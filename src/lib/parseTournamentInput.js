@@ -1,0 +1,52 @@
+// Normalize a user-supplied tournament identifier into { source, externalId, game, url, name }.
+// Accepts:
+//   Liquipedia URL : https://liquipedia.net/valorant/VCT/2024/Champions
+//   Start.gg URL   : https://www.start.gg/tournament/<slug>/...
+//   PandaScore ID  : 12345            (bare numeric)
+//   Explicit form  : pandascore:12345 | startgg:<slug> | liquipedia:<game>/<Page>
+// Returns null when nothing matches.
+export function parseTournamentInput(raw) {
+  const input = String(raw ?? '').trim();
+  if (!input) return null;
+
+  // Liquipedia URL -> capture <game> and the page path after it.
+  const lp = input.match(/liquipedia\.net\/([^/]+)\/(.+?)\/?(?:[?#].*)?$/i);
+  if (lp) {
+    const game = lp[1].toLowerCase();
+    const page = decodeURIComponent(lp[2]);
+    return {
+      source: 'liquipedia',
+      game,
+      externalId: `${game}/${page}`,
+      url: input,
+      name: page.replaceAll('_', ' '),
+    };
+  }
+
+  // Start.gg tournament URL -> capture the slug.
+  const sg = input.match(/start\.gg\/tournament\/([^/?#]+)/i);
+  if (sg) {
+    return { source: 'startgg', game: null, externalId: sg[1], url: input, name: sg[1] };
+  }
+
+  // Explicit "source:id" form.
+  const explicit = input.match(/^(pandascore|startgg|liquipedia):(.+)$/i);
+  if (explicit) {
+    const source = explicit[1].toLowerCase();
+    const id = explicit[2].trim();
+    return {
+      source,
+      game: source === 'liquipedia' ? id.split('/')[0].toLowerCase() : null,
+      externalId: id,
+      url: null,
+      name: id,
+    };
+  }
+
+  // Bare numeric -> PandaScore tournament/serie id.
+  if (/^\d+$/.test(input)) {
+    return { source: 'pandascore', game: null, externalId: input, url: null, name: `PandaScore #${input}` };
+  }
+
+  return null;
+}

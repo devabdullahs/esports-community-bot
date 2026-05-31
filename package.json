@@ -1,0 +1,23 @@
+{
+  "name": "esports-community-bot",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Discord bot for real-time esports tournament schedules, live scores, and brackets (EWC, RLCS, LCS, OWCS, VCT, Worlds, IEM, ...).",
+  "engines": {
+    "node": ">=20.12.0"
+  },
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "node --watch src/index.js",
+    "deploy": "node src/deploy-commands.js"
+  },
+  "license": "MIT",
+  "dependencies": {
+    "axios": "^1.16.1",
+    "better-sqlite3": "^12.10.0",
+    "cheerio": "^1.2.0",
+    "discord.js": "^14.26.4",
+    "node-cron": "^4.2.1"
+  }
+}
