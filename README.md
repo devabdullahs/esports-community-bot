@@ -29,6 +29,7 @@ Built with **discord.js v14** on **Node ≥ 20.12**. Primary data source is **Li
 |---|---|
 | `/add_tournament` | Track a tournament by Liquipedia URL (game auto-detected; ~45 games via autocomplete) |
 | `/list_tournaments` | List tracked tournaments with live/upcoming counts |
+| `/match` | Focused detail card for any tracked match (autocomplete search) |
 | `/remove_tournament` | Stop tracking one (autocomplete search) |
 | `/set_channel leaderboard` | Set the combined board channel, or a per-game board (optional `game`) |
 | `/set_channel voice` | Set the voice channel used for live status |
@@ -134,4 +135,4 @@ Liquipedia data remains under CC-BY-SA 3.0 as noted above.
 - [x] Per-game leaderboards **and** voice channels (a separate channel per game)
 - [x] LPDB API client wired — preferred over HTML parsing when `LPDB_API_KEY` is set (activate once your key is approved)
 - [x] Start.gg + PandaScore integrations (free tier) — structured match data with live status
-- [ ] Per-match detail view (buttons / select menus)
+- [x] Per-match detail view — `/match` (autocomplete) opens a focused card + link to full details

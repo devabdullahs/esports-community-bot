@@ -14,11 +14,14 @@ export function truncate(s, max) {
   return s.length <= max ? s : `${s.slice(0, max - 1)}…`;
 }
 
-// Liquipedia page for a match's tournament (so the game tag can link to it).
-function tournamentUrl(m) {
+// Public page for a match's tournament (so tags / detail cards can link to it).
+export function tournamentUrl(m) {
   if (m.tournament_url) return m.tournament_url;
   if (m.tournament_source === 'liquipedia' && m.tournament_path) {
     return `https://liquipedia.net/${m.tournament_path}`;
+  }
+  if (m.tournament_source === 'startgg' && m.tournament_path) {
+    return `https://www.start.gg/tournament/${m.tournament_path}`;
   }
   return null;
 }
