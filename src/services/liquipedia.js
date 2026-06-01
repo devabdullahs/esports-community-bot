@@ -2,6 +2,7 @@ import axios from 'axios';
 import * as cheerio from 'cheerio';
 import { config } from '../config.js';
 import { logger } from '../lib/logger.js';
+import * as lpdb from './lpdb.js';
 
 // PRIMARY (free) data source. Covers VCT, LCS/Worlds, IEM/CS2, RLCS, OWCS, EWC, etc.
 //
@@ -319,6 +320,19 @@ export async function fetchSchedule(tournament) {
   const [game, ...rest] = tournament.external_id.split('/');
   const page = rest.join('/');
   if (!page) return [];
+
+  // Prefer the structured LPDB API when a key is configured; fall back to HTML parsing on any
+  // error or empty result, so enabling LPDB can never break tracking.
+  if (lpdb.isEnabled()) {
+    try {
+      const viaApi = await lpdb.fetchSchedule(tournament);
+      if (viaApi.length) return viaApi;
+      logger.debug(`[lpdb] no matches for ${tournament.external_id}; using HTML parse`);
+    } catch (e) {
+      logger.warn(`[lpdb] ${tournament.external_id} failed, using HTML parse: ${e.message}`);
+    }
+  }
+
   const data = await parsePage(game, page);
   const html = data?.parse?.text?.['*'];
   if (!html) return [];

@@ -41,6 +41,11 @@ export const config = {
       'EsportsCommunityBot/0.1 (set LIQUIPEDIA_USER_AGENT with a contact email)',
     ),
   },
+  lpdb: {
+    // LiquipediaDB API (optional). When LPDB_API_KEY is set it's preferred over HTML parsing.
+    apiKey: get('LPDB_API_KEY'),
+    baseUrl: get('LPDB_BASE_URL', 'https://api.liquipedia.net/api/v3'),
+  },
   scheduler: {
     timezone: get('SCHEDULER_TIMEZONE', 'UTC'), // IANA tz, e.g. "Europe/London"
     morningCron: get('MORNING_CRON', '0 8 * * *'),
