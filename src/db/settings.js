@@ -69,6 +69,20 @@ export function setGameLeaderboardMessage(guildId, game, messageId) {
   );
 }
 
+// --- Per-game voice channels ---
+
+export function setGameVoiceChannel(guildId, game, channelId) {
+  db.prepare(
+    `INSERT INTO game_voice_channels (guild_id, game, channel_id, updated_at)
+     VALUES (?, ?, ?, datetime('now'))
+     ON CONFLICT (guild_id, game) DO UPDATE SET channel_id = excluded.channel_id, updated_at = datetime('now')`,
+  ).run(guildId, game, channelId);
+}
+
+export function getGameVoiceChannels(guildId) {
+  return db.prepare('SELECT game, channel_id FROM game_voice_channels WHERE guild_id = ?').all(guildId);
+}
+
 export function getGuildsWithClubChampionship() {
   return db
     .prepare(`SELECT guild_id FROM guild_settings WHERE cc_page IS NOT NULL AND cc_channel_id IS NOT NULL`)

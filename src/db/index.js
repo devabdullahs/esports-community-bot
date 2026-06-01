@@ -87,6 +87,18 @@ db.exec(`
   );
 `);
 
+// Per-game voice channels (a guild can have one VC per game, plus the combined VC stored in
+// guild_settings.voice_channel_id). Each channel's name reflects that game's live/next match.
+db.exec(`
+  CREATE TABLE IF NOT EXISTS game_voice_channels (
+    guild_id   TEXT NOT NULL,
+    game       TEXT NOT NULL,
+    channel_id TEXT NOT NULL,
+    updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+    PRIMARY KEY (guild_id, game)
+  );
+`);
+
 logger.info(`SQLite ready at ${config.db.path}`);
 
 export function closeDb() {

@@ -130,7 +130,8 @@ Liquipedia data remains under CC-BY-SA 3.0 as noted above.
 
 ## Roadmap
 
-- [ ] Swiss-stage match parsing (Rocket League and similar)
-- [ ] Switch Liquipedia access to the LPDB API (cleaner JSON, higher limits) once approved
+- [x] Swiss-stage match parsing (Rocket League and similar)
+- [x] Per-game leaderboards **and** voice channels (a separate channel per game)
+- [ ] Switch Liquipedia access to the LPDB API (cleaner JSON, higher limits) — pending API key
 - [ ] Per-match detail view (buttons / select menus)
 - [ ] Optional Start.gg / PandaScore fetch implementations

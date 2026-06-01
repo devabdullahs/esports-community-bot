@@ -6,7 +6,7 @@ import {
   ContainerBuilder,
   MessageFlags,
 } from 'discord.js';
-import { setChannel, setGameLeaderboard } from '../db/settings.js';
+import { setChannel, setGameLeaderboard, setGameVoiceChannel } from '../db/settings.js';
 import { updateLeaderboard } from '../jobs/leaderboard.js';
 import { updateVoiceChannel } from '../jobs/voiceStatus.js';
 import { searchGames, gameName } from '../lib/games.js';
@@ -31,9 +31,15 @@ export const data = new SlashCommandBuilder()
   .addSubcommand((sc) =>
     sc
       .setName('voice')
-      .setDescription('Voice channel whose name shows live match status')
+      .setDescription('Voice channel whose name shows live match status (all games, or one game)')
       .addChannelOption((o) =>
         o.setName('channel').setDescription('Voice channel').addChannelTypes(ChannelType.GuildVoice).setRequired(true),
+      )
+      .addStringOption((o) =>
+        o
+          .setName('game')
+          .setDescription('Optional: base this channel on one game (leave empty for all games)')
+          .setAutocomplete(true),
       ),
   )
   .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
@@ -54,14 +60,13 @@ export async function execute(interaction) {
   const channel = interaction.options.getChannel('channel', true);
 
   if (sub === 'voice') {
-    setChannel(interaction.guildId, 'voice_channel_id', channel.id);
+    const game = interaction.options.getString('game');
+    if (game) setGameVoiceChannel(interaction.guildId, game, channel.id);
+    else setChannel(interaction.guildId, 'voice_channel_id', channel.id);
+    const label = game ? `${gameName(game)} voice channel` : 'Live voice channel';
     await interaction.reply({
       components: [
-        confirm(
-          'Live voice channel',
-          channel,
-          "-# Its name will reflect live match status (renamed sparingly to respect Discord limits).",
-        ),
+        confirm(label, channel, '-# Its name reflects live match status (renamed sparingly to respect Discord limits).'),
       ],
       flags: [MessageFlags.IsComponentsV2, MessageFlags.Ephemeral],
     });

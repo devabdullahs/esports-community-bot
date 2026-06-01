@@ -1,6 +1,6 @@
 import { logger } from '../lib/logger.js';
 import { getMatchesForGuild } from '../db/matches.js';
-import { getSettings } from '../db/settings.js';
+import { getSettings, getGameVoiceChannels } from '../db/settings.js';
 import { gameTag, truncate } from '../lib/render.js';
 
 // Discord rate-limits channel renames to ~2 per 10 minutes PER CHANNEL. We therefore
@@ -12,8 +12,9 @@ const VOICE_NAME_MAX = 100;
 
 const state = new Map(); // channelId -> { at, name, timer, pending }
 
-export function computeVoiceName(guildId) {
-  const matches = getMatchesForGuild(guildId);
+export function computeVoiceName(guildId, game = null) {
+  let matches = getMatchesForGuild(guildId);
+  if (game) matches = matches.filter((m) => m.game === game);
 
   const live = matches.find((m) => m.status === 'running');
   if (live) {
@@ -32,12 +33,20 @@ export function computeVoiceName(guildId) {
   return '💤 No live matches';
 }
 
+// Update the combined voice channel AND every per-game voice channel for a guild.
 export async function updateVoiceChannel(client, guildId) {
   const s = getSettings(guildId);
-  if (!s.voice_channel_id) return;
-  const channel = await client.channels.fetch(s.voice_channel_id).catch(() => null);
+  await renameVoice(client, s.voice_channel_id, computeVoiceName(guildId, null));
+  for (const v of getGameVoiceChannels(guildId)) {
+    await renameVoice(client, v.channel_id, computeVoiceName(guildId, v.game));
+  }
+}
+
+async function renameVoice(client, channelId, desired) {
+  if (!channelId) return;
+  const channel = await client.channels.fetch(channelId).catch(() => null);
   if (!channel) return;
-  applyRename(channel, computeVoiceName(guildId));
+  applyRename(channel, desired);
 }
 
 function applyRename(channel, desired) {
