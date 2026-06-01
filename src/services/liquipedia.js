@@ -282,25 +282,29 @@ export function parseSwissMatches($, game) {
             const $cell = $(cell);
             const sc = $cell.text().match(/(\d+)\s*[:\-]\s*(\d+)/);
             if (!sc) return; // not played yet
+            const scoreA = Number(sc[1]);
+            const scoreB = Number(sc[2]);
+            if (scoreA === 0 && scoreB === 0) return; // empty / placeholder cell
             const opp = teamName($, cell);
             if (!opp || opp === 'TBD' || opp.toLowerCase() === rowTeam.toLowerCase()) return;
             const pairKey = [rowTeam.toLowerCase(), opp.toLowerCase()].sort().join('|');
             if (seen.has(pairKey)) return; // mirror row → same match
             seen.add(pairKey);
-            const cls = $cell.attr('class') || '';
-            const finished = /swisstable-bgc-(win|loss)/.test(cls);
+            // The standings grid only records COMPLETED matches, so a decided score is finished
+            // (the loser's cell lacks the win/loss class, so we derive the winner from the score).
+            const decided = scoreA !== scoreB;
             out.push({
               source: 'liquipedia',
               externalId: `${game}:swiss:${pairKey}`,
               name: `${rowTeam} vs ${opp}`,
               teamA: rowTeam,
               teamB: opp,
-              scoreA: Number(sc[1]),
-              scoreB: Number(sc[2]),
+              scoreA,
+              scoreB,
               bestOf: null,
               scheduledAt: null,
-              status: finished ? 'finished' : 'running',
-              winner: finished ? (/swisstable-bgc-win/.test(cls) ? rowTeam : opp) : null,
+              status: decided ? 'finished' : 'running',
+              winner: decided ? (scoreA > scoreB ? rowTeam : opp) : null,
             });
           });
       });
