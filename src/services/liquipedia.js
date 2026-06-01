@@ -28,6 +28,22 @@ const nowSec = () => Math.floor(Date.now() / 1000);
 const apiUrl = (game) => `https://liquipedia.net/${game}/api.php`;
 const normPath = (s) => decodeURIComponent(String(s ?? '')).toLowerCase();
 
+// A match that started in the recent past with no recorded result yet is treated as live for
+// this long. (Liquipedia serves true live status/scores client-side, so they are NOT present in
+// the static action=parse HTML — this is the best "currently being played" signal we have.)
+const LIVE_WINDOW_S = 4 * 3600;
+
+// Shared status logic for brackets, match lists, and the upcoming-matches widget.
+function deriveStatus({ winA = false, winB = false, scoreA, scoreB, bestOf, scheduledAt }) {
+  const winAt = bestOf ? Math.floor(bestOf / 2) + 1 : null;
+  const reachedWin = winAt != null && ((scoreA ?? 0) >= winAt || (scoreB ?? 0) >= winAt);
+  if (winA || winB || reachedWin) return 'finished';
+  if ((scoreA ?? 0) + (scoreB ?? 0) > 0) return 'running'; // has a partial score → in progress
+  const now = nowSec();
+  if (scheduledAt && now >= scheduledAt && now - scheduledAt <= LIVE_WINDOW_S) return 'running';
+  return 'scheduled';
+}
+
 async function throttle() {
   const wait = lastRequestAt + PARSE_MIN_GAP_MS - Date.now();
   if (wait > 0) await new Promise((r) => setTimeout(r, wait));
@@ -116,13 +132,7 @@ export function parseMatchInfo($, el, game) {
   const tournamentPath = tHref.replace(/^\//, '').split('#')[0];
   const tournamentName = $m.find('.match-info-tournament a').last().text().trim() || null;
 
-  // Status from scores only: "running" once it has a score, "finished" when a side reaches the
-  // win threshold. A past start time alone does NOT make it live — group/Swiss stages list many
-  // not-yet-played matches whose nominal times have elapsed.
-  const winAt = bestOf ? Math.floor(bestOf / 2) + 1 : null;
-  let status = 'scheduled';
-  if (winAt != null && ((scoreA ?? 0) >= winAt || (scoreB ?? 0) >= winAt)) status = 'finished';
-  else if ((scoreA ?? 0) + (scoreB ?? 0) > 0) status = 'running';
+  const status = deriveStatus({ scoreA, scoreB, bestOf, scheduledAt });
 
   return {
     source: 'liquipedia',
@@ -178,14 +188,7 @@ export function parseBracketMatch($, el, game) {
   const scheduledAt = Number($m.find('[data-timestamp]').attr('data-timestamp')) || null;
   const bestOf = Number($m.find('.brkts-popup').text().match(/\(Bo(\d+)\)/i)?.[1]) || null;
 
-  // Finished when the bracket marks a winner OR a side reaches the win threshold. "Running"
-  // requires an actual score — a past start time alone is NOT enough (Swiss/group stages list
-  // many not-yet-played matches whose nominal start times have already elapsed).
-  const winAt = bestOf ? Math.floor(bestOf / 2) + 1 : null;
-  const reachedWin = winAt != null && ((scoreA ?? 0) >= winAt || (scoreB ?? 0) >= winAt);
-  let status = 'scheduled';
-  if (winA || winB || reachedWin) status = 'finished';
-  else if ((scoreA ?? 0) + (scoreB ?? 0) > 0) status = 'running';
+  const status = deriveStatus({ winA, winB, scoreA, scoreB, bestOf, scheduledAt });
 
   // Prefer Liquipedia's stable Match: id; fall back to a composite that stays constant per match.
   const matchHref = $m.find('a[href*="/Match:"]').attr('href') || '';
@@ -206,6 +209,105 @@ export function parseBracketMatch($, el, game) {
   };
 }
 
+// Parse one match-list row (.brkts-matchlist-match) — used by group stages, Swiss rounds, and
+// weekly schedules (e.g. CDL). Same shape as a bracket match but with different cell classes.
+export function parseMatchlistMatch($, el, game) {
+  const $m = $(el);
+  const opps = $m.find('.brkts-matchlist-opponent');
+  if (opps.length < 2) return null;
+
+  const readTeam = (e) => ($(e).attr('aria-label') || $(e).find('.name').first().text() || 'TBD').trim();
+  const teamA = readTeam(opps[0]);
+  const teamB = readTeam(opps[1]);
+  if (teamA === 'TBD' && teamB === 'TBD') return null;
+
+  const scoreEls = $m.find('.brkts-matchlist-score .brkts-matchlist-cell-content');
+  const num = (s) => (/^\d+$/.test(s) ? Number(s) : null);
+  const scoreA = scoreEls[0] ? num($(scoreEls[0]).text().trim()) : null;
+  const scoreB = scoreEls[1] ? num($(scoreEls[1]).text().trim()) : null;
+
+  // The winner's opponent cell carries .brkts-matchlist-slot-winner.
+  const winA = $(opps[0]).hasClass('brkts-matchlist-slot-winner');
+  const winB = $(opps[1]).hasClass('brkts-matchlist-slot-winner');
+
+  const scheduledAt = Number($m.find('[data-timestamp]').attr('data-timestamp')) || null;
+  const bestOf = Number($m.find('.brkts-popup').text().match(/\(Bo(\d+)\)/i)?.[1]) || null;
+  const status = deriveStatus({ winA, winB, scoreA, scoreB, bestOf, scheduledAt });
+
+  const matchHref = $m.find('a[href*="/Match:"]').attr('href') || '';
+  const externalId = matchHref.split('/').pop() || `${game}:${scheduledAt}:${teamA}:${teamB}`;
+
+  return {
+    source: 'liquipedia',
+    externalId,
+    name: `${teamA} vs ${teamB}`,
+    teamA,
+    teamB,
+    scoreA,
+    scoreB,
+    bestOf,
+    scheduledAt,
+    status,
+    winner: winA ? teamA : winB ? teamB : null,
+  };
+}
+
+// Parse Swiss-stage standings grids (table.swisstable): "# | Team | Matches | BU | Round 1..N",
+// where each round cell holds the opponent + a score + a win/loss class. Each match shows up in
+// both teams' rows, so we dedupe by team-pair. Used by RLCS and other Swiss-format events whose
+// matches are not in brackets or match lists.
+export function parseSwissMatches($, game) {
+  const out = [];
+  const seen = new Set();
+  $('.swisstable').each((_t, table) => {
+    $(table)
+      .find('tr')
+      .slice(1)
+      .each((_r, row) => {
+        // The row's own team = first non-round cell that holds a team.
+        let rowTeam = '';
+        $(row)
+          .children('td')
+          .each((_c, cell) => {
+            if (rowTeam || (($(cell).attr('class') || '').includes('swisstable-bgc'))) return;
+            const t = teamName($, cell);
+            if (t && t !== 'TBD') rowTeam = t;
+          });
+        if (!rowTeam) return;
+
+        // Round cells carry a swisstable-bgc-* class (win / loss / empty).
+        $(row)
+          .find('td[class*="swisstable-bgc"]')
+          .each((_c, cell) => {
+            const $cell = $(cell);
+            const sc = $cell.text().match(/(\d+)\s*[:\-]\s*(\d+)/);
+            if (!sc) return; // not played yet
+            const opp = teamName($, cell);
+            if (!opp || opp === 'TBD' || opp.toLowerCase() === rowTeam.toLowerCase()) return;
+            const pairKey = [rowTeam.toLowerCase(), opp.toLowerCase()].sort().join('|');
+            if (seen.has(pairKey)) return; // mirror row → same match
+            seen.add(pairKey);
+            const cls = $cell.attr('class') || '';
+            const finished = /swisstable-bgc-(win|loss)/.test(cls);
+            out.push({
+              source: 'liquipedia',
+              externalId: `${game}:swiss:${pairKey}`,
+              name: `${rowTeam} vs ${opp}`,
+              teamA: rowTeam,
+              teamB: opp,
+              scoreA: Number(sc[1]),
+              scoreB: Number(sc[2]),
+              bestOf: null,
+              scheduledAt: null,
+              status: finished ? 'finished' : 'running',
+              winner: finished ? (/swisstable-bgc-win/.test(cls) ? rowTeam : opp) : null,
+            });
+          });
+      });
+  });
+  return out;
+}
+
 // Matches for a tracked tournament, parsed from its OWN page's bracket/matchlist
 // (external_id = "<game>/<Page_Path>"). Stable + authoritative: upcoming, live, and finished
 // (with final scores + winners), so results are correct and corrections propagate.
@@ -220,27 +322,37 @@ export async function fetchSchedule(tournament) {
 
   const out = [];
   const seenIds = new Set();
-  const bracketPairs = new Set();
+  const pairs = new Set();
   const pairOf = (m) => [m.teamA.toLowerCase(), m.teamB.toLowerCase()].sort().join('|');
-
-  // 1) Bracket/matchlist = authoritative (stable, with winners + final scores).
-  $('.brkts-match').each((_i, el) => {
-    const m = parseBracketMatch($, el, game);
+  const addAuthoritative = (el, parser) => {
+    const m = parser($, el, game);
     if (!m || seenIds.has(m.externalId)) return;
     seenIds.add(m.externalId);
-    bracketPairs.add(pairOf(m));
+    pairs.add(pairOf(m));
     out.push(m);
-  });
+  };
 
-  // 2) "Upcoming Matches" widget — add ONLY matchups whose team-pair isn't already in the
-  //    bracket. The same match can appear in both sources with different ids/timestamps, so we
-  //    dedupe by team-pair (not id/time) to avoid the live-match duplicates seen before.
+  // 1) Brackets AND match lists (group / Swiss / weekly schedules) = authoritative:
+  //    stable set, with winners + final scores.
+  $('.brkts-match').each((_i, el) => addAuthoritative(el, parseBracketMatch));
+  $('.brkts-matchlist-match').each((_i, el) => addAuthoritative(el, parseMatchlistMatch));
+
+  // 1c) Swiss group standings grids (RLCS etc.) — matches are encoded in the round cells.
+  for (const m of parseSwissMatches($, game)) {
+    if (seenIds.has(m.externalId) || pairs.has(pairOf(m))) continue;
+    seenIds.add(m.externalId);
+    pairs.add(pairOf(m));
+    out.push(m);
+  }
+
+  // 2) "Upcoming Matches" widget — add ONLY matchups whose team-pair isn't already covered.
+  //    A match can appear in both with different ids/timestamps, so dedupe by team-pair.
   $('.match-info').each((_i, el) => {
     const m = parseMatchInfo($, el, game);
     if (!m || (m.teamA === 'TBD' && m.teamB === 'TBD')) return;
-    if (seenIds.has(m.externalId) || bracketPairs.has(pairOf(m))) return;
+    if (seenIds.has(m.externalId) || pairs.has(pairOf(m))) return;
     seenIds.add(m.externalId);
-    bracketPairs.add(pairOf(m));
+    pairs.add(pairOf(m));
     out.push(m);
   });
 
