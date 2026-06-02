@@ -4,7 +4,15 @@ import { readFile, unlink, writeFile } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
 import { createCanvas, loadImage } from '@napi-rs/canvas';
 import axios from 'axios';
+import { config } from '../config.js';
 import { logger } from './logger.js';
+
+// Reuse one client for all logo/flag downloads (Liquipedia ToS: re-use your HTTP client). It
+// carries the same contact-bearing User-Agent as the API client and accepts gzip, so image
+// fetches identify the project exactly like the MediaWiki API calls do.
+const http = axios.create({
+  headers: { 'User-Agent': config.liquipedia.userAgent, 'Accept-Encoding': 'gzip' },
+});
 
 const CACHE_DIR = resolve(process.env.LOGO_CACHE_DIR || 'data/logo-cache');
 const MAX_CONCURRENT_DOWNLOADS = Math.max(1, Number(process.env.LOGO_CACHE_CONCURRENCY || 2));
@@ -127,11 +135,10 @@ async function downloadLogo(url, file) {
   lastDownloadAt = Date.now();
   saveRateState();
 
-  const { data, headers } = await axios.get(url, {
+  const { data, headers } = await http.get(url, {
     responseType: 'arraybuffer',
     timeout: 10_000,
     maxContentLength: MAX_LOGO_BYTES,
-    headers: { 'User-Agent': 'EsportsCommunityBot/1.0 (Discord match cards; logo cache)' },
   }).catch((err) => {
     const status = err.response?.status;
     if (status === 403 || status === 429 || status === 503) {
