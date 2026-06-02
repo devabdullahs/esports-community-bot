@@ -61,6 +61,12 @@ export const config = {
     // Valve Regional Standings update infrequently; keep this gentle for Liquipedia.
     refreshMinutes: Number(get('CS_RANKINGS_REFRESH_MINUTES', 60)),
   },
+  ewcPredictions: {
+    // Checks for due prediction snapshots/scoring. Actual Liquipedia requests still go through
+    // the global MediaWiki parse limiter, and only happen when a configured round is due.
+    refreshMinutes: Number(get('EWC_PREDICTIONS_REFRESH_MINUTES', 60)),
+    scoreDelayHours: Number(get('EWC_PREDICTIONS_SCORE_DELAY_HOURS', 24)),
+  },
   db: {
     path: get('DB_PATH', 'data/bot.sqlite'),
   },

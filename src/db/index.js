@@ -87,6 +87,7 @@ ensureColumns('guild_settings', [
   ['cs_rankings_format', 'TEXT'],
   ['match_card_channel_id', 'TEXT'],
   ['match_card_message_id', 'TEXT'],
+  ['ewc_predictions_channel_id', 'TEXT'],
 ]);
 
 ensureColumns('matches', [
@@ -140,6 +141,78 @@ db.exec(`
     PRIMARY KEY (guild_id, game, match_id)
   );
 `);
+
+// EWC community predictions. Weekly rounds are scored from the delta between two standings
+// snapshots; season rounds are scored from the final Club Championship standings.
+db.exec(`
+  CREATE TABLE IF NOT EXISTS ewc_prediction_weeks (
+    id             INTEGER PRIMARY KEY AUTOINCREMENT,
+    guild_id       TEXT NOT NULL,
+    season         TEXT NOT NULL DEFAULT '2026',
+    week_key       TEXT NOT NULL,
+    label          TEXT,
+    open_at        INTEGER,
+    close_at       INTEGER,
+    score_after    INTEGER,
+    status         TEXT NOT NULL DEFAULT 'open'
+                     CHECK (status IN ('open','closed','scored')),
+    baseline_json  TEXT,
+    final_json     TEXT,
+    created_by     TEXT,
+    created_at     TEXT NOT NULL DEFAULT (datetime('now')),
+    scored_at      TEXT,
+    UNIQUE (guild_id, season, week_key)
+  );
+
+  CREATE TABLE IF NOT EXISTS ewc_weekly_predictions (
+    guild_id       TEXT NOT NULL,
+    week_id        INTEGER NOT NULL REFERENCES ewc_prediction_weeks(id) ON DELETE CASCADE,
+    user_id        TEXT NOT NULL,
+    picks_json     TEXT NOT NULL,
+    score          INTEGER,
+    details_json   TEXT,
+    created_at     TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at     TEXT NOT NULL DEFAULT (datetime('now')),
+    PRIMARY KEY (guild_id, week_id, user_id)
+  );
+
+  CREATE TABLE IF NOT EXISTS ewc_prediction_seasons (
+    guild_id       TEXT NOT NULL,
+    season         TEXT NOT NULL DEFAULT '2026',
+    label          TEXT,
+    open_at        INTEGER,
+    close_at       INTEGER,
+    score_after    INTEGER,
+    status         TEXT NOT NULL DEFAULT 'open'
+                     CHECK (status IN ('open','closed','scored')),
+    top_size       INTEGER NOT NULL DEFAULT 10,
+    final_json     TEXT,
+    created_by     TEXT,
+    created_at     TEXT NOT NULL DEFAULT (datetime('now')),
+    scored_at      TEXT,
+    PRIMARY KEY (guild_id, season)
+  );
+
+  CREATE TABLE IF NOT EXISTS ewc_season_predictions (
+    guild_id       TEXT NOT NULL,
+    season         TEXT NOT NULL,
+    user_id        TEXT NOT NULL,
+    picks_json     TEXT NOT NULL,
+    score          INTEGER,
+    details_json   TEXT,
+    created_at     TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at     TEXT NOT NULL DEFAULT (datetime('now')),
+    PRIMARY KEY (guild_id, season, user_id)
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_ewc_weekly_predictions_week
+    ON ewc_weekly_predictions(week_id, score DESC);
+  CREATE INDEX IF NOT EXISTS idx_ewc_season_predictions_season
+    ON ewc_season_predictions(guild_id, season, score DESC);
+`);
+
+ensureColumns('ewc_prediction_weeks', [['score_after', 'INTEGER']]);
+ensureColumns('ewc_prediction_seasons', [['score_after', 'INTEGER']]);
 
 // Canonicalize old game keys after slug changes. Keep this tiny and explicit so existing
 // per-game boards continue to work without creating duplicate alias rows later.

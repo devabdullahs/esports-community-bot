@@ -21,6 +21,11 @@ const PARSE_MIN_GAP_MS = Math.max(30_000, Number(process.env.LIQUIPEDIA_PARSE_MI
 const CACHE_TTL_MS = Math.max(60_000, Number(process.env.LIQUIPEDIA_CACHE_TTL_MS || 5 * 60_000));
 const BACKOFF_MS = Math.max(60_000, Number(process.env.LIQUIPEDIA_BACKOFF_MS || 20 * 60_000));
 const RATE_STATE_PATH = resolve(process.env.LIQUIPEDIA_RATE_STATE_PATH || 'data/liquipedia-rate-limit.json');
+// Player/page lookup uses action=opensearch (NOT action=parse): it falls under the general
+// MediaWiki limit of 1 request / 2s, so it gets its own lighter throttle + cache. We only use it
+// to resolve a typed name to its existing page URL — never to fetch or parse the page itself.
+const SEARCH_MIN_GAP_MS = Math.max(2_000, Number(process.env.LIQUIPEDIA_SEARCH_MIN_GAP_MS || 2_000));
+const SEARCH_CACHE_TTL_MS = Math.max(60_000, Number(process.env.LIQUIPEDIA_SEARCH_CACHE_TTL_MS || 10 * 60_000));
 
 const client = axios.create({
   timeout: 20_000,
@@ -29,9 +34,11 @@ const client = axios.create({
 
 let lastRequestAt = 0;
 let blockedUntil = 0;
+let lastSearchAt = 0;
 let rateStateLoaded = false;
 const cache = new Map(); // key -> { at, data }
 const inFlight = new Map(); // key -> Promise<parse response>
+const searchCache = new Map(); // `${game}:${q}` -> { at, results }
 const nowSec = () => Math.floor(Date.now() / 1000);
 const apiUrl = (game) => `https://liquipedia.net/${game}/api.php`;
 const normPath = (s) => decodeURIComponent(String(s ?? '')).toLowerCase();
@@ -41,6 +48,7 @@ const cleanName = (s) =>
   String(s ?? '')
     .replace(/[\u200b-\u200f\ufeff]/g, '')
     .replace(/\(page does not exist\)/gi, '')
+    .replace(/\((?:[^)]*?\s)?stack\)/gi, '')
     .replace(/\s+/g, ' ')
     .trim();
 const isPlaceholderTeam = (s) => {
@@ -74,6 +82,14 @@ function normalizeImageUrl(src) {
   if (src.startsWith('//')) return `https:${src}`;
   if (src.startsWith('/')) return `https://liquipedia.net${src}`;
   if (/^https?:\/\//i.test(src)) return src;
+  return null;
+}
+
+function normalizePageUrl(href) {
+  if (!href) return null;
+  if (href.startsWith('//')) return `https:${href}`;
+  if (href.startsWith('/')) return `https://liquipedia.net${href}`;
+  if (/^https?:\/\//i.test(href)) return href;
   return null;
 }
 
@@ -115,7 +131,9 @@ function deriveStatus({ winA = false, winB = false, scoreA, scoreB, bestOf, sche
 
 async function throttle() {
   loadRateState();
-  const wait = lastRequestAt + PARSE_MIN_GAP_MS - Date.now();
+  // Honor both the parse sub-limit (1/30s) and the general floor (1/2s) vs any recent search.
+  const floor = Math.max(lastRequestAt + PARSE_MIN_GAP_MS, lastSearchAt + SEARCH_MIN_GAP_MS);
+  const wait = floor - Date.now();
   if (wait > 0) await new Promise((r) => setTimeout(r, wait));
   lastRequestAt = Date.now();
   saveRateState();
@@ -164,6 +182,64 @@ export async function parsePage(game, page) {
   } finally {
     inFlight.delete(key);
   }
+}
+
+// Resolve a typed name to matching Liquipedia pages on a given wiki, using the MediaWiki
+// action=opensearch endpoint. Returns [{ title, description, url }]. This is a SEARCH (find the
+// page) — it never fetches or parses the page's content. Lightly throttled (1/2s), cached, and
+// it yields to the rate-limit backoff just like parsePage.
+export async function searchPages(game, query, limit = 6) {
+  const q = String(query ?? '').trim();
+  if (!game || !q) return [];
+
+  const key = `${game}:${q.toLowerCase()}`;
+  const hit = searchCache.get(key);
+  if (hit && Date.now() - hit.at < SEARCH_CACHE_TTL_MS) return hit.results;
+
+  loadRateState();
+  if (Date.now() < blockedUntil) {
+    if (hit) return hit.results;
+    return []; // backing off — caller falls back to a plain search link
+  }
+
+  // General limit is 1 request / 2s; stay ≥2s after ANY prior Liquipedia request (parse too).
+  const floorWait = Math.max(lastSearchAt, lastRequestAt) + SEARCH_MIN_GAP_MS - Date.now();
+  if (floorWait > 0) await new Promise((r) => setTimeout(r, floorWait));
+  lastSearchAt = Date.now();
+
+  try {
+    const { data } = await client.get(apiUrl(game), {
+      params: { action: 'opensearch', search: q, limit, namespace: 0, redirects: 'resolve', format: 'json' },
+    });
+    // opensearch response shape: [query, [titles], [descriptions], [urls]]
+    const titles = Array.isArray(data?.[1]) ? data[1] : [];
+    const descs = Array.isArray(data?.[2]) ? data[2] : [];
+    const urls = Array.isArray(data?.[3]) ? data[3] : [];
+    const results = titles
+      .map((title, i) => ({
+        title: cleanName(title),
+        description: cleanName(descs[i]) || null,
+        url: normalizePageUrl(urls[i]) || searchPageUrl(game, title),
+      }))
+      .filter((r) => r.title && r.url);
+    searchCache.set(key, { at: Date.now(), results });
+    return results;
+  } catch (err) {
+    const status = err.response?.status;
+    if (status === 403 || status === 429 || status === 503) {
+      blockedUntil = Date.now() + BACKOFF_MS;
+      saveRateState();
+      logger.warn(`[liquipedia] search rate limited (HTTP ${status}) — pausing requests for ${BACKOFF_MS / 60000} min`);
+    }
+    if (hit) return hit.results;
+    throw err;
+  }
+}
+
+// A plain Liquipedia search-results URL (zero API calls) — used as a fallback when opensearch
+// finds nothing or is unavailable.
+export function searchPageUrl(game, query) {
+  return `https://liquipedia.net/${game}/index.php?title=Special:Search&fulltext=1&search=${encodeURIComponent(String(query ?? ''))}`;
 }
 
 function cleanDisplayTitle(title) {
@@ -665,6 +741,379 @@ export async function fetchClubChampionship(wiki, page) {
   if (!html) return { standings: [], prizepool: [] };
   const $ = cheerio.load(html);
   return { standings: parseClubStandings($), prizepool: parseClubPrizepool($) };
+}
+
+// ---------------------------------------------------------------------------
+// EWC 2026 club / roster catalog
+// ---------------------------------------------------------------------------
+
+const EWC_CLUBS_PAGE = 'Esports_World_Cup/2026/Clubs';
+const EWC_PLAYER_LIST_PAGE = 'Esports_World_Cup/2026/Player_List';
+const EWC_MAIN_PAGE = 'Esports_World_Cup/2026';
+
+const EWC_GAME_LABELS = {
+  Apex: 'Apex Legends',
+  CF: 'CrossFire',
+  Chess: 'Chess',
+  'Call of Duty: Black Ops 7': 'Call of Duty: Black Ops 7',
+  WZ: 'Call of Duty: Warzone',
+  CS2: 'Counter-Strike 2',
+  Dota2: 'Dota 2',
+  'EA SPORTS FC 26': 'EA SPORTS FC 26',
+  'Free Fire': 'Free Fire',
+  'Fatal Fury': 'Fatal Fury: City of the Wolves',
+  FN: 'Fortnite',
+  HoK: 'Honor of Kings',
+  LoL: 'League of Legends',
+  'Mobile Legends: Bang Bang': 'Mobile Legends: Bang Bang',
+  "MLBB Women's Invitational": "MLBB Women's Invitational",
+  OW2: 'Overwatch 2',
+  PUBG: 'PUBG',
+  'PUBG Mobile': 'PUBG Mobile',
+  'Rainbow Six Siege X': 'Rainbow Six Siege X',
+  RL: 'Rocket League',
+  SF6: 'Street Fighter 6',
+  T8: 'Tekken 8',
+  TFT: 'Teamfight Tactics',
+  Trackmania: 'Trackmania',
+  VAL: 'VALORANT',
+};
+
+function normalizeEwcGameLabel(label) {
+  const text = cleanName(label);
+  return EWC_GAME_LABELS[text] || text;
+}
+
+function slugFromLiquipediaTitle(title) {
+  const match = String(title || '').match(/^([^:]+):(.+)$/);
+  return match ? match[1].toLowerCase() : null;
+}
+
+function pageNameFromLiquipediaTitle(title) {
+  const match = String(title || '').match(/^[^:]+:(.+)$/);
+  return cleanName(match ? match[1] : title);
+}
+
+function statusFromIconClass(iconClass) {
+  if (/fa-check-circle/.test(iconClass)) return 'qualified';
+  if (/fa-question/.test(iconClass)) return 'can_qualify';
+  if (/fa-times/.test(iconClass)) return 'eliminated';
+  if (/fa-ban/.test(iconClass)) return 'ineligible';
+  return 'has_team';
+}
+
+function summarizeEwcStatuses(entries) {
+  const statuses = entries.map((entry) => entry.status);
+  const counts = statuses.reduce((acc, status) => {
+    acc[status] = (acc[status] || 0) + 1;
+    return acc;
+  }, {});
+  let status = null;
+  if (statuses.includes('qualified')) status = 'qualified';
+  else if (statuses.includes('can_qualify')) status = 'can_qualify';
+  else if (statuses.includes('eliminated')) status = 'eliminated';
+  else if (statuses.includes('ineligible')) status = 'ineligible';
+  else if (statuses.includes('has_team')) status = 'has_team';
+  return { status, counts };
+}
+
+function parseEwcRosterEntries($, cell) {
+  const entries = [];
+  $(cell)
+    .find('a[href]')
+    .each((_i, link) => {
+      const $link = $(link);
+      const title = $link.attr('title') || '';
+      const href = normalizePageUrl($link.attr('href'));
+      const iconClass = $link.find('i').first().attr('class') || '';
+      const wiki = slugFromLiquipediaTitle(title) || href?.match(/^https:\/\/liquipedia\.net\/([^/]+)/i)?.[1]?.toLowerCase() || null;
+      const name = pageNameFromLiquipediaTitle(title);
+      if (!wiki || !name) return;
+      entries.push({ wiki, name, url: href, status: statusFromIconClass(iconClass) });
+    });
+  return entries;
+}
+
+function ewcClubHeader($, cell) {
+  const $cell = $(cell);
+  const raw =
+    $cell.find('a[title]').first().attr('title') ||
+    $cell.find('img').first().attr('alt') ||
+    $cell.text();
+  const label = normalizeEwcGameLabel(raw);
+  return {
+    label,
+    shortLabel: cleanName(raw),
+    pageUrl: normalizePageUrl($cell.find('a[href]').first().attr('href')),
+    icon: normalizeImageUrl(imageSrc($cell.find('img').first())),
+  };
+}
+
+function parseQualifiedCount(text) {
+  const [qualified, total] = cleanName(text)
+    .split('/')
+    .map((part) => Number(part.replace(/[^0-9]/g, '')));
+  return {
+    qualified: Number.isFinite(qualified) ? qualified : 0,
+    possible: Number.isFinite(total) ? total : null,
+  };
+}
+
+export function parseEwcClubs($) {
+  const table = $('table.wikitable.sortable')
+    .toArray()
+    .find((el) => {
+      const headers = $(el)
+        .find('tr')
+        .first()
+        .children('th,td')
+        .map((_i, c) => $(c).text().replace(/\s+/g, ' ').trim())
+        .get();
+      return headers.includes('Team Name') && headers.includes('Q#') && headers.includes('T#');
+    });
+  if (!table) return { games: [], clubs: [] };
+
+  const headerCells = $(table).find('tr').first().children('th,td').toArray();
+  const games = headerCells.slice(4).map((cell) => ewcClubHeader($, cell));
+  const clubs = [];
+
+  for (const row of $(table).find('tr').slice(1).toArray()) {
+    const cells = $(row).children('th,td').toArray();
+    if (cells.length < 4) continue;
+
+    const name = teamName($, cells[0]);
+    if (!name || /^team name$/i.test(name)) continue;
+    const qualifiedCount = parseQualifiedCount($(cells[2]).text());
+    const totalTeams = Number(cleanName($(cells[3]).text()).replace(/[^0-9]/g, '')) || 0;
+    const gameEntries = [];
+
+    for (let i = 0; i < games.length; i += 1) {
+      const cell = cells[i + 4];
+      if (!cell) continue;
+      const entries = parseEwcRosterEntries($, cell);
+      if (!entries.length) continue;
+      const { status, counts } = summarizeEwcStatuses(entries);
+      gameEntries.push({
+        ...games[i],
+        status,
+        statusCounts: counts,
+        entries,
+      });
+    }
+
+    clubs.push({
+      name,
+      pageUrl: normalizePageUrl($(cells[0]).find('a[href]').first().attr('href')),
+      logo: teamLogo($, cells[0]),
+      clubSupportProgram: /Esports_World_Cup|EWC/i.test($(cells[1]).find('a[title]').first().attr('title') || ''),
+      qualifiedCount: qualifiedCount.qualified,
+      possibleEvents: qualifiedCount.possible,
+      totalTeams,
+      games: gameEntries,
+    });
+  }
+
+  return { games, clubs };
+}
+
+function findEwcPlayerTable($) {
+  return $('table.table2__table')
+    .toArray()
+    .find((table) => {
+      const text = $(table).text().replace(/\s+/g, ' ');
+      return /List of Players attending the 2026 EWC/i.test(text) && /\bPlayer\b/.test(text) && /\bTeam\b/.test(text);
+    });
+}
+
+function parseBirthCell(text) {
+  const clean = cleanName(text);
+  const date = clean.match(/\d{4}-\d{2}-\d{2}/)?.[0] || null;
+  const age = Number(clean.match(/\((\d+)\)/)?.[1]) || null;
+  return { birthDate: date, age };
+}
+
+export function parseEwcPlayerList($) {
+  const table = findEwcPlayerTable($);
+  if (!table) return [];
+
+  const rows = $(table).find('tr').toArray();
+  const headerIndex = rows.findIndex((row) => {
+    const cells = $(row).children('th,td').map((_i, c) => cleanName($(c).text())).get();
+    return cells.includes('Player') && cells.includes('Team') && cells.includes('Game');
+  });
+  if (headerIndex < 0) return [];
+
+  const players = [];
+  for (const row of rows.slice(headerIndex + 1)) {
+    const cells = $(row).children('th,td').toArray();
+    if (cells.length < 7) continue;
+    const id = cleanName($(cells[1]).text());
+    if (!id || /^player$/i.test(id)) continue;
+    const { birthDate, age } = parseBirthCell($(cells[4]).text());
+    const gameTitle = $(cells[6]).find('a[title]').first().attr('title') || '';
+    const gameWiki = slugFromLiquipediaTitle(gameTitle);
+    players.push({
+      country: cleanName($(cells[0]).find('a[title]').first().attr('title') || $(cells[0]).text()),
+      id,
+      givenName: cleanName($(cells[2]).text()) || null,
+      familyName: cleanName($(cells[3]).text()) || null,
+      birthDate,
+      age,
+      team: teamName($, cells[5]),
+      teamUrl: normalizePageUrl($(cells[5]).find('a[href]').first().attr('href')),
+      teamLogo: teamLogo($, cells[5]),
+      game: normalizeEwcGameLabel($(cells[6]).text()),
+      gameWiki,
+      gameUrl: normalizePageUrl($(cells[6]).find('a[href]').first().attr('href')),
+    });
+  }
+  return players;
+}
+
+export async function fetchEwcClubs() {
+  const data = await parsePage('esports', EWC_CLUBS_PAGE);
+  const html = data?.parse?.text?.['*'];
+  if (!html) return { sourceUrl: 'https://liquipedia.net/esports/Esports_World_Cup/2026/Clubs', games: [], clubs: [] };
+  const parsed = parseEwcClubs(cheerio.load(html));
+  return {
+    sourceUrl: 'https://liquipedia.net/esports/Esports_World_Cup/2026/Clubs',
+    ...parsed,
+  };
+}
+
+export async function fetchEwcPlayerList() {
+  const data = await parsePage('esports', EWC_PLAYER_LIST_PAGE);
+  const html = data?.parse?.text?.['*'];
+  if (!html) return { sourceUrl: 'https://liquipedia.net/esports/Esports_World_Cup/2026/Player_List', players: [] };
+  return {
+    sourceUrl: 'https://liquipedia.net/esports/Esports_World_Cup/2026/Player_List',
+    players: parseEwcPlayerList(cheerio.load(html)),
+  };
+}
+
+const MONTHS = new Map([
+  ['jan', 0],
+  ['january', 0],
+  ['feb', 1],
+  ['february', 1],
+  ['mar', 2],
+  ['march', 2],
+  ['apr', 3],
+  ['april', 3],
+  ['may', 4],
+  ['jun', 5],
+  ['june', 5],
+  ['jul', 6],
+  ['july', 6],
+  ['aug', 7],
+  ['august', 7],
+  ['sep', 8],
+  ['sept', 8],
+  ['september', 8],
+  ['oct', 9],
+  ['october', 9],
+  ['nov', 10],
+  ['november', 10],
+  ['dec', 11],
+  ['december', 11],
+]);
+
+function riyadhStartOfDay(year, month, day) {
+  return Math.floor(Date.UTC(year, month, day, -3, 0, 0) / 1000);
+}
+
+function parseEwcDateRange(raw) {
+  const text = cleanName(raw).replace(/^\d{4}\s+/, '');
+  const match = text.match(/^([A-Za-z]+)\s+(\d{1,2})\s*-\s*(?:([A-Za-z]+)\s+)?(\d{1,2}),\s*(\d{4})$/);
+  if (!match) return { label: text, startAt: null, endAt: null };
+  const startMonth = MONTHS.get(match[1].toLowerCase());
+  const startDay = Number(match[2]);
+  const endMonth = MONTHS.get((match[3] || match[1]).toLowerCase());
+  const endDay = Number(match[4]);
+  const year = Number(match[5]);
+  if (!Number.isFinite(startMonth) || !Number.isFinite(endMonth)) return { label: text, startAt: null, endAt: null };
+  const startAt = riyadhStartOfDay(year, startMonth, startDay);
+  const endAt = riyadhStartOfDay(year, endMonth, endDay + 1) - 1;
+  return { label: text, startAt, endAt };
+}
+
+function findEwcTournamentsTable($) {
+  return $('table.table2__table')
+    .toArray()
+    .find((table) => /List of Tournaments/i.test($(table).text()) && /Prize Pool/i.test($(table).text()));
+}
+
+export function parseEwcEventSchedule($) {
+  const table = findEwcTournamentsTable($);
+  if (!table) return [];
+  const rows = $(table).find('tr').toArray();
+  const headerIndex = rows.findIndex((row) => {
+    const cells = $(row).children('th,td').map((_i, c) => cleanName($(c).text())).get();
+    return cells.includes('Game') && cells.includes('Date') && cells.includes('Event');
+  });
+  if (headerIndex < 0) return [];
+
+  const events = [];
+  for (const row of rows.slice(headerIndex + 1)) {
+    const cells = $(row).children('th,td').toArray();
+    if (cells.length < 5) continue;
+    const game = normalizeEwcGameLabel($(cells[0]).text());
+    const gameTitle = $(cells[0]).find('a[title]').first().attr('title') || '';
+    const date = parseEwcDateRange($(cells[1]).text());
+    const eventCell = cells[2];
+    const eventName = cleanName($(eventCell).text());
+    if (!game || !eventName || !date.startAt) continue;
+    const eventLink =
+      $(eventCell)
+        .find('a[href]')
+        .toArray()
+        .map((a) => normalizePageUrl($(a).attr('href')))
+        .find((href) => /liquipedia\.net/i.test(href || '')) || normalizePageUrl($(eventCell).find('a[href]').last().attr('href'));
+    events.push({
+      game,
+      gameWiki: slugFromLiquipediaTitle(gameTitle) || $(cells[0]).find('a[href]').first().attr('href')?.match(/liquipedia\.net\/([^/]+)/i)?.[1] || null,
+      dateLabel: date.label,
+      startAt: date.startAt,
+      endAt: date.endAt,
+      event: eventName,
+      eventUrl: eventLink,
+      prizePool: cleanName($(cells[3]).text()) || null,
+      participants: cleanName($(cells[4]).text()) || null,
+    });
+  }
+  return events.sort((a, b) => a.startAt - b.startAt || a.endAt - b.endAt || a.game.localeCompare(b.game));
+}
+
+export async function fetchEwcEventSchedule(year = 2026) {
+  const page = year === 2026 ? EWC_MAIN_PAGE : `Esports_World_Cup/${year}`;
+  const data = await parsePage('esports', page);
+  const html = data?.parse?.text?.['*'];
+  if (!html) return { year, sourceUrl: `https://liquipedia.net/esports/${page}`, events: [] };
+  return {
+    year,
+    sourceUrl: `https://liquipedia.net/esports/${page}`,
+    events: parseEwcEventSchedule(cheerio.load(html)),
+  };
+}
+
+export async function fetchEwcClubStandings(year = 2026) {
+  const page = `Esports_World_Cup/${year}/Club_Championship_Standings`;
+  try {
+    const data = await parsePage('esports', page);
+    const html = data?.parse?.text?.['*'];
+    if (!html) return { year, exists: false, standings: [], prizepool: [] };
+    const $ = cheerio.load(html);
+    return {
+      year,
+      exists: true,
+      sourceUrl: `https://liquipedia.net/esports/${page}`,
+      standings: parseClubStandings($),
+      prizepool: parseClubPrizepool($),
+    };
+  } catch (error) {
+    if (/doesn'?t exist/i.test(error.message)) return { year, exists: false, standings: [], prizepool: [] };
+    throw error;
+  }
 }
 
 // ---------------------------------------------------------------------------

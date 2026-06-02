@@ -24,12 +24,36 @@ export function setAuditLogChannel(guildId, channelId) {
   ).run(guildId, channelId);
 }
 
+export function setEwcPredictionsChannel(guildId, channelId) {
+  db.prepare(
+    `INSERT INTO guild_settings (guild_id, ewc_predictions_channel_id, updated_at)
+     VALUES (?, ?, datetime('now'))
+     ON CONFLICT (guild_id) DO UPDATE SET ewc_predictions_channel_id = excluded.ewc_predictions_channel_id, updated_at = datetime('now')`,
+  ).run(guildId, channelId);
+}
+
 export function setLeaderboardMessage(guildId, messageId) {
   db.prepare(
     `INSERT INTO guild_settings (guild_id, leaderboard_message_id, updated_at)
      VALUES (?, ?, datetime('now'))
      ON CONFLICT (guild_id) DO UPDATE SET leaderboard_message_id = excluded.leaderboard_message_id, updated_at = datetime('now')`,
   ).run(guildId, messageId);
+}
+
+export function clearCombinedLeaderboard(guildId) {
+  return db
+    .prepare(
+      `UPDATE guild_settings
+       SET leaderboard_channel_id = NULL, leaderboard_message_id = NULL, updated_at = datetime('now')
+       WHERE guild_id = ?`,
+    )
+    .run(guildId);
+}
+
+export function clearCombinedVoiceChannel(guildId) {
+  return db
+    .prepare(`UPDATE guild_settings SET voice_channel_id = NULL, updated_at = datetime('now') WHERE guild_id = ?`)
+    .run(guildId);
 }
 
 // --- EWC Club Championship tracker (one per guild) ---
@@ -105,6 +129,10 @@ export function setGameLeaderboardMessage(guildId, game, messageId) {
   );
 }
 
+export function deleteGameLeaderboard(guildId, game) {
+  return db.prepare('DELETE FROM game_leaderboards WHERE guild_id = ? AND game = ?').run(guildId, game);
+}
+
 // --- Per-game voice channels ---
 
 export function setGameVoiceChannel(guildId, game, channelId) {
@@ -119,6 +147,10 @@ export function getGameVoiceChannels(guildId) {
   return db.prepare('SELECT game, channel_id FROM game_voice_channels WHERE guild_id = ?').all(guildId);
 }
 
+export function deleteGameVoiceChannel(guildId, game) {
+  return db.prepare('DELETE FROM game_voice_channels WHERE guild_id = ? AND game = ?').run(guildId, game);
+}
+
 // --- Per-game match-card boards ---
 
 export function setGameMatchCard(guildId, game, channelId) {
@@ -131,6 +163,10 @@ export function setGameMatchCard(guildId, game, channelId) {
 
 export function getGameMatchCards(guildId) {
   return db.prepare('SELECT game, channel_id FROM game_match_cards WHERE guild_id = ?').all(guildId);
+}
+
+export function deleteGameMatchCard(guildId, game) {
+  return db.prepare('DELETE FROM game_match_cards WHERE guild_id = ? AND game = ?').run(guildId, game);
 }
 
 export function getMatchCardMessages(guildId, game) {
@@ -160,6 +196,10 @@ export function deleteMatchCardMessage(guildId, game, matchId) {
     game,
     matchId,
   );
+}
+
+export function clearMatchCardMessages(guildId, game) {
+  return db.prepare('DELETE FROM match_card_messages WHERE guild_id = ? AND game = ?').run(guildId, game);
 }
 
 export function getGuildsWithClubChampionship() {

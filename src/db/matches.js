@@ -60,14 +60,16 @@ export function getMatch(source, externalId) {
 
 // Collapse rows that describe the SAME match but were stored separately — e.g. the bracket form
 // "Team Canada" plus the upcoming-widget form "Canada", or the same game tracked on two sources.
-// Keyed by game + normalized team pair + calendar day; keeps the most informative row
-// (live > finished > scheduled, prefers one carrying a score and logos).
+// Keyed by game + normalized team pair + calendar day; keeps the most authoritative row.
+// A finished result with a score beats a stale "running" widget row for the same pair/day.
 function dedupeMatches(rows) {
-  const rank = (m) =>
-    (m.status === 'running' ? 100 : m.status === 'finished' ? 50 : 0) +
-    (m.score_a != null ? 10 : 0) +
-    (m.logo_a ? 1 : 0) +
-    (m.logo_b ? 1 : 0);
+  const rank = (m) => {
+    const hasScore = m.score_a != null && m.score_b != null;
+    const status =
+      m.status === 'finished' && hasScore ? 300 : m.status === 'running' ? 200 : m.status === 'finished' ? 150 : 0;
+    const stableMatchId = /^Match:/i.test(m.external_id || '') ? 40 : 0;
+    return status + stableMatchId + (hasScore ? 20 : 0) + (m.logo_a ? 1 : 0) + (m.logo_b ? 1 : 0);
+  };
   const best = new Map();
   for (const m of rows) {
     const day = m.scheduled_at ? Math.floor(m.scheduled_at / 86400) : 'x';

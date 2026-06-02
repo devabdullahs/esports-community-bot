@@ -17,6 +17,7 @@ export function normalizeTeamName(s) {
   return String(s ?? '')
     .toLowerCase()
     .replace(/^team\s+/, '')
+    .replace(/\([^)]*\)/g, '')
     .replace(/[^a-z0-9]+/g, '')
     .trim();
 }
