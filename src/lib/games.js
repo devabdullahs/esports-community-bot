@@ -29,7 +29,7 @@ export const GAMES = [
   { name: 'Heroes of the Storm', slug: 'heroes', tag: 'HotS' },
   { name: 'Free Fire', slug: 'freefire', tag: 'FF' },
   { name: 'Delta Force', slug: 'deltaforce', tag: 'DF' },
-  { name: 'Teamfight Tactics', slug: 'teamfighttactics', tag: 'TFT' },
+  { name: 'Teamfight Tactics', slug: 'tft', tag: 'TFT' },
   { name: 'Clash Royale', slug: 'clashroyale', tag: 'CR' },
   { name: 'CrossFire', slug: 'crossfire', tag: 'CF' },
   { name: 'Deadlock', slug: 'deadlock', tag: 'DL' },
@@ -51,24 +51,44 @@ export const GAMES = [
 ];
 
 const BY_SLUG = new Map(GAMES.map((g) => [g.slug, g]));
+const GAME_ALIASES = { teamfighttactics: 'tft' };
+const LOBBY_GAMES = new Set(['apexlegends', 'freefire', 'fortnite', 'pubg', 'pubgmobile', 'teamfighttactics', 'tft']);
 
 // Short tag for a game key (handles wiki slugs, a few legacy codes, and unknowns).
 const LEGACY_TAGS = { lol: 'LoL', cs2: 'CS', csgo: 'CS', rl: 'RL', ow: 'OW', other: '' };
 export function gameTag(game) {
   if (!game) return '';
-  if (BY_SLUG.has(game)) return BY_SLUG.get(game).tag;
+  const slug = normalizeGameSlug(game);
+  if (BY_SLUG.has(slug)) return BY_SLUG.get(slug).tag;
   if (game in LEGACY_TAGS) return LEGACY_TAGS[game];
   return game.length <= 6 ? game.toUpperCase() : `${game.slice(0, 5).toUpperCase()}`;
 }
 
 // Friendly display name for a game slug (falls back to the slug itself).
 export function gameName(slug) {
-  return BY_SLUG.get(slug)?.name || slug;
+  return BY_SLUG.get(normalizeGameSlug(slug))?.name || slug;
+}
+
+export function isLobbyGame(slug) {
+  return LOBBY_GAMES.has(slug) || LOBBY_GAMES.has(normalizeGameSlug(slug));
+}
+
+export function normalizeGameSlug(slug) {
+  return GAME_ALIASES[slug] || slug;
+}
+
+export function sameGame(a, b) {
+  return normalizeGameSlug(a) === normalizeGameSlug(b);
 }
 
 // Up to 25 autocomplete choices matching a query by name or slug.
-export function searchGames(query) {
+export function searchGames(query, { includeAll = false } = {}) {
   const q = (query || '').toLowerCase().trim();
   const list = q ? GAMES.filter((g) => g.name.toLowerCase().includes(q) || g.slug.includes(q)) : GAMES;
-  return list.slice(0, 25).map((g) => ({ name: g.name, value: g.slug }));
+  const choices = [];
+  if (includeAll && (!q || 'all games'.includes(q) || q === 'all')) {
+    choices.push({ name: 'All games', value: 'all' });
+  }
+  choices.push(...list.map((g) => ({ name: g.name, value: g.slug })));
+  return choices.slice(0, 25);
 }

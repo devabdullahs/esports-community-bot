@@ -4,6 +4,7 @@ import { startMorningSync } from '../jobs/morningSync.js';
 import { resumePolling, setUpdateHandler } from '../jobs/pollingManager.js';
 import { onMatchUpdate, refreshAllGuilds } from '../jobs/refresh.js';
 import { startClubChampionship } from '../jobs/clubChampionship.js';
+import { startCsRankings } from '../jobs/csRankings.js';
 
 // NOTE: in discord.js 14.26 this event's string is "clientReady" — always use the enum.
 export const name = Events.ClientReady;
@@ -20,6 +21,7 @@ export function execute(client) {
         PermissionFlagsBits.ViewChannel,
         PermissionFlagsBits.SendMessages,
         PermissionFlagsBits.EmbedLinks,
+        PermissionFlagsBits.AttachFiles,
         PermissionFlagsBits.ReadMessageHistory,
         PermissionFlagsBits.ManageChannels, // rename the live voice channel
       ],
@@ -28,7 +30,7 @@ export function execute(client) {
   } catch (e) {
     const id = client.application?.id;
     logger.info(
-      `Invite link: https://discord.com/api/oauth2/authorize?client_id=${id}&permissions=85008&scope=bot%20applications.commands`,
+      `Invite link: https://discord.com/api/oauth2/authorize?client_id=${id}&permissions=117776&scope=bot%20applications.commands`,
     );
     logger.debug(`generateInvite fallback: ${e.message}`);
   }
@@ -40,4 +42,5 @@ export function execute(client) {
   resumePolling(); // re-arm matches still pending/running from before a restart
   refreshAllGuilds(client); // repaint leaderboards/voice on boot
   startClubChampionship(client); // EWC Club Championship standings refresh loop
+  startCsRankings(client); // Counter-Strike Valve rankings refresh loop
 }

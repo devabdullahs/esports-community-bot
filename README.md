@@ -15,6 +15,9 @@ Built with **discord.js v14** on **Node ≥ 20.12**. Primary data source is **Li
 - **Live leaderboards** (Components V2 embeds) that auto-update as scores change, grouped into
   **Live / Upcoming / Recent**. Have one **combined** board *and* **per-game** boards in
   separate channels — all update simultaneously.
+- **Live match image cards** — `/set_channel card` can target all games or a single game
+  channel. It posts one rendered PNG per running match, edits score changes, and deletes cards
+  when those matches finish. If nothing is live, the channel keeps a tidy standby card.
 - **EWC Club Championship board** — `/set_ewc` posts an auto-refreshing standings embed
   (club points race + prize pool, with winner highlighting).
 - **Live voice-channel status** — renames a voice channel to the current match
@@ -32,6 +35,7 @@ Built with **discord.js v14** on **Node ≥ 20.12**. Primary data source is **Li
 | `/match` | Focused detail card for any tracked match (autocomplete search) |
 | `/remove_tournament` | Stop tracking one (autocomplete search) |
 | `/set_channel leaderboard` | Set the combined board channel, or a per-game board (optional `game`) |
+| `/set_channel card` | Set the channel for live match image cards, optionally limited to one game |
 | `/set_channel voice` | Set the voice channel used for live status |
 | `/set_ewc` | Track the EWC Club Championship standings in a channel |
 
@@ -67,8 +71,8 @@ npm start        # or: npm run dev  (auto-restart on file change)
 ```
 
 Invite the bot with the `bot` + `applications.commands` scopes and these permissions:
-**View Channels**, **Send Messages**, **Embed Links**, **Read Message History** (to edit its
-own boards), and **Manage Channels** (to rename the voice channel). The bot prints a ready-made
+**View Channels**, **Send Messages**, **Embed Links**, **Attach Files**, **Read Message History**
+(to edit its own boards), and **Manage Channels** (to rename the voice channel). The bot prints a ready-made
 invite link in its startup log.
 
 Then, as a server admin:
@@ -76,6 +80,8 @@ Then, as a server admin:
 ```
 /set_channel leaderboard channel:#esports
 /set_channel leaderboard channel:#valorant  game:Valorant      (optional per-game board)
+/set_channel card channel:#valorant  game:Valorant
+/set_channel card channel:#lol       game:League of Legends
 /set_channel voice channel:🔴-status
 /add_tournament identifier:https://liquipedia.net/valorant/VCT/2026/Stage_2/Masters
 /set_ewc url:https://liquipedia.net/esports/Esports_World_Cup/2026 channel:#ewc-standings
@@ -87,11 +93,26 @@ Then, as a server admin:
 |---|---|
 | `DISCORD_TOKEN`, `DISCORD_CLIENT_ID` | Bot credentials (required) |
 | `DISCORD_GUILD_ID` | Register commands to one server instantly (dev) |
+| `LIQUIPEDIA_PARSE_MIN_GAP_MS`, `LIQUIPEDIA_CACHE_TTL_MS`, `LIQUIPEDIA_BACKOFF_MS`, `LIQUIPEDIA_RATE_STATE_PATH` | Liquipedia parse throttle, cache, and restart-safe rate-limit state |
 | `LIQUIPEDIA_USER_AGENT` | Required by Liquipedia ToS — identify your app + a contact |
 | `SCHEDULER_TIMEZONE`, `MORNING_CRON` | Daily-sync schedule |
 | `LIVE_POLL_INTERVAL_MS` | Live poll cadence (default 3 min; cache keeps fetches well under the limit) |
 | `CC_REFRESH_MINUTES` | Club Championship refresh cadence (default 15) |
+| `LOGO_CACHE_DIR`, `LOGO_CACHE_CONCURRENCY` | Persistent logo cache path and max concurrent logo downloads |
+| `LOGO_DOWNLOAD_MIN_GAP_MS`, `LOGO_RATE_LIMIT_BACKOFF_MS`, `LOGO_RATE_STATE_PATH` | Logo download throttle and restart-safe rate-limit state |
+| `LOGO_FAILURE_TTL_MS`, `LOGO_MAX_BYTES` | Logo retry delay for bad URLs and maximum accepted logo size |
 | `STARTGG_TOKEN`, `PANDASCORE_TOKEN` | Optional secondary sources (stubbed) |
+
+## Docker / UGREEN NAS
+
+Local NAS deployment files are intentionally ignored by git. Fill `.env.docker`, then run:
+
+```bash
+docker compose -f compose.ugreen.yml build
+docker compose -f compose.ugreen.yml up -d
+```
+
+The compose file stores the SQLite database, logo cache, and persistent Liquipedia/logo rate-limit state under `./data`.
 
 ## Project structure
 
@@ -136,3 +157,4 @@ Liquipedia data remains under CC-BY-SA 3.0 as noted above.
 - [x] LPDB API client wired — preferred over HTML parsing when `LPDB_API_KEY` is set (activate once your key is approved)
 - [x] Start.gg + PandaScore integrations (free tier) — structured match data with live status
 - [x] Per-match detail view — `/match` (autocomplete) opens a focused card + link to full details
+- [x] Generated match-card images for `/match` and per-game live card channels

@@ -9,6 +9,12 @@ import { parseTournamentInput } from '../lib/parseTournamentInput.js';
 import { setClubChampionship } from '../db/settings.js';
 import { updateClubChampionship } from '../jobs/clubChampionship.js';
 import { logger } from '../lib/logger.js';
+import { sendAuditLog } from '../lib/auditLog.js';
+import {
+  botChannelPermissionMessage,
+  EMBED_BOARD_PERMISSIONS,
+  missingBotChannelPermissions,
+} from '../lib/botPermissions.js';
 
 export const data = new SlashCommandBuilder()
   .setName('set_ewc')
@@ -22,12 +28,12 @@ export const data = new SlashCommandBuilder()
   .addChannelOption((o) =>
     o
       .setName('channel')
-      .setDescription('Channel for the live standings message')
-      .addChannelTypes(ChannelType.GuildText)
+      .setDescription('Text or announcement channel for the live standings message')
+      .addChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement)
       .setRequired(true),
   )
   .addStringOption((o) => o.setName('label').setDescription('Title shown on the embed').setRequired(false))
-  .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
+  .setDefaultMemberPermissions(PermissionFlagsBits.ModerateMembers)
   .setContexts(InteractionContextType.Guild);
 
 export async function execute(interaction) {
@@ -45,6 +51,15 @@ export async function execute(interaction) {
     return;
   }
 
+  const missing = missingBotChannelPermissions(interaction, channel, EMBED_BOARD_PERMISSIONS);
+  if (missing.length) {
+    await interaction.reply({
+      content: botChannelPermissionMessage(channel, missing),
+      flags: MessageFlags.Ephemeral,
+    });
+    return;
+  }
+
   // externalId is "<wiki>/<page>" e.g. "esports/Esports_World_Cup/2026"
   const [wiki, ...rest] = parsed.externalId.split('/');
   const page = rest.join('/');
@@ -53,6 +68,14 @@ export async function execute(interaction) {
   await interaction.reply({
     content: `✅ **Club Championship tracking set** in ${channel}.\n-# Page \`${wiki}/${page}\` — posting standings now and refreshing automatically.`,
     flags: MessageFlags.Ephemeral,
+  });
+
+  await sendAuditLog(interaction.client, interaction.guildId, {
+    action: 'EWC Standings Channel Set',
+    actor: interaction.user,
+    target: `${channel} (${channel.id})`,
+    details: `Page: ${wiki}/${page}\nLabel: ${label}`,
+    color: 'config',
   });
 
   try {

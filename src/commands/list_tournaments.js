@@ -1,4 +1,11 @@
-import { SlashCommandBuilder, InteractionContextType, ContainerBuilder, SeparatorSpacingSize, MessageFlags } from 'discord.js';
+import {
+  SlashCommandBuilder,
+  InteractionContextType,
+  ContainerBuilder,
+  SeparatorSpacingSize,
+  MessageFlags,
+  PermissionFlagsBits,
+} from 'discord.js';
 import { listActiveTournaments } from '../db/tournaments.js';
 import { getMatchesForGuild } from '../db/matches.js';
 import { gameTag } from '../lib/render.js';
@@ -6,6 +13,7 @@ import { gameTag } from '../lib/render.js';
 export const data = new SlashCommandBuilder()
   .setName('list_tournaments')
   .setDescription('Show the tournaments tracked in this server.')
+  .setDefaultMemberPermissions(PermissionFlagsBits.ModerateMembers)
   .setContexts(InteractionContextType.Guild);
 
 export async function execute(interaction) {

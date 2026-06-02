@@ -1,0 +1,555 @@
+import { createCanvas, GlobalFonts } from '@napi-rs/canvas';
+import { gameTag } from './games.js';
+import { loadLogoImage } from './logoCache.js';
+import { isLobbyMatch, matchLabel } from './render.js';
+
+// Register heading/body fonts (best-effort across OSes; falls back to a generic family).
+function registerFont(paths, family) {
+  for (const p of paths) {
+    try {
+      GlobalFonts.registerFromPath(p, family);
+      return family;
+    } catch {
+      /* try next */
+    }
+  }
+  return 'sans-serif';
+}
+const HEAD = registerFont(
+  [
+    'C:/Windows/Fonts/segoeuib.ttf',
+    'C:/Windows/Fonts/arialbd.ttf',
+    '/usr/share/fonts/opentype/inter/InterDisplay-Bold.otf',
+    '/usr/share/fonts/opentype/inter/Inter-Bold.otf',
+    '/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf',
+    '/Library/Fonts/Arial Bold.ttf',
+  ],
+  'CardHeading',
+);
+const BODY = registerFont(
+  [
+    'C:/Windows/Fonts/segoeui.ttf',
+    'C:/Windows/Fonts/arial.ttf',
+    '/usr/share/fonts/opentype/inter/Inter-Regular.otf',
+    '/usr/share/fonts/opentype/inter/InterDisplay-Regular.otf',
+    '/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf',
+    '/Library/Fonts/Arial.ttf',
+  ],
+  'CardBody',
+);
+
+function roundRect(ctx, x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.arcTo(x + w, y, x + w, y + h, r);
+  ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r);
+  ctx.arcTo(x, y, x + w, y, r);
+  ctx.closePath();
+}
+function fit(ctx, text, maxWidth, font) {
+  ctx.font = font;
+  let t = String(text ?? '');
+  if (ctx.measureText(t).width <= maxWidth) return t;
+  while (t.length > 1 && ctx.measureText(`${t}...`).width > maxWidth) t = t.slice(0, -1);
+  return `${t}...`;
+}
+const initials = (name) =>
+  String(name || '?')
+    .split(/\s+/)
+    .map((w) => w[0])
+    .join('')
+    .slice(0, 3)
+    .toUpperCase();
+
+export function displayTeamName(name) {
+  const s = String(name || 'TBD').replace(/\s+/g, ' ').trim();
+  if (/^thunderdownunder$/i.test(s)) return 'Thunder Down Under';
+  return s;
+}
+
+function drawTeam(ctx, cx, cy, size, name, img) {
+  name = displayTeamName(name);
+  if (img) {
+    const r = Math.min(size / img.width, size / img.height);
+    const w = img.width * r;
+    const h = img.height * r;
+    const dx = cx - w / 2;
+    const dy = cy - h / 2;
+    drawLightLogoHalo(ctx, img, dx, dy, w, h);
+    ctx.drawImage(img, dx, dy, w, h);
+  } else {
+    ctx.fillStyle = 'rgba(255,255,255,0.07)';
+    ctx.beginPath();
+    ctx.arc(cx, cy, size / 2, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#cdd8ec';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.font = `bold 60px ${HEAD}`;
+    ctx.fillText(initials(name), cx, cy);
+    ctx.textBaseline = 'alphabetic';
+  }
+  ctx.fillStyle = '#ffffff';
+  ctx.textAlign = 'center';
+  ctx.fillText(fit(ctx, name || 'TBD', 380, `bold 38px ${HEAD}`), cx, cy + size / 2 + 48);
+}
+
+function drawSmallLogo(ctx, cx, cy, maxW, maxH, name, img) {
+  if (maxH == null) maxH = maxW;
+  const x = cx - maxW / 2;
+  const y = cy - maxH / 2;
+
+  ctx.save();
+  if (img) {
+    const r = Math.min(maxW / img.width, maxH / img.height);
+    const w = img.width * r;
+    const h = img.height * r;
+    const dx = cx - w / 2;
+    const dy = cy - h / 2;
+    drawLightLogoHalo(ctx, img, dx, dy, w, h);
+    ctx.shadowColor = 'rgba(255,255,255,0.2)';
+    ctx.shadowBlur = 5;
+    ctx.drawImage(img, dx, dy, w, h);
+    ctx.restore();
+    return;
+  }
+
+  ctx.fillStyle = 'rgba(255,255,255,0.07)';
+  ctx.beginPath();
+  ctx.arc(cx, cy, maxH / 2, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = '#cdd8ec';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.font = `bold 22px ${HEAD}`;
+  ctx.fillText(initials(name), cx, cy);
+  ctx.textBaseline = 'alphabetic';
+  ctx.restore();
+}
+
+function drawLightLogoHalo(ctx, img, dx, dy, w, h) {
+  const pad = 8;
+  const mask = createCanvas(Math.ceil(w + pad * 2), Math.ceil(h + pad * 2));
+  const mctx = mask.getContext('2d');
+  for (const [ox, oy] of [
+    [-2, 0],
+    [2, 0],
+    [0, -2],
+    [0, 2],
+    [-1, -1],
+    [1, 1],
+  ]) {
+    mctx.drawImage(img, pad + ox, pad + oy, w, h);
+  }
+  mctx.globalCompositeOperation = 'source-in';
+  mctx.fillStyle = 'rgba(255,255,255,0.42)';
+  mctx.fillRect(0, 0, mask.width, mask.height);
+  ctx.drawImage(mask, dx - pad, dy - pad);
+}
+
+export function formatRiyadhDateTime(sec) {
+  if (!sec) return { date: 'Date TBD', time: 'Time TBD', text: 'Date TBD - Time TBD UTC+3' };
+  const d = new Date(sec * 1000);
+  const date = new Intl.DateTimeFormat('en-GB', {
+    timeZone: 'Asia/Riyadh',
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+  }).format(d);
+  const time = new Intl.DateTimeFormat('en-GB', {
+    timeZone: 'Asia/Riyadh',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  }).format(d);
+  return { date, time, text: `${date} - ${time} UTC+3` };
+}
+
+// Render a match-result card to a PNG Buffer.
+// m = { tournament, subtitle, timeText, scoreText, teamA, teamB, logoA, logoB, accent, nextText }
+export async function renderMatchCard(m) {
+  const W = 1200;
+  const H = 600;
+  const canvas = createCanvas(W, H);
+  const ctx = canvas.getContext('2d');
+
+  const bg = ctx.createLinearGradient(0, 0, W, H);
+  bg.addColorStop(0, '#15273f');
+  bg.addColorStop(1, '#070c16');
+  ctx.fillStyle = bg;
+  ctx.fillRect(0, 0, W, H);
+  ctx.strokeStyle = m.accent || 'rgba(120,150,200,0.30)';
+  ctx.lineWidth = 3;
+  roundRect(ctx, 14, 14, W - 28, H - 28, 28);
+  ctx.stroke();
+
+  // Header
+  ctx.textBaseline = 'alphabetic';
+  ctx.textAlign = 'left';
+  ctx.fillStyle = '#ffffff';
+  ctx.fillText(fit(ctx, m.tournament || 'Match', 720, `bold 46px ${HEAD}`), 64, 104);
+  if (m.subtitle) {
+    ctx.fillStyle = '#9fb3d1';
+    ctx.fillText(fit(ctx, m.subtitle, 720, `32px ${BODY}`), 64, 150);
+  }
+  if (m.timeText) {
+    ctx.fillStyle = '#8ab4ff';
+    ctx.textAlign = 'right';
+    ctx.font = `bold 36px ${HEAD}`;
+    ctx.fillText(m.timeText, W - 64, 104);
+  }
+
+  ctx.strokeStyle = 'rgba(130,160,210,0.18)';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(54, 196);
+  ctx.lineTo(W - 54, 196);
+  ctx.stroke();
+
+  const [logoA, logoB] = await Promise.all([loadLogoImage(m.logoA), loadLogoImage(m.logoB)]);
+  drawTeam(ctx, 270, 380, 160, m.teamA, logoA);
+
+  ctx.fillStyle = '#ffffff';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  if (m.teamB) {
+    drawTeam(ctx, W - 270, 380, 160, m.teamB, logoB);
+    ctx.font = `bold 120px ${HEAD}`;
+    ctx.fillText(m.scoreText || 'VS', W / 2, 384);
+  } else {
+    ctx.font = `bold 76px ${HEAD}`;
+    ctx.fillText(m.scoreText || m.timeText || 'LIVE', W - 330, 360);
+    ctx.fillStyle = '#9fb3d1';
+    ctx.font = `30px ${BODY}`;
+    ctx.fillText('Event lobby', W - 330, 420);
+  }
+  ctx.textBaseline = 'alphabetic';
+
+  if (m.nextText) {
+    ctx.fillStyle = '#9fb3d1';
+    ctx.textAlign = 'center';
+    ctx.font = `24px ${BODY}`;
+    ctx.fillText(fit(ctx, m.nextText, 1060, `24px ${BODY}`), W / 2, 572);
+  }
+
+  return canvas.toBuffer('image/png');
+}
+
+export async function renderScheduleCard({ title, subtitle, matches, accent, showGameTags = false }) {
+  const W = 1200;
+  const H = 600;
+  const canvas = createCanvas(W, H);
+  const ctx = canvas.getContext('2d');
+
+  const bg = ctx.createLinearGradient(0, 0, W, H);
+  bg.addColorStop(0, '#14243a');
+  bg.addColorStop(1, '#070c16');
+  ctx.fillStyle = bg;
+  ctx.fillRect(0, 0, W, H);
+
+  ctx.strokeStyle = accent || 'rgba(88,101,242,0.65)';
+  ctx.lineWidth = 3;
+  roundRect(ctx, 14, 14, W - 28, H - 28, 28);
+  ctx.stroke();
+
+  ctx.textBaseline = 'alphabetic';
+  ctx.textAlign = 'left';
+  ctx.fillStyle = '#ffffff';
+  ctx.fillText(fit(ctx, title || 'Upcoming Matches', 760, `bold 46px ${HEAD}`), 64, 104);
+  if (subtitle) {
+    ctx.fillStyle = '#9fb3d1';
+    ctx.fillText(fit(ctx, subtitle, 760, `32px ${BODY}`), 64, 150);
+  }
+
+  ctx.fillStyle = '#8ab4ff';
+  ctx.textAlign = 'right';
+  ctx.font = `bold 36px ${HEAD}`;
+  ctx.fillText('SCHEDULE', W - 64, 104);
+
+  ctx.strokeStyle = 'rgba(130,160,210,0.18)';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(54, 184);
+  ctx.lineTo(W - 54, 184);
+  ctx.stroke();
+
+  const rows = matches.slice(0, 5);
+  const logoPairs = await Promise.all(rows.map((m) => Promise.all([loadLogoImage(m.logo_a), loadLogoImage(m.logo_b)])));
+
+  rows.forEach((m, i) => {
+    const y = 230 + i * 72;
+    const time = formatRiyadhDateTime(m.scheduled_at);
+
+    ctx.fillStyle = i % 2 === 0 ? 'rgba(255,255,255,0.035)' : 'rgba(255,255,255,0.018)';
+    roundRect(ctx, 54, y - 34, W - 108, 62, 10);
+    ctx.fill();
+
+    ctx.textAlign = 'left';
+    ctx.fillStyle = '#8ab4ff';
+    ctx.font = `bold 22px ${HEAD}`;
+    ctx.fillText(time.time, 78, y - 5);
+    ctx.fillStyle = '#9fb3d1';
+    ctx.font = `20px ${BODY}`;
+    ctx.fillText(`${time.date} UTC+3`, 78, y + 20);
+
+    const [logoA, logoB] = logoPairs[i];
+    const isLobby = isLobbyMatch(m);
+    drawSmallLogo(ctx, 306, y - 3, 76, 44, m.team_a, logoA);
+    if (!isLobby) drawSmallLogo(ctx, 908, y - 3, 76, 44, m.team_b, logoB);
+
+    ctx.textAlign = 'left';
+    ctx.fillStyle = '#ffffff';
+    ctx.font = `bold 25px ${HEAD}`;
+    const teamA = displayTeamName(m.team_a);
+    const teamB = isLobby ? m.team_b : displayTeamName(m.team_b);
+    if (isLobby) {
+      const label = matchLabel({ ...m, team_a: teamA, team_b: teamB });
+      ctx.fillText(fit(ctx, label, 760, `bold 25px ${HEAD}`), 350, y - 3);
+    } else {
+      ctx.fillText(fit(ctx, teamA, 195, `bold 25px ${HEAD}`), 350, y - 3);
+    }
+
+    ctx.textAlign = 'center';
+    ctx.fillStyle = '#ffffff';
+    ctx.font = `bold 34px ${HEAD}`;
+    if (!isLobby) ctx.fillText('VS', W / 2, y - 2);
+    if (m.tournament_name) {
+      ctx.fillStyle = '#8ea2c3';
+      ctx.font = `17px ${BODY}`;
+      const tag = showGameTags ? gameTag(m.game) : null;
+      const tournament = tag ? `${tag} - ${m.tournament_name}` : m.tournament_name;
+      ctx.fillText(fit(ctx, tournament, 430, `17px ${BODY}`), W / 2, y + 23);
+    }
+
+    ctx.textAlign = 'right';
+    ctx.fillStyle = '#ffffff';
+    ctx.font = `bold 25px ${HEAD}`;
+    if (!isLobby) ctx.fillText(fit(ctx, teamB, 205, `bold 25px ${HEAD}`), 850, y - 3);
+  });
+
+  return canvas.toBuffer('image/png');
+}
+
+export function renderAllGamesStatusCard({ live = [], upcoming = [], updatedAt = Date.now(), accent }) {
+  const W = 1200;
+  const H = 920;
+  const canvas = createCanvas(W, H);
+  const ctx = canvas.getContext('2d');
+
+  const bg = ctx.createLinearGradient(0, 0, W, H);
+  bg.addColorStop(0, '#14243a');
+  bg.addColorStop(1, '#070c16');
+  ctx.fillStyle = bg;
+  ctx.fillRect(0, 0, W, H);
+
+  ctx.strokeStyle = accent || (live.length ? 'rgba(237,66,69,0.75)' : 'rgba(88,101,242,0.65)');
+  ctx.lineWidth = 3;
+  roundRect(ctx, 14, 14, W - 28, H - 28, 28);
+  ctx.stroke();
+
+  ctx.textBaseline = 'alphabetic';
+  ctx.textAlign = 'left';
+  ctx.fillStyle = '#ffffff';
+  ctx.font = `bold 46px ${HEAD}`;
+  ctx.fillText('All Games Status', 64, 104);
+  ctx.fillStyle = '#9fb3d1';
+  ctx.font = `28px ${BODY}`;
+  const updated = new Intl.DateTimeFormat('en-GB', {
+    timeZone: 'Asia/Riyadh',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  }).format(new Date(updatedAt));
+  ctx.fillText(`Updated ${updated} UTC+3`, 64, 148);
+
+  ctx.fillStyle = live.length ? '#ff6b72' : '#8ab4ff';
+  ctx.textAlign = 'right';
+  ctx.font = `bold 36px ${HEAD}`;
+  ctx.fillText(live.length ? 'LIVE' : 'STANDBY', W - 64, 104);
+
+  ctx.strokeStyle = 'rgba(130,160,210,0.18)';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(54, 184);
+  ctx.lineTo(W - 54, 184);
+  ctx.stroke();
+
+  const liveRows = live.slice(0, 4);
+  let y = 224;
+  ctx.textAlign = 'left';
+  ctx.fillStyle = '#ffffff';
+  ctx.font = `bold 28px ${HEAD}`;
+  ctx.fillText(liveRows.length ? 'Live now' : 'No live matches', 64, y);
+
+  y += 36;
+  if (liveRows.length) {
+    for (const m of liveRows) {
+      const tag = gameTag(m.game);
+      const label = matchLabel(m);
+      const score = m.score_a != null && m.score_b != null ? `${m.score_a} - ${m.score_b}` : 'Live';
+      ctx.fillStyle = 'rgba(255,255,255,0.035)';
+      roundRect(ctx, 54, y - 27, W - 108, 48, 10);
+      ctx.fill();
+
+      ctx.fillStyle = '#ff6b72';
+      ctx.beginPath();
+      ctx.arc(82, y - 4, 8, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.fillStyle = '#8ab4ff';
+      ctx.font = `bold 20px ${HEAD}`;
+      ctx.fillText(tag || 'Game', 108, y + 3);
+
+      ctx.fillStyle = '#ffffff';
+      ctx.font = `bold 22px ${HEAD}`;
+      ctx.fillText(fit(ctx, label, 750, `bold 22px ${HEAD}`), 190, y + 3);
+
+      ctx.textAlign = 'right';
+      ctx.fillStyle = '#cdd8ec';
+      ctx.font = `bold 22px ${HEAD}`;
+      ctx.fillText(score, W - 82, y + 3);
+      ctx.textAlign = 'left';
+      y += 50;
+    }
+  } else {
+    ctx.fillStyle = '#9fb3d1';
+    ctx.font = `28px ${BODY}`;
+    ctx.fillText('Cards will update here when tracked matches go live.', 64, y + 4);
+    y += 66;
+  }
+
+  const nextY = y + 56;
+  ctx.strokeStyle = 'rgba(130,160,210,0.18)';
+  ctx.beginPath();
+  ctx.moveTo(54, nextY - 42);
+  ctx.lineTo(W - 54, nextY - 42);
+  ctx.stroke();
+
+  ctx.fillStyle = '#ffffff';
+  ctx.font = `bold 28px ${HEAD}`;
+  ctx.fillText('Upcoming', 64, nextY);
+  const maxUpcomingRows = Math.max(4, Math.min(10, Math.floor((H - (nextY + 72)) / 32)));
+  const upcomingRows = upcoming.slice(0, maxUpcomingRows);
+  if (upcomingRows.length) {
+    let rowY = nextY + 35;
+    for (const m of upcomingRows) {
+      const tag = gameTag(m.game);
+      const time = formatRiyadhDateTime(m.scheduled_at);
+      ctx.textAlign = 'left';
+      ctx.fillStyle = '#8ab4ff';
+      ctx.font = `bold 18px ${HEAD}`;
+      ctx.fillText(tag || 'Game', 64, rowY);
+      ctx.fillStyle = '#ffffff';
+      ctx.font = `bold 20px ${HEAD}`;
+      ctx.fillText(fit(ctx, matchLabel(m), 650, `bold 20px ${HEAD}`), 146, rowY);
+      ctx.textAlign = 'right';
+      ctx.fillStyle = '#9fb3d1';
+      ctx.font = `19px ${BODY}`;
+      ctx.fillText(time.text, W - 64, rowY);
+      rowY += 32;
+    }
+  } else {
+    ctx.textAlign = 'left';
+    ctx.fillStyle = '#9fb3d1';
+    ctx.font = `24px ${BODY}`;
+    ctx.fillText('No upcoming matches found.', 64, nextY + 42);
+  }
+
+  return canvas.toBuffer('image/png');
+}
+
+export function renderStatusCard({ title, subtitle, statusText, detail, accent }) {
+  const W = 1200;
+  const H = 600;
+  const canvas = createCanvas(W, H);
+  const ctx = canvas.getContext('2d');
+
+  const bg = ctx.createLinearGradient(0, 0, W, H);
+  bg.addColorStop(0, '#14243a');
+  bg.addColorStop(1, '#070c16');
+  ctx.fillStyle = bg;
+  ctx.fillRect(0, 0, W, H);
+
+  ctx.strokeStyle = accent || 'rgba(88,101,242,0.65)';
+  ctx.lineWidth = 3;
+  roundRect(ctx, 14, 14, W - 28, H - 28, 28);
+  ctx.stroke();
+
+  ctx.textBaseline = 'alphabetic';
+  ctx.textAlign = 'left';
+  ctx.fillStyle = '#ffffff';
+  ctx.fillText(fit(ctx, title || 'Match cards', 760, `bold 46px ${HEAD}`), 64, 104);
+  if (subtitle) {
+    ctx.fillStyle = '#9fb3d1';
+    ctx.fillText(fit(ctx, subtitle, 760, `32px ${BODY}`), 64, 150);
+  }
+
+  ctx.fillStyle = '#8ab4ff';
+  ctx.textAlign = 'right';
+  ctx.font = `bold 36px ${HEAD}`;
+  ctx.fillText('STANDBY', W - 64, 104);
+
+  ctx.strokeStyle = 'rgba(130,160,210,0.18)';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(54, 196);
+  ctx.lineTo(W - 54, 196);
+  ctx.stroke();
+
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillStyle = '#ffffff';
+  ctx.font = `bold 78px ${HEAD}`;
+  ctx.fillText(fit(ctx, statusText || 'No live matches', 960, `bold 78px ${HEAD}`), W / 2, 330);
+
+  if (detail) {
+    ctx.fillStyle = '#b5c5df';
+    ctx.font = `32px ${BODY}`;
+    ctx.fillText(fit(ctx, detail, 960, `32px ${BODY}`), W / 2, 410);
+  }
+
+  return canvas.toBuffer('image/png');
+}
+
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+function fmtUtc(sec) {
+  const d = new Date(sec * 1000);
+  const hh = String(d.getUTCHours()).padStart(2, '0');
+  const mm = String(d.getUTCMinutes()).padStart(2, '0');
+  return `${MONTHS[d.getUTCMonth()]} ${d.getUTCDate()} - ${hh}:${mm} UTC`;
+}
+
+// Render a card from a DB match row (joined with tournament fields by getMatchesForGuild).
+export function renderCardForMatch(m, { nextText } = {}) {
+  const lobby = isLobbyMatch(m);
+  const tag = gameTag(m.game);
+  let timeText = '';
+  let accent = 'rgba(120,150,200,0.35)';
+  if (m.status === 'running') {
+    timeText = 'LIVE';
+    accent = 'rgba(237,66,69,0.75)';
+  } else if (m.status === 'finished') {
+    timeText = 'FINAL';
+    accent = 'rgba(87,242,135,0.6)';
+  } else if (m.scheduled_at) {
+    timeText = fmtUtc(m.scheduled_at);
+    accent = 'rgba(88,101,242,0.65)';
+  }
+  return renderMatchCard({
+    tournament: m.tournament_name || (tag ? `${tag} match` : 'Match'),
+    subtitle: m.tournament_name && tag ? tag : null,
+    timeText,
+    scoreText: lobby
+      ? timeText || 'EVENT'
+      : m.status !== 'scheduled' && m.score_a != null && m.score_b != null
+        ? `${m.score_a} : ${m.score_b}`
+        : 'VS',
+    teamA: displayTeamName(m.team_a),
+    teamB: lobby ? null : displayTeamName(m.team_b),
+    logoA: m.logo_a,
+    logoB: m.logo_b,
+    nextText,
+    accent,
+  });
+}

@@ -8,9 +8,10 @@ import {
   setGameLeaderboardMessage,
 } from '../db/settings.js';
 import { matchLine, LIQUIPEDIA_ATTRIBUTION } from '../lib/render.js';
-import { gameName } from '../lib/games.js';
+import { gameName, sameGame } from '../lib/games.js';
 
 const nowSec = () => Math.floor(Date.now() / 1000);
+const MAX_UPCOMING = 10;
 
 // Append the required Liquipedia attribution footer (CC-BY-SA).
 function addAttribution(c) {
@@ -18,11 +19,37 @@ function addAttribution(c) {
   c.addTextDisplayComponents((td) => td.setContent(`-# ${LIQUIPEDIA_ATTRIBUTION}`));
 }
 
+function byScheduledAt(a, b) {
+  return (a.scheduled_at ?? Number.MAX_SAFE_INTEGER) - (b.scheduled_at ?? Number.MAX_SAFE_INTEGER) || a.id - b.id;
+}
+
+function balancedUpcoming(matches, limit = MAX_UPCOMING) {
+  const scheduled = matches.filter((m) => m.status === 'scheduled').sort(byScheduledAt);
+  const selected = [];
+  const seenGames = new Set();
+
+  for (const match of scheduled) {
+    const game = match.game || 'unknown';
+    if (seenGames.has(game)) continue;
+    selected.push(match);
+    seenGames.add(game);
+    if (selected.length >= limit) return selected.sort(byScheduledAt);
+  }
+
+  for (const match of scheduled) {
+    if (selected.some((m) => m.id === match.id)) continue;
+    selected.push(match);
+    if (selected.length >= limit) break;
+  }
+
+  return selected.sort(byScheduledAt);
+}
+
 // Build the live leaderboard as a Components V2 Container. If `game` is set, only that game's
 // matches are shown (a per-game board); otherwise it's the combined "all games" board.
 export function buildLeaderboardContainer(guildId, game = null) {
   let matches = getMatchesForGuild(guildId);
-  if (game) matches = matches.filter((m) => m.game === game);
+  if (game) matches = matches.filter((m) => sameGame(m.game, game));
 
   const c = new ContainerBuilder().setAccentColor(0x5865f2);
   const title = game ? `🏆 ${gameName(game)} Tracker` : '🏆 Esports Tracker';
@@ -38,7 +65,7 @@ export function buildLeaderboardContainer(guildId, game = null) {
   }
 
   const live = matches.filter((m) => m.status === 'running').slice(0, 12);
-  const upcoming = matches.filter((m) => m.status === 'scheduled').slice(0, 10);
+  const upcoming = game ? matches.filter((m) => m.status === 'scheduled').slice(0, MAX_UPCOMING) : balancedUpcoming(matches);
   const recent = matches
     .filter((m) => m.status === 'finished')
     .slice(-6)

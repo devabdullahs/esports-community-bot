@@ -30,6 +30,8 @@ export function normalizeMatch(m) {
     name: m.name || `${teamA} vs ${teamB}`,
     teamA,
     teamB,
+    logoA: a?.opponent?.image_url ?? null,
+    logoB: b?.opponent?.image_url ?? null,
     scoreA: scoreOf(idA),
     scoreB: scoreOf(idB),
     bestOf: m.number_of_games ?? null,

@@ -34,6 +34,10 @@ export function getTournamentById(id) {
   return db.prepare('SELECT * FROM tournaments WHERE id = ?').get(id);
 }
 
+export function updateTournamentName(id, name) {
+  return db.prepare('UPDATE tournaments SET name = ? WHERE id = ?').run(name, id);
+}
+
 export function deactivateTournament(id, guildId) {
   return db.prepare('UPDATE tournaments SET active = 0 WHERE id = ? AND guild_id = ?').run(id, guildId);
 }

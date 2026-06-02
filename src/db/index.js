@@ -34,6 +34,8 @@ db.exec(`
     name           TEXT,
     team_a         TEXT,
     team_b         TEXT,
+    logo_a         TEXT,
+    logo_b         TEXT,
     score_a        INTEGER DEFAULT 0,
     score_b        INTEGER DEFAULT 0,
     status         TEXT    NOT NULL DEFAULT 'scheduled'
@@ -61,7 +63,13 @@ db.exec(`
 function ensureColumns(table, defs) {
   const have = new Set(db.prepare(`PRAGMA table_info(${table})`).all().map((c) => c.name));
   for (const [name, type] of defs) {
-    if (!have.has(name)) db.exec(`ALTER TABLE ${table} ADD COLUMN ${name} ${type}`);
+    if (!have.has(name)) {
+      try {
+        db.exec(`ALTER TABLE ${table} ADD COLUMN ${name} ${type}`);
+      } catch (e) {
+        if (!/duplicate column name/i.test(e.message)) throw e;
+      }
+    }
   }
 }
 
@@ -72,6 +80,18 @@ ensureColumns('guild_settings', [
   ['cc_channel_id', 'TEXT'],
   ['cc_message_id', 'TEXT'],
   ['cc_label', 'TEXT'],
+  ['audit_log_channel_id', 'TEXT'],
+  ['cs_rankings_channel_id', 'TEXT'],
+  ['cs_rankings_message_id', 'TEXT'],
+  ['cs_rankings_region', 'TEXT'],
+  ['cs_rankings_format', 'TEXT'],
+  ['match_card_channel_id', 'TEXT'],
+  ['match_card_message_id', 'TEXT'],
+]);
+
+ensureColumns('matches', [
+  ['logo_a', 'TEXT'],
+  ['logo_b', 'TEXT'],
 ]);
 
 // Per-game leaderboard boards (a guild can have one board per game, plus the combined board
@@ -98,6 +118,40 @@ db.exec(`
     PRIMARY KEY (guild_id, game)
   );
 `);
+
+// Per-game match-card channels. Each board owns one Discord message per running match.
+// A board game of "all" is the combined/all-games card board.
+db.exec(`
+  CREATE TABLE IF NOT EXISTS game_match_cards (
+    guild_id   TEXT NOT NULL,
+    game       TEXT NOT NULL,
+    channel_id TEXT NOT NULL,
+    updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+    PRIMARY KEY (guild_id, game)
+  );
+
+  CREATE TABLE IF NOT EXISTS match_card_messages (
+    guild_id   TEXT NOT NULL,
+    game       TEXT NOT NULL,
+    match_id   INTEGER NOT NULL,
+    channel_id TEXT NOT NULL,
+    message_id TEXT NOT NULL,
+    updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+    PRIMARY KEY (guild_id, game, match_id)
+  );
+`);
+
+// Canonicalize old game keys after slug changes. Keep this tiny and explicit so existing
+// per-game boards continue to work without creating duplicate alias rows later.
+function canonicalizeGameKey(table, oldGame, newGame) {
+  db.prepare(`DELETE FROM ${table} WHERE game = ? AND EXISTS (SELECT 1 FROM ${table} WHERE game = ?)`).run(oldGame, newGame);
+  db.prepare(`UPDATE ${table} SET game = ? WHERE game = ?`).run(newGame, oldGame);
+}
+
+for (const table of ['game_leaderboards', 'game_voice_channels', 'game_match_cards', 'match_card_messages']) {
+  canonicalizeGameKey(table, 'teamfighttactics', 'tft');
+}
+db.prepare(`UPDATE tournaments SET game = ? WHERE game = ?`).run('tft', 'teamfighttactics');
 
 logger.info(`SQLite ready at ${config.db.path}`);
 

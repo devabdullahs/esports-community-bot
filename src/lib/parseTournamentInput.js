@@ -1,3 +1,26 @@
+function cleanTitlePart(part) {
+  return decodeURIComponent(String(part ?? ''))
+    .replaceAll('_', ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+export function formatLiquipediaPageTitle(page) {
+  const parts = String(page ?? '')
+    .split('/')
+    .map(cleanTitlePart)
+    .filter(Boolean);
+  if (!parts.length) return '';
+
+  const [first, second, ...rest] = parts;
+  if (/^\d{4}$/.test(second || '')) {
+    const prefix = `${first} ${second}`;
+    return rest.length ? `${prefix}: ${rest.join(' ')}` : prefix;
+  }
+
+  return parts.join(' ');
+}
+
 // Normalize a user-supplied tournament identifier into { source, externalId, game, url, name }.
 // Accepts:
 //   Liquipedia URL : https://liquipedia.net/valorant/VCT/2024/Champions
@@ -19,7 +42,7 @@ export function parseTournamentInput(raw) {
       game,
       externalId: `${game}/${page}`,
       url: input,
-      name: page.replaceAll('_', ' '),
+      name: formatLiquipediaPageTitle(page),
     };
   }
 
@@ -39,7 +62,7 @@ export function parseTournamentInput(raw) {
       game: source === 'liquipedia' ? id.split('/')[0].toLowerCase() : null,
       externalId: id,
       url: null,
-      name: id,
+      name: source === 'liquipedia' ? formatLiquipediaPageTitle(id.split('/').slice(1).join('/')) : id,
     };
   }
 

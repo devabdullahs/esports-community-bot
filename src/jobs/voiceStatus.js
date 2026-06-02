@@ -1,7 +1,8 @@
 import { logger } from '../lib/logger.js';
 import { getMatchesForGuild } from '../db/matches.js';
 import { getSettings, getGameVoiceChannels } from '../db/settings.js';
-import { gameTag, truncate } from '../lib/render.js';
+import { matchLabel, gameTag, truncate } from '../lib/render.js';
+import { sameGame } from '../lib/games.js';
 
 // Discord rate-limits channel renames to ~2 per 10 minutes PER CHANNEL. We therefore
 // never rename on a fixed poll tick — only when the computed name actually changes, and
@@ -14,21 +15,21 @@ const state = new Map(); // channelId -> { at, name, timer, pending }
 
 export function computeVoiceName(guildId, game = null) {
   let matches = getMatchesForGuild(guildId);
-  if (game) matches = matches.filter((m) => m.game === game);
+  if (game) matches = matches.filter((m) => sameGame(m.game, game));
 
   const live = matches.find((m) => m.status === 'running');
   if (live) {
     const tag = gameTag(live.game);
     const lead = tag ? `${tag} - ` : '';
     const score = live.score_a != null && live.score_b != null ? ` ${live.score_a}-${live.score_b}` : '';
-    return truncate(`🔴 LIVE: ${lead}${live.team_a} vs ${live.team_b}${score}`, VOICE_NAME_MAX);
+    return truncate(`🔴 LIVE: ${lead}${matchLabel(live)}${score}`, VOICE_NAME_MAX);
   }
 
   const next = matches.find((m) => m.status === 'scheduled');
   if (next) {
     const tag = gameTag(next.game);
     const lead = tag ? `${tag} - ` : '';
-    return truncate(`🗓️ Next: ${lead}${next.team_a} vs ${next.team_b}`, VOICE_NAME_MAX);
+    return truncate(`🗓️ Next: ${lead}${matchLabel(next)}`, VOICE_NAME_MAX);
   }
   return '💤 No live matches';
 }

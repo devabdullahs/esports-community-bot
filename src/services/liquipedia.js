@@ -1,7 +1,11 @@
 import axios from 'axios';
 import * as cheerio from 'cheerio';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { dirname, resolve } from 'node:path';
 import { config } from '../config.js';
 import { logger } from '../lib/logger.js';
+import { formatLiquipediaPageTitle } from '../lib/parseTournamentInput.js';
+import { normalizeTeamName } from '../lib/render.js';
 import * as lpdb from './lpdb.js';
 
 // PRIMARY (free) data source. Covers VCT, LCS/Worlds, IEM/CS2, RLCS, OWCS, EWC, etc.
@@ -13,9 +17,10 @@ import * as lpdb from './lpdb.js';
 // We use the MediaWiki API (action=parse) — NOT raw scraping — and enforce a 30s GLOBAL gap
 // between parse requests, a multi-minute response cache (so many matches/polls share one
 // fetch), and automatic backoff if Liquipedia rate-limits us anyway.
-const PARSE_MIN_GAP_MS = 30_000; // action=parse limit is 1 request / 30s (NOT the general 1/2s)
-const CACHE_TTL_MS = 5 * 60_000; // serve cached pages for 5 min — keeps us well under the limit
-const BACKOFF_MS = 20 * 60_000; // pause all requests this long after a rate-limit response
+const PARSE_MIN_GAP_MS = Math.max(30_000, Number(process.env.LIQUIPEDIA_PARSE_MIN_GAP_MS || 30_000));
+const CACHE_TTL_MS = Math.max(60_000, Number(process.env.LIQUIPEDIA_CACHE_TTL_MS || 5 * 60_000));
+const BACKOFF_MS = Math.max(60_000, Number(process.env.LIQUIPEDIA_BACKOFF_MS || 20 * 60_000));
+const RATE_STATE_PATH = resolve(process.env.LIQUIPEDIA_RATE_STATE_PATH || 'data/liquipedia-rate-limit.json');
 
 const client = axios.create({
   timeout: 20_000,
@@ -24,10 +29,73 @@ const client = axios.create({
 
 let lastRequestAt = 0;
 let blockedUntil = 0;
+let rateStateLoaded = false;
 const cache = new Map(); // key -> { at, data }
+const inFlight = new Map(); // key -> Promise<parse response>
 const nowSec = () => Math.floor(Date.now() / 1000);
 const apiUrl = (game) => `https://liquipedia.net/${game}/api.php`;
 const normPath = (s) => decodeURIComponent(String(s ?? '')).toLowerCase();
+// Liquipedia appends "(page does not exist)" to names whose wiki page is missing (common for
+// individual players in chess / EA FC). Strip it so names render cleanly.
+const cleanName = (s) =>
+  String(s ?? '')
+    .replace(/[\u200b-\u200f\ufeff]/g, '')
+    .replace(/\(page does not exist\)/gi, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+const isPlaceholderTeam = (s) => {
+  const name = cleanName(s);
+  return !name || /^TBD$/i.test(name);
+};
+
+function loadRateState() {
+  if (rateStateLoaded) return;
+  rateStateLoaded = true;
+  try {
+    const data = JSON.parse(readFileSync(RATE_STATE_PATH, 'utf8'));
+    lastRequestAt = Number(data.lastRequestAt) || 0;
+    blockedUntil = Number(data.blockedUntil) || 0;
+  } catch {
+    // Missing or invalid state just means this is the first run.
+  }
+}
+
+function saveRateState() {
+  try {
+    mkdirSync(dirname(RATE_STATE_PATH), { recursive: true });
+    writeFileSync(RATE_STATE_PATH, JSON.stringify({ lastRequestAt, blockedUntil }, null, 2));
+  } catch (e) {
+    logger.debug(`[liquipedia] could not save rate state: ${e.message}`);
+  }
+}
+
+function normalizeImageUrl(src) {
+  if (!src || src.startsWith('data:')) return null;
+  if (src.startsWith('//')) return `https:${src}`;
+  if (src.startsWith('/')) return `https://liquipedia.net${src}`;
+  if (/^https?:\/\//i.test(src)) return src;
+  return null;
+}
+
+function imageSrc($img) {
+  const srcset = $img.attr('srcset')?.split(',')[0]?.trim()?.split(/\s+/)[0];
+  return $img.attr('data-src') || $img.attr('src') || srcset || null;
+}
+
+function teamLogo($, el) {
+  const selectors = ['.team-template-image img', '.team-template-logo img', '.brkts-opponent-icon img', 'img'];
+  let fallback = null;
+  for (const selector of selectors) {
+    const imgs = $(el).find(selector).toArray();
+    for (const img of imgs) {
+      const url = normalizeImageUrl(imageSrc($(img)));
+      if (!url) continue;
+      if (!fallback) fallback = url;
+      if (!/\/flags\/|flag_/i.test(url)) return url;
+    }
+  }
+  return fallback;
+}
 
 // A match that started in the recent past with no recorded result yet is treated as live for
 // this long. (Liquipedia serves true live status/scores client-side, so they are NOT present in
@@ -46,16 +114,20 @@ function deriveStatus({ winA = false, winB = false, scoreA, scoreB, bestOf, sche
 }
 
 async function throttle() {
+  loadRateState();
   const wait = lastRequestAt + PARSE_MIN_GAP_MS - Date.now();
   if (wait > 0) await new Promise((r) => setTimeout(r, wait));
   lastRequestAt = Date.now();
+  saveRateState();
 }
 
 // Fetch a page's parsed HTML via the MediaWiki API (throttled, cached, with rate-limit backoff).
 export async function parsePage(game, page) {
+  loadRateState();
   const key = `${game}/${page}`;
   const hit = cache.get(key);
   if (hit && Date.now() - hit.at < CACHE_TTL_MS) return hit.data;
+  if (inFlight.has(key)) return inFlight.get(key);
 
   // If Liquipedia recently rate-limited us, don't touch the network — serve stale or fail fast.
   if (Date.now() < blockedUntil) {
@@ -63,24 +135,51 @@ export async function parsePage(game, page) {
     throw new Error('Liquipedia: backing off after a rate limit');
   }
 
-  await throttle();
-  try {
+  const promise = (async () => {
+    await throttle();
+    const afterWait = cache.get(key);
+    if (afterWait && Date.now() - afterWait.at < CACHE_TTL_MS) return afterWait.data;
+
     const { data } = await client.get(apiUrl(game), {
-      params: { action: 'parse', page, prop: 'text', format: 'json', redirects: true },
+      params: { action: 'parse', page, prop: 'text|displaytitle', format: 'json', redirects: true },
     });
     if (data.error) throw new Error(`Liquipedia: ${data.error.info}`);
     cache.set(key, { at: Date.now(), data });
     return data;
+  })();
+
+  inFlight.set(key, promise);
+  try {
+    return await promise;
   } catch (err) {
     const status = err.response?.status;
     const body = typeof err.response?.data === 'string' ? err.response.data : '';
     if (status === 403 || status === 429 || status === 503 || /rate.?limit|cloudflare|temporarily blocked/i.test(body)) {
       blockedUntil = Date.now() + BACKOFF_MS;
+      saveRateState();
       logger.warn(`[liquipedia] rate limited (HTTP ${status ?? '?'}) — pausing requests for ${BACKOFF_MS / 60000} min`);
     }
     if (hit) return hit.data; // prefer stale data over nothing
     throw err;
+  } finally {
+    inFlight.delete(key);
   }
+}
+
+function cleanDisplayTitle(title) {
+  if (!title) return null;
+  const text = /</.test(title) ? cheerio.load(`<main>${title}</main>`)('main').text() : title;
+  return text.replace(/\s+/g, ' ').trim() || null;
+}
+
+export async function resolveTournamentTitle(tournament) {
+  const [game, ...rest] = tournament.external_id.split('/');
+  const page = rest.join('/');
+  if (!page) return null;
+
+  const data = await parsePage(game, page);
+  const title = cleanDisplayTitle(data?.parse?.displaytitle) || cleanDisplayTitle(data?.parse?.title);
+  return title && !title.includes('/') ? title : formatLiquipediaPageTitle(page);
 }
 
 // Parse a single .match-info element into a normalized match. Works for both the Main_Page
@@ -92,17 +191,70 @@ export function parseMatchInfo($, el, game) {
   const readTeam = (block) => {
     const $b = $(block);
     return (
-      $b.find('a[title]').first().attr('title')?.trim() ||
-      $b.find('[data-highlightingclass]').attr('data-highlightingclass')?.trim() ||
-      $b.find('.name').first().text().trim() ||
-      'TBD'
+      cleanName(
+        $b.find('a[title]').first().attr('title') ||
+          $b.find('[data-highlightingclass]').attr('data-highlightingclass') ||
+          $b.find('.name').first().text(),
+      ) || 'TBD'
     );
   };
-  const teamBlocks = $m.find('.block-team');
-  const teamA = teamBlocks[0] ? readTeam(teamBlocks[0]) : 'TBD';
-  const teamB = teamBlocks[1] ? readTeam(teamBlocks[1]) : 'TBD';
+  // Team games wrap each side in .block-team; 1v1-player wikis (chess, EA FC, fighting games)
+  // use .block-player instead. Prefer exactly two .block-team; otherwise take the first
+  // opponent block from each of the two header sides. Require exactly two sides/players so that
+  // 8-player lobby cards (TFT, battle-royale placement) don't get mistaken for a 1v1 match.
+  let blocks = $m.find('.block-team').toArray();
+  if (blocks.length !== 2) {
+    const sides = $m.find('.match-info-header-opponent').toArray();
+    const perSide = sides.map((s) => $(s).find('.block-team, .block-player').first().get(0)).filter(Boolean);
+    if (perSide.length === 2) blocks = perSide;
+    else {
+      const players = $m.find('.block-player').toArray();
+      blocks = players.length === 2 ? players : [];
+    }
+  }
+  const teamA = blocks[0] ? readTeam(blocks[0]) : 'TBD';
+  const teamB = blocks[1] ? readTeam(blocks[1]) : 'TBD';
+  const logoA = blocks[0] ? teamLogo($, blocks[0]) : null;
+  const logoB = blocks[1] ? teamLogo($, blocks[1]) : null;
 
   const scheduledAt = Number($m.find('.timer-object[data-timestamp]').attr('data-timestamp')) || null;
+  const tHref = $m.find('.match-info-tournament a[href]').first().attr('href') || '';
+  const tournamentPath = tHref.replace(/^\//, '').split('#')[0];
+  const tournamentName =
+    cleanName($m.find('.match-info-tournament-name').first().text()) ||
+    cleanName($m.find('.match-info-tournament a').last().text()) ||
+    null;
+  const tournamentDetail = cleanName(
+    $m
+      .find('.match-info-tournament-wrapper')
+      .first()
+      .children()
+      .filter((_i, child) => !$(child).hasClass('match-info-tournament-name'))
+      .map((_i, child) => $(child).text())
+      .get()
+      .join(' '),
+  );
+
+  if (!blocks.length && tournamentName) {
+    const status = deriveStatus({ scheduledAt });
+    const name = tournamentDetail ? `${tournamentName} — ${tournamentDetail}` : tournamentName;
+    return {
+      source: 'liquipedia',
+      externalId: `${game}:event:${scheduledAt}:${name}`,
+      name,
+      teamA: tournamentName,
+      teamB: tournamentDetail || 'Lobby',
+      logoA: teamLogo($, $m.find('.match-info-tournament').first()),
+      logoB: null,
+      scoreA: null,
+      scoreB: null,
+      bestOf: null,
+      scheduledAt,
+      status,
+      tournamentPath,
+      tournamentName,
+    };
+  }
 
   // Scores: vertical layout has per-opponent .match-info-opponent-score; the horizontal
   // ticker has a single .match-info-header-scoreholder-upper ("vs" | ":" | "2 : 1").
@@ -128,11 +280,6 @@ export function parseMatchInfo($, el, game) {
   const matchId = matchHref.split('/').pop() || null;
   const externalId = matchId || `${game}:${scheduledAt}:${teamA}:${teamB}`;
 
-  // Tournament path (present only on the Main_Page ticker; absent on a tournament's own page).
-  const tHref = $m.find('.match-info-tournament a[href]').first().attr('href') || '';
-  const tournamentPath = tHref.replace(/^\//, '').split('#')[0];
-  const tournamentName = $m.find('.match-info-tournament a').last().text().trim() || null;
-
   const status = deriveStatus({ scoreA, scoreB, bestOf, scheduledAt });
 
   return {
@@ -141,6 +288,8 @@ export function parseMatchInfo($, el, game) {
     name: `${teamA} vs ${teamB}`,
     teamA,
     teamB,
+    logoA,
+    logoB,
     scoreA,
     scoreB,
     bestOf,
@@ -166,16 +315,24 @@ export async function fetchGameMatches(game) {
 // Parse one bracket/matchlist match (.brkts-match) — the AUTHORITATIVE match list on a
 // tournament page: a stable set (unlike the rotating "Upcoming" widget) carrying winners,
 // final scores, and best-of. Returns null for an undetermined (TBD vs TBD) slot.
-export function parseBracketMatch($, el, game) {
+export function parseBracketMatch($, el, game, scope = '') {
   const $m = $(el);
   const entries = $m.find('.brkts-opponent-entry');
   if (entries.length < 2) return null;
 
   // Full team name is in the entry's aria-label; .name is the short fallback.
-  const readTeam = (e) => ($(e).attr('aria-label') || $(e).find('.name').first().text() || 'TBD').trim();
+  const readTeam = (e) =>
+    cleanName(
+      $(e).attr('aria-label') ||
+        $(e).find('[data-highlightingclass]').attr('data-highlightingclass') ||
+        $(e).find('.name').first().text() ||
+        $(e).find('.brkts-opponent-block-literal').first().text(),
+    ) || 'TBD';
   const teamA = readTeam(entries[0]);
   const teamB = readTeam(entries[1]);
-  if (teamA === 'TBD' && teamB === 'TBD') return null;
+  if (isPlaceholderTeam(teamA) && isPlaceholderTeam(teamB)) return null;
+  const logoA = teamLogo($, entries[0]);
+  const logoB = teamLogo($, entries[1]);
 
   const scoreEls = $m.find('.brkts-opponent-score-inner');
   const num = (s) => (/^\d+$/.test(s) ? Number(s) : null);
@@ -193,7 +350,8 @@ export function parseBracketMatch($, el, game) {
 
   // Prefer Liquipedia's stable Match: id; fall back to a composite that stays constant per match.
   const matchHref = $m.find('a[href*="/Match:"]').attr('href') || '';
-  const externalId = matchHref.split('/').pop() || `${game}:${scheduledAt}:${teamA}:${teamB}`;
+  const fallbackScope = scheduledAt ?? (scope || 'unknown');
+  const externalId = matchHref.split('/').pop() || `${game}:${fallbackScope}:${teamA}:${teamB}`;
 
   return {
     source: 'liquipedia',
@@ -201,6 +359,8 @@ export function parseBracketMatch($, el, game) {
     name: `${teamA} vs ${teamB}`,
     teamA,
     teamB,
+    logoA,
+    logoB,
     scoreA,
     scoreB,
     bestOf,
@@ -212,15 +372,23 @@ export function parseBracketMatch($, el, game) {
 
 // Parse one match-list row (.brkts-matchlist-match) — used by group stages, Swiss rounds, and
 // weekly schedules (e.g. CDL). Same shape as a bracket match but with different cell classes.
-export function parseMatchlistMatch($, el, game) {
+export function parseMatchlistMatch($, el, game, scope = '') {
   const $m = $(el);
   const opps = $m.find('.brkts-matchlist-opponent');
   if (opps.length < 2) return null;
 
-  const readTeam = (e) => ($(e).attr('aria-label') || $(e).find('.name').first().text() || 'TBD').trim();
+  const readTeam = (e) =>
+    cleanName(
+      $(e).attr('aria-label') ||
+        $(e).find('[data-highlightingclass]').attr('data-highlightingclass') ||
+        $(e).find('.name').first().text() ||
+        $(e).find('.brkts-opponent-block-literal').first().text(),
+    ) || 'TBD';
   const teamA = readTeam(opps[0]);
   const teamB = readTeam(opps[1]);
-  if (teamA === 'TBD' && teamB === 'TBD') return null;
+  if (isPlaceholderTeam(teamA) && isPlaceholderTeam(teamB)) return null;
+  const logoA = teamLogo($, opps[0]);
+  const logoB = teamLogo($, opps[1]);
 
   const scoreEls = $m.find('.brkts-matchlist-score .brkts-matchlist-cell-content');
   const num = (s) => (/^\d+$/.test(s) ? Number(s) : null);
@@ -236,7 +404,8 @@ export function parseMatchlistMatch($, el, game) {
   const status = deriveStatus({ winA, winB, scoreA, scoreB, bestOf, scheduledAt });
 
   const matchHref = $m.find('a[href*="/Match:"]').attr('href') || '';
-  const externalId = matchHref.split('/').pop() || `${game}:${scheduledAt}:${teamA}:${teamB}`;
+  const fallbackScope = scheduledAt ?? (scope || 'unknown');
+  const externalId = matchHref.split('/').pop() || `${game}:${fallbackScope}:${teamA}:${teamB}`;
 
   return {
     source: 'liquipedia',
@@ -244,6 +413,8 @@ export function parseMatchlistMatch($, el, game) {
     name: `${teamA} vs ${teamB}`,
     teamA,
     teamB,
+    logoA,
+    logoB,
     scoreA,
     scoreB,
     bestOf,
@@ -267,12 +438,16 @@ export function parseSwissMatches($, game) {
       .each((_r, row) => {
         // The row's own team = first non-round cell that holds a team.
         let rowTeam = '';
+        let rowLogo = null;
         $(row)
           .children('td')
           .each((_c, cell) => {
             if (rowTeam || (($(cell).attr('class') || '').includes('swisstable-bgc'))) return;
             const t = teamName($, cell);
-            if (t && t !== 'TBD') rowTeam = t;
+            if (t && t !== 'TBD') {
+              rowTeam = t;
+              rowLogo = teamLogo($, cell);
+            }
           });
         if (!rowTeam) return;
 
@@ -288,6 +463,7 @@ export function parseSwissMatches($, game) {
             if (scoreA === 0 && scoreB === 0) return; // empty / placeholder cell
             const opp = teamName($, cell);
             if (!opp || opp === 'TBD' || opp.toLowerCase() === rowTeam.toLowerCase()) return;
+            const oppLogo = teamLogo($, cell);
             const pairKey = [rowTeam.toLowerCase(), opp.toLowerCase()].sort().join('|');
             if (seen.has(pairKey)) return; // mirror row → same match
             seen.add(pairKey);
@@ -300,6 +476,8 @@ export function parseSwissMatches($, game) {
               name: `${rowTeam} vs ${opp}`,
               teamA: rowTeam,
               teamB: opp,
+              logoA: rowLogo,
+              logoB: oppLogo,
               scoreA,
               scoreB,
               bestOf: null,
@@ -341,9 +519,9 @@ export async function fetchSchedule(tournament) {
   const out = [];
   const seenIds = new Set();
   const pairs = new Set();
-  const pairOf = (m) => [m.teamA.toLowerCase(), m.teamB.toLowerCase()].sort().join('|');
+  const pairOf = (m) => [normalizeTeamName(m.teamA), normalizeTeamName(m.teamB)].sort().join('|');
   const addAuthoritative = (el, parser) => {
-    const m = parser($, el, game);
+    const m = parser($, el, game, page);
     if (!m || seenIds.has(m.externalId)) return;
     seenIds.add(m.externalId);
     pairs.add(pairOf(m));
@@ -487,4 +665,92 @@ export async function fetchClubChampionship(wiki, page) {
   if (!html) return { standings: [], prizepool: [] };
   const $ = cheerio.load(html);
   return { standings: parseClubStandings($), prizepool: parseClubPrizepool($) };
+}
+
+// ---------------------------------------------------------------------------
+// Counter-Strike Valve Regional Standings
+// ---------------------------------------------------------------------------
+
+const VRS_REGIONS = {
+  global: { label: 'Global', tableIndex: 0 },
+  europe: { label: 'Europe', tableIndex: 1 },
+  americas: { label: 'Americas', tableIndex: 2 },
+  asia: { label: 'Asia', tableIndex: 3 },
+};
+
+export const valveRankingRegions = Object.keys(VRS_REGIONS);
+
+function normalizeValveRankingRegion(region) {
+  const key = String(region || 'global').toLowerCase();
+  if (['eu', 'europe'].includes(key)) return 'europe';
+  if (['am', 'americas', 'america'].includes(key)) return 'americas';
+  if (['as', 'asia'].includes(key)) return 'asia';
+  return 'global';
+}
+
+function tableCells($, row) {
+  return $(row)
+    .find('th,td')
+    .map((_i, cell) => $(cell).text().replace(/\s+/g, ' ').trim())
+    .get();
+}
+
+function parseValveRankingTable($, table, region) {
+  const out = [];
+  const global = region === 'global';
+  $(table)
+    .find('tr')
+    .slice(1)
+    .each((_i, row) => {
+      const cells = tableCells($, row);
+      if (cells.length < 4) return;
+      const teamCell = $(row).find('td').eq(global ? 2 : 3);
+      const team = cleanName(
+        teamCell.find('.team-template-text a').first().text() ||
+          teamCell.find('a[title]').last().attr('title') ||
+          teamCell.text(),
+      );
+      if (!team) return;
+
+      const roster = $(row)
+        .find('td')
+        .last()
+        .find('.block-player .name')
+        .map((_j, el) => cleanName($(el).text()))
+        .get()
+        .filter(Boolean);
+
+      out.push({
+        rank: Number(cells[0]) || out.length + 1,
+        globalRank: global ? Number(cells[0]) || null : Number(cells[1]) || null,
+        points: Number(cells[global ? 1 : 2]) || 0,
+        team,
+        region: global ? cells[3] || null : VRS_REGIONS[region].label,
+        roster,
+      });
+    });
+  return out;
+}
+
+export async function fetchValveRegionalStandings(region = 'global') {
+  const key = normalizeValveRankingRegion(region);
+  const data = await parsePage('counterstrike', 'Valve_Regional_Standings');
+  const html = data?.parse?.text?.['*'];
+  if (!html) return { region: key, label: VRS_REGIONS[key].label, date: null, standings: [] };
+
+  const $ = cheerio.load(html);
+  const tables = $('table.table2__table').toArray();
+  const table = tables[VRS_REGIONS[key].tableIndex];
+  const date =
+    $('.navbox .selflink').first().text().match(/\d{4}-\d{2}-\d{2}/)?.[0] ||
+    $.text().match(/\d{4}-\d{2}-\d{2}/)?.[0] ||
+    null;
+
+  return {
+    region: key,
+    label: VRS_REGIONS[key].label,
+    date,
+    sourceUrl: 'https://liquipedia.net/counterstrike/Valve_Regional_Standings',
+    standings: table ? parseValveRankingTable($, table, key) : [],
+  };
 }

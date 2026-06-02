@@ -2,6 +2,7 @@ import { logger } from '../lib/logger.js';
 import { getTournamentById, listActiveTournaments } from '../db/tournaments.js';
 import { updateLeaderboard } from './leaderboard.js';
 import { updateVoiceChannel } from './voiceStatus.js';
+import { updateMatchCards } from './matchCardBoard.js';
 
 // Coalesces rapid match updates into one leaderboard+voice refresh per guild.
 const DEBOUNCE_MS = 2500;
@@ -20,6 +21,11 @@ export function refreshGuild(client, guildId) {
       await updateVoiceChannel(client, guildId);
     } catch (e) {
       logger.error(`[refresh] voice ${guildId}: ${e.message}`);
+    }
+    try {
+      await updateMatchCards(client, guildId);
+    } catch (e) {
+      logger.error(`[refresh] match card ${guildId}: ${e.message}`);
     }
   }, DEBOUNCE_MS);
   t.unref?.();

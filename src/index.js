@@ -7,6 +7,8 @@ import { loadModules } from './lib/loaders.js';
 import { closeDb } from './db/index.js';
 import { stopAll } from './jobs/pollingManager.js';
 import { stopClubChampionship } from './jobs/clubChampionship.js';
+import { stopCsRankings } from './jobs/csRankings.js';
+import { deployCommands } from './lib/commandRegistry.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 
@@ -44,11 +46,21 @@ function shutdown(signal) {
   logger.info(`Received ${signal} — shutting down.`);
   stopAll();
   stopClubChampionship();
+  stopCsRankings();
   client.destroy();
   closeDb();
   process.exit(0);
 }
 process.on('SIGINT', () => shutdown('SIGINT'));
 process.on('SIGTERM', () => shutdown('SIGTERM'));
+
+if (config.discord.deployCommandsOnStart) {
+  await deployCommands().catch((err) => {
+    logger.error('Startup command deployment failed:', err);
+    process.exit(1);
+  });
+} else {
+  logger.info('Startup command deployment disabled (set DEPLOY_DISCORD_COMMANDS=true to enable).');
+}
 
 client.login(config.discord.token);

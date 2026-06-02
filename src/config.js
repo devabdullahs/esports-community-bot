@@ -25,6 +25,7 @@ export const config = {
     clientId: required('DISCORD_CLIENT_ID'),
     // Optional: when set, slash commands register to this one guild instantly (great for dev).
     guildId: get('DISCORD_GUILD_ID'),
+    deployCommandsOnStart: get('DEPLOY_DISCORD_COMMANDS', 'false') === 'true',
   },
   pandascore: {
     token: get('PANDASCORE_TOKEN'),
@@ -55,6 +56,10 @@ export const config = {
   clubChampionship: {
     // How often to refresh the EWC Club Championship standings embed (minutes).
     refreshMinutes: Number(get('CC_REFRESH_MINUTES', 15)),
+  },
+  csRankings: {
+    // Valve Regional Standings update infrequently; keep this gentle for Liquipedia.
+    refreshMinutes: Number(get('CS_RANKINGS_REFRESH_MINUTES', 60)),
   },
   db: {
     path: get('DB_PATH', 'data/bot.sqlite'),

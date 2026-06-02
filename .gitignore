@@ -3,6 +3,12 @@ node_modules/
 .env.*
 !.env.example
 
+# Local Docker/NAS deployment files
+docker-compose*.yml
+compose*.yml
+*.tar
+*.tar.gz
+
 # SQLite database + WAL/SHM sidecars
 data/
 *.sqlite
@@ -13,3 +19,10 @@ data/
 npm-debug.log*
 .DS_Store
 Thumbs.db
+
+# Local test-render artifacts + scratch scripts (cards/rankings are generated at runtime)
+*-card.png
+*-preview.png
+cs-rankings-*.png
+fut-logo.png
+tmp-*.mjs

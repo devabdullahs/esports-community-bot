@@ -7,6 +7,7 @@ import {
 } from 'discord.js';
 import { listActiveTournaments, getTournamentById, deactivateTournament } from '../db/tournaments.js';
 import { refreshGuild } from '../jobs/refresh.js';
+import { sendAuditLog } from '../lib/auditLog.js';
 
 export const data = new SlashCommandBuilder()
   .setName('remove_tournament')
@@ -14,7 +15,7 @@ export const data = new SlashCommandBuilder()
   .addIntegerOption((o) =>
     o.setName('tournament').setDescription('Start typing to search tracked tournaments').setRequired(true).setAutocomplete(true),
   )
-  .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
+  .setDefaultMemberPermissions(PermissionFlagsBits.ModerateMembers)
   .setContexts(InteractionContextType.Guild);
 
 export async function autocomplete(interaction) {
@@ -41,6 +42,18 @@ export async function execute(interaction) {
     .setAccentColor(0xed4245)
     .addTextDisplayComponents((td) => td.setContent(`🗑️ Stopped tracking **${t.name || t.external_id}**.`));
   await interaction.reply({ components: [container], flags: MessageFlags.IsComponentsV2 });
+
+  await sendAuditLog(interaction.client, interaction.guildId, {
+    action: 'Tournament Removed',
+    actor: interaction.user,
+    target: t.name || t.external_id,
+    details:
+      `Source: ${t.source}\n` +
+      `Game: ${t.game || 'auto'}\n` +
+      `Identifier: ${t.external_id}` +
+      `${t.url ? `\nURL: ${t.url}` : ''}`,
+    color: 'danger',
+  });
 
   refreshGuild(interaction.client, interaction.guildId);
 }

@@ -12,6 +12,7 @@ import { syncTournament } from '../jobs/morningSync.js';
 import { refreshGuild } from '../jobs/refresh.js';
 import { searchGames } from '../lib/games.js';
 import { logger } from '../lib/logger.js';
+import { sendAuditLog } from '../lib/auditLog.js';
 
 export const data = new SlashCommandBuilder()
   .setName('add_tournament')
@@ -28,7 +29,7 @@ export const data = new SlashCommandBuilder()
       .setDescription('Game (optional — auto-detected from Liquipedia URLs; start typing to search)')
       .setAutocomplete(true),
   )
-  .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
+  .setDefaultMemberPermissions(PermissionFlagsBits.ModerateMembers)
   .setContexts(InteractionContextType.Guild);
 
 export async function autocomplete(interaction) {
@@ -81,6 +82,17 @@ export async function execute(interaction) {
   // and refresh the boards. Firing a parse request synchronously on every /add is what tripped
   // Liquipedia's 1-request-per-30s limit when several tournaments were added in quick succession.
   await interaction.reply({ components: [container], flags: MessageFlags.IsComponentsV2 });
+  await sendAuditLog(interaction.client, interaction.guildId, {
+    action: 'Tournament Added',
+    actor: interaction.user,
+    target: record.name || record.external_id,
+    details:
+      `Source: ${record.source}\n` +
+      `Game: ${record.game || 'auto'}\n` +
+      `Identifier: ${record.external_id}` +
+      `${record.url ? `\nURL: ${record.url}` : ''}`,
+    color: 'success',
+  });
   syncTournament(interaction.client, record)
     .then(() => refreshGuild(interaction.client, interaction.guildId))
     .catch((e) => logger.warn(`[add] background sync failed for ${record.source}:${record.external_id}: ${e.message}`));

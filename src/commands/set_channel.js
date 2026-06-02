@@ -6,10 +6,19 @@ import {
   ContainerBuilder,
   MessageFlags,
 } from 'discord.js';
-import { setChannel, setGameLeaderboard, setGameVoiceChannel } from '../db/settings.js';
+import { setChannel, setGameLeaderboard, setGameMatchCard, setGameVoiceChannel } from '../db/settings.js';
 import { updateLeaderboard } from '../jobs/leaderboard.js';
 import { updateVoiceChannel } from '../jobs/voiceStatus.js';
-import { searchGames, gameName } from '../lib/games.js';
+import { ALL_GAMES, updateMatchCards } from '../jobs/matchCardBoard.js';
+import { normalizeGameSlug, searchGames, gameName } from '../lib/games.js';
+import { sendAuditLog } from '../lib/auditLog.js';
+import {
+  botChannelPermissionMessage,
+  EMBED_BOARD_PERMISSIONS,
+  IMAGE_BOARD_PERMISSIONS,
+  missingBotChannelPermissions,
+  VOICE_STATUS_PERMISSIONS,
+} from '../lib/botPermissions.js';
 
 export const data = new SlashCommandBuilder()
   .setName('set_channel')
@@ -19,13 +28,18 @@ export const data = new SlashCommandBuilder()
       .setName('leaderboard')
       .setDescription('Channel for a live, auto-updating leaderboard (all games, or one game)')
       .addChannelOption((o) =>
-        o.setName('channel').setDescription('Text channel').addChannelTypes(ChannelType.GuildText).setRequired(true),
+        o
+          .setName('channel')
+          .setDescription('Text or announcement channel')
+          .addChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement)
+          .setRequired(true),
       )
       .addStringOption((o) =>
         o
           .setName('game')
-          .setDescription('Optional: limit this board to one game (leave empty for an all-games board)')
-          .setAutocomplete(true),
+          .setDescription('Choose one game or All games')
+          .setAutocomplete(true)
+          .setRequired(true),
       ),
   )
   .addSubcommand((sc) =>
@@ -38,15 +52,35 @@ export const data = new SlashCommandBuilder()
       .addStringOption((o) =>
         o
           .setName('game')
-          .setDescription('Optional: base this channel on one game (leave empty for all games)')
-          .setAutocomplete(true),
+          .setDescription('Choose one game or All games')
+          .setAutocomplete(true)
+          .setRequired(true),
       ),
   )
-  .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
+  .addSubcommand((sc) =>
+    sc
+      .setName('card')
+      .setDescription('Channel for auto-updating live match image cards (all games, or one game)')
+      .addChannelOption((o) =>
+        o
+          .setName('channel')
+          .setDescription('Text or announcement channel')
+          .addChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement)
+          .setRequired(true),
+      )
+      .addStringOption((o) =>
+        o
+          .setName('game')
+          .setDescription('Choose one game or All games')
+          .setAutocomplete(true)
+          .setRequired(true),
+      ),
+  )
+  .setDefaultMemberPermissions(PermissionFlagsBits.ModerateMembers)
   .setContexts(InteractionContextType.Guild);
 
 export async function autocomplete(interaction) {
-  await interaction.respond(searchGames(interaction.options.getFocused()));
+  await interaction.respond(searchGames(interaction.options.getFocused(), { includeAll: true }));
 }
 
 function confirm(label, channel, note) {
@@ -60,7 +94,17 @@ export async function execute(interaction) {
   const channel = interaction.options.getChannel('channel', true);
 
   if (sub === 'voice') {
-    const game = interaction.options.getString('game');
+    const missing = missingBotChannelPermissions(interaction, channel, VOICE_STATUS_PERMISSIONS);
+    if (missing.length) {
+      await interaction.reply({
+        content: botChannelPermissionMessage(channel, missing),
+        flags: MessageFlags.Ephemeral,
+      });
+      return;
+    }
+
+    const selectedGame = normalizeGameSlug(interaction.options.getString('game', true));
+    const game = selectedGame === ALL_GAMES ? null : selectedGame;
     if (game) setGameVoiceChannel(interaction.guildId, game, channel.id);
     else setChannel(interaction.guildId, 'voice_channel_id', channel.id);
     const label = game ? `${gameName(game)} voice channel` : 'Live voice channel';
@@ -70,12 +114,60 @@ export async function execute(interaction) {
       ],
       flags: [MessageFlags.IsComponentsV2, MessageFlags.Ephemeral],
     });
+    await sendAuditLog(interaction.client, interaction.guildId, {
+      action: 'Voice Status Channel Set',
+      actor: interaction.user,
+      target: `${label}: ${channel} (${channel.id})`,
+      details: `Game scope: ${game || 'all games'}`,
+      color: 'config',
+    });
     await updateVoiceChannel(interaction.client, interaction.guildId).catch(() => {});
     return;
   }
 
+  if (sub === 'card') {
+    const missing = missingBotChannelPermissions(interaction, channel, IMAGE_BOARD_PERMISSIONS);
+    if (missing.length) {
+      await interaction.reply({
+        content: botChannelPermissionMessage(channel, missing),
+        flags: MessageFlags.Ephemeral,
+      });
+      return;
+    }
+
+    const selectedGame = normalizeGameSlug(interaction.options.getString('game', true));
+    const game = selectedGame === ALL_GAMES ? ALL_GAMES : selectedGame;
+    setGameMatchCard(interaction.guildId, game, channel.id);
+    const label = game === ALL_GAMES ? 'All-games match cards' : `${gameName(game)} match cards`;
+    await interaction.reply({
+      components: [
+        confirm(label, channel, '-# One image is posted per running match; finished match cards are removed.'),
+      ],
+      flags: [MessageFlags.IsComponentsV2, MessageFlags.Ephemeral],
+    });
+    await sendAuditLog(interaction.client, interaction.guildId, {
+      action: 'Match Card Channel Set',
+      actor: interaction.user,
+      target: `${label}: ${channel} (${channel.id})`,
+      details: `Game scope: ${game === ALL_GAMES ? 'all games' : game}`,
+      color: 'config',
+    });
+    await updateMatchCards(interaction.client, interaction.guildId).catch(() => {});
+    return;
+  }
+
   // leaderboard (combined or per-game)
-  const game = interaction.options.getString('game');
+  const missing = missingBotChannelPermissions(interaction, channel, EMBED_BOARD_PERMISSIONS);
+  if (missing.length) {
+    await interaction.reply({
+      content: botChannelPermissionMessage(channel, missing),
+      flags: MessageFlags.Ephemeral,
+    });
+    return;
+  }
+
+  const selectedGame = normalizeGameSlug(interaction.options.getString('game', true));
+  const game = selectedGame === ALL_GAMES ? null : selectedGame;
   if (game) setGameLeaderboard(interaction.guildId, game, channel.id);
   else setChannel(interaction.guildId, 'leaderboard_channel_id', channel.id);
 
@@ -83,6 +175,13 @@ export async function execute(interaction) {
   await interaction.reply({
     components: [confirm(label, channel, '-# The live scoreboard appears here and updates automatically.')],
     flags: [MessageFlags.IsComponentsV2, MessageFlags.Ephemeral],
+  });
+  await sendAuditLog(interaction.client, interaction.guildId, {
+    action: 'Leaderboard Channel Set',
+    actor: interaction.user,
+    target: `${label}: ${channel} (${channel.id})`,
+    details: `Game scope: ${game || 'all games'}`,
+    color: 'config',
   });
   await updateLeaderboard(interaction.client, interaction.guildId).catch(() => {});
 }

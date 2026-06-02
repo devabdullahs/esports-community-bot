@@ -80,7 +80,12 @@ async function pollOnce(match, tournament) {
     const before = getMatch(fresh.source, fresh.externalId);
     const row = upsertMatch(toMatchRow(fresh, match.tournament_id));
     const changed =
-      !before || before.score_a !== row.score_a || before.score_b !== row.score_b || before.status !== row.status;
+      !before ||
+      before.score_a !== row.score_a ||
+      before.score_b !== row.score_b ||
+      before.status !== row.status ||
+      before.logo_a !== row.logo_a ||
+      before.logo_b !== row.logo_b;
     if (changed) onUpdate('update', row);
     if (fresh.externalId === match.external_id) polled = row;
   }

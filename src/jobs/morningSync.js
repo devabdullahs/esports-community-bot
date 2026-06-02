@@ -1,8 +1,8 @@
 import cron from 'node-cron';
 import { config } from '../config.js';
 import { logger } from '../lib/logger.js';
-import { listActiveTournaments } from '../db/tournaments.js';
-import { upsertMatch, toMatchRow } from '../db/matches.js';
+import { listActiveTournaments, updateTournamentName } from '../db/tournaments.js';
+import { deleteTournamentPlaceholderMatches, upsertMatch, toMatchRow } from '../db/matches.js';
 import { armMatch } from './pollingManager.js';
 import { refreshAllGuilds } from './refresh.js';
 import * as liquipedia from '../services/liquipedia.js';
@@ -19,7 +19,22 @@ export async function syncTournament(client, t) {
     logger.warn(`[sync] no service for source "${t.source}" (tournament #${t.id}).`);
     return 0;
   }
+
+  if (service.resolveTournamentTitle) {
+    try {
+      const title = await service.resolveTournamentTitle(t);
+      if (title && title !== t.name) {
+        updateTournamentName(t.id, title);
+        t = { ...t, name: title };
+      }
+    } catch (e) {
+      logger.debug(`[sync] title lookup failed for ${t.source}:${t.external_id}: ${e.message}`);
+    }
+  }
+
   const matches = await service.fetchSchedule(t);
+  const deleted = deleteTournamentPlaceholderMatches(t.id);
+  if (deleted) logger.info(`[sync] removed ${deleted} placeholder match(es) for ${t.source}:${t.external_id}`);
   for (const parsed of matches) {
     const row = upsertMatch(toMatchRow(parsed, t.id));
     armMatch(row, t);
