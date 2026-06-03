@@ -20,6 +20,12 @@ npm-debug.log*
 .DS_Store
 Thumbs.db
 
+# Runtime permission backups — contain guild/role/member IDs; never commit (esp. public repo)
+backups/
+
+# Redundant emoji bundle (the individual files are tracked instead)
+assets/game-emojis/*.zip
+
 # Local test-render artifacts + scratch scripts (cards/rankings are generated at runtime)
 *-card.png
 *-preview.png
