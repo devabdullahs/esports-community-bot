@@ -654,13 +654,13 @@ export async function fetchSchedule(tournament) {
 
   const out = [];
   const seenIds = new Set();
-  const pairs = new Set();
+  const pairIndex = new Map(); // pairKey -> match (dedupe + live-status upgrade)
   const pairOf = (m) => [normalizeTeamName(m.teamA), normalizeTeamName(m.teamB)].sort().join('|');
   const addAuthoritative = (el, parser) => {
     const m = parser($, el, game, page);
     if (!m || seenIds.has(m.externalId)) return;
     seenIds.add(m.externalId);
-    pairs.add(pairOf(m));
+    pairIndex.set(pairOf(m), m);
     out.push(m);
   };
 
@@ -671,20 +671,34 @@ export async function fetchSchedule(tournament) {
 
   // 1c) Swiss group standings grids (RLCS etc.) — matches are encoded in the round cells.
   for (const m of parseSwissMatches($, game)) {
-    if (seenIds.has(m.externalId) || pairs.has(pairOf(m))) continue;
+    if (seenIds.has(m.externalId) || pairIndex.has(pairOf(m))) continue;
     seenIds.add(m.externalId);
-    pairs.add(pairOf(m));
+    pairIndex.set(pairOf(m), m);
     out.push(m);
   }
 
-  // 2) "Upcoming Matches" widget — add ONLY matchups whose team-pair isn't already covered.
-  //    A match can appear in both with different ids/timestamps, so dedupe by team-pair.
+  // 2) "Upcoming Matches" widget = the live matchticker, our best LIVE signal. For a pair we
+  //    already have, don't duplicate it — but if the widget shows it live, UPGRADE the stored
+  //    entry to running. (A Swiss/bracket cell can show a live Bo3's partial score, e.g. 1-0,
+  //    which the score heuristic otherwise reads as "finished".) New matchups are added.
   $('.match-info').each((_i, el) => {
     const m = parseMatchInfo($, el, game);
     if (!m || (m.teamA === 'TBD' && m.teamB === 'TBD')) return;
-    if (seenIds.has(m.externalId) || pairs.has(pairOf(m))) return;
+    const key = pairOf(m);
+    const existing = pairIndex.get(key);
+    if (existing) {
+      if (m.status === 'running' && existing.status !== 'running') {
+        existing.status = 'running';
+        existing.winner = null;
+        if (m.scoreA != null) existing.scoreA = m.scoreA;
+        if (m.scoreB != null) existing.scoreB = m.scoreB;
+        if (!existing.scheduledAt && m.scheduledAt) existing.scheduledAt = m.scheduledAt;
+      }
+      return;
+    }
+    if (seenIds.has(m.externalId)) return;
     seenIds.add(m.externalId);
-    pairs.add(pairOf(m));
+    pairIndex.set(key, m);
     out.push(m);
   });
 
