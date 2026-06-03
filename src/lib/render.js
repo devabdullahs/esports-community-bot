@@ -1,5 +1,5 @@
 // Shared formatting helpers for embeds, the leaderboard, and voice-channel names.
-import { gameTag, isLobbyGame } from './games.js';
+import { gameTag, isLobbyGame, matchTagEwc } from './games.js';
 
 export { gameTag };
 
@@ -58,7 +58,7 @@ export function matchLabel(m) {
 // One markdown line describing a match, tuned per status. The game tag links to the
 // tournament's Liquipedia page when available.
 export function matchLine(m) {
-  const tag = gameTag(m.game);
+  const tag = matchTagEwc(m);
   const url = tournamentUrl(m);
   const tagText = tag ? `\`${tag}\`` : '';
   const prefix = tag ? `${url ? `[${tagText}](${url})` : tagText} ` : '';

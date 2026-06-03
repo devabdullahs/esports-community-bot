@@ -7,7 +7,7 @@ import {
   renderScheduleCard,
   renderStatusCard,
 } from './matchCard.js';
-import { gameName, gameTag } from './games.js';
+import { gameName, gameTag, matchTagEwc } from './games.js';
 import { isLobbyMatch, matchLabel, matchUrl, tournamentUrl } from './render.js';
 
 const LIQUIPEDIA_FOOTER = 'Data from Liquipedia — CC-BY-SA 3.0';
@@ -189,7 +189,7 @@ export async function buildAllGamesStatusPayload(matches) {
     lines.push(
       '**Live now**',
       ...live.map((m) => {
-        const tag = gameTag(m.game);
+        const tag = matchTagEwc(m);
         const score = m.score_a != null && m.score_b != null ? ` — **${m.score_a} - ${m.score_b}**` : '';
         const url = matchUrl(m);
         const label = `${tag ? `\`${tag}\` ` : ''}${matchLabel(m)}`;
@@ -205,7 +205,7 @@ export async function buildAllGamesStatusPayload(matches) {
     lines.push(
       '**Upcoming**',
       ...upcoming.map((m) => {
-        const tag = gameTag(m.game);
+        const tag = matchTagEwc(m);
         const label = `${tag ? `\`${tag}\` ` : ''}${matchLabel(m)}`;
         const url = matchUrl(m);
         const when = m.scheduled_at ? `<t:${m.scheduled_at}:F> (<t:${m.scheduled_at}:R>)` : '`Time TBD`';

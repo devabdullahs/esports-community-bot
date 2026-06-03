@@ -1,5 +1,5 @@
 import { createCanvas, GlobalFonts } from '@napi-rs/canvas';
-import { gameTag } from './games.js';
+import { matchTag, matchTagEwc } from './games.js';
 import { loadLogoImage } from './logoCache.js';
 import { isLobbyMatch, matchLabel } from './render.js';
 
@@ -317,7 +317,7 @@ export async function renderScheduleCard({ title, subtitle, matches, accent, sho
     if (m.tournament_name) {
       ctx.fillStyle = '#8ea2c3';
       ctx.font = `17px ${BODY}`;
-      const tag = showGameTags ? gameTag(m.game) : null;
+      const tag = showGameTags ? matchTag(m) : null;
       const tournament = tag ? `${tag} - ${m.tournament_name}` : m.tournament_name;
       ctx.fillText(fit(ctx, tournament, 430, `17px ${BODY}`), W / 2, y + 23);
     }
@@ -385,7 +385,7 @@ export function renderAllGamesStatusCard({ live = [], upcoming = [], updatedAt =
   y += 36;
   if (liveRows.length) {
     for (const m of liveRows) {
-      const tag = gameTag(m.game);
+      const tag = matchTagEwc(m);
       const label = matchLabel(m);
       const score = m.score_a != null && m.score_b != null ? `${m.score_a} - ${m.score_b}` : 'Live';
       ctx.fillStyle = 'rgba(255,255,255,0.035)';
@@ -399,11 +399,11 @@ export function renderAllGamesStatusCard({ live = [], upcoming = [], updatedAt =
 
       ctx.fillStyle = '#8ab4ff';
       ctx.font = `bold 20px ${HEAD}`;
-      ctx.fillText(tag || 'Game', 108, y + 3);
+      ctx.fillText(fit(ctx, tag || 'Game', 150, `bold 20px ${HEAD}`), 108, y + 3);
 
       ctx.fillStyle = '#ffffff';
       ctx.font = `bold 22px ${HEAD}`;
-      ctx.fillText(fit(ctx, label, 750, `bold 22px ${HEAD}`), 190, y + 3);
+      ctx.fillText(fit(ctx, label, 658, `bold 22px ${HEAD}`), 282, y + 3);
 
       ctx.textAlign = 'right';
       ctx.fillStyle = '#cdd8ec';
@@ -434,15 +434,15 @@ export function renderAllGamesStatusCard({ live = [], upcoming = [], updatedAt =
   if (upcomingRows.length) {
     let rowY = nextY + 35;
     for (const m of upcomingRows) {
-      const tag = gameTag(m.game);
+      const tag = matchTagEwc(m);
       const time = formatRiyadhDateTime(m.scheduled_at);
       ctx.textAlign = 'left';
       ctx.fillStyle = '#8ab4ff';
       ctx.font = `bold 18px ${HEAD}`;
-      ctx.fillText(tag || 'Game', 64, rowY);
+      ctx.fillText(fit(ctx, tag || 'Game', 150, `bold 18px ${HEAD}`), 64, rowY);
       ctx.fillStyle = '#ffffff';
       ctx.font = `bold 20px ${HEAD}`;
-      ctx.fillText(fit(ctx, matchLabel(m), 650, `bold 20px ${HEAD}`), 146, rowY);
+      ctx.fillText(fit(ctx, matchLabel(m), 560, `bold 20px ${HEAD}`), 230, rowY);
       ctx.textAlign = 'right';
       ctx.fillStyle = '#9fb3d1';
       ctx.font = `19px ${BODY}`;
@@ -523,7 +523,7 @@ function fmtUtc(sec) {
 // Render a card from a DB match row (joined with tournament fields by getMatchesForGuild).
 export function renderCardForMatch(m, { nextText } = {}) {
   const lobby = isLobbyMatch(m);
-  const tag = gameTag(m.game);
+  const tag = matchTagEwc(m);
   let timeText = '';
   let accent = 'rgba(120,150,200,0.35)';
   if (m.status === 'running') {
