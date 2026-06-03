@@ -126,7 +126,8 @@ function leaderboardLines(rows, offset = 0) {
 
 // custom_id: "ewc_predict:<action>:<type>:<season>:<week|->:<page>" — parsed by the interaction
 // router (first segment = command name) and by handleComponent/handleModal below.
-const lbId = (action, type, season, week, page) => `ewc_predict:${action}:${type}:${season}:${week || '-'}:${page}`;
+const lbId = (action, type, season, week, page, ownerId) =>
+  `ewc_predict:${action}:${type}:${season}:${week || '-'}:${page}:${ownerId}`;
 
 // Resolve title + total count + a page fetcher for a leaderboard type. null if the round is gone.
 function leaderboardData(guildId, type, season, week) {
@@ -155,7 +156,7 @@ function leaderboardData(guildId, type, season, week) {
 
 // Build a leaderboard page: embed + (Prev / Page X/Y / Next) buttons. Buttons only appear when
 // there is more than one page. The middle button opens a "go to page" modal.
-function buildLeaderboardPage(guildId, type, season, week, page = 1) {
+function buildLeaderboardPage(guildId, type, season, week, page = 1, ownerId = '') {
   const data = leaderboardData(guildId, type, season, week);
   if (!data) return null;
   const totalPages = Math.max(1, Math.ceil(data.count / PAGE_SIZE));
@@ -172,16 +173,16 @@ function buildLeaderboardPage(guildId, type, season, week, page = 1) {
     components.push(
       new ActionRowBuilder().addComponents(
         new ButtonBuilder()
-          .setCustomId(lbId('lb', type, season, week, p - 1))
+          .setCustomId(lbId('lb', type, season, week, p - 1, ownerId))
           .setLabel('◀ Prev')
           .setStyle(ButtonStyle.Secondary)
           .setDisabled(p <= 1),
         new ButtonBuilder()
-          .setCustomId(lbId('lbgoto', type, season, week, p))
+          .setCustomId(lbId('lbgoto', type, season, week, p, ownerId))
           .setLabel(`Page ${p}/${totalPages}`)
           .setStyle(ButtonStyle.Primary),
         new ButtonBuilder()
-          .setCustomId(lbId('lb', type, season, week, p + 1))
+          .setCustomId(lbId('lb', type, season, week, p + 1, ownerId))
           .setLabel('Next ▶')
           .setStyle(ButtonStyle.Secondary)
           .setDisabled(p >= totalPages),
@@ -281,7 +282,7 @@ export async function execute(interaction) {
         return;
       }
     }
-    const payload = buildLeaderboardPage(interaction.guildId, type, seasonYear, week, page);
+    const payload = buildLeaderboardPage(interaction.guildId, type, seasonYear, week, page, interaction.user.id);
     await interaction.reply({ embeds: payload.embeds, components: payload.components });
     return;
   }
@@ -359,14 +360,23 @@ export async function execute(interaction) {
 
 // --- Leaderboard pagination (routed here via the "ewc_predict:" custom_id prefix) ---
 export async function handleComponent(interaction) {
-  const [, action, type, season, weekRaw, pageRaw] = interaction.customId.split(':');
+  const [, action, type, season, weekRaw, pageRaw, ownerId] = interaction.customId.split(':');
   const week = weekRaw === '-' ? null : weekRaw;
+
+  // Only the member who ran /ewc_predict leaderboard can drive its buttons.
+  if (ownerId && interaction.user.id !== ownerId) {
+    await interaction.reply({
+      content: 'These buttons belong to whoever ran the command — use `/ewc_predict leaderboard` to get your own.',
+      flags: MessageFlags.Ephemeral,
+    });
+    return;
+  }
 
   if (action === 'lbgoto') {
     const data = leaderboardData(interaction.guildId, type, season, week);
     const totalPages = data ? Math.max(1, Math.ceil(data.count / PAGE_SIZE)) : 1;
     const modal = new ModalBuilder()
-      .setCustomId(`ewc_predict:lbmodal:${type}:${season}:${week || '-'}`)
+      .setCustomId(`ewc_predict:lbmodal:${type}:${season}:${week || '-'}:${ownerId}`)
       .setTitle(`Go to page (1-${totalPages})`)
       .addComponents(
         new ActionRowBuilder().addComponents(
@@ -384,7 +394,7 @@ export async function handleComponent(interaction) {
   }
 
   // action === 'lb' → jump to the page baked into the button's custom_id.
-  const payload = buildLeaderboardPage(interaction.guildId, type, season, week, Number(pageRaw) || 1);
+  const payload = buildLeaderboardPage(interaction.guildId, type, season, week, Number(pageRaw) || 1, ownerId);
   if (!payload) {
     await interaction.deferUpdate().catch(() => {});
     return;
@@ -393,10 +403,17 @@ export async function handleComponent(interaction) {
 }
 
 export async function handleModal(interaction) {
-  const [, , type, season, weekRaw] = interaction.customId.split(':');
+  const [, , type, season, weekRaw, ownerId] = interaction.customId.split(':');
   const week = weekRaw === '-' ? null : weekRaw;
   const requested = parseInt(interaction.fields.getTextInputValue('page'), 10);
-  const payload = buildLeaderboardPage(interaction.guildId, type, season, week, Number.isFinite(requested) ? requested : 1);
+  const payload = buildLeaderboardPage(
+    interaction.guildId,
+    type,
+    season,
+    week,
+    Number.isFinite(requested) ? requested : 1,
+    ownerId,
+  );
   if (!payload) {
     await interaction.reply({ content: 'That leaderboard is no longer available.', flags: MessageFlags.Ephemeral });
     return;
