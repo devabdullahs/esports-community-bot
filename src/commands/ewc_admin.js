@@ -20,7 +20,11 @@ import {
   upsertEwcWeek,
 } from '../db/ewcPredictions.js';
 import { config } from '../config.js';
-import { setEwcPredictionsChannel, setEwcPredictionsLeaderboard } from '../db/settings.js';
+import {
+  setEwcPredictionsChannel,
+  setEwcPredictionsLeaderboard,
+  setEwcPredictionsMentionsLeaderboard,
+} from '../db/settings.js';
 import { updateEwcPredictionLeaderboard } from '../jobs/ewcPredictions.js';
 import { sendAuditLog } from '../lib/auditLog.js';
 import {
@@ -57,7 +61,20 @@ export const data = new SlashCommandBuilder()
   .addSubcommand((s) =>
     s
       .setName('set_leaderboard')
-      .setDescription('Post one auto-updating EWC prediction leaderboard message.')
+      .setDescription('Post one auto-updating public EWC prediction image leaderboard.')
+      .addChannelOption((o) =>
+        o
+          .setName('channel')
+          .setDescription('Text or announcement channel')
+          .addChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement)
+          .setRequired(true),
+      )
+      .addStringOption((o) => o.setName('season').setDescription('Season year').setRequired(false)),
+  )
+  .addSubcommand((s) =>
+    s
+      .setName('set_mentions_leaderboard')
+      .setDescription('Post one auto-updating EWC prediction leaderboard with member mentions for admins.')
       .addChannelOption((o) =>
         o
           .setName('channel')
@@ -250,6 +267,29 @@ export async function execute(interaction) {
       });
       await sendAuditLog(interaction.client, interaction.guildId, {
         action: 'EWC Prediction Leaderboard Set',
+        actor: interaction.user,
+        target: `${channel} (${channel.id})`,
+        details: `Season: ${seasonYear}`,
+        color: 'config',
+      });
+      return;
+    }
+
+    if (sub === 'set_mentions_leaderboard') {
+      const channel = interaction.options.getChannel('channel', true);
+      const missing = missingBotChannelPermissions(interaction, channel, EMBED_BOARD_PERMISSIONS);
+      if (missing.length) {
+        await interaction.reply({ content: botChannelPermissionMessage(channel, missing), flags: MessageFlags.Ephemeral });
+        return;
+      }
+      await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+      setEwcPredictionsMentionsLeaderboard(interaction.guildId, { channelId: channel.id, season: seasonYear });
+      await updateEwcPredictionLeaderboard(interaction.client, interaction.guildId);
+      await interaction.editReply({
+        content: `✅ EWC ${seasonYear} admin mentions leaderboard posted in ${channel} and will keep updating.`,
+      });
+      await sendAuditLog(interaction.client, interaction.guildId, {
+        action: 'EWC Prediction Mentions Leaderboard Set',
         actor: interaction.user,
         target: `${channel} (${channel.id})`,
         details: `Season: ${seasonYear}`,

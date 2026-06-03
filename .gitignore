@@ -23,6 +23,8 @@ Thumbs.db
 # Local test-render artifacts + scratch scripts (cards/rankings are generated at runtime)
 *-card.png
 *-preview.png
+*-sample.png
 cs-rankings-*.png
+ewc-prediction*.png
 fut-logo.png
 tmp-*.mjs

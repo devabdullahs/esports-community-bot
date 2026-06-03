@@ -1,4 +1,4 @@
-import { SlashCommandBuilder, InteractionContextType, MessageFlags } from 'discord.js';
+import { SlashCommandBuilder, InteractionContextType, MessageFlags, EmbedBuilder } from 'discord.js';
 import {
   getEwcSeason,
   getEwcWeek,
@@ -146,7 +146,12 @@ export async function execute(interaction) {
     const picks = uniqueClubPicks(teamPicks(interaction, 3), 3);
     upsertWeeklyPrediction({ guildId: interaction.guildId, weekId: round.id, userId: interaction.user.id, picks });
     await interaction.reply({
-      content: `✅ Weekly picks locked for **${round.label || round.week_key}**:\n${formatPicks(picks)}`,
+      embeds: [
+        new EmbedBuilder()
+          .setColor(0x57f287)
+          .setTitle(`✅ Weekly picks locked — ${round.label || round.week_key}`)
+          .setDescription(formatPicks(picks)),
+      ],
       flags: MessageFlags.Ephemeral,
     });
     return;
@@ -169,7 +174,12 @@ export async function execute(interaction) {
     }
     upsertSeasonPrediction({ guildId: interaction.guildId, season: seasonYear, userId: interaction.user.id, picks });
     await interaction.reply({
-      content: `✅ Season picks locked for **${round.label || `EWC ${seasonYear}`}**:\n${formatPicks(picks)}`,
+      embeds: [
+        new EmbedBuilder()
+          .setColor(0x57f287)
+          .setTitle(`✅ Season picks locked — ${round.label || `EWC ${seasonYear}`}`)
+          .setDescription(formatPicks(picks)),
+      ],
       flags: MessageFlags.Ephemeral,
     });
     return;
@@ -192,17 +202,36 @@ export async function execute(interaction) {
       }
       const rows = weeklyLeaderboard(round.id, PAGE_SIZE, offset);
       await interaction.reply({
-        content: `## EWC Weekly Predictions — ${round.label || round.week_key}\n${leaderboardLines(rows, offset)}`,
+        embeds: [
+          new EmbedBuilder()
+            .setColor(0xf1c40f)
+            .setTitle(`EWC Weekly Predictions — ${round.label || round.week_key}`)
+            .setDescription(leaderboardLines(rows, offset)),
+        ],
       });
       return;
     }
     if (type === 'season') {
       const rows = seasonLeaderboard(interaction.guildId, seasonYear, PAGE_SIZE, offset);
-      await interaction.reply({ content: `## EWC ${seasonYear} Season Predictions\n${leaderboardLines(rows, offset)}` });
+      await interaction.reply({
+        embeds: [
+          new EmbedBuilder()
+            .setColor(0xf1c40f)
+            .setTitle(`EWC ${seasonYear} Season Predictions`)
+            .setDescription(leaderboardLines(rows, offset)),
+        ],
+      });
       return;
     }
     const rows = overallLeaderboard(interaction.guildId, seasonYear, PAGE_SIZE, offset);
-    await interaction.reply({ content: `## EWC ${seasonYear} Prediction Leaderboard\n${leaderboardLines(rows, offset)}` });
+    await interaction.reply({
+      embeds: [
+        new EmbedBuilder()
+          .setColor(0xf1c40f)
+          .setTitle(`EWC ${seasonYear} Prediction Leaderboard`)
+          .setDescription(leaderboardLines(rows, offset)),
+      ],
+    });
     return;
   }
 
@@ -214,11 +243,17 @@ export async function execute(interaction) {
       .slice(-5)
       .map((row) => `• **${row.label || row.week_key}** — ${row.picks?.join(', ') || 'No picks'}${row.score != null ? ` — \`${row.score}\`` : ''}`);
     const seasonPicks = profile.season?.picks?.length ? profile.season.picks.join(', ') : 'No season picks yet.';
+    const seasonValue = `${seasonPicks}${profile.season?.score != null ? ` — \`${profile.season.score}\`` : ''}`;
     await interaction.reply({
-      content:
-        `## EWC Prediction Profile — ${user}\n` +
-        `**Season picks:** ${seasonPicks}${profile.season?.score != null ? ` — \`${profile.season.score}\`` : ''}\n\n` +
-        `**Recent weekly picks**\n${weekly.length ? weekly.join('\n') : 'No weekly picks yet.'}`,
+      embeds: [
+        new EmbedBuilder()
+          .setColor(0x5865f2)
+          .setAuthor({ name: `${user.globalName || user.username} — EWC Prediction Profile`, iconURL: user.displayAvatarURL() })
+          .addFields(
+            { name: 'Season picks', value: seasonValue.slice(0, 1024) },
+            { name: 'Recent weekly picks', value: (weekly.length ? weekly.join('\n') : 'No weekly picks yet.').slice(0, 1024) },
+          ),
+      ],
       flags: MessageFlags.Ephemeral,
     });
     return;
@@ -226,18 +261,30 @@ export async function execute(interaction) {
 
   if (sub === 'guide') {
     await interaction.reply({
-      content:
-        '## نظام توقعات كأس العالم للرياضات الإلكترونية\n' +
-        'الفكرة بسيطة: كل أسبوع تختار **3 أندية** تتوقع أنها بتحقق أعلى نقاط في ترتيب الأندية خلال هذا الأسبوع.\n\n' +
-        '**التوقع الأسبوعي**\n' +
-        'استخدم الأمر `/ewc_predict weekly` واختر الأسبوع وثلاثة أندية. بعد إغلاق التوقعات، البوت يحسب الفرق بين ترتيب بداية الأسبوع ونهايته، والنقاط تكون حسب النقاط الفعلية التي كسبتها الأندية في ذلك الأسبوع. إذا كانت اختياراتك الثلاثة كلها ضمن أفضل 3 في الأسبوع، تحصل على بونص إضافي.\n\n' +
-        '**توقع الموسم كامل**\n' +
-        'استخدم الأمر `/ewc_predict season` واختر أفضل 5 إلى 10 أندية حسب إعدادات الإدارة. هذا التوقع ينحسب في نهاية البطولة حسب ترتيب الأندية النهائي.\n\n' +
-        '**الأوامر المفيدة**\n' +
-        '`/ewc_predict leaderboard` يعرض ترتيب المشاركين.\n' +
-        '`/ewc_predict profile` يعرض توقعاتك ونتائجك.\n' +
-        '`/ewc_predict teams` يساعدك تبحث عن الأندية المشاركة.\n\n' +
-        'التوقعات تقفل في وقت محدد، وبعدها البوت ينتظر فترة أمان قبل حساب النتائج عشان يتأكد أن ترتيب Liquipedia استقر.',
+      embeds: [
+        new EmbedBuilder()
+          .setColor(0x5865f2)
+          .setTitle('نظام توقّعات كأس العالم للرياضات الإلكترونية')
+          .setDescription(
+            'الفكرة بسيطة: كل أسبوع تختار **ثلاثة أندية** تتوقّع أن تحقّق أعلى النقاط في ترتيب الأندية خلال ذلك الأسبوع.\n\n' +
+              '**التوقّع الأسبوعي**\n' +
+              'اختر الأسبوع وثلاثة أندية باستخدام:\n' +
+              '`/ewc_predict weekly`\n' +
+              'بعد إغلاق باب التوقّعات، يحسب البوت الفرق بين ترتيب الأندية في بداية الأسبوع ونهايته، وتُحتسب نقاطك بحسب النقاط الفعلية التي حققتها الأندية التي اخترتها. وإذا جاءت اختياراتك الثلاثة جميعها ضمن أفضل ثلاثة أندية في ذلك الأسبوع، فستحصل على مكافأة إضافية.\n\n' +
+              '**توقّع الموسم الكامل**\n' +
+              'اختر أفضل خمسة إلى عشرة أندية (حسب إعدادات الإدارة) باستخدام:\n' +
+              '`/ewc_predict season`\n' +
+              'تُحتسب هذه التوقّعات في نهاية البطولة بحسب الترتيب النهائي للأندية.\n\n' +
+              '**أوامر مفيدة**\n' +
+              'لعرض ترتيب المشاركين:\n' +
+              '`/ewc_predict leaderboard`\n' +
+              'لعرض توقّعاتك ونتائجك:\n' +
+              '`/ewc_predict profile`\n' +
+              'للبحث عن الأندية المشاركة:\n' +
+              '`/ewc_predict teams`\n\n' +
+              'تعتمد النتائج على بيانات موقع Liquipedia، لذلك تُغلق التوقّعات في وقت محدّد ثم ينتظر البوت فترة أمان قبل الاحتساب حتى يستقرّ الترتيب.',
+          ),
+      ],
     });
     return;
   }
@@ -247,7 +294,14 @@ export async function execute(interaction) {
     await interaction.deferReply({ flags: MessageFlags.Ephemeral });
     const choices = await searchEwcClubChoices(query, { wait: true });
     await interaction.editReply({
-      content: choices.length ? choices.map((c) => `• ${c.name}`).join('\n') : 'No EWC clubs matched that search.',
+      embeds: [
+        new EmbedBuilder()
+          .setColor(0x5865f2)
+          .setTitle(`EWC Clubs${query ? ` — “${query}”` : ''}`)
+          .setDescription(
+            (choices.length ? choices.map((c) => `• ${c.name}`).join('\n') : 'No EWC clubs matched that search.').slice(0, 4000),
+          ),
+      ],
     });
   }
 }

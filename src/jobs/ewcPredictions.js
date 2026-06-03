@@ -1,4 +1,4 @@
-import { EmbedBuilder } from 'discord.js';
+import { AttachmentBuilder, EmbedBuilder } from 'discord.js';
 import { config } from '../config.js';
 import {
   listEwcWeeks,
@@ -18,10 +18,12 @@ import {
 import {
   getGuildsWithEwcPredictionLeaderboard,
   getSettings,
+  setEwcPredictionsMentionsMessage,
   setEwcPredictionsLeaderboardMessage,
 } from '../db/settings.js';
 import { logger } from '../lib/logger.js';
 import { scoreSeasonPrediction, scoreWeeklyPrediction } from '../lib/ewcPredictions.js';
+import { renderEwcPredictionLeaderboardCard } from '../lib/ewcPredictionLeaderboardCard.js';
 import { fetchEwcClubStandings } from '../services/liquipedia.js';
 
 const nowSec = () => Math.floor(Date.now() / 1000);
@@ -55,44 +57,118 @@ function leaderboardLines(rows) {
     .join('\n');
 }
 
-function buildEwcPredictionLeaderboardEmbed(guildId, season) {
+async function leaderboardRowsForImage(client, guildId, rows) {
+  const guild = await client.guilds.fetch(guildId).catch(() => null);
+  return Promise.all(
+    rows.map(async (row) => {
+      let label = null;
+      const cachedMember = guild?.members?.cache?.get(row.user_id);
+      const member = cachedMember || (guild ? await guild.members.fetch(row.user_id).catch(() => null) : null);
+      const user = member?.user || (await client.users.fetch(row.user_id).catch(() => null));
+      label = member?.displayName || user?.globalName || user?.username || null;
+      return { ...row, label: label || `Member ${String(row.user_id).slice(-4)}` };
+    }),
+  );
+}
+
+function leaderboardMeta(guildId, season) {
   const rows = overallLeaderboard(guildId, season, 20, 0);
   const weeks = listEwcWeeks(guildId, season);
   const scoredWeeks = weeks.filter((week) => week.status === 'scored').length;
-  return new EmbedBuilder()
+  return { rows, weeks, scoredWeeks };
+}
+
+async function buildEwcPredictionLeaderboardPayload(client, guildId, season) {
+  const { rows, weeks, scoredWeeks } = leaderboardMeta(guildId, season);
+  const namedRows = await leaderboardRowsForImage(client, guildId, rows);
+  const imageName = `ewc-predictions-${season}-${Date.now()}.png`;
+  const attachment = new AttachmentBuilder(
+    renderEwcPredictionLeaderboardCard({
+      season,
+      rows: namedRows,
+      scoredWeeks,
+      totalWeeks: weeks.length,
+      updatedAt: Date.now(),
+    }),
+    { name: imageName },
+  );
+  const embed = new EmbedBuilder()
     .setColor(0xf1c40f)
     .setTitle(`EWC ${season} Prediction Leaderboard`)
-    .setDescription(leaderboardLines(rows))
+    .setImage(`attachment://${imageName}`)
     .addFields(
       { name: 'Scored weeks', value: `${scoredWeeks}/${weeks.length || 0}`, inline: true },
       { name: 'Updated', value: `<t:${nowSec()}:R>`, inline: true },
     )
     .setFooter({ text: 'Weekly and season prediction points' });
+  return { embeds: [embed], files: [attachment] };
+}
+
+function buildEwcPredictionMentionsEmbed(guildId, season) {
+  const { rows, weeks, scoredWeeks } = leaderboardMeta(guildId, season);
+  return new EmbedBuilder()
+    .setColor(0xf1c40f)
+    .setTitle(`EWC ${season} Prediction Leaderboard - Admin Mentions`)
+    .setDescription(leaderboardLines(rows))
+    .addFields(
+      { name: 'Scored weeks', value: `${scoredWeeks}/${weeks.length || 0}`, inline: true },
+      { name: 'Updated', value: `<t:${nowSec()}:R>`, inline: true },
+    )
+    .setFooter({ text: 'Mentions are shown for admin tracking; edits do not ping members.' });
 }
 
 export async function updateEwcPredictionLeaderboard(client, guildId) {
   if (!client) return false;
   const s = getSettings(guildId);
-  if (!s.ewc_predictions_leaderboard_channel_id) return false;
+  let updated = false;
 
-  const channel = await client.channels.fetch(s.ewc_predictions_leaderboard_channel_id).catch(() => null);
-  if (!channel?.isTextBased?.()) return false;
-
-  const season = s.ewc_predictions_leaderboard_season || '2026';
-  const payload = { embeds: [buildEwcPredictionLeaderboardEmbed(guildId, season)] };
-
-  if (s.ewc_predictions_leaderboard_message_id) {
-    const msg = await channel.messages.fetch(s.ewc_predictions_leaderboard_message_id).catch(() => null);
-    if (msg) {
-      await msg.edit(payload);
-      return true;
+  if (s.ewc_predictions_leaderboard_channel_id) {
+    const channel = await client.channels.fetch(s.ewc_predictions_leaderboard_channel_id).catch(() => null);
+    if (channel?.isTextBased?.()) {
+      const season = s.ewc_predictions_leaderboard_season || '2026';
+      const imagePayload = await buildEwcPredictionLeaderboardPayload(client, guildId, season);
+      if (s.ewc_predictions_leaderboard_message_id) {
+        const msg = await channel.messages.fetch(s.ewc_predictions_leaderboard_message_id).catch(() => null);
+        if (msg) {
+          await msg.edit({ ...imagePayload, attachments: [] });
+          updated = true;
+        }
+      }
+      if (!updated) {
+        const sent = await channel.send(imagePayload);
+        setEwcPredictionsLeaderboardMessage(guildId, sent.id);
+        logger.info(`[ewc-predictions] posted leaderboard ${sent.id} in guild ${guildId}`);
+        updated = true;
+      }
     }
   }
 
-  const sent = await channel.send(payload);
-  setEwcPredictionsLeaderboardMessage(guildId, sent.id);
-  logger.info(`[ewc-predictions] posted leaderboard ${sent.id} in guild ${guildId}`);
-  return true;
+  if (s.ewc_predictions_mentions_channel_id) {
+    const channel = await client.channels.fetch(s.ewc_predictions_mentions_channel_id).catch(() => null);
+    if (channel?.isTextBased?.()) {
+      const season = s.ewc_predictions_mentions_season || '2026';
+      const payload = {
+        embeds: [buildEwcPredictionMentionsEmbed(guildId, season)],
+        allowedMentions: { parse: [] },
+      };
+      let mentionUpdated = false;
+      if (s.ewc_predictions_mentions_message_id) {
+        const msg = await channel.messages.fetch(s.ewc_predictions_mentions_message_id).catch(() => null);
+        if (msg) {
+          await msg.edit(payload);
+          mentionUpdated = true;
+        }
+      }
+      if (!mentionUpdated) {
+        const sent = await channel.send(payload);
+        setEwcPredictionsMentionsMessage(guildId, sent.id);
+        logger.info(`[ewc-predictions] posted mentions leaderboard ${sent.id} in guild ${guildId}`);
+      }
+      updated = true;
+    }
+  }
+
+  return updated;
 }
 
 async function announce(client, guildId, content) {

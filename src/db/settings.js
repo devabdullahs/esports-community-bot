@@ -53,6 +53,27 @@ export function setEwcPredictionsLeaderboardMessage(guildId, messageId) {
   ).run(messageId, guildId);
 }
 
+export function setEwcPredictionsMentionsLeaderboard(guildId, { channelId, season = '2026' }) {
+  db.prepare(
+    `INSERT INTO guild_settings
+       (guild_id, ewc_predictions_mentions_channel_id, ewc_predictions_mentions_season, ewc_predictions_mentions_message_id, updated_at)
+     VALUES (?, ?, ?, NULL, datetime('now'))
+     ON CONFLICT (guild_id) DO UPDATE SET
+       ewc_predictions_mentions_channel_id = excluded.ewc_predictions_mentions_channel_id,
+       ewc_predictions_mentions_season = excluded.ewc_predictions_mentions_season,
+       ewc_predictions_mentions_message_id = NULL,
+       updated_at = datetime('now')`,
+  ).run(guildId, channelId, season);
+}
+
+export function setEwcPredictionsMentionsMessage(guildId, messageId) {
+  db.prepare(
+    `UPDATE guild_settings
+     SET ewc_predictions_mentions_message_id = ?, updated_at = datetime('now')
+     WHERE guild_id = ?`,
+  ).run(messageId, guildId);
+}
+
 export function setLeaderboardMessage(guildId, messageId) {
   db.prepare(
     `INSERT INTO guild_settings (guild_id, leaderboard_message_id, updated_at)
@@ -239,7 +260,12 @@ export function getGuildsWithCsRankings() {
 
 export function getGuildsWithEwcPredictionLeaderboard() {
   return db
-    .prepare(`SELECT guild_id FROM guild_settings WHERE ewc_predictions_leaderboard_channel_id IS NOT NULL`)
+    .prepare(
+      `SELECT guild_id
+       FROM guild_settings
+       WHERE ewc_predictions_leaderboard_channel_id IS NOT NULL
+          OR ewc_predictions_mentions_channel_id IS NOT NULL`,
+    )
     .all()
     .map((r) => r.guild_id);
 }

@@ -91,6 +91,9 @@ ensureColumns('guild_settings', [
   ['ewc_predictions_leaderboard_channel_id', 'TEXT'],
   ['ewc_predictions_leaderboard_message_id', 'TEXT'],
   ['ewc_predictions_leaderboard_season', 'TEXT'],
+  ['ewc_predictions_mentions_channel_id', 'TEXT'],
+  ['ewc_predictions_mentions_message_id', 'TEXT'],
+  ['ewc_predictions_mentions_season', 'TEXT'],
 ]);
 
 ensureColumns('matches', [
