@@ -114,10 +114,13 @@ export function markFinished(id) {
   return db.prepare(`UPDATE matches SET status='finished', updated_at=datetime('now') WHERE id = ?`).run(id);
 }
 
-export function deleteTournamentPlaceholderMatches(tournamentId) {
+export function deleteTournamentPlaceholderMatches(tournamentId, currentExternalIds = null) {
   const rows = db
-    .prepare('SELECT id, team_a, team_b FROM matches WHERE tournament_id = ?')
+    .prepare('SELECT id, external_id, team_a, team_b, scheduled_at FROM matches WHERE tournament_id = ?')
     .all(tournamentId);
+  const current = currentExternalIds ? new Set(currentExternalIds) : null;
+  const now = Math.floor(Date.now() / 1000);
+  const staleAfterSeconds = 4 * 3600;
   const clean = (value) =>
     String(value ?? '')
       .replace(/[\u200b-\u200f\ufeff]/g, '')
@@ -128,7 +131,18 @@ export function deleteTournamentPlaceholderMatches(tournamentId) {
     return !text || /^TBD$/i.test(text);
   };
 
-  const ids = rows.filter((row) => isPlaceholder(row.team_a) && isPlaceholder(row.team_b)).map((row) => row.id);
+  const ids = rows
+    .filter((row) => {
+      const placeholderA = isPlaceholder(row.team_a);
+      const placeholderB = isPlaceholder(row.team_b);
+      if (placeholderA && placeholderB) return true;
+      if (!placeholderA && !placeholderB) return false;
+
+      const missingFromLatest = current && !current.has(row.external_id);
+      const overdue = row.scheduled_at && row.scheduled_at < now - staleAfterSeconds;
+      return missingFromLatest || overdue;
+    })
+    .map((row) => row.id);
   if (!ids.length) return 0;
   const del = db.prepare('DELETE FROM matches WHERE id = ?');
   const tx = db.transaction((toDelete) => {

@@ -81,6 +81,15 @@ export function sameGame(a, b) {
   return normalizeGameSlug(a) === normalizeGameSlug(b);
 }
 
+// Resolve a user-supplied game value (slug or alias) to its registered game, or null if unknown.
+export function getGame(slug) {
+  return BY_SLUG.get(normalizeGameSlug(slug)) || null;
+}
+
+export function isKnownGameSlug(slug) {
+  return BY_SLUG.has(normalizeGameSlug(slug));
+}
+
 // Up to 25 autocomplete choices matching a query by name or slug.
 export function searchGames(query, { includeAll = false } = {}) {
   const q = (query || '').toLowerCase().trim();

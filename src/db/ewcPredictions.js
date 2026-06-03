@@ -82,6 +82,14 @@ export function setEwcWeekStatus(weekId, status) {
   ).run(status, status, weekId);
 }
 
+export function reopenEwcWeek(weekId) {
+  db.prepare(
+    `UPDATE ewc_prediction_weeks
+     SET status = 'open', final_json = NULL, scored_at = NULL
+     WHERE id = ?`,
+  ).run(weekId);
+}
+
 export function setEwcWeekSnapshot(weekId, type, standings) {
   const column = type === 'baseline' ? 'baseline_json' : 'final_json';
   db.prepare(`UPDATE ewc_prediction_weeks SET ${column} = ? WHERE id = ?`).run(stringify(standings), weekId);
@@ -193,6 +201,14 @@ export function setEwcSeasonStatus(guildId, season, status) {
   );
 }
 
+export function reopenEwcSeason(guildId, season) {
+  db.prepare(
+    `UPDATE ewc_prediction_seasons
+     SET status = 'open', final_json = NULL, scored_at = NULL
+     WHERE guild_id = ? AND season = ?`,
+  ).run(guildId, season);
+}
+
 export function markEwcSeasonScored(guildId, season, finalStandings) {
   db.prepare(
     `UPDATE ewc_prediction_seasons
@@ -272,7 +288,7 @@ export function overallLeaderboard(guildId, season = '2026', limit = 20, offset 
        SELECT user_id, SUM(score) AS score
        FROM scores
        GROUP BY user_id
-       ORDER BY score DESC
+       ORDER BY score DESC, user_id ASC
        LIMIT ? OFFSET ?`,
     )
     .all(guildId, season, guildId, season, limit, offset);

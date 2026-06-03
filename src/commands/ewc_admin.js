@@ -9,6 +9,8 @@ import {
   listWeeklyPredictions,
   markEwcSeasonScored,
   markEwcWeekScored,
+  reopenEwcSeason,
+  reopenEwcWeek,
   saveSeasonPredictionScore,
   saveWeeklyPredictionScore,
   setEwcSeasonStatus,
@@ -18,7 +20,8 @@ import {
   upsertEwcWeek,
 } from '../db/ewcPredictions.js';
 import { config } from '../config.js';
-import { setEwcPredictionsChannel } from '../db/settings.js';
+import { setEwcPredictionsChannel, setEwcPredictionsLeaderboard } from '../db/settings.js';
+import { updateEwcPredictionLeaderboard } from '../jobs/ewcPredictions.js';
 import { sendAuditLog } from '../lib/auditLog.js';
 import {
   formatTimestamp,
@@ -50,6 +53,19 @@ export const data = new SlashCommandBuilder()
           .addChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement)
           .setRequired(true),
       ),
+  )
+  .addSubcommand((s) =>
+    s
+      .setName('set_leaderboard')
+      .setDescription('Post one auto-updating EWC prediction leaderboard message.')
+      .addChannelOption((o) =>
+        o
+          .setName('channel')
+          .setDescription('Text or announcement channel')
+          .addChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement)
+          .setRequired(true),
+      )
+      .addStringOption((o) => o.setName('season').setDescription('Season year').setRequired(false)),
   )
   .addSubcommand((s) =>
     s
@@ -219,6 +235,29 @@ export async function execute(interaction) {
       return;
     }
 
+    if (sub === 'set_leaderboard') {
+      const channel = interaction.options.getChannel('channel', true);
+      const missing = missingBotChannelPermissions(interaction, channel, EMBED_BOARD_PERMISSIONS);
+      if (missing.length) {
+        await interaction.reply({ content: botChannelPermissionMessage(channel, missing), flags: MessageFlags.Ephemeral });
+        return;
+      }
+      await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+      setEwcPredictionsLeaderboard(interaction.guildId, { channelId: channel.id, season: seasonYear });
+      await updateEwcPredictionLeaderboard(interaction.client, interaction.guildId);
+      await interaction.editReply({
+        content: `✅ EWC ${seasonYear} prediction leaderboard posted in ${channel} and will keep updating.`,
+      });
+      await sendAuditLog(interaction.client, interaction.guildId, {
+        action: 'EWC Prediction Leaderboard Set',
+        actor: interaction.user,
+        target: `${channel} (${channel.id})`,
+        details: `Season: ${seasonYear}`,
+        color: 'config',
+      });
+      return;
+    }
+
     if (sub === 'generate_weeks') {
       const openBeforeHours = interaction.options.getInteger('open_before_hours') ?? 48;
       const scoreDelayHours = interaction.options.getInteger('score_delay_hours') ?? config.ewcPredictions.scoreDelayHours;
@@ -299,11 +338,11 @@ export async function execute(interaction) {
       const type = interaction.options.getString('type', true);
       const round = getEwcWeek(interaction.guildId, seasonYear, weekKey);
       if (!round) throw new Error(`Week \`${weekKey}\` does not exist.`);
+      await interaction.deferReply({ flags: MessageFlags.Ephemeral });
       const standings = await currentStandings(seasonYear);
       setEwcWeekSnapshot(round.id, type, standings);
-      await interaction.reply({
+      await interaction.editReply({
         content: `✅ Saved **${type}** snapshot for **${round.label || round.week_key}** with ${standings.length} clubs.`,
-        flags: MessageFlags.Ephemeral,
       });
       await sendAuditLog(interaction.client, interaction.guildId, {
         action: 'EWC Week Snapshot Saved',
@@ -334,11 +373,12 @@ export async function execute(interaction) {
       const weekKey = interaction.options.getString('week', true);
       const round = getEwcWeek(interaction.guildId, seasonYear, weekKey);
       if (!round) throw new Error(`Week \`${weekKey}\` does not exist.`);
-      setEwcWeekStatus(round.id, 'open');
+      reopenEwcWeek(round.id);
       clearWeeklyPredictionScores(round.id);
-      await interaction.reply({
+      await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+      await updateEwcPredictionLeaderboard(interaction.client, interaction.guildId);
+      await interaction.editReply({
         content: `✅ Reopened **${round.label || round.week_key}** and cleared its prediction scores.`,
-        flags: MessageFlags.Ephemeral,
       });
       await sendAuditLog(interaction.client, interaction.guildId, {
         action: 'EWC Prediction Week Reopened',
@@ -356,22 +396,32 @@ export async function execute(interaction) {
       if (!round) throw new Error(`Week \`${weekKey}\` does not exist.`);
       const baseline = round.baseline || [];
       if (!baseline.length) throw new Error('This week has no baseline snapshot yet.');
+      await interaction.deferReply({ flags: MessageFlags.Ephemeral });
       const final = round.final?.length ? round.final : await currentStandings(seasonYear);
       const predictions = listWeeklyPredictions(round.id);
+      let malformed = 0;
       for (const prediction of predictions) {
-        const result = scoreWeeklyPrediction(prediction.picks, baseline, final);
-        saveWeeklyPredictionScore(interaction.guildId, round.id, prediction.user_id, result.score, result.details);
+        try {
+          const result = scoreWeeklyPrediction(prediction.picks, baseline, final);
+          saveWeeklyPredictionScore(interaction.guildId, round.id, prediction.user_id, result.score, result.details);
+        } catch (error) {
+          malformed += 1;
+          saveWeeklyPredictionScore(interaction.guildId, round.id, prediction.user_id, 0, {
+            error: error.message,
+            picks: prediction.picks,
+          });
+        }
       }
       markEwcWeekScored(round.id, final);
-      await interaction.reply({
+      await updateEwcPredictionLeaderboard(interaction.client, interaction.guildId);
+      await interaction.editReply({
         content: `✅ Scored **${round.label || round.week_key}** for ${predictions.length} prediction(s).`,
-        flags: MessageFlags.Ephemeral,
       });
       await sendAuditLog(interaction.client, interaction.guildId, {
         action: 'EWC Prediction Week Scored',
         actor: interaction.user,
         target: `${round.season} ${round.week_key}`,
-        details: `Predictions scored: ${predictions.length}`,
+        details: `Predictions scored: ${predictions.length}${malformed ? `\nMalformed rows scored as 0: ${malformed}` : ''}`,
         color: 'success',
       });
       return;
@@ -429,11 +479,12 @@ export async function execute(interaction) {
     if (sub === 'reopen_season') {
       const round = getEwcSeason(interaction.guildId, seasonYear);
       if (!round) throw new Error(`No season round exists for ${seasonYear}.`);
-      setEwcSeasonStatus(interaction.guildId, seasonYear, 'open');
+      reopenEwcSeason(interaction.guildId, seasonYear);
       clearSeasonPredictionScores(interaction.guildId, seasonYear);
-      await interaction.reply({
+      await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+      await updateEwcPredictionLeaderboard(interaction.client, interaction.guildId);
+      await interaction.editReply({
         content: `✅ Reopened EWC ${seasonYear} season predictions and cleared season scores.`,
-        flags: MessageFlags.Ephemeral,
       });
       await sendAuditLog(interaction.client, interaction.guildId, {
         action: 'EWC Season Prediction Reopened',
@@ -448,22 +499,32 @@ export async function execute(interaction) {
     if (sub === 'score_season') {
       const round = getEwcSeason(interaction.guildId, seasonYear);
       if (!round) throw new Error(`No season round exists for ${seasonYear}.`);
+      await interaction.deferReply({ flags: MessageFlags.Ephemeral });
       const final = await currentStandings(seasonYear);
       const predictions = listSeasonPredictions(interaction.guildId, seasonYear);
+      let malformed = 0;
       for (const prediction of predictions) {
-        const result = scoreSeasonPrediction(prediction.picks, final, round.top_size);
-        saveSeasonPredictionScore(interaction.guildId, seasonYear, prediction.user_id, result.score, result.details);
+        try {
+          const result = scoreSeasonPrediction(prediction.picks, final, round.top_size);
+          saveSeasonPredictionScore(interaction.guildId, seasonYear, prediction.user_id, result.score, result.details);
+        } catch (error) {
+          malformed += 1;
+          saveSeasonPredictionScore(interaction.guildId, seasonYear, prediction.user_id, 0, {
+            error: error.message,
+            picks: prediction.picks,
+          });
+        }
       }
       markEwcSeasonScored(interaction.guildId, seasonYear, final);
-      await interaction.reply({
+      await updateEwcPredictionLeaderboard(interaction.client, interaction.guildId);
+      await interaction.editReply({
         content: `✅ Scored EWC ${seasonYear} season predictions for ${predictions.length} member(s).`,
-        flags: MessageFlags.Ephemeral,
       });
       await sendAuditLog(interaction.client, interaction.guildId, {
         action: 'EWC Season Prediction Scored',
         actor: interaction.user,
         target: seasonYear,
-        details: `Predictions scored: ${predictions.length}`,
+        details: `Predictions scored: ${predictions.length}${malformed ? `\nMalformed rows scored as 0: ${malformed}` : ''}`,
         color: 'success',
       });
       return;
@@ -472,14 +533,28 @@ export async function execute(interaction) {
     if (sub === 'list') {
       const weeks = listEwcWeeks(interaction.guildId, seasonYear);
       const seasonRound = getEwcSeason(interaction.guildId, seasonYear);
+      const now = Math.floor(Date.now() / 1000);
+      let needsBaseline = 0;
       const lines = weeks.length
-        ? weeks.map((w) => `• **${w.week_key}** — ${w.label || 'No label'} — \`${w.status}\``)
+        ? weeks.map((w) => {
+            const hasBaseline = w.baseline?.length;
+            // A week past its lock time with no baseline → weekly scoring would be inaccurate.
+            const lateMissing = !hasBaseline && w.status !== 'scored' && w.close_at && now >= w.close_at;
+            if (lateMissing) needsBaseline += 1;
+            const snap = `baseline ${hasBaseline ? '✓' : '✗'}${w.final?.length ? ' · final ✓' : ''}`;
+            const warn = lateMissing ? ' — ⚠️ baseline not captured' : '';
+            return `• **${w.week_key}** — ${w.label || 'No label'} — \`${w.status}\` — ${snap}${warn}`;
+          })
         : ['No weekly rounds configured.'];
       const seasonLine = seasonRound
         ? `Season: **${seasonRound.label || seasonRound.season}** — \`${seasonRound.status}\` — top ${seasonRound.top_size}`
         : 'Season: not configured';
+      const warning = needsBaseline
+        ? `\n\n⚠️ **${needsBaseline} week(s) are past their lock time with no baseline captured.** ` +
+          'Run `/ewc_admin snapshot_week type:baseline` for each so weekly scoring stays accurate.'
+        : '';
       await interaction.reply({
-        content: `## EWC ${seasonYear} Prediction Rounds\n${seasonLine}\n\n${lines.join('\n')}`,
+        content: `## EWC ${seasonYear} Prediction Rounds\n${seasonLine}\n\n${lines.join('\n')}${warning}`,
         flags: MessageFlags.Ephemeral,
       });
     }

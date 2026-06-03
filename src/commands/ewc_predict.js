@@ -244,10 +244,10 @@ export async function execute(interaction) {
 
   if (sub === 'teams') {
     const query = interaction.options.getString('query') || '';
-    const choices = await searchEwcClubChoices(query);
-    await interaction.reply({
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+    const choices = await searchEwcClubChoices(query, { wait: true });
+    await interaction.editReply({
       content: choices.length ? choices.map((c) => `• ${c.name}`).join('\n') : 'No EWC clubs matched that search.',
-      flags: MessageFlags.Ephemeral,
     });
   }
 }

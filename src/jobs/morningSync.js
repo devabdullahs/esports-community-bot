@@ -33,12 +33,13 @@ export async function syncTournament(client, t) {
   }
 
   const matches = await service.fetchSchedule(t);
-  const deleted = deleteTournamentPlaceholderMatches(t.id);
-  if (deleted) logger.info(`[sync] removed ${deleted} placeholder match(es) for ${t.source}:${t.external_id}`);
+  const currentIds = matches.map((m) => m.externalId);
   for (const parsed of matches) {
     const row = upsertMatch(toMatchRow(parsed, t.id));
     armMatch(row, t);
   }
+  const deleted = deleteTournamentPlaceholderMatches(t.id, currentIds);
+  if (deleted) logger.info(`[sync] removed ${deleted} stale placeholder match(es) for ${t.source}:${t.external_id}`);
   return matches.length;
 }
 

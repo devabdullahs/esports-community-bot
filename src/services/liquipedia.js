@@ -24,8 +24,12 @@ const RATE_STATE_PATH = resolve(process.env.LIQUIPEDIA_RATE_STATE_PATH || 'data/
 // Player/page lookup uses action=opensearch (NOT action=parse): it falls under the general
 // MediaWiki limit of 1 request / 2s, so it gets its own lighter throttle + cache. We only use it
 // to resolve a typed name to its existing page URL — never to fetch or parse the page itself.
-const SEARCH_MIN_GAP_MS = Math.max(2_000, Number(process.env.LIQUIPEDIA_SEARCH_MIN_GAP_MS || 2_000));
+const SEARCH_MIN_GAP_MS = Math.max(2_000, Number(process.env.LIQUIPEDIA_SEARCH_MIN_GAP_MS || 2_500));
 const SEARCH_CACHE_TTL_MS = Math.max(60_000, Number(process.env.LIQUIPEDIA_SEARCH_CACHE_TTL_MS || 10 * 60_000));
+// Cap how many lookups may wait in the serialized search queue at once. Beyond this, extra
+// lookups resolve to empty immediately (the command then shows a plain search link) instead of
+// queueing without bound — this keeps latency sane and shields us during a usage flood.
+const SEARCH_MAX_QUEUE = Math.max(1, Number(process.env.LIQUIPEDIA_SEARCH_MAX_QUEUE || 12));
 
 const client = axios.create({
   timeout: 20_000,
@@ -39,6 +43,9 @@ let rateStateLoaded = false;
 const cache = new Map(); // key -> { at, data }
 const inFlight = new Map(); // key -> Promise<parse response>
 const searchCache = new Map(); // `${game}:${q}` -> { at, results }
+const searchInFlight = new Map(); // key -> Promise<results>  (dedupe identical concurrent lookups)
+let searchChain = Promise.resolve(); // serializes ALL opensearch requests (prevents bursts)
+let searchQueueDepth = 0;
 const nowSec = () => Math.floor(Date.now() / 1000);
 const apiUrl = (game) => `https://liquipedia.net/${game}/api.php`;
 const normPath = (s) => decodeURIComponent(String(s ?? '')).toLowerCase();
@@ -119,11 +126,12 @@ function teamLogo($, el) {
 const LIVE_WINDOW_S = 4 * 3600;
 
 // Shared status logic for brackets, match lists, and the upcoming-matches widget.
-function deriveStatus({ winA = false, winB = false, scoreA, scoreB, bestOf, scheduledAt }) {
+function deriveStatus({ winA = false, winB = false, scoreA, scoreB, bestOf, scheduledAt, placeholder = false }) {
   const winAt = bestOf ? Math.floor(bestOf / 2) + 1 : null;
   const reachedWin = winAt != null && ((scoreA ?? 0) >= winAt || (scoreB ?? 0) >= winAt);
   if (winA || winB || reachedWin) return 'finished';
   if ((scoreA ?? 0) + (scoreB ?? 0) > 0) return 'running'; // has a partial score → in progress
+  if (placeholder) return 'scheduled';
   const now = nowSec();
   if (scheduledAt && now >= scheduledAt && now - scheduledAt <= LIVE_WINDOW_S) return 'running';
   return 'scheduled';
@@ -184,32 +192,60 @@ export async function parsePage(game, page) {
   }
 }
 
-// Resolve a typed name to matching Liquipedia pages on a given wiki, using the MediaWiki
-// action=opensearch endpoint. Returns [{ title, description, url }]. This is a SEARCH (find the
-// page) — it never fetches or parses the page's content. Lightly throttled (1/2s), cached, and
-// it yields to the rate-limit backoff just like parsePage.
-export async function searchPages(game, query, limit = 6) {
-  const q = String(query ?? '').trim();
-  if (!game || !q) return [];
+// Run a search task on a single serialized queue, spaced ≥ SEARCH_MIN_GAP_MS apart and ≥2s after
+// any parse request. This is what makes the lookup safe under load: no matter how many members
+// fire /player at once, the actual HTTP requests leave one-at-a-time and never burst past the
+// 1-request/2s limit. When the queue is full we reject immediately so the caller falls back to a
+// plain search link instead of piling up unbounded work.
+function scheduleSearch(task) {
+  if (searchQueueDepth >= SEARCH_MAX_QUEUE) return Promise.reject(new Error('search queue full'));
+  searchQueueDepth++;
+  const run = searchChain.then(async () => {
+    const wait = Math.max(lastSearchAt, lastRequestAt) + SEARCH_MIN_GAP_MS - Date.now();
+    if (wait > 0) await new Promise((r) => setTimeout(r, wait));
+    lastSearchAt = Date.now();
+    return task();
+  });
+  searchChain = run.then(() => undefined, () => undefined); // chain link must never reject
+  run.then(() => { searchQueueDepth--; }, () => { searchQueueDepth--; }); // free slot; swallow reject
+  return run;
+}
 
-  const key = `${game}:${q.toLowerCase()}`;
-  const hit = searchCache.get(key);
-  if (hit && Date.now() - hit.at < SEARCH_CACHE_TTL_MS) return hit.results;
+// Resolve a typed name to matching Liquipedia pages on a wiki via MediaWiki action=opensearch.
+// Returns [{ title, description, url }]. This only FINDS the page (returns its URL) — it never
+// fetches or parses the page's content.
+//
+// Designed to stay ToS-compliant under heavy concurrent use:
+//   • Serialized queue (above) → requests never burst, always ≥2.5s apart.
+//   • Identical concurrent queries share one in-flight request (dedupe), and results — including
+//     empty ones — are cached, so repeated/popular lookups hit memory, not the network.
+//   • Never throws: any error / rate-limit backoff / full queue resolves to cached-or-empty, and
+//     the command shows a plain Liquipedia search link in that case.
+export async function searchPages(game, query, limit = 6) {
+  const q = String(query ?? '')
+    .trim()
+    .replace(/\s+/g, ' ');
+  if (!game || !q) return [];
+  // Cache/in-flight key must include the limit so a small-limit result isn't served to a caller
+  // that asked for more.
+  const normalizedLimit = Math.max(1, Math.min(50, Number(limit) || 6));
+  const key = `${game}:${q.toLowerCase()}:${normalizedLimit}`;
+
+  const cached = searchCache.get(key);
+  if (cached && Date.now() - cached.at < SEARCH_CACHE_TTL_MS) return cached.results;
 
   loadRateState();
-  if (Date.now() < blockedUntil) {
-    if (hit) return hit.results;
-    return []; // backing off — caller falls back to a plain search link
-  }
+  if (Date.now() < blockedUntil) return cached ? cached.results : [];
+  if (searchInFlight.has(key)) return searchInFlight.get(key); // collapse duplicate concurrent lookups
 
-  // General limit is 1 request / 2s; stay ≥2s after ANY prior Liquipedia request (parse too).
-  const floorWait = Math.max(lastSearchAt, lastRequestAt) + SEARCH_MIN_GAP_MS - Date.now();
-  if (floorWait > 0) await new Promise((r) => setTimeout(r, floorWait));
-  lastSearchAt = Date.now();
+  const promise = scheduleSearch(async () => {
+    // A duplicate may have resolved + cached this while we waited our turn in the queue.
+    const fresh = searchCache.get(key);
+    if (fresh && Date.now() - fresh.at < SEARCH_CACHE_TTL_MS) return fresh.results;
+    if (Date.now() < blockedUntil) return cached ? cached.results : [];
 
-  try {
     const { data } = await client.get(apiUrl(game), {
-      params: { action: 'opensearch', search: q, limit, namespace: 0, redirects: 'resolve', format: 'json' },
+      params: { action: 'opensearch', search: q, limit: normalizedLimit, namespace: 0, redirects: 'resolve', format: 'json' },
     });
     // opensearch response shape: [query, [titles], [descriptions], [urls]]
     const titles = Array.isArray(data?.[1]) ? data[1] : [];
@@ -224,16 +260,24 @@ export async function searchPages(game, query, limit = 6) {
       .filter((r) => r.title && r.url);
     searchCache.set(key, { at: Date.now(), results });
     return results;
-  } catch (err) {
-    const status = err.response?.status;
-    if (status === 403 || status === 429 || status === 503) {
-      blockedUntil = Date.now() + BACKOFF_MS;
-      saveRateState();
-      logger.warn(`[liquipedia] search rate limited (HTTP ${status}) — pausing requests for ${BACKOFF_MS / 60000} min`);
-    }
-    if (hit) return hit.results;
-    throw err;
-  }
+  })
+    .catch((err) => {
+      const status = err.response?.status;
+      if (status === 403 || status === 429 || status === 503) {
+        blockedUntil = Date.now() + BACKOFF_MS;
+        saveRateState();
+        logger.warn(`[liquipedia] search rate limited (HTTP ${status}) — pausing requests for ${BACKOFF_MS / 60000} min`);
+      } else if (err.message !== 'search queue full') {
+        logger.debug(`[liquipedia] search failed (${key}): ${err.message}`);
+      }
+      return cached ? cached.results : []; // graceful fallback; command shows a search link
+    })
+    .finally(() => {
+      searchInFlight.delete(key);
+    });
+
+  searchInFlight.set(key, promise);
+  return promise;
 }
 
 // A plain Liquipedia search-results URL (zero API calls) — used as a fallback when opensearch
@@ -422,7 +466,15 @@ export function parseBracketMatch($, el, game, scope = '') {
   const scheduledAt = Number($m.find('[data-timestamp]').attr('data-timestamp')) || null;
   const bestOf = Number($m.find('.brkts-popup').text().match(/\(Bo(\d+)\)/i)?.[1]) || null;
 
-  const status = deriveStatus({ winA, winB, scoreA, scoreB, bestOf, scheduledAt });
+  const status = deriveStatus({
+    winA,
+    winB,
+    scoreA,
+    scoreB,
+    bestOf,
+    scheduledAt,
+    placeholder: isPlaceholderTeam(teamA) || isPlaceholderTeam(teamB),
+  });
 
   // Prefer Liquipedia's stable Match: id; fall back to a composite that stays constant per match.
   const matchHref = $m.find('a[href*="/Match:"]').attr('href') || '';
@@ -477,7 +529,15 @@ export function parseMatchlistMatch($, el, game, scope = '') {
 
   const scheduledAt = Number($m.find('[data-timestamp]').attr('data-timestamp')) || null;
   const bestOf = Number($m.find('.brkts-popup').text().match(/\(Bo(\d+)\)/i)?.[1]) || null;
-  const status = deriveStatus({ winA, winB, scoreA, scoreB, bestOf, scheduledAt });
+  const status = deriveStatus({
+    winA,
+    winB,
+    scoreA,
+    scoreB,
+    bestOf,
+    scheduledAt,
+    placeholder: isPlaceholderTeam(teamA) || isPlaceholderTeam(teamB),
+  });
 
   const matchHref = $m.find('a[href*="/Match:"]').attr('href') || '';
   const fallbackScope = scheduledAt ?? (scope || 'unknown');

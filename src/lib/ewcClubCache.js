@@ -8,8 +8,7 @@ let cachedAt = 0;
 let cachedClubs = [];
 let inFlight = null;
 
-export async function getEwcClubsCached() {
-  if (cachedClubs.length && Date.now() - cachedAt < TTL_MS) return cachedClubs;
+function refreshEwcClubCache() {
   if (inFlight) return inFlight;
   inFlight = fetchEwcClubs()
     .then((data) => {
@@ -27,9 +26,22 @@ export async function getEwcClubsCached() {
   return inFlight;
 }
 
-export async function searchEwcClubChoices(query) {
+export function primeEwcClubCache() {
+  refreshEwcClubCache().catch(() => {});
+}
+
+export async function getEwcClubsCached({ wait = true } = {}) {
+  const fresh = cachedClubs.length && Date.now() - cachedAt < TTL_MS;
+  if (fresh) return cachedClubs;
+
+  const refresh = refreshEwcClubCache();
+  if (wait && !cachedClubs.length) return refresh;
+  return cachedClubs;
+}
+
+export async function searchEwcClubChoices(query, { wait = false } = {}) {
   const q = normalizeClubName(query);
-  const clubs = await getEwcClubsCached();
+  const clubs = await getEwcClubsCached({ wait });
   const matches = q
     ? clubs.filter((club) => normalizeClubName(club.name).includes(q))
     : clubs.slice(0, 25);

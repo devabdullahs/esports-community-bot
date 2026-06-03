@@ -3,7 +3,7 @@ import { logger } from '../lib/logger.js';
 import * as liquipedia from '../services/liquipedia.js';
 import * as pandascore from '../services/pandascore.js';
 import * as startgg from '../services/startgg.js';
-import { upsertMatch, toMatchRow, getMatch, getActiveMatches } from '../db/matches.js';
+import { upsertMatch, toMatchRow, getMatch, getActiveMatches, deleteTournamentPlaceholderMatches } from '../db/matches.js';
 import { getTournamentById } from '../db/tournaments.js';
 
 // Targeted backoff polling: a match is polled (every livePollIntervalMs) only while it is
@@ -14,6 +14,10 @@ const nowSec = () => Math.floor(Date.now() / 1000);
 const MAX_RUN_SECONDS = 8 * 3600; // safety net: stop polling 8h after a match's start time
 
 const watchers = new Map(); // external_id -> { armTimer?, pollTimer? }
+
+function isPlaceholderTeam(value) {
+  return !String(value ?? '').trim() || /^TBD$/i.test(String(value ?? '').trim());
+}
 
 // Hook for the (next-phase) leaderboard embed + live voice-channel updaters.
 let onUpdate = () => {};
@@ -41,6 +45,13 @@ export function stopAll() {
 export function armMatch(match, tournament) {
   if (match.status === 'finished') return;
   if (watchers.has(match.external_id)) return; // already armed or polling
+  if (
+    match.scheduled_at &&
+    match.scheduled_at <= nowSec() &&
+    (isPlaceholderTeam(match.team_a) || isPlaceholderTeam(match.team_b))
+  ) {
+    return;
+  }
 
   const delaySec = match.scheduled_at ? match.scheduled_at - nowSec() : 0;
   if (delaySec <= 0) {
@@ -72,6 +83,7 @@ async function pollOnce(match, tournament) {
   }
 
   const all = await service.fetchSchedule(tournament);
+  const currentIds = all.map((m) => m.externalId);
 
   // Refresh EVERY match in this tournament so live scores, final results, winners, and any
   // later corrections all propagate — not just the one match this watcher is tied to.
@@ -88,6 +100,12 @@ async function pollOnce(match, tournament) {
       before.logo_b !== row.logo_b;
     if (changed) onUpdate('update', row);
     if (fresh.externalId === match.external_id) polled = row;
+  }
+  const deleted = deleteTournamentPlaceholderMatches(match.tournament_id, currentIds);
+  if (deleted) logger.info(`[poll] removed ${deleted} stale placeholder match(es) for tournament ${match.tournament_id}`);
+  if (deleted && !getMatch(match.source, match.external_id)) {
+    clearWatcher(match.external_id);
+    return;
   }
 
   if (polled) {

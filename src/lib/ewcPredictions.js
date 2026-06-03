@@ -1,3 +1,5 @@
+import { normalizeTeamName } from './render.js';
+
 const RIYADH_OFFSET = '+03:00';
 
 export const WEEKLY_TOP_THREE_SWEEP_BONUS = 300;
@@ -11,14 +13,21 @@ export function normalizeClubName(name) {
     .toLowerCase();
 }
 
+export function clubNameKeys(name) {
+  const base = normalizeClubName(name);
+  const noTeamPrefix = base.replace(/^team\s+/, '');
+  const compact = normalizeTeamName(name);
+  return [...new Set([base, noTeamPrefix, compact].filter(Boolean))];
+}
+
 export function uniqueClubPicks(picks, requiredCount) {
   const clean = picks.map((pick) => String(pick ?? '').replace(/\s+/g, ' ').trim()).filter(Boolean);
   const seen = new Set();
   const out = [];
   for (const pick of clean) {
-    const key = normalizeClubName(pick);
-    if (seen.has(key)) continue;
-    seen.add(key);
+    const keys = clubNameKeys(pick);
+    if (keys.some((key) => seen.has(key))) continue;
+    keys.forEach((key) => seen.add(key));
     out.push(pick);
   }
   if (requiredCount && out.length !== requiredCount) {
@@ -42,21 +51,17 @@ export function parsePredictionDate(input) {
   return Math.floor(time / 1000);
 }
 
-export function isWindowOpen(round, now = Math.floor(Date.now() / 1000)) {
-  if (!round || round.status !== 'open') return false;
-  if (round.open_at && now < round.open_at) return false;
-  if (round.close_at && now >= round.close_at) return false;
-  return true;
-}
-
 function standingsMap(standings) {
   const map = new Map();
   for (const row of standings || []) {
-    map.set(normalizeClubName(row.team), {
+    const value = {
       team: row.team,
       rank: Number(row.rank) || null,
       points: Number(row.points) || 0,
-    });
+    };
+    for (const key of clubNameKeys(row.team)) {
+      if (!map.has(key)) map.set(key, value);
+    }
   }
   return map;
 }
@@ -66,8 +71,7 @@ export function weeklyPointDeltas(baseline, final) {
   const rows = [];
   for (const row of final || []) {
     const team = row.team;
-    const key = normalizeClubName(team);
-    const start = before.get(key)?.points || 0;
+    const start = clubNameKeys(team).map((key) => before.get(key)?.points).find((points) => points != null) || 0;
     const points = Number(row.points) || 0;
     const delta = points - start;
     if (delta <= 0) continue;
@@ -94,10 +98,15 @@ export function weeklyPointDeltas(baseline, final) {
 export function scoreWeeklyPrediction(picks, baseline, final) {
   const cleanPicks = uniqueClubPicks(picks, 3);
   const deltas = weeklyPointDeltas(baseline, final);
-  const byTeam = new Map(deltas.map((row) => [normalizeClubName(row.team), row]));
-  const topThree = new Set(deltas.filter((row) => row.rank <= 3).map((row) => normalizeClubName(row.team)));
+  const byTeam = new Map();
+  for (const row of deltas) {
+    for (const key of clubNameKeys(row.team)) {
+      if (!byTeam.has(key)) byTeam.set(key, row);
+    }
+  }
+  const topThree = new Set(deltas.filter((row) => row.rank <= 3).flatMap((row) => clubNameKeys(row.team)));
   const pickDetails = cleanPicks.map((pick) => {
-    const actual = byTeam.get(normalizeClubName(pick));
+    const actual = clubNameKeys(pick).map((key) => byTeam.get(key)).find(Boolean);
     return {
       pick,
       matchedTeam: actual?.team || null,
@@ -105,7 +114,7 @@ export function scoreWeeklyPrediction(picks, baseline, final) {
       weeklyPoints: actual?.weeklyPoints || 0,
     };
   });
-  const allTopThree = pickDetails.every((detail) => topThree.has(normalizeClubName(detail.matchedTeam || detail.pick)));
+  const allTopThree = pickDetails.every((detail) => clubNameKeys(detail.matchedTeam || detail.pick).some((key) => topThree.has(key)));
   const bonus = allTopThree ? WEEKLY_TOP_THREE_SWEEP_BONUS : 0;
   return {
     score: pickDetails.reduce((sum, detail) => sum + detail.weeklyPoints, 0) + bonus,
@@ -121,9 +130,15 @@ export function scoreWeeklyPrediction(picks, baseline, final) {
 export function scoreSeasonPrediction(picks, finalStandings, topSize = 10) {
   const cleanPicks = uniqueClubPicks(picks);
   const finalTop = (finalStandings || []).filter((row, index) => (Number(row.rank) || index + 1) <= topSize);
-  const byTeam = new Map(finalTop.map((row, index) => [normalizeClubName(row.team), { ...row, actualIndex: index, actualRankNumber: Number(row.rank) || index + 1 }]));
+  const byTeam = new Map();
+  finalTop.forEach((row, index) => {
+    const value = { ...row, actualIndex: index, actualRankNumber: Number(row.rank) || index + 1 };
+    for (const key of clubNameKeys(row.team)) {
+      if (!byTeam.has(key)) byTeam.set(key, value);
+    }
+  });
   const pickDetails = cleanPicks.slice(0, topSize).map((pick, predictedIndex) => {
-    const actual = byTeam.get(normalizeClubName(pick));
+    const actual = clubNameKeys(pick).map((key) => byTeam.get(key)).find(Boolean);
     if (!actual) return { pick, matchedTeam: null, actualRank: null, predictedRank: predictedIndex + 1, points: 0 };
     const hitPoints = Math.max(1, topSize - actual.actualRankNumber + 1) * 100;
     const exactBonus = actual.actualRankNumber === predictedIndex + 1 ? SEASON_EXACT_RANK_BONUS : 0;

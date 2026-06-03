@@ -6,6 +6,7 @@ import { onMatchUpdate, refreshAllGuilds } from '../jobs/refresh.js';
 import { startClubChampionship } from '../jobs/clubChampionship.js';
 import { startCsRankings } from '../jobs/csRankings.js';
 import { startEwcPredictions } from '../jobs/ewcPredictions.js';
+import { primeEwcClubCache } from '../lib/ewcClubCache.js';
 
 // NOTE: in discord.js 14.26 this event's string is "clientReady" — always use the enum.
 export const name = Events.ClientReady;
@@ -45,4 +46,5 @@ export function execute(client) {
   startClubChampionship(client); // EWC Club Championship standings refresh loop
   startCsRankings(client); // Counter-Strike Valve rankings refresh loop
   startEwcPredictions(client); // EWC prediction snapshots/scoring automation
+  primeEwcClubCache(); // Warm autocomplete without blocking startup.
 }

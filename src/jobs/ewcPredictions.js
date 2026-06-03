@@ -1,18 +1,25 @@
+import { EmbedBuilder } from 'discord.js';
 import { config } from '../config.js';
 import {
+  listEwcWeeks,
   listEwcSeasonsForAutomation,
   listEwcWeeksForAutomation,
   listSeasonPredictions,
   listWeeklyPredictions,
   markEwcSeasonScored,
   markEwcWeekScored,
+  overallLeaderboard,
   saveSeasonPredictionScore,
   saveWeeklyPredictionScore,
   setEwcSeasonStatus,
   setEwcWeekSnapshot,
   setEwcWeekStatus,
 } from '../db/ewcPredictions.js';
-import { getSettings } from '../db/settings.js';
+import {
+  getGuildsWithEwcPredictionLeaderboard,
+  getSettings,
+  setEwcPredictionsLeaderboardMessage,
+} from '../db/settings.js';
 import { logger } from '../lib/logger.js';
 import { scoreSeasonPrediction, scoreWeeklyPrediction } from '../lib/ewcPredictions.js';
 import { fetchEwcClubStandings } from '../services/liquipedia.js';
@@ -38,6 +45,54 @@ function topPredictionLines(predictions) {
     .slice(0, 10);
   if (!rows.length) return 'No scored predictions.';
   return rows.map((row, index) => `**${index + 1}.** <@${row.user_id}> - \`${Number(row.score).toLocaleString()}\``).join('\n');
+}
+
+function leaderboardLines(rows) {
+  if (!rows.length) return 'No scored predictions yet.';
+  return rows
+    .slice(0, 20)
+    .map((row, index) => `**${index + 1}.** <@${row.user_id}> - \`${Number(row.score || 0).toLocaleString()}\``)
+    .join('\n');
+}
+
+function buildEwcPredictionLeaderboardEmbed(guildId, season) {
+  const rows = overallLeaderboard(guildId, season, 20, 0);
+  const weeks = listEwcWeeks(guildId, season);
+  const scoredWeeks = weeks.filter((week) => week.status === 'scored').length;
+  return new EmbedBuilder()
+    .setColor(0xf1c40f)
+    .setTitle(`EWC ${season} Prediction Leaderboard`)
+    .setDescription(leaderboardLines(rows))
+    .addFields(
+      { name: 'Scored weeks', value: `${scoredWeeks}/${weeks.length || 0}`, inline: true },
+      { name: 'Updated', value: `<t:${nowSec()}:R>`, inline: true },
+    )
+    .setFooter({ text: 'Weekly and season prediction points' });
+}
+
+export async function updateEwcPredictionLeaderboard(client, guildId) {
+  if (!client) return false;
+  const s = getSettings(guildId);
+  if (!s.ewc_predictions_leaderboard_channel_id) return false;
+
+  const channel = await client.channels.fetch(s.ewc_predictions_leaderboard_channel_id).catch(() => null);
+  if (!channel?.isTextBased?.()) return false;
+
+  const season = s.ewc_predictions_leaderboard_season || '2026';
+  const payload = { embeds: [buildEwcPredictionLeaderboardEmbed(guildId, season)] };
+
+  if (s.ewc_predictions_leaderboard_message_id) {
+    const msg = await channel.messages.fetch(s.ewc_predictions_leaderboard_message_id).catch(() => null);
+    if (msg) {
+      await msg.edit(payload);
+      return true;
+    }
+  }
+
+  const sent = await channel.send(payload);
+  setEwcPredictionsLeaderboardMessage(guildId, sent.id);
+  logger.info(`[ewc-predictions] posted leaderboard ${sent.id} in guild ${guildId}`);
+  return true;
 }
 
 async function announce(client, guildId, content) {
@@ -91,8 +146,16 @@ async function processWeek(client, round) {
 
   const predictions = listWeeklyPredictions(round.id);
   for (const prediction of predictions) {
-    const result = scoreWeeklyPrediction(prediction.picks, round.baseline, final);
-    saveWeeklyPredictionScore(round.guild_id, round.id, prediction.user_id, result.score, result.details);
+    try {
+      const result = scoreWeeklyPrediction(prediction.picks, round.baseline, final);
+      saveWeeklyPredictionScore(round.guild_id, round.id, prediction.user_id, result.score, result.details);
+    } catch (error) {
+      logger.warn(`[ewc-predictions] skipped malformed weekly pick ${prediction.user_id}/${round.week_key}: ${error.message}`);
+      saveWeeklyPredictionScore(round.guild_id, round.id, prediction.user_id, 0, {
+        error: error.message,
+        picks: prediction.picks,
+      });
+    }
   }
   markEwcWeekScored(round.id, final);
   logger.info(`[ewc-predictions] scored ${predictions.length} weekly prediction(s) for ${round.guild_id}/${round.season}/${round.week_key}`);
@@ -102,6 +165,7 @@ async function processWeek(client, round) {
     round.guild_id,
     `## EWC Weekly Predictions Scored - ${round.label || round.week_key}\n${topPredictionLines(scored)}\n\nUse \`/ewc_predict leaderboard type:weekly week:${round.week_key}\` for the full board.`,
   );
+  await updateEwcPredictionLeaderboard(client, round.guild_id);
 }
 
 async function processSeason(client, round) {
@@ -124,8 +188,16 @@ async function processSeason(client, round) {
 
   const predictions = listSeasonPredictions(round.guild_id, round.season);
   for (const prediction of predictions) {
-    const result = scoreSeasonPrediction(prediction.picks, final, round.top_size);
-    saveSeasonPredictionScore(round.guild_id, round.season, prediction.user_id, result.score, result.details);
+    try {
+      const result = scoreSeasonPrediction(prediction.picks, final, round.top_size);
+      saveSeasonPredictionScore(round.guild_id, round.season, prediction.user_id, result.score, result.details);
+    } catch (error) {
+      logger.warn(`[ewc-predictions] skipped malformed season pick ${prediction.user_id}/${round.season}: ${error.message}`);
+      saveSeasonPredictionScore(round.guild_id, round.season, prediction.user_id, 0, {
+        error: error.message,
+        picks: prediction.picks,
+      });
+    }
   }
   markEwcSeasonScored(round.guild_id, round.season, final);
   logger.info(`[ewc-predictions] scored ${predictions.length} season prediction(s) for ${round.guild_id}/${round.season}`);
@@ -135,6 +207,7 @@ async function processSeason(client, round) {
     round.guild_id,
     `## EWC ${round.season} Season Predictions Scored\n${topPredictionLines(scored)}\n\nUse \`/ewc_predict leaderboard type:season\` for the full board.`,
   );
+  await updateEwcPredictionLeaderboard(client, round.guild_id);
 }
 
 export async function runEwcPredictionAutomation(client = null) {
@@ -155,6 +228,14 @@ export async function runEwcPredictionAutomation(client = null) {
       await processSeason(client, round);
     } catch (error) {
       logger.error(`[ewc-predictions] season ${round.guild_id}/${round.season}: ${error.message}`);
+    }
+  }
+
+  for (const guildId of getGuildsWithEwcPredictionLeaderboard()) {
+    try {
+      await updateEwcPredictionLeaderboard(client, guildId);
+    } catch (error) {
+      logger.error(`[ewc-predictions] leaderboard ${guildId}: ${error.message}`);
     }
   }
 }
