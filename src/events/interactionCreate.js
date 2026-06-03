@@ -17,6 +17,23 @@ export async function execute(interaction) {
     return;
   }
 
+  // Buttons / modal submits — routed to the owning command by the "<commandName>:" custom_id
+  // prefix (e.g. "ewc_predict:lb:..."), which exposes handleComponent / handleModal.
+  if (interaction.isButton() || interaction.isModalSubmit()) {
+    const command = interaction.client.commands.get(String(interaction.customId).split(':')[0]);
+    const handler = interaction.isButton() ? command?.handleComponent : command?.handleModal;
+    if (!handler) return;
+    try {
+      await handler(interaction);
+    } catch (err) {
+      logger.error(`Interaction handler error (${interaction.customId}): ${err.message}`);
+      if (!interaction.replied && !interaction.deferred) {
+        await interaction.reply({ content: '⚠️ Something went wrong.', flags: MessageFlags.Ephemeral }).catch(() => {});
+      }
+    }
+    return;
+  }
+
   if (!interaction.isChatInputCommand()) return;
 
   const command = interaction.client.commands.get(interaction.commandName);

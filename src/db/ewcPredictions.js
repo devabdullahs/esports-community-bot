@@ -271,6 +271,31 @@ export function seasonLeaderboard(guildId, season = '2026', limit = 20, offset =
     .map(hydratePrediction);
 }
 
+export function countWeeklyScored(weekId) {
+  return db.prepare('SELECT COUNT(*) c FROM ewc_weekly_predictions WHERE week_id = ? AND score IS NOT NULL').get(weekId).c;
+}
+
+export function countSeasonScored(guildId, season = '2026') {
+  return db
+    .prepare('SELECT COUNT(*) c FROM ewc_season_predictions WHERE guild_id = ? AND season = ? AND score IS NOT NULL')
+    .get(guildId, season).c;
+}
+
+export function countOverallScored(guildId, season = '2026') {
+  return db
+    .prepare(
+      `SELECT COUNT(*) c FROM (
+         SELECT user_id FROM ewc_weekly_predictions wp
+           JOIN ewc_prediction_weeks w ON w.id = wp.week_id
+           WHERE wp.guild_id = ? AND w.season = ? AND wp.score IS NOT NULL
+         UNION
+         SELECT user_id FROM ewc_season_predictions
+           WHERE guild_id = ? AND season = ? AND score IS NOT NULL
+       )`,
+    )
+    .get(guildId, season, guildId, season).c;
+}
+
 export function overallLeaderboard(guildId, season = '2026', limit = 20, offset = 0) {
   return db
     .prepare(

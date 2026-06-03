@@ -1,5 +1,19 @@
-import { SlashCommandBuilder, InteractionContextType, MessageFlags, EmbedBuilder } from 'discord.js';
 import {
+  SlashCommandBuilder,
+  InteractionContextType,
+  MessageFlags,
+  EmbedBuilder,
+  ActionRowBuilder,
+  ButtonBuilder,
+  ButtonStyle,
+  ModalBuilder,
+  TextInputBuilder,
+  TextInputStyle,
+} from 'discord.js';
+import {
+  countOverallScored,
+  countSeasonScored,
+  countWeeklyScored,
   getEwcSeason,
   getEwcWeek,
   listEwcWeeks,
@@ -110,6 +124,73 @@ function leaderboardLines(rows, offset = 0) {
     .join('\n');
 }
 
+// custom_id: "ewc_predict:<action>:<type>:<season>:<week|->:<page>" — parsed by the interaction
+// router (first segment = command name) and by handleComponent/handleModal below.
+const lbId = (action, type, season, week, page) => `ewc_predict:${action}:${type}:${season}:${week || '-'}:${page}`;
+
+// Resolve title + total count + a page fetcher for a leaderboard type. null if the round is gone.
+function leaderboardData(guildId, type, season, week) {
+  if (type === 'weekly') {
+    const round = getEwcWeek(guildId, season, week);
+    if (!round) return null;
+    return {
+      title: `EWC Weekly Predictions — ${round.label || round.week_key}`,
+      count: countWeeklyScored(round.id),
+      fetch: (limit, offset) => weeklyLeaderboard(round.id, limit, offset),
+    };
+  }
+  if (type === 'season') {
+    return {
+      title: `EWC ${season} Season Predictions`,
+      count: countSeasonScored(guildId, season),
+      fetch: (limit, offset) => seasonLeaderboard(guildId, season, limit, offset),
+    };
+  }
+  return {
+    title: `EWC ${season} Prediction Leaderboard`,
+    count: countOverallScored(guildId, season),
+    fetch: (limit, offset) => overallLeaderboard(guildId, season, limit, offset),
+  };
+}
+
+// Build a leaderboard page: embed + (Prev / Page X/Y / Next) buttons. Buttons only appear when
+// there is more than one page. The middle button opens a "go to page" modal.
+function buildLeaderboardPage(guildId, type, season, week, page = 1) {
+  const data = leaderboardData(guildId, type, season, week);
+  if (!data) return null;
+  const totalPages = Math.max(1, Math.ceil(data.count / PAGE_SIZE));
+  const p = Math.min(Math.max(1, Math.floor(Number(page)) || 1), totalPages);
+  const offset = (p - 1) * PAGE_SIZE;
+  const embed = new EmbedBuilder()
+    .setColor(0xf1c40f)
+    .setTitle(data.title)
+    .setDescription(leaderboardLines(data.fetch(PAGE_SIZE, offset), offset))
+    .setFooter({ text: `Page ${p} / ${totalPages} · ${data.count} ranked` });
+
+  const components = [];
+  if (totalPages > 1) {
+    components.push(
+      new ActionRowBuilder().addComponents(
+        new ButtonBuilder()
+          .setCustomId(lbId('lb', type, season, week, p - 1))
+          .setLabel('◀ Prev')
+          .setStyle(ButtonStyle.Secondary)
+          .setDisabled(p <= 1),
+        new ButtonBuilder()
+          .setCustomId(lbId('lbgoto', type, season, week, p))
+          .setLabel(`Page ${p}/${totalPages}`)
+          .setStyle(ButtonStyle.Primary),
+        new ButtonBuilder()
+          .setCustomId(lbId('lb', type, season, week, p + 1))
+          .setLabel('Next ▶')
+          .setStyle(ButtonStyle.Secondary)
+          .setDisabled(p >= totalPages),
+      ),
+    );
+  }
+  return { embeds: [embed], components, totalPages, page: p };
+}
+
 async function autocompleteWeek(interaction) {
   const q = String(interaction.options.getFocused() || '').toLowerCase();
   const seasonYear = season(interaction);
@@ -188,50 +269,20 @@ export async function execute(interaction) {
   if (sub === 'leaderboard') {
     const type = interaction.options.getString('type', true);
     const page = interaction.options.getInteger('page') || 1;
-    const offset = (page - 1) * PAGE_SIZE;
+    let week = null;
     if (type === 'weekly') {
-      const weekKey = interaction.options.getString('week');
-      if (!weekKey) {
+      week = interaction.options.getString('week');
+      if (!week) {
         await interaction.reply({ content: '❌ Choose a `week` for the weekly leaderboard.', flags: MessageFlags.Ephemeral });
         return;
       }
-      const round = getEwcWeek(interaction.guildId, seasonYear, weekKey);
-      if (!round) {
-        await interaction.reply({ content: `❌ Week \`${weekKey}\` does not exist.`, flags: MessageFlags.Ephemeral });
+      if (!getEwcWeek(interaction.guildId, seasonYear, week)) {
+        await interaction.reply({ content: `❌ Week \`${week}\` does not exist.`, flags: MessageFlags.Ephemeral });
         return;
       }
-      const rows = weeklyLeaderboard(round.id, PAGE_SIZE, offset);
-      await interaction.reply({
-        embeds: [
-          new EmbedBuilder()
-            .setColor(0xf1c40f)
-            .setTitle(`EWC Weekly Predictions — ${round.label || round.week_key}`)
-            .setDescription(leaderboardLines(rows, offset)),
-        ],
-      });
-      return;
     }
-    if (type === 'season') {
-      const rows = seasonLeaderboard(interaction.guildId, seasonYear, PAGE_SIZE, offset);
-      await interaction.reply({
-        embeds: [
-          new EmbedBuilder()
-            .setColor(0xf1c40f)
-            .setTitle(`EWC ${seasonYear} Season Predictions`)
-            .setDescription(leaderboardLines(rows, offset)),
-        ],
-      });
-      return;
-    }
-    const rows = overallLeaderboard(interaction.guildId, seasonYear, PAGE_SIZE, offset);
-    await interaction.reply({
-      embeds: [
-        new EmbedBuilder()
-          .setColor(0xf1c40f)
-          .setTitle(`EWC ${seasonYear} Prediction Leaderboard`)
-          .setDescription(leaderboardLines(rows, offset)),
-      ],
-    });
+    const payload = buildLeaderboardPage(interaction.guildId, type, seasonYear, week, page);
+    await interaction.reply({ embeds: payload.embeds, components: payload.components });
     return;
   }
 
@@ -303,5 +354,56 @@ export async function execute(interaction) {
           ),
       ],
     });
+  }
+}
+
+// --- Leaderboard pagination (routed here via the "ewc_predict:" custom_id prefix) ---
+export async function handleComponent(interaction) {
+  const [, action, type, season, weekRaw, pageRaw] = interaction.customId.split(':');
+  const week = weekRaw === '-' ? null : weekRaw;
+
+  if (action === 'lbgoto') {
+    const data = leaderboardData(interaction.guildId, type, season, week);
+    const totalPages = data ? Math.max(1, Math.ceil(data.count / PAGE_SIZE)) : 1;
+    const modal = new ModalBuilder()
+      .setCustomId(`ewc_predict:lbmodal:${type}:${season}:${week || '-'}`)
+      .setTitle(`Go to page (1-${totalPages})`)
+      .addComponents(
+        new ActionRowBuilder().addComponents(
+          new TextInputBuilder()
+            .setCustomId('page')
+            .setLabel(`Page number (1-${totalPages})`)
+            .setStyle(TextInputStyle.Short)
+            .setRequired(true)
+            .setMaxLength(6)
+            .setPlaceholder(String(pageRaw || 1)),
+        ),
+      );
+    await interaction.showModal(modal);
+    return;
+  }
+
+  // action === 'lb' → jump to the page baked into the button's custom_id.
+  const payload = buildLeaderboardPage(interaction.guildId, type, season, week, Number(pageRaw) || 1);
+  if (!payload) {
+    await interaction.deferUpdate().catch(() => {});
+    return;
+  }
+  await interaction.update({ embeds: payload.embeds, components: payload.components });
+}
+
+export async function handleModal(interaction) {
+  const [, , type, season, weekRaw] = interaction.customId.split(':');
+  const week = weekRaw === '-' ? null : weekRaw;
+  const requested = parseInt(interaction.fields.getTextInputValue('page'), 10);
+  const payload = buildLeaderboardPage(interaction.guildId, type, season, week, Number.isFinite(requested) ? requested : 1);
+  if (!payload) {
+    await interaction.reply({ content: 'That leaderboard is no longer available.', flags: MessageFlags.Ephemeral });
+    return;
+  }
+  if (interaction.isFromMessage()) {
+    await interaction.update({ embeds: payload.embeds, components: payload.components });
+  } else {
+    await interaction.reply({ embeds: payload.embeds, components: payload.components });
   }
 }

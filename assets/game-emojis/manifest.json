@@ -1,0 +1,138 @@
+[
+  {
+    "key": "cs2",
+    "name": "Counter-Strike 2",
+    "status": "ok",
+    "emojiPath": "assets\\game-emojis\\128\\cs2.png",
+    "sourcePath": "assets\\game-emojis\\sources\\cs2.svg",
+    "sourceUrl": "https://simpleicons.org/icons/counterstrike.svg"
+  },
+  {
+    "key": "overwatch",
+    "name": "Overwatch",
+    "status": "ok",
+    "emojiPath": "assets\\game-emojis\\128\\overwatch.png",
+    "sourcePath": "assets\\game-emojis\\sources\\overwatch.svg",
+    "sourceUrl": "https://commons.wikimedia.org/wiki/File:Overwatch_2_logo.svg"
+  },
+  {
+    "key": "rocket_league",
+    "name": "Rocket League",
+    "status": "ok",
+    "emojiPath": "assets\\game-emojis\\128\\rocket_league.png",
+    "sourcePath": "assets\\game-emojis\\sources\\rocket_league.svg",
+    "sourceUrl": "https://commons.wikimedia.org/wiki/File:Rocket_League_logo.svg"
+  },
+  {
+    "key": "call_of_duty",
+    "name": "Call of Duty",
+    "status": "ok",
+    "emojiPath": "assets\\game-emojis\\128\\call_of_duty.png",
+    "sourcePath": "assets\\game-emojis\\sources\\call_of_duty.svg",
+    "sourceUrl": "https://commons.wikimedia.org/wiki/File:Call_of_Duty_logo_2023_2.svg"
+  },
+  {
+    "key": "warzone",
+    "name": "Warzone",
+    "status": "ok",
+    "emojiPath": "assets\\game-emojis\\128\\warzone.png",
+    "sourcePath": "assets\\game-emojis\\sources\\warzone.png",
+    "sourceUrl": "https://commons.wikimedia.org/wiki/File:Call_of_Duty_Warzone_Logo.png"
+  },
+  {
+    "key": "fortnite",
+    "name": "Fortnite",
+    "status": "ok",
+    "emojiPath": "assets\\game-emojis\\128\\fortnite.png",
+    "sourcePath": "assets\\game-emojis\\sources\\fortnite.svg",
+    "sourceUrl": "https://simpleicons.org/icons/fortnite.svg"
+  },
+  {
+    "key": "apex_legends",
+    "name": "Apex Legends",
+    "status": "ok",
+    "emojiPath": "assets\\game-emojis\\128\\apex_legends.png",
+    "sourcePath": "assets\\game-emojis\\sources\\apex_legends.svg",
+    "sourceUrl": "https://commons.wikimedia.org/wiki/File:Apex_Legends_logo.svg"
+  },
+  {
+    "key": "fifa",
+    "name": "FIFA",
+    "status": "ok",
+    "emojiPath": "assets\\game-emojis\\128\\fifa.png",
+    "sourcePath": "assets\\game-emojis\\sources\\fifa.svg",
+    "sourceUrl": "https://simpleicons.org/icons/fifa.svg"
+  },
+  {
+    "key": "dota2",
+    "name": "Dota 2",
+    "status": "ok",
+    "emojiPath": "assets\\game-emojis\\128\\dota2.png",
+    "sourcePath": "assets\\game-emojis\\sources\\dota2.svg",
+    "sourceUrl": "https://simpleicons.org/icons/dota2.svg"
+  },
+  {
+    "key": "rainbow_six",
+    "name": "Rainbow Six Siege",
+    "status": "ok",
+    "emojiPath": "assets\\game-emojis\\128\\rainbow_six.png",
+    "sourcePath": "assets\\game-emojis\\sources\\rainbow_six.svg",
+    "sourceUrl": "https://commons.wikimedia.org/wiki/File:Rainbow_Six_Siege_X_logo.svg"
+  },
+  {
+    "key": "valorant",
+    "name": "Valorant",
+    "status": "ok",
+    "emojiPath": "assets\\game-emojis\\128\\valorant.png",
+    "sourcePath": "assets\\game-emojis\\sources\\valorant.svg",
+    "sourceUrl": "https://simpleicons.org/icons/valorant.svg"
+  },
+  {
+    "key": "pubg",
+    "name": "PUBG",
+    "status": "ok",
+    "emojiPath": "assets\\game-emojis\\128\\pubg.png",
+    "sourcePath": "assets\\game-emojis\\sources\\pubg.svg",
+    "sourceUrl": "https://simpleicons.org/icons/pubg.svg"
+  },
+  {
+    "key": "mobile_legends",
+    "name": "Mobile Legends",
+    "status": "ok",
+    "emojiPath": "assets\\game-emojis\\128\\mobile_legends.png",
+    "sourcePath": "assets\\game-emojis\\sources\\mobile_legends.png",
+    "sourceUrl": "https://superdevpro.com/brands/mobile-legends-bang-bang"
+  },
+  {
+    "key": "chess",
+    "name": "Chess",
+    "status": "ok",
+    "emojiPath": "assets\\game-emojis\\128\\chess.png",
+    "sourcePath": "assets\\game-emojis\\sources\\chess.svg",
+    "sourceUrl": "custom public-domain-style chess knight mark"
+  },
+  {
+    "key": "free_fire",
+    "name": "Free Fire",
+    "status": "ok",
+    "emojiPath": "assets\\game-emojis\\128\\free_fire.png",
+    "sourcePath": "assets\\game-emojis\\sources\\free_fire.svg",
+    "sourceUrl": "https://www.svgrepo.com/svg/516499/free-fire"
+  },
+  {
+    "key": "tft",
+    "name": "Teamfight Tactics",
+    "status": "ok",
+    "emojiPath": "assets\\game-emojis\\128\\tft.png",
+    "sourcePath": "assets\\game-emojis\\sources\\tft.svg",
+    "sourceUrl": "https://www.svgrepo.com/svg/519644/team-fight-tactics"
+  },
+  {
+    "key": "league_of_legends",
+    "name": "League of Legends",
+    "status": "ok",
+    "emojiPath": "assets\\game-emojis\\128\\league_of_legends.png",
+    "sourcePath": "assets\\game-emojis\\sources\\league_of_legends.svg",
+    "sourceUrl": "https://simpleicons.org/icons/leagueoflegends.svg"
+  }
+]
