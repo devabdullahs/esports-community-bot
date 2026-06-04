@@ -152,19 +152,30 @@ export function weeklyLeaderboard(weekId, limit = 20, offset = 0) {
     .map(hydratePrediction);
 }
 
-export function upsertEwcSeason({ guildId, season = '2026', label, openAt, closeAt, scoreAfter, topSize = 10, createdBy }) {
+export function upsertEwcSeason({
+  guildId,
+  season = '2026',
+  label,
+  openAt,
+  closeAt,
+  scoreAfter,
+  topSize = 10,
+  bestWeeks,
+  createdBy,
+}) {
   db.prepare(
     `INSERT INTO ewc_prediction_seasons
-       (guild_id, season, label, open_at, close_at, score_after, top_size, created_by, status, created_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'open', datetime('now'))
+       (guild_id, season, label, open_at, close_at, score_after, top_size, best_weeks, created_by, status, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'open', datetime('now'))
      ON CONFLICT (guild_id, season) DO UPDATE SET
        label = excluded.label,
        open_at = excluded.open_at,
        close_at = excluded.close_at,
        score_after = excluded.score_after,
        top_size = excluded.top_size,
+       best_weeks = excluded.best_weeks,
        status = CASE WHEN ewc_prediction_seasons.status = 'scored' THEN 'scored' ELSE 'open' END`,
-  ).run(guildId, season, label, openAt ?? null, closeAt ?? null, scoreAfter ?? null, topSize, createdBy ?? null);
+  ).run(guildId, season, label, openAt ?? null, closeAt ?? null, scoreAfter ?? null, topSize, bestWeeks ?? null, createdBy ?? null);
   return getEwcSeason(guildId, season);
 }
 
@@ -296,15 +307,22 @@ export function countOverallScored(guildId, season = '2026') {
     .get(guildId, season, guildId, season).c;
 }
 
+// Overall = each user's weekly scores + their season score. When the season has best_weeks set,
+// only each user's top-N weekly scores count (fairer: neutralizes participation + week unevenness).
 export function overallLeaderboard(guildId, season = '2026', limit = 20, offset = 0) {
+  const s = db.prepare('SELECT best_weeks FROM ewc_prediction_seasons WHERE guild_id = ? AND season = ?').get(guildId, season);
+  const k = s && s.best_weeks > 0 ? s.best_weeks : 999999; // null/0 → count every week
   return db
     .prepare(
-      `WITH scores AS (
-         SELECT user_id, SUM(score) AS score
+      `WITH ranked AS (
+         SELECT wp.user_id, wp.score,
+                ROW_NUMBER() OVER (PARTITION BY wp.user_id ORDER BY wp.score DESC, wp.week_id) AS rn
          FROM ewc_weekly_predictions wp
          JOIN ewc_prediction_weeks w ON w.id = wp.week_id
          WHERE wp.guild_id = ? AND w.season = ? AND wp.score IS NOT NULL
-         GROUP BY user_id
+       ),
+       scores AS (
+         SELECT user_id, score FROM ranked WHERE rn <= ?
          UNION ALL
          SELECT user_id, score
          FROM ewc_season_predictions
@@ -316,7 +334,7 @@ export function overallLeaderboard(guildId, season = '2026', limit = 20, offset 
        ORDER BY score DESC, user_id ASC
        LIMIT ? OFFSET ?`,
     )
-    .all(guildId, season, guildId, season, limit, offset);
+    .all(guildId, season, k, guildId, season, limit, offset);
 }
 
 export function userPredictionProfile(guildId, season, userId) {

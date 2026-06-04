@@ -171,6 +171,13 @@ export const data = new SlashCommandBuilder()
           .setMaxValue(336),
       )
       .addIntegerOption((o) => o.setName('top_size').setDescription('How many season picks count').setMinValue(5).setMaxValue(10))
+      .addIntegerOption((o) =>
+        o
+          .setName('best_weeks')
+          .setDescription("Overall counts each member's best N weeks (blank = all weeks)")
+          .setMinValue(1)
+          .setMaxValue(20),
+      )
       .addStringOption((o) => o.setName('season').setDescription('Season year').setRequired(false)),
   )
   .addSubcommand((s) =>
@@ -469,6 +476,7 @@ export async function execute(interaction) {
 
     if (sub === 'open_season') {
       const topSize = interaction.options.getInteger('top_size') || 10;
+      const bestWeeks = interaction.options.getInteger('best_weeks');
       const closeAt = parseOptionalDate(interaction, 'close_at');
       const round = upsertEwcSeason({
         guildId: interaction.guildId,
@@ -478,6 +486,7 @@ export async function execute(interaction) {
         closeAt,
         scoreAfter: scoreAfterFromClose(interaction, closeAt),
         topSize,
+        bestWeeks,
         createdBy: interaction.user.id,
       });
       await interaction.reply({
@@ -485,7 +494,8 @@ export async function execute(interaction) {
           `✅ Season prediction round is open for **${round.label || round.season}**.\n` +
           `Open: ${formatTimestamp(round.open_at)}\nClose: ${formatTimestamp(round.close_at)}\n` +
           `Score after: ${formatTimestamp(round.score_after)}\n` +
-          `Picks counted: **${round.top_size}**`,
+          `Picks counted: **${round.top_size}**\n` +
+          `Overall: ${round.best_weeks ? `each member's **best ${round.best_weeks}** weeks` : '**all** weeks count'}`,
         flags: MessageFlags.Ephemeral,
       });
       await sendAuditLog(interaction.client, interaction.guildId, {
@@ -494,6 +504,7 @@ export async function execute(interaction) {
         target: round.season,
         details:
           `Top size: ${round.top_size}\n` +
+          `Overall best weeks: ${round.best_weeks || 'all'}\n` +
           `Open: ${formatTimestamp(round.open_at)}\n` +
           `Close: ${formatTimestamp(round.close_at)}\n` +
           `Score after: ${formatTimestamp(round.score_after)}`,
@@ -587,7 +598,7 @@ export async function execute(interaction) {
           })
         : ['No weekly rounds configured.'];
       const seasonLine = seasonRound
-        ? `Season: **${seasonRound.label || seasonRound.season}** — \`${seasonRound.status}\` — top ${seasonRound.top_size}`
+        ? `Season: **${seasonRound.label || seasonRound.season}** — \`${seasonRound.status}\` — top ${seasonRound.top_size} — overall: ${seasonRound.best_weeks ? `best ${seasonRound.best_weeks} weeks` : 'all weeks'}`
         : 'Season: not configured';
       const warning = needsBaseline
         ? `\n\n⚠️ **${needsBaseline} week(s) are past their lock time with no baseline captured.** ` +

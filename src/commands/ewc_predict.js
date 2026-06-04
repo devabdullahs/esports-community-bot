@@ -147,8 +147,9 @@ function leaderboardData(guildId, type, season, week) {
       fetch: (limit, offset) => seasonLeaderboard(guildId, season, limit, offset),
     };
   }
+  const best = getEwcSeason(guildId, season)?.best_weeks;
   return {
-    title: `EWC ${season} Prediction Leaderboard`,
+    title: `EWC ${season} Prediction Leaderboard${best ? ` · best ${best} weeks` : ''}`,
     count: countOverallScored(guildId, season),
     fetch: (limit, offset) => overallLeaderboard(guildId, season, limit, offset),
   };

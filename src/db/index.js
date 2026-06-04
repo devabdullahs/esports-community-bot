@@ -218,7 +218,7 @@ db.exec(`
 `);
 
 ensureColumns('ewc_prediction_weeks', [['score_after', 'INTEGER']]);
-ensureColumns('ewc_prediction_seasons', [['score_after', 'INTEGER']]);
+ensureColumns('ewc_prediction_seasons', [['score_after', 'INTEGER'], ['best_weeks', 'INTEGER']]);
 
 // Canonicalize old game keys after slug changes. Keep this tiny and explicit so existing
 // per-game boards continue to work without creating duplicate alias rows later.
