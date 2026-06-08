@@ -6,8 +6,9 @@ import { SiteHeader } from "@/components/site-header";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "EWC Predictions",
-  description: "EWC prediction leaderboard and Discord profile showcase.",
+  title: "Esports Community",
+  description:
+    "Community esports hub for game pages, news, prediction boards, and Discord profile showcase.",
 };
 
 export default function RootLayout({

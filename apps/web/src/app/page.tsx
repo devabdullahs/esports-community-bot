@@ -1,7 +1,10 @@
 import Link from "next/link";
 import {
   ArrowRightIcon,
-  BadgeCheckIcon,
+  Gamepad2Icon,
+  MegaphoneIcon,
+  NewspaperIcon,
+  ShieldCheckIcon,
   type LucideIcon,
   TrophyIcon,
   UserRoundIcon,
@@ -23,6 +26,7 @@ import {
   localeFromSearchParams,
   localizedPath,
 } from "@/lib/i18n";
+import { getAuthSession } from "@/lib/session";
 
 export const dynamic = "force-dynamic";
 
@@ -33,11 +37,13 @@ export default async function Home({
 }) {
   const locale = localeFromSearchParams(await searchParams);
   const text = copy[locale];
+  const session = await getAuthSession();
   const defaultGuildId = defaultPublicGuildId();
   const leaderboardHref = defaultGuildId
     ? localizedPath(`/leaderboard/${defaultGuildId}/${DEFAULT_SEASON}`, locale)
     : null;
   const profileHref = localizedPath("/me", locale);
+  const gamesHref = localizedPath("/games", locale);
 
   return (
     <main lang={locale} dir={directionForLocale(locale)} className="flex-1">
@@ -56,12 +62,12 @@ export default async function Home({
           </div>
           <div className="flex flex-wrap gap-3">
             <Button
-              render={<Link href={profileHref} />}
+              render={<Link href={gamesHref} />}
               nativeButton={false}
               size="lg"
             >
-              <UserRoundIcon data-icon="inline-start" />
-              {text.home.openProfile}
+              <Gamepad2Icon data-icon="inline-start" />
+              {text.home.openGames}
               <ArrowRightIcon
                 data-icon="inline-end"
                 className="rtl:rotate-180"
@@ -78,6 +84,15 @@ export default async function Home({
                 {text.home.openLeaderboard}
               </Button>
             ) : null}
+            <Button
+              render={<Link href={profileHref} />}
+              nativeButton={false}
+              size="lg"
+              variant="outline"
+            >
+              <UserRoundIcon data-icon="inline-start" />
+              {text.home.openProfile}
+            </Button>
           </div>
         </div>
 
@@ -124,31 +139,40 @@ export default async function Home({
               {text.home.featureDescription}
             </p>
           </div>
-          <div className="grid gap-4 md:grid-cols-3">
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+            {session ? (
+              <ActionCard
+                icon={ShieldCheckIcon}
+                title={text.home.adminTitle}
+                description={text.home.adminDescription}
+                href={localizedPath("/admin", locale)}
+                action={text.common.admin}
+              />
+            ) : null}
             <ActionCard
-              icon={UserRoundIcon}
-              title={text.home.profileTitle}
-              description={text.home.profileDescription}
-              href={profileHref}
-              action={text.home.openProfile}
+              icon={Gamepad2Icon}
+              title={text.home.gamePagesTitle}
+              description={text.home.gamePagesDescription}
+              href={gamesHref}
+              action={text.home.openGames}
             />
             <ActionCard
-              icon={TrophyIcon}
-              title={text.home.leaderboardTitle}
+              icon={NewspaperIcon}
+              title={text.home.newsTitle}
+              description={text.home.newsDescription}
+              href={gamesHref}
+              action={text.common.games}
+            />
+            <ActionCard
+              icon={MegaphoneIcon}
+              title={text.home.predictionsTitle}
               description={
                 leaderboardHref
-                  ? text.home.leaderboardDescription
-                  : `${text.home.leaderboardDescription} ${text.home.noDefaultLeaderboard}`
+                  ? text.home.predictionsDescription
+                  : `${text.home.predictionsDescription} ${text.home.noDefaultLeaderboard}`
               }
               href={leaderboardHref}
               action={text.home.openLeaderboard}
-            />
-            <ActionCard
-              icon={BadgeCheckIcon}
-              title={text.home.discordTitle}
-              description={text.home.discordDescription}
-              href={profileHref}
-              action={text.common.myProfile}
             />
           </div>
         </div>

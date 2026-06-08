@@ -4,12 +4,102 @@
 
 @custom-variant dark (&:is(.dark *));
 
+@font-face {
+  font-family: "Thmanyah Sans";
+  src: url("https://assets.moonbot.info/thmanyahsans/woff2/thmanyahsans-Light.woff2")
+    format("woff2");
+  font-style: normal;
+  font-weight: 300;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Thmanyah Sans";
+  src: url("https://assets.moonbot.info/thmanyahsans/woff2/thmanyahsans-Regular.woff2")
+    format("woff2");
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Thmanyah Sans";
+  src: url("https://assets.moonbot.info/thmanyahsans/woff2/thmanyahsans-Medium.woff2")
+    format("woff2");
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Thmanyah Sans";
+  src: url("https://assets.moonbot.info/thmanyahsans/woff2/thmanyahsans-Bold.woff2")
+    format("woff2");
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Thmanyah Sans";
+  src: url("https://assets.moonbot.info/thmanyahsans/woff2/thmanyahsans-Black.woff2")
+    format("woff2");
+  font-style: normal;
+  font-weight: 900;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Thmanyah Serif Display";
+  src: url("https://assets.moonbot.info/thmanyahserifdisplay/woff2/thmanyahserifdisplay-Regular.woff2")
+    format("woff2");
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Thmanyah Serif Display";
+  src: url("https://assets.moonbot.info/thmanyahserifdisplay/woff2/thmanyahserifdisplay-Bold.woff2")
+    format("woff2");
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Thmanyah Serif Text";
+  src: url("https://assets.moonbot.info/thmanyahseriftext/woff2/thmanyahseriftext-Regular.woff2")
+    format("woff2");
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Thmanyah Serif Text";
+  src: url("https://assets.moonbot.info/thmanyahseriftext/woff2/thmanyahseriftext-Medium.woff2")
+    format("woff2");
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Thmanyah Serif Text";
+  src: url("https://assets.moonbot.info/thmanyahseriftext/woff2/thmanyahseriftext-Bold.woff2")
+    format("woff2");
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+}
+
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --font-sans: var(--font-system-sans);
   --font-mono: var(--font-system-mono);
-  --font-heading: var(--font-system-sans);
+  --font-heading: var(--font-heading-family);
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -49,8 +139,11 @@
 }
 
 :root {
-  --font-system-sans: Arial, Helvetica, "Segoe UI", Tahoma, sans-serif;
-  --font-system-arabic: "Segoe UI", Tahoma, Arial, sans-serif;
+  --font-system-sans: "Thmanyah Sans", Arial, Helvetica, sans-serif;
+  --font-heading-family: "Thmanyah Serif Display", "Thmanyah Sans", Arial,
+    Helvetica, sans-serif;
+  --font-article-family: "Thmanyah Serif Text", "Thmanyah Sans", Arial,
+    Helvetica, sans-serif;
   --font-system-mono: "SFMono-Regular", Consolas, "Liberation Mono", Menlo,
     monospace;
   --background: oklch(1 0 0);
@@ -142,8 +235,17 @@
   body {
     font-family: var(--font-system-sans);
   }
+  h1,
+  h2,
+  h3,
+  h4 {
+    font-family: var(--font-heading-family);
+  }
   :lang(ar) {
-    font-family: var(--font-system-arabic);
+    font-family: var(--font-system-sans);
+  }
+  .article-copy {
+    font-family: var(--font-article-family);
   }
   code,
   kbd,
