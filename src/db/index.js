@@ -1,15 +1,6 @@
-import { mkdirSync } from 'node:fs';
-import { dirname } from 'node:path';
-import Database from 'better-sqlite3';
-import { config } from '../config.js';
 import { logger } from '../lib/logger.js';
-
-// Ensure the directory that will hold the SQLite file exists.
-mkdirSync(dirname(config.db.path), { recursive: true });
-
-export const db = new Database(config.db.path);
-db.pragma('journal_mode = WAL');
-db.pragma('foreign_keys = ON');
+import { db } from './connection.js';
+export { db, closeDb } from './connection.js';
 
 db.exec(`
   CREATE TABLE IF NOT EXISTS tournaments (
@@ -215,6 +206,17 @@ db.exec(`
     ON ewc_weekly_predictions(week_id, score DESC);
   CREATE INDEX IF NOT EXISTS idx_ewc_season_predictions_season
     ON ewc_season_predictions(guild_id, season, score DESC);
+
+  CREATE TABLE IF NOT EXISTS ewc_profile_links (
+    auth_user_id     TEXT NOT NULL,
+    discord_user_id  TEXT PRIMARY KEY,
+    guild_id         TEXT NOT NULL,
+    season           TEXT NOT NULL DEFAULT '2026',
+    last_synced_at   TEXT,
+    last_sync_error  TEXT,
+    created_at       TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at       TEXT NOT NULL DEFAULT (datetime('now'))
+  );
 `);
 
 ensureColumns('ewc_prediction_weeks', [['score_after', 'INTEGER']]);
@@ -232,12 +234,4 @@ for (const table of ['game_leaderboards', 'game_voice_channels', 'game_match_car
 }
 db.prepare(`UPDATE tournaments SET game = ? WHERE game = ?`).run('tft', 'teamfighttactics');
 
-logger.info(`SQLite ready at ${config.db.path}`);
-
-export function closeDb() {
-  try {
-    db.close();
-  } catch {
-    /* already closed */
-  }
-}
+logger.info(`SQLite ready at ${process.env.DB_PATH || 'data/bot.sqlite'}`);

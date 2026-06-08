@@ -15,6 +15,7 @@ import {
   setEwcWeekSnapshot,
   setEwcWeekStatus,
 } from '../db/ewcPredictions.js';
+import { listEwcProfileLinks } from '../db/ewcProfileLinks.js';
 import {
   getGuildsWithEwcPredictionLeaderboard,
   getSettings,
@@ -180,6 +181,35 @@ async function announce(client, guildId, content) {
   await channel.send({ content }).catch((error) => logger.warn(`[ewc-predictions] announcement failed: ${error.message}`));
 }
 
+async function syncLinkedProfileShowcases(guildId, season) {
+  if (!config.dashboard.internalUrl || !config.dashboard.internalSecret) return;
+  const links = listEwcProfileLinks({ guildId, season });
+  if (!links.length) return;
+  const base = config.dashboard.internalUrl.replace(/\/$/, '');
+  for (const link of links) {
+    try {
+      const response = await fetch(`${base}/api/internal/ewc-profile/sync`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-ewc-internal-secret': config.dashboard.internalSecret,
+        },
+        body: JSON.stringify({
+          discordUserId: link.discordUserId,
+          guildId,
+          season,
+        }),
+      });
+      if (!response.ok) {
+        const body = await response.text().catch(() => '');
+        throw new Error(body || `HTTP ${response.status}`);
+      }
+    } catch (error) {
+      logger.warn(`[ewc-predictions] profile showcase sync failed for ${link.discordUserId}: ${error.message}`);
+    }
+  }
+}
+
 async function processWeek(client, round) {
   const now = nowSec();
 
@@ -242,6 +272,7 @@ async function processWeek(client, round) {
     `## EWC Weekly Predictions Scored - ${round.label || round.week_key}\n${topPredictionLines(scored)}\n\nUse \`/ewc_predict leaderboard type:weekly week:${round.week_key}\` for the full board.`,
   );
   await updateEwcPredictionLeaderboard(client, round.guild_id);
+  await syncLinkedProfileShowcases(round.guild_id, round.season);
 }
 
 async function processSeason(client, round) {
@@ -284,6 +315,7 @@ async function processSeason(client, round) {
     `## EWC ${round.season} Season Predictions Scored\n${topPredictionLines(scored)}\n\nUse \`/ewc_predict leaderboard type:season\` for the full board.`,
   );
   await updateEwcPredictionLeaderboard(client, round.guild_id);
+  await syncLinkedProfileShowcases(round.guild_id, round.season);
 }
 
 export async function runEwcPredictionAutomation(client = null) {

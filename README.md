@@ -87,17 +87,54 @@ Then, as a server admin:
 /set_ewc url:https://liquipedia.net/esports/Esports_World_Cup/2026 channel:#ewc-standings
 ```
 
+## EWC prediction dashboard and profile showcase
+
+The dashboard is a separate Next.js app in `apps/web`. It reads the same SQLite database as
+the bot, uses Better Auth for Discord login, and can update a user's Discord Application Role
+Connection so their profile can show an EWC prediction summary.
+
+Discord Developer Portal setup:
+
+1. Add the OAuth redirect URL: `{BETTER_AUTH_URL}/api/auth/callback/discord`
+2. Add an Application Role Connection verification URL: `{EWC_DASHBOARD_PUBLIC_URL}/me`
+3. Run `npm run deploy` so slash commands and role-connection metadata are registered.
+
+Local setup:
+
+```bash
+npm install
+npm run web:auth:migrate
+npm run web:build
+npm run web:start
+```
+
+Run the bot separately with `npm start`. Both processes should point at the same `DB_PATH`.
+The bot calls the web app through `EWC_DASHBOARD_INTERNAL_URL` with
+`EWC_DASHBOARD_INTERNAL_SECRET` when `/ewc_predict sync`, `/ewc_predict unlink`, or scoring
+automation refreshes profile showcases.
+
+Useful dashboard URLs:
+
+```text
+/me
+/leaderboard/<guildId>/2026
+```
+
 ## Configuration (`.env`)
 
 | Variable | Purpose |
 |---|---|
 | `DISCORD_TOKEN`, `DISCORD_CLIENT_ID` | Bot credentials (required) |
+| `DISCORD_CLIENT_SECRET` | Discord OAuth client secret for the web dashboard |
 | `DISCORD_GUILD_ID` | Register commands to one server instantly (dev) |
 | `LIQUIPEDIA_PARSE_MIN_GAP_MS`, `LIQUIPEDIA_CACHE_TTL_MS`, `LIQUIPEDIA_BACKOFF_MS`, `LIQUIPEDIA_RATE_STATE_PATH` | Liquipedia parse throttle, cache, and restart-safe rate-limit state |
 | `LIQUIPEDIA_USER_AGENT` | Required by Liquipedia ToS — identify your app + a contact |
 | `SCHEDULER_TIMEZONE`, `MORNING_CRON` | Daily-sync schedule |
 | `LIVE_POLL_INTERVAL_MS` | Live poll cadence (default 3 min; cache keeps fetches well under the limit) |
 | `CC_REFRESH_MINUTES` | Club Championship refresh cadence (default 15) |
+| `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL` | Better Auth secret and public auth base URL |
+| `EWC_DASHBOARD_PUBLIC_URL`, `EWC_DASHBOARD_INTERNAL_URL`, `EWC_DASHBOARD_INTERNAL_SECRET` | Public dashboard URL and bot-to-web internal sync settings |
+| `EWC_DASHBOARD_ADMIN_DISCORD_IDS` | Optional comma-separated Discord user IDs for future admin dashboard routes |
 | `LOGO_CACHE_DIR`, `LOGO_CACHE_CONCURRENCY` | Persistent logo cache path and max concurrent logo downloads |
 | `LOGO_DOWNLOAD_MIN_GAP_MS`, `LOGO_RATE_LIMIT_BACKOFF_MS`, `LOGO_RATE_STATE_PATH` | Logo download throttle and restart-safe rate-limit state |
 | `LOGO_FAILURE_TTL_MS`, `LOGO_MAX_BYTES` | Logo retry delay for bad URLs and maximum accepted logo size |

@@ -4,6 +4,7 @@ import { REST, Routes } from 'discord.js';
 import { config } from '../config.js';
 import { logger } from './logger.js';
 import { loadModules } from './loaders.js';
+import { EWC_ROLE_CONNECTION_METADATA } from './discordRoleConnection.js';
 
 const srcDir = dirname(dirname(fileURLToPath(import.meta.url)));
 
@@ -29,4 +30,9 @@ export async function deployCommands() {
     await rest.put(Routes.applicationCommands(config.discord.clientId), { body: commands });
     logger.info('Deployed commands globally (can take up to 1 hour to appear).');
   }
+
+  await rest.put(Routes.applicationRoleConnectionMetadata(config.discord.clientId), {
+    body: EWC_ROLE_CONNECTION_METADATA,
+  });
+  logger.info('Deployed EWC profile role connection metadata.');
 }
