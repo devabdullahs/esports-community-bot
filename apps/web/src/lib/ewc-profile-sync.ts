@@ -1,6 +1,10 @@
 import "server-only";
 
 import { auth } from "@/lib/auth";
+import {
+  devDiscordUserId,
+  isDevAuthUser,
+} from "@/lib/dev-auth";
 import { DEFAULT_SEASON } from "@/lib/env";
 import { db } from "@bot/db/connection.js";
 import {
@@ -35,6 +39,13 @@ function safeAccountQuery<T>(fn: () => T) {
 }
 
 export function getDiscordAccountForAuthUser(authUserId: string): DiscordAccount | null {
+  if (isDevAuthUser(authUserId)) {
+    return {
+      accountId: devDiscordUserId(),
+      userId: authUserId,
+    };
+  }
+
   return safeAccountQuery(() =>
     db
       .prepare(
@@ -125,8 +136,18 @@ export async function syncEwcProfileForAuthUser({
   });
 
   try {
-    const accessToken = await accessTokenForAuthUser(authUserId);
     const payload = getEwcRoleConnectionPayload(guildId, season, account.accountId);
+    if (isDevAuthUser(authUserId)) {
+      markEwcProfileLinkSynced(account.accountId);
+      return {
+        link: getEwcProfileLinkByDiscordUser(account.accountId) || link,
+        stats: getEwcUserProfileStats(guildId, season, account.accountId),
+        payload,
+        devBypass: true,
+      };
+    }
+
+    const accessToken = await accessTokenForAuthUser(authUserId);
     await updateDiscordRoleConnection({
       accessToken,
       clientId: process.env.DISCORD_CLIENT_ID || "",
@@ -165,6 +186,11 @@ export async function syncEwcProfileForDiscordUser({
 export async function unlinkEwcProfileForAuthUser(authUserId: string) {
   const account = getDiscordAccountForAuthUser(authUserId);
   if (!account) return { deleted: false };
+
+  if (isDevAuthUser(authUserId)) {
+    deleteEwcProfileLink(account.accountId);
+    return { deleted: true, devBypass: true };
+  }
 
   try {
     const accessToken = await accessTokenForAuthUser(authUserId);

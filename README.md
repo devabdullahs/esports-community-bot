@@ -113,6 +113,11 @@ The bot calls the web app through `EWC_DASHBOARD_INTERNAL_URL` with
 `EWC_DASHBOARD_INTERNAL_SECRET` when `/ewc_predict sync`, `/ewc_predict unlink`, or scoring
 automation refreshes profile showcases.
 
+For local dashboard previews without Discord OAuth, start the web app with
+`EWC_DASHBOARD_DEV_AUTH_BYPASS=true`. The preview user defaults to Discord ID
+`100000000000000001`; set `EWC_DASHBOARD_DEV_DISCORD_USER_ID` to view another local
+prediction user. This bypass is ignored when `NODE_ENV=production`.
+
 Useful dashboard URLs:
 
 ```text

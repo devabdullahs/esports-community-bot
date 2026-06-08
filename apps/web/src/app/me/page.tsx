@@ -1,8 +1,7 @@
-import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { ProfileDashboard } from "@/components/dashboard/profile-dashboard";
-import { auth } from "@/lib/auth";
 import { DEFAULT_SEASON } from "@/lib/env";
+import { getOptionalSession } from "@/lib/session";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -12,7 +11,7 @@ export default async function MePage({
 }: {
   searchParams: Promise<{ guildId?: string; season?: string }>;
 }) {
-  const session = await auth.api.getSession({ headers: await headers() });
+  const session = await getOptionalSession();
   const params = await searchParams;
   const callbackParams = new URLSearchParams();
   if (params.guildId) callbackParams.set("guildId", params.guildId);
