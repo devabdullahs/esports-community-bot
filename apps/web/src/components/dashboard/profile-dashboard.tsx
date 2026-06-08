@@ -3,6 +3,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ExternalLinkIcon, RefreshCcwIcon, UnlinkIcon } from "lucide-react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
@@ -68,6 +69,7 @@ export function ProfileDashboard({
   guildId?: string;
   season: string;
 }) {
+  const router = useRouter();
   const queryClient = useQueryClient();
   const query = useQuery<MePayload>({
     queryKey: ["me-ewc", guildId || "", season],
@@ -98,7 +100,10 @@ export function ProfileDashboard({
           method: "POST",
         }),
       ),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["me-ewc"] }),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["me-ewc"] });
+      router.replace(`/me?season=${encodeURIComponent(season)}`);
+    },
   });
 
   if (query.isPending) {
