@@ -13,10 +13,16 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import {
+  copy,
+  localeFromSearchParams,
+} from "@/lib/i18n";
 
 export function LoginPanel() {
   const searchParams = useSearchParams();
   const [error, setError] = useState<string | null>(null);
+  const locale = localeFromSearchParams(searchParams);
+  const text = copy[locale].login;
   const callbackURL = searchParams.get("callbackURL") || "/me";
 
   async function onSignIn() {
@@ -25,25 +31,25 @@ export function LoginPanel() {
       provider: "discord",
       callbackURL,
     });
-    if (result?.error) setError(result.error.message || "Discord sign-in failed.");
+    if (result?.error) setError(result.error.message || text.failedMessage);
   }
 
   return (
     <Card className="w-full max-w-md">
       <CardHeader>
-        <CardTitle>Discord sign in</CardTitle>
-        <CardDescription>Connect your Discord account to manage your EWC profile showcase.</CardDescription>
+        <CardTitle>{text.title}</CardTitle>
+        <CardDescription>{text.description}</CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-4">
         {error ? (
           <Alert variant="destructive">
-            <AlertTitle>Sign in failed</AlertTitle>
+            <AlertTitle>{text.failedTitle}</AlertTitle>
             <AlertDescription>{error}</AlertDescription>
           </Alert>
         ) : null}
         <Button onClick={onSignIn}>
           <LogInIcon data-icon="inline-start" />
-          Continue with Discord
+          {text.continue}
         </Button>
       </CardContent>
     </Card>

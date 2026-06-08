@@ -123,7 +123,12 @@ Useful dashboard URLs:
 ```text
 /me
 /leaderboard/<guildId>/2026
+/leaderboard/<guildId>/2026?lang=ar
 ```
+
+The dashboard supports English by default and Arabic with `?lang=ar`. Set
+`EWC_DASHBOARD_DEFAULT_GUILD_ID` when you want the home page to include a direct public
+leaderboard button.
 
 ## Configuration (`.env`)
 
@@ -140,6 +145,7 @@ Useful dashboard URLs:
 | `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL` | Better Auth secret and public auth base URL |
 | `EWC_DASHBOARD_PUBLIC_URL`, `EWC_DASHBOARD_INTERNAL_URL`, `EWC_DASHBOARD_INTERNAL_SECRET` | Public dashboard URL and bot-to-web internal sync settings |
 | `EWC_DASHBOARD_ADMIN_DISCORD_IDS` | Optional comma-separated Discord user IDs for future admin dashboard routes |
+| `EWC_DASHBOARD_DEFAULT_GUILD_ID` | Optional guild ID used for the home page public leaderboard shortcut |
 | `LOGO_CACHE_DIR`, `LOGO_CACHE_CONCURRENCY` | Persistent logo cache path and max concurrent logo downloads |
 | `LOGO_DOWNLOAD_MIN_GAP_MS`, `LOGO_RATE_LIMIT_BACKOFF_MS`, `LOGO_RATE_STATE_PATH` | Logo download throttle and restart-safe rate-limit state |
 | `LOGO_FAILURE_TTL_MS`, `LOGO_MAX_BYTES` | Logo retry delay for bad URLs and maximum accepted logo size |

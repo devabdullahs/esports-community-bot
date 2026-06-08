@@ -1,5 +1,11 @@
 import Link from "next/link";
-import { ArrowRightIcon, SparklesIcon, TrophyIcon, UserRoundIcon } from "lucide-react";
+import {
+  ArrowRightIcon,
+  BadgeCheckIcon,
+  SparklesIcon,
+  TrophyIcon,
+  UserRoundIcon,
+} from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -9,71 +15,159 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { DEFAULT_SEASON, defaultPublicGuildId } from "@/lib/env";
+import {
+  copy,
+  directionForLocale,
+  formatNumber,
+  localeFromSearchParams,
+  localizedPath,
+} from "@/lib/i18n";
 
-export default function Home() {
+export const dynamic = "force-dynamic";
+
+export default async function Home({
+  searchParams,
+}: {
+  searchParams: Promise<{ lang?: string }>;
+}) {
+  const locale = localeFromSearchParams(await searchParams);
+  const text = copy[locale];
+  const defaultGuildId = defaultPublicGuildId();
+  const leaderboardHref = defaultGuildId
+    ? localizedPath(`/leaderboard/${defaultGuildId}/${DEFAULT_SEASON}`, locale)
+    : null;
+  const profileHref = localizedPath("/me", locale);
+
   return (
-    <main className="mx-auto flex w-full max-w-5xl flex-1 flex-col gap-12 px-6 py-12 sm:py-16">
-      <section className="flex flex-col items-start gap-5">
-        <Badge variant="secondary" className="gap-1.5">
-          <SparklesIcon className="size-3.5 text-primary" />
-          Esports World Cup 2026
-        </Badge>
-        <h1 className="max-w-2xl text-4xl font-semibold tracking-tight text-balance sm:text-5xl">
-          Predict the EWC. Climb your community{" "}
-          <span className="bg-gradient-to-r from-primary to-amber-400 bg-clip-text text-transparent">
-            leaderboard
-          </span>
-          .
-        </h1>
-        <p className="max-w-xl text-base text-muted-foreground text-pretty">
-          Track your weekly and season predictions, show off your stats, and sync an EWC
-          showcase straight to your Discord profile.
-        </p>
-        <div className="flex flex-wrap gap-3">
-          <Button render={<Link href="/me" />} nativeButton={false} size="lg">
-            <UserRoundIcon data-icon="inline-start" />
-            Open my profile
-            <ArrowRightIcon data-icon="inline-end" />
-          </Button>
+    <main
+      lang={locale}
+      dir={directionForLocale(locale)}
+      className="mx-auto flex w-full max-w-6xl flex-1 flex-col gap-8 px-6 py-8 sm:py-10"
+    >
+      <section className="grid items-stretch gap-4 lg:grid-cols-[1.15fr_0.85fr]">
+        <div className="flex min-h-[24rem] flex-col justify-between rounded-xl border bg-card p-6 text-card-foreground shadow-sm">
+          <div className="flex flex-col items-start gap-5">
+            <Badge variant="secondary" className="gap-1.5">
+              <SparklesIcon data-icon="inline-start" />
+              {text.home.eyebrow}
+            </Badge>
+            <div className="flex max-w-3xl flex-col gap-4">
+              <h1 className="text-4xl font-semibold tracking-normal text-balance sm:text-5xl">
+                {text.home.title}
+              </h1>
+              <p className="max-w-2xl text-base leading-7 text-muted-foreground text-pretty">
+                {text.home.description}
+              </p>
+            </div>
+          </div>
+          <div className="mt-8 flex flex-wrap gap-3">
+            <Button render={<Link href={profileHref} />} nativeButton={false} size="lg">
+              <UserRoundIcon data-icon="inline-start" />
+              {text.home.openProfile}
+              <ArrowRightIcon data-icon="inline-end" className="rtl:rotate-180" />
+            </Button>
+            {leaderboardHref ? (
+              <Button render={<Link href={leaderboardHref} />} nativeButton={false} size="lg" variant="outline">
+                <TrophyIcon data-icon="inline-start" />
+                {text.home.openLeaderboard}
+              </Button>
+            ) : null}
+          </div>
         </div>
+
+        <Card className="min-h-[24rem]">
+          <CardHeader>
+            <CardTitle>{text.home.previewTitle}</CardTitle>
+            <CardDescription>{text.home.previewTeams}</CardDescription>
+          </CardHeader>
+          <CardContent className="flex flex-1 flex-col justify-between gap-6">
+            <div className="rounded-lg border bg-muted/35 p-4">
+              <p className="text-sm text-muted-foreground">{text.common.rank}</p>
+              <p className="mt-2 text-4xl font-semibold text-primary">#2</p>
+              <p className="mt-2 text-sm text-muted-foreground">{text.home.previewName}</p>
+            </div>
+            <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-1 xl:grid-cols-3">
+              <MiniMetric label={text.common.points} value={formatNumber(1240, locale)} />
+              <MiniMetric label={text.common.weeks} value={formatNumber(3, locale)} />
+              <MiniMetric label={text.common.wins} value={formatNumber(1, locale)} />
+            </div>
+          </CardContent>
+        </Card>
       </section>
 
-      <section className="grid gap-4 md:grid-cols-2">
-        <Card className="group transition-colors hover:border-primary/40">
-          <CardHeader>
-            <div className="mb-1 flex size-9 items-center justify-center rounded-lg bg-primary/10 text-primary ring-1 ring-primary/20">
-              <UserRoundIcon className="size-4.5" />
-            </div>
-            <CardTitle>My profile</CardTitle>
-            <CardDescription>Points, picks, weekly history, and Discord profile sync.</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <Button render={<Link href="/me" />} nativeButton={false} variant="outline">
-              Open profile
-              <ArrowRightIcon data-icon="inline-end" className="transition-transform group-hover:translate-x-0.5" />
-            </Button>
-          </CardContent>
-        </Card>
-
-        <Card className="transition-colors hover:border-primary/40">
-          <CardHeader>
-            <div className="mb-1 flex size-9 items-center justify-center rounded-lg bg-primary/10 text-primary ring-1 ring-primary/20">
-              <TrophyIcon className="size-4.5" />
-            </div>
-            <CardTitle>Public leaderboard</CardTitle>
-            <CardDescription>Open your server&apos;s ranking from the Discord bot link.</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <p className="text-sm text-muted-foreground">
-              Leaderboard URLs use the format
-              <span className="mx-1 rounded bg-muted px-1.5 py-0.5 font-mono text-xs text-foreground">
-                /leaderboard/server_id/2026
-              </span>
-              .
-            </p>
-          </CardContent>
-        </Card>
+      <section className="grid gap-4 md:grid-cols-3">
+        <ActionCard
+          icon={UserRoundIcon}
+          title={text.home.profileTitle}
+          description={text.home.profileDescription}
+          href={profileHref}
+          action={text.home.openProfile}
+        />
+        <ActionCard
+          icon={TrophyIcon}
+          title={text.home.leaderboardTitle}
+          description={
+            leaderboardHref
+              ? text.home.leaderboardDescription
+              : `${text.home.leaderboardDescription} ${text.home.noDefaultLeaderboard}`
+          }
+          href={leaderboardHref}
+          action={text.home.openLeaderboard}
+        />
+        <ActionCard
+          icon={BadgeCheckIcon}
+          title={text.home.discordTitle}
+          description={text.home.discordDescription}
+          href={profileHref}
+          action={text.common.myProfile}
+        />
       </section>
     </main>
+  );
+}
+
+function MiniMetric({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-lg bg-secondary px-3 py-2">
+      <p className="text-xs text-muted-foreground">{label}</p>
+      <p className="mt-1 text-lg font-semibold tabular-nums">{value}</p>
+    </div>
+  );
+}
+
+function ActionCard({
+  icon: Icon,
+  title,
+  description,
+  href,
+  action,
+}: {
+  icon: typeof UserRoundIcon;
+  title: string;
+  description: string;
+  href: string | null;
+  action: string;
+}) {
+  return (
+    <Card className="transition-[box-shadow] hover:shadow-md hover:ring-1 hover:ring-primary/30">
+      <CardHeader>
+        <div className="mb-1 flex size-9 items-center justify-center rounded-lg bg-primary/10 text-primary ring-1 ring-primary/20">
+          <Icon />
+        </div>
+        <CardTitle>{title}</CardTitle>
+        <CardDescription>{description}</CardDescription>
+      </CardHeader>
+      <CardContent>
+        {href ? (
+          <Button render={<Link href={href} />} nativeButton={false} variant="outline">
+            {action}
+            <ArrowRightIcon data-icon="inline-end" className="rtl:rotate-180" />
+          </Button>
+        ) : (
+          <Badge variant="outline">/leaderboard/server_id/2026</Badge>
+        )}
+      </CardContent>
+    </Card>
   );
 }

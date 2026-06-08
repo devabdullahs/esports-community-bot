@@ -1,5 +1,14 @@
 export const DEFAULT_SEASON = "2026";
 
+export function defaultPublicGuildId() {
+  if (process.env.EWC_DASHBOARD_DEFAULT_GUILD_ID) {
+    return process.env.EWC_DASHBOARD_DEFAULT_GUILD_ID;
+  }
+  return process.env.EWC_DASHBOARD_DEV_AUTH_BYPASS === "true"
+    ? "demo-guild"
+    : "";
+}
+
 export function dashboardPublicUrl() {
   return (
     process.env.EWC_DASHBOARD_PUBLIC_URL ||

@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Geist, Geist_Mono, Noto_Sans_Arabic } from "next/font/google";
+import { Suspense } from "react";
 import { Providers } from "@/components/providers";
+import { SiteFooter } from "@/components/site-footer";
 import { SiteHeader } from "@/components/site-header";
 import "./globals.css";
 
@@ -12,6 +14,11 @@ const geistSans = Geist({
 const geistMono = Geist_Mono({
   variable: "--font-geist-mono",
   subsets: ["latin"],
+});
+
+const notoSansArabic = Noto_Sans_Arabic({
+  variable: "--font-arabic",
+  subsets: ["arabic"],
 });
 
 export const metadata: Metadata = {
@@ -28,19 +35,20 @@ export default function RootLayout({
     <html
       lang="en"
       suppressHydrationWarning
-      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
+      className={`${geistSans.variable} ${geistMono.variable} ${notoSansArabic.variable} h-full antialiased`}
     >
-      <body className="flex min-h-full flex-col">
-        <Providers>
-          <SiteHeader />
-          <div className="flex flex-1 flex-col">{children}</div>
-          <footer className="border-t border-border/60">
-            <div className="mx-auto flex w-full max-w-6xl flex-col items-center justify-between gap-2 px-6 py-5 text-xs text-muted-foreground sm:flex-row">
-              <p>EWC Predictions · Esports Community Bot</p>
-              <p>Predictions are community fun, not affiliated with the Esports World Cup.</p>
-            </div>
-          </footer>
-        </Providers>
+      <body>
+        <div className="app-root flex min-h-full flex-col">
+          <Providers>
+            <Suspense fallback={null}>
+              <SiteHeader />
+            </Suspense>
+            <div className="flex flex-1 flex-col">{children}</div>
+            <Suspense fallback={null}>
+              <SiteFooter />
+            </Suspense>
+          </Providers>
+        </div>
       </body>
     </html>
   );

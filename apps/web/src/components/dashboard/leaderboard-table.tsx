@@ -25,6 +25,11 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import {
+  copy,
+  formatNumber,
+  type Locale,
+} from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
 export type LeaderboardRow = {
@@ -38,61 +43,96 @@ export type LeaderboardRow = {
   topTeams: string[];
 };
 
-export function LeaderboardTable({ rows }: { rows: LeaderboardRow[] }) {
+export function LeaderboardTable({
+  rows,
+  locale,
+}: {
+  rows: LeaderboardRow[];
+  locale: Locale;
+}) {
   const [sorting, setSorting] = useState<SortingState>([]);
   const [globalFilter, setGlobalFilter] = useState("");
+  const text = copy[locale];
+
   const columns = useMemo<ColumnDef<LeaderboardRow>[]>(
     () => [
       {
         accessorKey: "rank",
-        header: "Rank",
+        header: text.common.rank,
         cell: ({ row }) => {
           const rank = row.original.rank;
-          const medal = rank === 1 ? "🥇" : rank === 2 ? "🥈" : rank === 3 ? "🥉" : null;
           return (
-            <span className={cn("font-mono tabular-nums", rank <= 3 && "font-semibold text-primary")}>
-              {medal ? <span className="mr-1">{medal}</span> : null}#{rank}
-            </span>
+            <Badge variant={rank <= 3 ? "default" : "outline"}>
+              #{formatNumber(rank, locale)}
+            </Badge>
           );
         },
       },
       {
         accessorKey: "displayName",
-        header: "Member",
+        header: text.common.member,
         cell: ({ row }) => (
-          <div className="flex flex-col">
+          <div className="flex min-w-44 flex-col">
             <span className="font-medium">{row.original.displayName}</span>
-            <span className="font-mono text-xs text-muted-foreground">{row.original.userId}</span>
+            <span className="font-mono text-xs text-muted-foreground" dir="ltr">
+              {row.original.userId}
+            </span>
           </div>
         ),
       },
       {
         accessorKey: "overallPoints",
         header: ({ column }) => (
-          <Button variant="ghost" size="sm" onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}>
-            Points
-            <ArrowDownUpIcon data-icon="inline-end" />
-          </Button>
+          <div className="flex justify-end">
+            <Button
+              variant="ghost"
+              size="sm"
+              className="-me-2"
+              onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
+            >
+              {text.common.points}
+              <ArrowDownUpIcon data-icon="inline-end" />
+            </Button>
+          </div>
         ),
-        cell: ({ row }) => <span className="font-mono">{row.original.overallPoints.toLocaleString()}</span>,
+        cell: ({ row }) => (
+          <span className="block text-end font-mono tabular-nums">
+            {formatNumber(row.original.overallPoints, locale)}
+          </span>
+        ),
       },
       {
         accessorKey: "weeksScored",
-        header: "Weeks",
+        header: () => <div className="text-end">{text.common.weeks}</div>,
+        cell: ({ row }) => (
+          <span className="block text-end tabular-nums">
+            {formatNumber(row.original.weeksScored, locale)}
+          </span>
+        ),
       },
       {
         accessorKey: "weeklyWins",
-        header: "Wins",
+        header: () => <div className="text-end">{text.common.wins}</div>,
+        cell: ({ row }) => (
+          <span className="block text-end tabular-nums">
+            {formatNumber(row.original.weeklyWins, locale)}
+          </span>
+        ),
       },
       {
         accessorKey: "top3Sweeps",
-        header: "Sweeps",
+        header: () => <div className="text-end">{text.common.sweeps}</div>,
+        cell: ({ row }) => (
+          <span className="block text-end tabular-nums">
+            {formatNumber(row.original.top3Sweeps, locale)}
+          </span>
+        ),
       },
       {
         accessorKey: "topTeams",
-        header: "Top teams",
+        header: text.common.topTeams,
         cell: ({ row }) => (
-          <div className="flex flex-wrap gap-1">
+          <div className="flex min-w-56 flex-wrap gap-1">
             {row.original.topTeams.length ? (
               row.original.topTeams.map((team) => (
                 <Badge key={team} variant="secondary">
@@ -106,7 +146,7 @@ export function LeaderboardTable({ rows }: { rows: LeaderboardRow[] }) {
         ),
       },
     ],
-    [],
+    [locale, text],
   );
 
   const table = useReactTable({
@@ -123,12 +163,13 @@ export function LeaderboardTable({ rows }: { rows: LeaderboardRow[] }) {
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex max-w-sm items-center gap-2">
-        <SearchIcon data-icon="inline-start" />
+      <div className="relative max-w-sm">
+        <SearchIcon className="pointer-events-none absolute start-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
         <Input
           value={globalFilter}
           onChange={(event) => setGlobalFilter(event.target.value)}
-          placeholder="Search members or teams"
+          placeholder={text.leaderboard.searchPlaceholder}
+          className="ps-8"
         />
       </div>
       <div className="overflow-hidden rounded-md border">
@@ -147,7 +188,13 @@ export function LeaderboardTable({ rows }: { rows: LeaderboardRow[] }) {
           <TableBody>
             {table.getRowModel().rows.length ? (
               table.getRowModel().rows.map((row) => (
-                <TableRow key={row.id} className={cn(row.original.rank <= 3 && "bg-primary/[0.04]")}>
+                <TableRow
+                  key={row.id}
+                  className={cn(
+                    row.original.rank <= 3 && "bg-primary/5 dark:bg-primary/10",
+                    row.original.rank === 1 && "border-s-2 border-s-primary",
+                  )}
+                >
                   {row.getVisibleCells().map((cell) => (
                     <TableCell key={cell.id}>{flexRender(cell.column.columnDef.cell, cell.getContext())}</TableCell>
                   ))}
@@ -156,7 +203,7 @@ export function LeaderboardTable({ rows }: { rows: LeaderboardRow[] }) {
             ) : (
               <TableRow>
                 <TableCell colSpan={columns.length} className="h-24 text-center text-muted-foreground">
-                  No ranked predictions yet.
+                  {text.leaderboard.empty}
                 </TableCell>
               </TableRow>
             )}
@@ -165,14 +212,14 @@ export function LeaderboardTable({ rows }: { rows: LeaderboardRow[] }) {
       </div>
       <div className="flex items-center justify-between gap-3">
         <p className="text-sm text-muted-foreground">
-          Page {table.getState().pagination.pageIndex + 1} of {table.getPageCount() || 1}
+          {text.leaderboard.page(table.getState().pagination.pageIndex + 1, table.getPageCount() || 1)}
         </p>
         <div className="flex gap-2">
           <Button variant="outline" size="sm" onClick={() => table.previousPage()} disabled={!table.getCanPreviousPage()}>
-            Previous
+            {text.common.previous}
           </Button>
           <Button variant="outline" size="sm" onClick={() => table.nextPage()} disabled={!table.getCanNextPage()}>
-            Next
+            {text.common.next}
           </Button>
         </div>
       </div>

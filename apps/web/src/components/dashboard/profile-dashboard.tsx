@@ -19,6 +19,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Card,
+  CardAction,
   CardContent,
   CardDescription,
   CardHeader,
@@ -27,6 +28,13 @@ import {
 import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  copy,
+  formatDateTime,
+  formatNumber,
+  localizedPath,
+  type Locale,
+} from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
 type MePayload = {
@@ -75,18 +83,22 @@ async function jsonOrThrow(response: Response) {
 export function ProfileDashboard({
   guildId,
   season,
+  locale,
 }: {
   guildId?: string;
   season: string;
+  locale: Locale;
 }) {
   const router = useRouter();
   const queryClient = useQueryClient();
+  const text = copy[locale].profile;
   const query = useQuery<MePayload>({
     queryKey: ["me-ewc", guildId || "", season],
     queryFn: async () => {
       const params = new URLSearchParams();
       if (guildId) params.set("guildId", guildId);
       params.set("season", season);
+      if (locale === "ar") params.set("lang", locale);
       return jsonOrThrow(await fetch(`/api/me/ewc?${params.toString()}`));
     },
   });
@@ -112,18 +124,39 @@ export function ProfileDashboard({
       ),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ["me-ewc"] });
-      router.replace(`/me?season=${encodeURIComponent(season)}`);
+      router.replace(localizedPath(`/me?season=${encodeURIComponent(season)}`, locale));
     },
   });
 
   if (query.isPending) {
-    return <Skeleton className="h-96 w-full" />;
+    return (
+      <div className="flex flex-col gap-6">
+        <Card>
+          <CardHeader>
+            <div className="flex items-center gap-3">
+              <Skeleton className="size-12 rounded-full" />
+              <div className="flex flex-col gap-2">
+                <Skeleton className="h-4 w-40" />
+                <Skeleton className="h-3 w-28" />
+              </div>
+            </div>
+          </CardHeader>
+        </Card>
+        <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-4">
+          {Array.from({ length: 4 }).map((_, index) => (
+            <Skeleton key={index} className="h-24 rounded-xl" />
+          ))}
+        </div>
+        <Skeleton className="h-8 w-64" />
+        <Skeleton className="h-40 w-full rounded-xl" />
+      </div>
+    );
   }
 
   if (query.error) {
     return (
       <Alert variant="destructive">
-        <AlertTitle>Profile unavailable</AlertTitle>
+        <AlertTitle>{text.unavailableTitle}</AlertTitle>
         <AlertDescription>{query.error.message}</AlertDescription>
       </Alert>
     );
@@ -135,60 +168,62 @@ export function ProfileDashboard({
   return (
     <div className="flex flex-col gap-6">
       <Card>
-        <CardHeader className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <CardHeader className="gap-4">
           <div className="flex items-center gap-3">
             <Avatar className="size-12">
               <AvatarImage src={data.user.image || undefined} alt="" />
               <AvatarFallback>{(data.user.name || "E").slice(0, 2).toUpperCase()}</AvatarFallback>
             </Avatar>
-            <div>
-              <CardTitle>{data.user.name || "EWC Predictor"}</CardTitle>
-              <CardDescription>{data.discordUserId || "Discord account pending"}</CardDescription>
+            <div className="min-w-0">
+              <CardTitle className="truncate">{data.user.name || "EWC Predictor"}</CardTitle>
+              <CardDescription className="truncate" dir="ltr">
+                {data.discordUserId || text.discordPending}
+              </CardDescription>
             </div>
           </div>
-          <div className="flex flex-wrap gap-2">
+          <CardAction className="col-span-full col-start-1 row-start-2 flex flex-wrap gap-2 justify-self-start sm:col-span-1 sm:col-start-2 sm:row-span-2 sm:row-start-1 sm:justify-self-end">
             {stats?.guildId ? (
               <Button
-                render={<Link href={`/leaderboard/${stats.guildId}/${stats.season}`} />}
+                render={<Link href={localizedPath(`/leaderboard/${stats.guildId}/${stats.season}`, locale)} />}
                 nativeButton={false}
                 variant="outline"
               >
                 <ExternalLinkIcon data-icon="inline-start" />
-                Leaderboard
+                {text.leaderboard}
               </Button>
             ) : null}
             <Button onClick={() => sync.mutate()} disabled={sync.isPending || !stats}>
               <RefreshCcwIcon data-icon="inline-start" />
-              Sync profile
+              {text.sync}
             </Button>
             <Button variant="outline" onClick={() => unlink.mutate()} disabled={unlink.isPending || !data.link}>
               <UnlinkIcon data-icon="inline-start" />
-              Unlink
+              {text.unlink}
             </Button>
-          </div>
+          </CardAction>
         </CardHeader>
         <CardContent className="flex flex-col gap-4">
           {!stats ? (
             <Alert>
-              <AlertTitle>No active prediction profile</AlertTitle>
-              <AlertDescription>Open this page from `/ewc_predict link` in Discord to select a server.</AlertDescription>
+              <AlertTitle>{text.noProfileTitle}</AlertTitle>
+              <AlertDescription>{text.noProfileDescription}</AlertDescription>
             </Alert>
           ) : null}
           {data.link?.lastSyncError ? (
             <Alert variant="destructive">
-              <AlertTitle>Last sync failed</AlertTitle>
+              <AlertTitle>{text.lastSyncFailed}</AlertTitle>
               <AlertDescription>{data.link.lastSyncError}</AlertDescription>
             </Alert>
           ) : null}
           {sync.error ? (
             <Alert variant="destructive">
-              <AlertTitle>Sync failed</AlertTitle>
+              <AlertTitle>{text.syncFailed}</AlertTitle>
               <AlertDescription>{sync.error.message}</AlertDescription>
             </Alert>
           ) : null}
           {unlink.error ? (
             <Alert variant="destructive">
-              <AlertTitle>Unlink failed</AlertTitle>
+              <AlertTitle>{text.unlinkFailed}</AlertTitle>
               <AlertDescription>{unlink.error.message}</AlertDescription>
             </Alert>
           ) : null}
@@ -198,47 +233,58 @@ export function ProfileDashboard({
       {stats ? (
         <>
           <section className="grid gap-4 sm:grid-cols-2 md:grid-cols-4">
-            <StatCard label="Rank" value={stats.rank ? `#${stats.rank}` : "Unranked"} icon={TrophyIcon} accent />
-            <StatCard label="Points" value={stats.overallPoints.toLocaleString()} icon={SparklesIcon} />
-            <StatCard label="Weeks scored" value={String(stats.weeksScored)} icon={CalendarDaysIcon} />
-            <StatCard label="Weekly wins" value={String(stats.weeklyWins)} icon={MedalIcon} />
+            <StatCard
+              label={copy[locale].common.rank}
+              value={stats.rank ? `#${formatNumber(stats.rank, locale)}` : text.unranked}
+              icon={TrophyIcon}
+              accent
+            />
+            <StatCard label={text.points} value={formatNumber(stats.overallPoints, locale)} icon={SparklesIcon} />
+            <StatCard label={text.weeksScored} value={formatNumber(stats.weeksScored, locale)} icon={CalendarDaysIcon} />
+            <StatCard label={text.weeklyWins} value={formatNumber(stats.weeklyWins, locale)} icon={MedalIcon} />
           </section>
 
           <Tabs defaultValue="showcase">
             <TabsList>
-              <TabsTrigger value="showcase">Showcase</TabsTrigger>
-              <TabsTrigger value="season">Season picks</TabsTrigger>
-              <TabsTrigger value="weekly">Weekly history</TabsTrigger>
+              <TabsTrigger value="showcase">{text.showcase}</TabsTrigger>
+              <TabsTrigger value="season">{text.seasonPicks}</TabsTrigger>
+              <TabsTrigger value="weekly">{text.weeklyHistory}</TabsTrigger>
             </TabsList>
             <TabsContent value="showcase">
               <Card>
                 <CardHeader>
-                  <CardTitle>EWC Predictions</CardTitle>
-                  <CardDescription>{stats.showcaseUsername}</CardDescription>
+                  <CardTitle>{copy[locale].common.brand}</CardTitle>
+                  <CardDescription dir="ltr">{stats.showcaseUsername}</CardDescription>
                 </CardHeader>
                 <CardContent className="flex flex-wrap gap-2">
-                  <Badge variant="secondary">{stats.top3Sweeps} top 3 sweep{stats.top3Sweeps === 1 ? "" : "s"}</Badge>
-                  {data.link?.lastSyncedAt ? <Badge variant="outline">Synced {data.link.lastSyncedAt}</Badge> : null}
+                  <Badge variant="secondary">{text.top3Sweep(stats.top3Sweeps)}</Badge>
+                  {data.link?.lastSyncedAt ? (
+                    <Badge variant="outline" title={data.link.lastSyncedAt}>
+                      {text.synced} {formatDateTime(data.link.lastSyncedAt, locale)}
+                    </Badge>
+                  ) : null}
                 </CardContent>
               </Card>
             </TabsContent>
             <TabsContent value="season">
               <Card>
                 <CardHeader>
-                  <CardTitle>Season picks</CardTitle>
+                  <CardTitle>{text.seasonPicks}</CardTitle>
                   <CardDescription>
-                    {stats.seasonScore == null ? "Not scored yet" : `${stats.seasonScore.toLocaleString()} points`}
+                    {stats.seasonScore == null
+                      ? text.notScored
+                      : `${formatNumber(stats.seasonScore, locale)} ${text.points}`}
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="flex flex-wrap gap-2">
                   {stats.seasonPicks.length ? (
                     stats.seasonPicks.map((team, index) => (
                       <Badge key={`${team}-${index}`} variant="secondary">
-                        {index + 1}. {team}
+                        {formatNumber(index + 1, locale)}. {team}
                       </Badge>
                     ))
                   ) : (
-                    <p className="text-sm text-muted-foreground">No season picks yet.</p>
+                    <p className="text-sm text-muted-foreground">{text.noSeasonPicks}</p>
                   )}
                 </CardContent>
               </Card>
@@ -246,32 +292,36 @@ export function ProfileDashboard({
             <TabsContent value="weekly">
               <Card>
                 <CardHeader>
-                  <CardTitle>Recent weekly rounds</CardTitle>
-                  <CardDescription>{stats.weeksScored} scored week{stats.weeksScored === 1 ? "" : "s"}</CardDescription>
+                  <CardTitle>{text.recentWeekly}</CardTitle>
+                  <CardDescription>{text.scoredWeeks(stats.weeksScored)}</CardDescription>
                 </CardHeader>
                 <CardContent className="flex flex-col gap-3">
                   {stats.recentWeekly.length ? (
                     stats.recentWeekly.map((week) => (
                       <div key={week.weekKey} className="flex flex-col gap-2 rounded-md border p-3">
                         <div className="flex items-center justify-between gap-3">
-                          <div>
+                          <div className="min-w-0">
                             <p className="font-medium">{week.label}</p>
-                            <p className="text-sm text-muted-foreground">{week.picks.join(", ") || "No picks"}</p>
+                            <p className="truncate text-sm text-muted-foreground">
+                              {week.picks.join(", ") || text.noPicks}
+                            </p>
                           </div>
                           <Badge variant={week.score == null ? "outline" : "secondary"}>
-                            {week.score == null ? week.status : week.score.toLocaleString()}
+                            {week.score == null ? week.status : formatNumber(week.score, locale)}
                           </Badge>
                         </div>
                         {week.bonus ? (
                           <>
                             <Separator />
-                            <p className="text-sm text-muted-foreground">Top 3 sweep bonus: {week.bonus}</p>
+                            <p className="text-sm text-muted-foreground">
+                              {text.sweepBonus}: {formatNumber(week.bonus, locale)}
+                            </p>
                           </>
                         ) : null}
                       </div>
                     ))
                   ) : (
-                    <p className="text-sm text-muted-foreground">No weekly picks yet.</p>
+                    <p className="text-sm text-muted-foreground">{text.noWeeklyPicks}</p>
                   )}
                 </CardContent>
               </Card>
@@ -295,13 +345,15 @@ function StatCard({
   accent?: boolean;
 }) {
   return (
-    <Card className="gap-0 transition-colors hover:border-primary/40">
+    <Card className="gap-2 transition-[box-shadow] hover:ring-1 hover:ring-primary/30">
       <CardHeader>
         <div className="flex items-center justify-between gap-2">
           <CardDescription>{label}</CardDescription>
-          {Icon ? <Icon className={cn("size-4 text-muted-foreground", accent && "text-primary")} /> : null}
+          {Icon ? <Icon className={cn("text-muted-foreground", accent && "text-primary")} /> : null}
         </div>
-        <CardTitle className={cn("text-2xl tabular-nums", accent && "text-primary")}>{value}</CardTitle>
+        <CardTitle className={cn("text-3xl font-semibold leading-none tabular-nums", accent && "text-primary")}>
+          {value}
+        </CardTitle>
       </CardHeader>
     </Card>
   );
