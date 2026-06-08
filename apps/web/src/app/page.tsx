@@ -1,5 +1,6 @@
 import Link from "next/link";
-import { TrophyIcon, UserRoundIcon } from "lucide-react";
+import { ArrowRightIcon, SparklesIcon, TrophyIcon, UserRoundIcon } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -11,42 +12,61 @@ import {
 
 export default function Home() {
   return (
-    <main className="mx-auto flex w-full max-w-5xl flex-1 flex-col gap-8 px-6 py-10">
-      <section className="flex flex-col gap-4">
-        <div className="flex items-center gap-3">
-          <div className="flex size-10 items-center justify-center rounded-md bg-primary text-primary-foreground">
-            <TrophyIcon data-icon="inline-start" />
-          </div>
-          <div>
-            <p className="text-sm text-muted-foreground">Esports Community Bot</p>
-            <h1 className="text-3xl font-semibold tracking-normal">EWC Predictions</h1>
-          </div>
+    <main className="mx-auto flex w-full max-w-5xl flex-1 flex-col gap-12 px-6 py-12 sm:py-16">
+      <section className="flex flex-col items-start gap-5">
+        <Badge variant="secondary" className="gap-1.5">
+          <SparklesIcon className="size-3.5 text-primary" />
+          Esports World Cup 2026
+        </Badge>
+        <h1 className="max-w-2xl text-4xl font-semibold tracking-tight text-balance sm:text-5xl">
+          Predict the EWC. Climb your community{" "}
+          <span className="bg-gradient-to-r from-primary to-amber-400 bg-clip-text text-transparent">
+            leaderboard
+          </span>
+          .
+        </h1>
+        <p className="max-w-xl text-base text-muted-foreground text-pretty">
+          Track your weekly and season predictions, show off your stats, and sync an EWC
+          showcase straight to your Discord profile.
+        </p>
+        <div className="flex flex-wrap gap-3">
+          <Button render={<Link href="/me" />} nativeButton={false} size="lg">
+            <UserRoundIcon data-icon="inline-start" />
+            Open my profile
+            <ArrowRightIcon data-icon="inline-end" />
+          </Button>
         </div>
       </section>
 
       <section className="grid gap-4 md:grid-cols-2">
-        <Card>
+        <Card className="group transition-colors hover:border-primary/40">
           <CardHeader>
+            <div className="mb-1 flex size-9 items-center justify-center rounded-lg bg-primary/10 text-primary ring-1 ring-primary/20">
+              <UserRoundIcon className="size-4.5" />
+            </div>
             <CardTitle>My profile</CardTitle>
             <CardDescription>Points, picks, weekly history, and Discord profile sync.</CardDescription>
           </CardHeader>
           <CardContent>
-            <Button render={<Link href="/me" />} nativeButton={false}>
-              <UserRoundIcon data-icon="inline-start" />
+            <Button render={<Link href="/me" />} nativeButton={false} variant="outline">
               Open profile
+              <ArrowRightIcon data-icon="inline-end" className="transition-transform group-hover:translate-x-0.5" />
             </Button>
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="transition-colors hover:border-primary/40">
           <CardHeader>
+            <div className="mb-1 flex size-9 items-center justify-center rounded-lg bg-primary/10 text-primary ring-1 ring-primary/20">
+              <TrophyIcon className="size-4.5" />
+            </div>
             <CardTitle>Public leaderboard</CardTitle>
-            <CardDescription>Use the Discord bot link for your server leaderboard.</CardDescription>
+            <CardDescription>Open your server&apos;s ranking from the Discord bot link.</CardDescription>
           </CardHeader>
           <CardContent>
             <p className="text-sm text-muted-foreground">
-              Public leaderboard URLs use the format
-              <span className="mx-1 rounded bg-muted px-1.5 py-0.5 font-mono text-xs">
+              Leaderboard URLs use the format
+              <span className="mx-1 rounded bg-muted px-1.5 py-0.5 font-mono text-xs text-foreground">
                 /leaderboard/server_id/2026
               </span>
               .

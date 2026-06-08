@@ -1,7 +1,16 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ExternalLinkIcon, RefreshCcwIcon, UnlinkIcon } from "lucide-react";
+import {
+  CalendarDaysIcon,
+  ExternalLinkIcon,
+  type LucideIcon,
+  MedalIcon,
+  RefreshCcwIcon,
+  SparklesIcon,
+  TrophyIcon,
+  UnlinkIcon,
+} from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -18,6 +27,7 @@ import {
 import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { cn } from "@/lib/utils";
 
 type MePayload = {
   user: {
@@ -187,11 +197,11 @@ export function ProfileDashboard({
 
       {stats ? (
         <>
-          <section className="grid gap-4 md:grid-cols-4">
-            <StatCard label="Rank" value={stats.rank ? `#${stats.rank}` : "Unranked"} />
-            <StatCard label="Points" value={stats.overallPoints.toLocaleString()} />
-            <StatCard label="Weeks" value={String(stats.weeksScored)} />
-            <StatCard label="Wins" value={String(stats.weeklyWins)} />
+          <section className="grid gap-4 sm:grid-cols-2 md:grid-cols-4">
+            <StatCard label="Rank" value={stats.rank ? `#${stats.rank}` : "Unranked"} icon={TrophyIcon} accent />
+            <StatCard label="Points" value={stats.overallPoints.toLocaleString()} icon={SparklesIcon} />
+            <StatCard label="Weeks scored" value={String(stats.weeksScored)} icon={CalendarDaysIcon} />
+            <StatCard label="Weekly wins" value={String(stats.weeklyWins)} icon={MedalIcon} />
           </section>
 
           <Tabs defaultValue="showcase">
@@ -273,12 +283,25 @@ export function ProfileDashboard({
   );
 }
 
-function StatCard({ label, value }: { label: string; value: string }) {
+function StatCard({
+  label,
+  value,
+  icon: Icon,
+  accent,
+}: {
+  label: string;
+  value: string;
+  icon?: LucideIcon;
+  accent?: boolean;
+}) {
   return (
-    <Card>
+    <Card className="gap-0 transition-colors hover:border-primary/40">
       <CardHeader>
-        <CardDescription>{label}</CardDescription>
-        <CardTitle>{value}</CardTitle>
+        <div className="flex items-center justify-between gap-2">
+          <CardDescription>{label}</CardDescription>
+          {Icon ? <Icon className={cn("size-4 text-muted-foreground", accent && "text-primary")} /> : null}
+        </div>
+        <CardTitle className={cn("text-2xl tabular-nums", accent && "text-primary")}>{value}</CardTitle>
       </CardHeader>
     </Card>
   );

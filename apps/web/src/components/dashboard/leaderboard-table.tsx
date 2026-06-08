@@ -25,6 +25,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { cn } from "@/lib/utils";
 
 export type LeaderboardRow = {
   rank: number;
@@ -45,7 +46,15 @@ export function LeaderboardTable({ rows }: { rows: LeaderboardRow[] }) {
       {
         accessorKey: "rank",
         header: "Rank",
-        cell: ({ row }) => <span className="font-mono">#{row.original.rank}</span>,
+        cell: ({ row }) => {
+          const rank = row.original.rank;
+          const medal = rank === 1 ? "🥇" : rank === 2 ? "🥈" : rank === 3 ? "🥉" : null;
+          return (
+            <span className={cn("font-mono tabular-nums", rank <= 3 && "font-semibold text-primary")}>
+              {medal ? <span className="mr-1">{medal}</span> : null}#{rank}
+            </span>
+          );
+        },
       },
       {
         accessorKey: "displayName",
@@ -138,7 +147,7 @@ export function LeaderboardTable({ rows }: { rows: LeaderboardRow[] }) {
           <TableBody>
             {table.getRowModel().rows.length ? (
               table.getRowModel().rows.map((row) => (
-                <TableRow key={row.id}>
+                <TableRow key={row.id} className={cn(row.original.rank <= 3 && "bg-primary/[0.04]")}>
                   {row.getVisibleCells().map((cell) => (
                     <TableCell key={cell.id}>{flexRender(cell.column.columnDef.cell, cell.getContext())}</TableCell>
                   ))}

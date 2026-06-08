@@ -3,6 +3,21 @@ import { nextCookies } from "better-auth/next-js";
 import { db } from "@bot/db/connection.js";
 import { dashboardPublicUrl, trustedOrigins } from "@/lib/env";
 
+// Fail closed in production: never serve requests with a known/default auth secret,
+// or session cookies could be forged. The fallback is only for local dev and the
+// production *build* step (which serves no requests).
+function resolveAuthSecret() {
+  const secret = process.env.BETTER_AUTH_SECRET;
+  if (secret) return secret;
+  const isBuild = process.env.NEXT_PHASE === "phase-production-build";
+  if (process.env.NODE_ENV === "production" && !isBuild) {
+    throw new Error(
+      "BETTER_AUTH_SECRET must be set in production — refusing to start with a default secret.",
+    );
+  }
+  return "development-insecure-secret-change-before-production";
+}
+
 function discordImage(profile: { id: string; avatar?: string | null; image_url?: string }) {
   if (profile.image_url) return profile.image_url;
   if (!profile.avatar) return undefined;
@@ -13,9 +28,7 @@ function discordImage(profile: { id: string; avatar?: string | null; image_url?:
 export const auth = betterAuth({
   appName: "EWC Predictions",
   baseURL: dashboardPublicUrl(),
-  secret:
-    process.env.BETTER_AUTH_SECRET ||
-    "development-build-secret-change-before-production",
+  secret: resolveAuthSecret(),
   database: db,
   trustedOrigins: trustedOrigins(),
   socialProviders: {
