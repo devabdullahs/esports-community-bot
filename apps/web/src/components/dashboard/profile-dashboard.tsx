@@ -35,7 +35,6 @@ import {
   localizedPath,
   type Locale,
 } from "@/lib/i18n";
-import { cn } from "@/lib/utils";
 
 type MePayload = {
   user: {
@@ -237,7 +236,6 @@ export function ProfileDashboard({
               label={copy[locale].common.rank}
               value={stats.rank ? `#${formatNumber(stats.rank, locale)}` : text.unranked}
               icon={TrophyIcon}
-              accent
             />
             <StatCard label={text.points} value={formatNumber(stats.overallPoints, locale)} icon={SparklesIcon} />
             <StatCard label={text.weeksScored} value={formatNumber(stats.weeksScored, locale)} icon={CalendarDaysIcon} />
@@ -337,21 +335,19 @@ function StatCard({
   label,
   value,
   icon: Icon,
-  accent,
 }: {
   label: string;
   value: string;
   icon?: LucideIcon;
-  accent?: boolean;
 }) {
   return (
-    <Card className="gap-2 transition-[box-shadow] hover:ring-1 hover:ring-primary/30">
+    <Card size="sm">
       <CardHeader>
         <div className="flex items-center justify-between gap-2">
           <CardDescription>{label}</CardDescription>
-          {Icon ? <Icon className={cn("text-muted-foreground", accent && "text-primary")} /> : null}
+          {Icon ? <Icon className="text-muted-foreground" /> : null}
         </div>
-        <CardTitle className={cn("text-3xl font-semibold leading-none tabular-nums", accent && "text-primary")}>
+        <CardTitle className="text-3xl font-semibold leading-none tabular-nums">
           {value}
         </CardTitle>
       </CardHeader>

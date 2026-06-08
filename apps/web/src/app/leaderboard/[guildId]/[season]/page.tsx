@@ -5,6 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Card,
+  CardAction,
   CardContent,
   CardDescription,
   CardHeader,
@@ -39,7 +40,7 @@ export default async function LeaderboardPage({
     <main
       lang={locale}
       dir={directionForLocale(locale)}
-      className="mx-auto flex w-full max-w-6xl flex-1 flex-col gap-6 px-6 py-8"
+      className="mx-auto flex w-full max-w-6xl flex-1 flex-col gap-8 px-5 py-10 sm:px-8"
     >
       <Button
         render={<Link href={localizedPath("/", locale)} />}
@@ -51,14 +52,14 @@ export default async function LeaderboardPage({
         {text.leaderboard.back}
       </Button>
 
-      <section className="flex flex-col gap-5 rounded-xl border bg-card p-6 text-card-foreground shadow-sm">
-        <div className="flex flex-col items-start gap-3">
-          <Badge variant="secondary" className="gap-1.5">
+      <section className="flex flex-col gap-6">
+        <div className="flex flex-col items-start gap-4">
+          <Badge variant="outline">
             <TrophyIcon data-icon="inline-start" />
             {text.leaderboard.badge}
           </Badge>
-          <div className="flex max-w-3xl flex-col gap-2">
-            <h1 className="text-3xl font-semibold tracking-normal text-balance sm:text-4xl">
+          <div className="flex max-w-3xl flex-col gap-3">
+            <h1 className="text-3xl font-semibold leading-tight text-balance sm:text-4xl">
               {text.leaderboard.title(season)}
             </h1>
             <p className="text-sm leading-6 text-muted-foreground">
@@ -67,7 +68,7 @@ export default async function LeaderboardPage({
           </div>
         </div>
 
-        <div className="grid gap-3 sm:grid-cols-3">
+        <div className="grid gap-4 sm:grid-cols-3">
           <SummaryMetric
             icon={UsersRoundIcon}
             label={text.leaderboard.rankedMembers}
@@ -109,14 +110,16 @@ function SummaryMetric({
   value: string;
 }) {
   return (
-    <div className="flex items-center gap-3 rounded-lg bg-secondary px-4 py-3">
-      <span className="flex size-8 items-center justify-center rounded-md bg-background text-primary ring-1 ring-border">
-        <Icon />
-      </span>
-      <div className="min-w-0">
-        <p className="text-xs text-muted-foreground">{label}</p>
-        <p className="truncate text-lg font-semibold tabular-nums">{value}</p>
-      </div>
-    </div>
+    <Card size="sm">
+      <CardHeader>
+        <CardDescription>{label}</CardDescription>
+        <CardAction>
+          <Icon className="text-muted-foreground" />
+        </CardAction>
+        <CardTitle className="truncate text-2xl font-semibold tabular-nums">
+          {value}
+        </CardTitle>
+      </CardHeader>
+    </Card>
   );
 }

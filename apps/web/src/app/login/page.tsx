@@ -14,7 +14,11 @@ export default async function LoginPage({
   const locale = localeFromSearchParams(await searchParams);
 
   return (
-    <main lang={locale} dir={directionForLocale(locale)} className="flex flex-1 items-center justify-center px-6 py-10">
+    <main
+      lang={locale}
+      dir={directionForLocale(locale)}
+      className="flex flex-1 items-center justify-center px-5 py-10 sm:px-8"
+    >
       <Suspense fallback={<Skeleton className="h-56 w-full max-w-md" />}>
         <LoginPanel />
       </Suspense>

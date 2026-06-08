@@ -30,7 +30,6 @@ import {
   formatNumber,
   type Locale,
 } from "@/lib/i18n";
-import { cn } from "@/lib/utils";
 
 export type LeaderboardRow = {
   rank: number;
@@ -62,7 +61,7 @@ export function LeaderboardTable({
         cell: ({ row }) => {
           const rank = row.original.rank;
           return (
-            <Badge variant={rank <= 3 ? "default" : "outline"}>
+            <Badge variant={rank <= 3 ? "secondary" : "outline"}>
               #{formatNumber(rank, locale)}
             </Badge>
           );
@@ -188,13 +187,7 @@ export function LeaderboardTable({
           <TableBody>
             {table.getRowModel().rows.length ? (
               table.getRowModel().rows.map((row) => (
-                <TableRow
-                  key={row.id}
-                  className={cn(
-                    row.original.rank <= 3 && "bg-primary/5 dark:bg-primary/10",
-                    row.original.rank === 1 && "border-s-2 border-s-primary",
-                  )}
-                >
+                <TableRow key={row.id}>
                   {row.getVisibleCells().map((cell) => (
                     <TableCell key={cell.id}>{flexRender(cell.column.columnDef.cell, cell.getContext())}</TableCell>
                   ))}

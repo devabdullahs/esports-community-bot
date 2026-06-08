@@ -24,23 +24,30 @@ export function SiteHeader() {
     <header
       lang={locale}
       dir={directionForLocale(locale)}
-      className="sticky top-0 z-40 w-full border-b border-border/60 bg-background/80 backdrop-blur-xl"
+      className="sticky top-0 z-40 w-full border-b bg-background/95 supports-[backdrop-filter]:bg-background/80"
     >
-      <div className="mx-auto flex h-14 w-full max-w-6xl items-center gap-3 px-6">
-        <Link href={localizedPath("/", locale)} className="flex min-w-0 items-center gap-2.5">
-          <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground shadow-sm shadow-primary/30">
+      <div className="mx-auto flex h-16 w-full max-w-6xl items-center gap-4 px-5 sm:px-8">
+        <Link
+          href={localizedPath("/", locale)}
+          className="flex min-w-0 items-center gap-2.5"
+        >
+          <span className="flex size-8 shrink-0 items-center justify-center rounded-md border bg-muted text-foreground">
             <TrophyIcon />
           </span>
           <span className="flex min-w-0 flex-col leading-none">
-            <span className="truncate text-sm font-semibold tracking-normal">{text.common.brand}</span>
-            <span className="truncate text-[0.7rem] text-muted-foreground">{text.common.community}</span>
+            <span className="truncate text-sm font-semibold">
+              {text.common.brand}
+            </span>
+            <span className="truncate text-[0.7rem] text-muted-foreground">
+              {text.common.community}
+            </span>
           </span>
         </Link>
-        <nav className="ms-auto flex shrink-0 items-center gap-1">
+        <nav className="ms-auto flex shrink-0 items-center gap-2">
           <Button
             render={<Link href={localizedPath("/me", locale)} />}
             nativeButton={false}
-            variant="ghost"
+            variant="outline"
             size="sm"
           >
             {text.common.myProfile}

@@ -12,10 +12,7 @@ function hasSearchParamGetter(
 }
 
 export function localeFromSearchParams(
-  searchParams?:
-    | LangSearchParams
-    | GetSearchParams
-    | null,
+  searchParams?: LangSearchParams | GetSearchParams | null,
 ): Locale {
   if (!searchParams) return "en";
   let value: string | null | undefined;
@@ -96,34 +93,53 @@ export const copy = {
     },
     home: {
       eyebrow: "Esports World Cup 2026",
-      title: "Community EWC predictions, live leaderboard, and Discord profile showcase.",
+      title: "A public EWC predictions desk for your Discord community.",
       description:
-        "A public board for the community and a private profile for syncing your best EWC prediction stats to Discord.",
+        "Track season picks, publish a clean leaderboard, and let members sync their best prediction stats into Discord profile showcase.",
       openProfile: "Open my profile",
       openLeaderboard: "Open leaderboard",
       profileTitle: "Profile showcase",
-      profileDescription: "Rank, points, picks, sync status, and Discord connection controls.",
+      profileDescription:
+        "Rank, points, top teams, sync status, and the exact text shown on Discord.",
       leaderboardTitle: "Public leaderboard",
-      leaderboardDescription: "Share a public ranking link for any server and season.",
-      discordTitle: "Discord-ready",
-      discordDescription: "The bot can link, sync, and unlink profile showcase data.",
+      leaderboardDescription:
+        "Share a public ranking page for any server and season without requiring login.",
+      discordTitle: "Discord connection",
+      discordDescription:
+        "Bot commands can link, sync, and unlink the profile connection from Discord.",
       routeHint: "Public route",
-      noDefaultLeaderboard: "Open a leaderboard link from Discord or use the public URL format.",
-      previewTitle: "Current showcase",
+      noDefaultLeaderboard:
+        "Open a leaderboard link from Discord or use the public URL format.",
+      previewTitle: "One profile, two public surfaces.",
+      previewDescription:
+        "The website stays readable for the community while the bot keeps Discord actions close to chat.",
       previewName: "#2 overall | 1,240 pts",
       previewTeams: "Falcons, T1, Vitality",
+      scoreboardLabel: "Shows",
+      scoreboardRows: [
+        ["Discord profile", "Rank, points, weeks scored, and top teams"],
+        ["Public leaderboard", "Community standing by server and season"],
+        ["Private profile", "Picks, history, sync state, and unlink control"],
+        ["Bot workflow", "/ewc_predict link, sync, and unlink"],
+      ],
+      featureTitle: "Built as a foundation, not a one-off page.",
+      featureDescription:
+        "The web app keeps the public leaderboard simple now while leaving room for future admin workflows that can feed the bot.",
     },
     leaderboard: {
       back: "Back home",
       badge: "Public board",
       title: (season: string) => `EWC ${season} prediction leaderboard`,
       description: (total: number, guildId: string) =>
-        `${formatNumber(total, "en")} ranked member${total === 1 ? "" : "s"} for server ${guildId}`,
+        `${formatNumber(total, "en")} ranked member${
+          total === 1 ? "" : "s"
+        } for server ${guildId}`,
       rankedMembers: "Ranked members",
       topScore: "Top score",
       searchPlaceholder: "Search members or teams",
       empty: "No ranked predictions yet.",
-      page: (page: number, pages: number) => `Page ${formatNumber(page, "en")} of ${formatNumber(pages, "en")}`,
+      page: (page: number, pages: number) =>
+        `Page ${formatNumber(page, "en")} of ${formatNumber(pages, "en")}`,
     },
     profile: {
       eyebrow: "EWC dashboard",
@@ -134,7 +150,8 @@ export const copy = {
       unlink: "Unlink",
       unavailableTitle: "Profile unavailable",
       noProfileTitle: "No active prediction profile",
-      noProfileDescription: "Open this page from /ewc_predict link in Discord to select a server.",
+      noProfileDescription:
+        "Open this page from /ewc_predict link in Discord to select a server.",
       lastSyncFailed: "Last sync failed",
       syncFailed: "Sync failed",
       unlinkFailed: "Unlink failed",
@@ -146,18 +163,21 @@ export const copy = {
       seasonPicks: "Season picks",
       weeklyHistory: "Weekly history",
       synced: "Synced",
-      top3Sweep: (count: number) => `${formatNumber(count, "en")} top 3 sweep${count === 1 ? "" : "s"}`,
+      top3Sweep: (count: number) =>
+        `${formatNumber(count, "en")} top 3 sweep${count === 1 ? "" : "s"}`,
       notScored: "Not scored yet",
       noSeasonPicks: "No season picks yet.",
       recentWeekly: "Recent weekly rounds",
-      scoredWeeks: (count: number) => `${formatNumber(count, "en")} scored week${count === 1 ? "" : "s"}`,
+      scoredWeeks: (count: number) =>
+        `${formatNumber(count, "en")} scored week${count === 1 ? "" : "s"}`,
       noWeeklyPicks: "No weekly picks yet.",
       noPicks: "No picks",
       sweepBonus: "Top 3 sweep bonus",
     },
     login: {
       title: "Discord sign in",
-      description: "Connect your Discord account to manage your EWC profile showcase.",
+      description:
+        "Connect your Discord account to manage your EWC profile showcase.",
       failedTitle: "Sign in failed",
       failedMessage: "Discord sign-in failed.",
       continue: "Continue with Discord",
@@ -169,10 +189,10 @@ export const copy = {
   },
   ar: {
     common: {
-      brand: "توقعات كأس العالم للرياضات الإلكترونية",
+      brand: "توقعات EWC",
       community: "مجتمع الرياضات الإلكترونية",
       myProfile: "ملفي",
-      publicLeaderboard: "لوحة الصدارة",
+      publicLeaderboard: "لوحة الصدارة العامة",
       languageSwitch: "English",
       themeToggle: "تبديل المظهر",
       season: "الموسم",
@@ -180,7 +200,7 @@ export const copy = {
       rank: "الترتيب",
       weeks: "الأسابيع",
       wins: "الفوز",
-      sweeps: "توقعات كاملة",
+      sweeps: "توقع كامل",
       topTeams: "أفضل الفرق",
       member: "العضو",
       previous: "السابق",
@@ -189,22 +209,38 @@ export const copy = {
     },
     home: {
       eyebrow: "كأس العالم للرياضات الإلكترونية 2026",
-      title: "توقعات المجتمع، لوحة صدارة عامة، واستعراض لملفك في ديسكورد.",
+      title: "لوحة توقعات عامة لمجتمعك في ديسكورد.",
       description:
-        "لوحة عامة للمجتمع وصفحة خاصة لمزامنة أفضل إحصائيات توقعاتك مع ملفك في ديسكورد.",
+        "تابع اختيارات الموسم، وانشر لوحة صدارة واضحة، واجعل الأعضاء يزامنون أفضل إحصائياتهم مع استعراض الملف في ديسكورد.",
       openProfile: "افتح ملفي",
       openLeaderboard: "افتح لوحة الصدارة",
       profileTitle: "استعراض الملف",
-      profileDescription: "ترتيبك، نقاطك، اختياراتك، حالة المزامنة، وربط ديسكورد.",
+      profileDescription:
+        "الترتيب، النقاط، أفضل الفرق، حالة المزامنة، والنص الذي يظهر في ديسكورد.",
       leaderboardTitle: "لوحة صدارة عامة",
-      leaderboardDescription: "شارك رابط ترتيب عام لأي سيرفر وموسم.",
-      discordTitle: "جاهز لديسكورد",
-      discordDescription: "البوت يدعم الربط والمزامنة وفصل بيانات الاستعراض.",
+      leaderboardDescription:
+        "شارك صفحة ترتيب عامة لأي سيرفر وموسم بدون تسجيل دخول.",
+      discordTitle: "ربط ديسكورد",
+      discordDescription:
+        "أوامر البوت تستطيع الربط، والمزامنة، وفصل استعراض الملف من ديسكورد.",
       routeHint: "الرابط العام",
-      noDefaultLeaderboard: "افتح رابط لوحة الصدارة من ديسكورد أو استخدم صيغة الرابط العامة.",
-      previewTitle: "استعراض حالي",
+      noDefaultLeaderboard:
+        "افتح رابط لوحة الصدارة من ديسكورد أو استخدم صيغة الرابط العامة.",
+      previewTitle: "ملف واحد، وواجهتان عامتان.",
+      previewDescription:
+        "يبقى الموقع واضحا للمجتمع، بينما تبقى إجراءات ديسكورد قريبة من المحادثة.",
       previewName: "#2 إجماليا | 1,240 نقطة",
       previewTeams: "Falcons، T1، Vitality",
+      scoreboardLabel: "يعرض",
+      scoreboardRows: [
+        ["ملف ديسكورد", "الترتيب، النقاط، الأسابيع، وأفضل الفرق"],
+        ["لوحة الصدارة", "ترتيب المجتمع حسب السيرفر والموسم"],
+        ["الملف الخاص", "الاختيارات، السجل، حالة المزامنة، وفصل الربط"],
+        ["أوامر البوت", "/ewc_predict link و sync و unlink"],
+      ],
+      featureTitle: "مبني كأساس قابل للتوسع، وليس صفحة مؤقتة.",
+      featureDescription:
+        "يبقي تطبيق الويب لوحة الصدارة بسيطة الآن، مع مساحة جاهزة لصفحات إدارة مستقبلية تغذي البوت.",
     },
     leaderboard: {
       back: "العودة للرئيسية",
@@ -216,7 +252,8 @@ export const copy = {
       topScore: "أعلى نقاط",
       searchPlaceholder: "ابحث عن عضو أو فريق",
       empty: "لا توجد توقعات مصنفة حتى الآن.",
-      page: (page: number, pages: number) => `صفحة ${formatNumber(page, "ar")} من ${formatNumber(pages, "ar")}`,
+      page: (page: number, pages: number) =>
+        `صفحة ${formatNumber(page, "ar")} من ${formatNumber(pages, "ar")}`,
     },
     profile: {
       eyebrow: "لوحة EWC",
@@ -227,7 +264,8 @@ export const copy = {
       unlink: "فصل الربط",
       unavailableTitle: "الملف غير متاح",
       noProfileTitle: "لا يوجد ملف توقعات نشط",
-      noProfileDescription: "افتح هذه الصفحة من أمر /ewc_predict link في ديسكورد لاختيار السيرفر.",
+      noProfileDescription:
+        "افتح هذه الصفحة من أمر /ewc_predict link في ديسكورد لاختيار السيرفر.",
       lastSyncFailed: "فشلت آخر مزامنة",
       syncFailed: "فشلت المزامنة",
       unlinkFailed: "فشل فصل الربط",
@@ -239,18 +277,21 @@ export const copy = {
       seasonPicks: "اختيارات الموسم",
       weeklyHistory: "السجل الأسبوعي",
       synced: "تمت المزامنة",
-      top3Sweep: (count: number) => `${formatNumber(count, "ar")} توقع كامل للمراكز الثلاثة`,
+      top3Sweep: (count: number) =>
+        `${formatNumber(count, "ar")} توقع كامل للمراكز الثلاثة`,
       notScored: "لم يتم احتسابه بعد",
       noSeasonPicks: "لا توجد اختيارات للموسم حتى الآن.",
       recentWeekly: "آخر الجولات الأسبوعية",
-      scoredWeeks: (count: number) => `${formatNumber(count, "ar")} أسابيع محسوبة`,
+      scoredWeeks: (count: number) =>
+        `${formatNumber(count, "ar")} أسابيع محسوبة`,
       noWeeklyPicks: "لا توجد اختيارات أسبوعية حتى الآن.",
       noPicks: "لا توجد اختيارات",
       sweepBonus: "مكافأة توقع أول ثلاثة",
     },
     login: {
       title: "تسجيل الدخول بديسكورد",
-      description: "اربط حسابك في ديسكورد لإدارة استعراض ملف توقعات EWC.",
+      description:
+        "اربط حسابك في ديسكورد لإدارة استعراض ملف توقعات EWC.",
       failedTitle: "فشل تسجيل الدخول",
       failedMessage: "فشل تسجيل الدخول عبر ديسكورد.",
       continue: "المتابعة عبر ديسكورد",

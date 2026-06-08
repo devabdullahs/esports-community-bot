@@ -36,11 +36,13 @@ export default async function MePage({
     <main
       lang={locale}
       dir={directionForLocale(locale)}
-      className="mx-auto flex w-full max-w-6xl flex-1 flex-col gap-6 px-6 py-8"
+      className="mx-auto flex w-full max-w-6xl flex-1 flex-col gap-8 px-5 py-10 sm:px-8"
     >
-      <div>
+      <div className="flex max-w-3xl flex-col gap-2">
         <p className="text-sm text-muted-foreground">{text.eyebrow}</p>
-        <h1 className="text-3xl font-semibold tracking-normal">{text.title}</h1>
+        <h1 className="text-3xl font-semibold leading-tight sm:text-4xl">
+          {text.title}
+        </h1>
       </div>
       <ProfileDashboard guildId={params.guildId} season={params.season || DEFAULT_SEASON} locale={locale} />
     </main>

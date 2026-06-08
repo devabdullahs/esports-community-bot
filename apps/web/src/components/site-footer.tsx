@@ -16,9 +16,9 @@ export function SiteFooter() {
     <footer
       lang={locale}
       dir={directionForLocale(locale)}
-      className="border-t border-border/60"
+      className="border-t"
     >
-      <div className="mx-auto flex w-full max-w-6xl flex-col items-center justify-between gap-2 px-6 py-5 text-xs text-muted-foreground sm:flex-row">
+      <div className="mx-auto flex w-full max-w-6xl flex-col justify-between gap-3 px-5 py-8 text-sm text-muted-foreground sm:flex-row sm:items-center sm:px-8">
         <p>{text.brand}</p>
         <p>{text.note}</p>
       </div>
