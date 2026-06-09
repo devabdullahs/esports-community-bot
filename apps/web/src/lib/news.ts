@@ -10,6 +10,7 @@ import {
   getEwcNewsPostById as _getById,
   getPublishedEwcNewsPost as _getPublished,
   listEwcNewsPostsForAdmin as _listAdmin,
+  listLatestPublishedEwcNewsPosts as _listLatest,
   listPublishedEwcNewsPosts as _listPublished,
   setEwcNewsPostStatus as _setStatus,
   updateEwcNewsPost as _update,
@@ -37,6 +38,7 @@ export type NewsPost = {
   body: string;
   status: NewsStatus;
   authorDiscordId: string | null;
+  authorName: string | null;
   coverImageUrl: string | null;
   translations: Partial<Record<Locale, NewsTranslation>>;
   createdAt: string;
@@ -51,6 +53,7 @@ export type NewsPostInput = {
   translations: Partial<Record<Locale, Omit<NewsTranslation, "locale">>>;
   status?: NewsStatus;
   authorDiscordId?: string | null;
+  authorName?: string | null;
   coverImageUrl?: string | null;
 };
 
@@ -64,6 +67,7 @@ const listPublished = _listPublished as (args: {
   gameSlug: string;
   locale: Locale;
 }) => NewsPost[];
+const listLatest = _listLatest as (args: { locale: Locale; limit?: number }) => NewsPost[];
 const create = _create as (input: NewsPostInput) => NewsPost;
 const update = _update as (
   id: number,
@@ -89,6 +93,10 @@ export function listAdminNewsPosts(filter?: {
 
 export function listPublishedNewsPosts(gameSlug: string, locale: Locale): NewsPost[] {
   return listPublished({ gameSlug, locale });
+}
+
+export function listLatestPublishedNewsPosts(locale: Locale, limit = 4): NewsPost[] {
+  return listLatest({ locale, limit });
 }
 
 export function createNewsPost(input: NewsPostInput): NewsPost {

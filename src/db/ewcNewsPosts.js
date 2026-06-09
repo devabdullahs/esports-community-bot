@@ -48,6 +48,7 @@ function hydrate(row, locale) {
     defaultLocale: row.default_locale || row.locale || 'en',
     status: row.status,
     authorDiscordId: row.author_discord_id,
+    authorName: row.author_name,
     coverImageUrl: row.cover_image_url,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -207,6 +208,19 @@ export function listPublishedEwcNewsPosts({ gameSlug, locale }) {
     .filter(Boolean);
 }
 
+export function listLatestPublishedEwcNewsPosts({ locale, limit = 4 } = {}) {
+  return db
+    .prepare(
+      `SELECT * FROM ewc_news_posts
+       WHERE status = 'published'
+       ORDER BY published_at DESC, id DESC
+       LIMIT ?`,
+    )
+    .all(Math.max(1, Math.min(20, Number(limit) || 4)))
+    .map((row) => hydrate(row, locale))
+    .filter(Boolean);
+}
+
 export function createEwcNewsPost(input) {
   const tx = db.transaction((raw) => {
     const value = normalizeInput(raw);
@@ -215,8 +229,8 @@ export function createEwcNewsPost(input) {
       .prepare(
         `INSERT INTO ewc_news_posts
            (game_slug, locale, content_mode, default_locale, title, summary, body, status,
-            author_discord_id, cover_image_url, created_at, updated_at, published_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'),
+            author_discord_id, author_name, cover_image_url, created_at, updated_at, published_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'),
             CASE WHEN ? = 'published' THEN datetime('now') ELSE NULL END)`,
       )
       .run(
@@ -229,6 +243,7 @@ export function createEwcNewsPost(input) {
         fallback.body,
         value.status || 'draft',
         value.authorDiscordId || null,
+        value.authorName || null,
         value.coverImageUrl || null,
         value.status || 'draft',
       );
@@ -249,6 +264,7 @@ export function updateEwcNewsPost(id, input) {
         `UPDATE ewc_news_posts
          SET game_slug = ?, locale = ?, content_mode = ?, default_locale = ?, title = ?,
              summary = ?, body = ?, status = ?, cover_image_url = ?,
+             author_name = COALESCE(?, author_name),
              updated_at = datetime('now'),
              published_at = COALESCE(published_at, CASE WHEN ? = 'published' THEN datetime('now') ELSE NULL END)
          WHERE id = ?`,
@@ -263,6 +279,7 @@ export function updateEwcNewsPost(id, input) {
         fallback.body,
         value.status || 'draft',
         value.coverImageUrl || null,
+        value.authorName || null,
         value.status || 'draft',
         postId,
       );

@@ -2,10 +2,7 @@ import Link from "next/link";
 import {
   ArrowRightIcon,
   Gamepad2Icon,
-  MegaphoneIcon,
   NewspaperIcon,
-  ShieldCheckIcon,
-  type LucideIcon,
   TrophyIcon,
   UserRoundIcon,
 } from "lucide-react";
@@ -13,27 +10,29 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Card,
-  CardContent,
   CardDescription,
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { Separator } from "@/components/ui/separator";
+import { localizeText } from "@/lib/community-content";
 import { DEFAULT_SEASON, defaultPublicGuildId } from "@/lib/env";
+import { listGames } from "@/lib/games";
+import { listLatestPublishedNewsPosts } from "@/lib/news";
 import {
   copy,
   directionForLocale,
+  formatDateTime,
   localizedPath,
 } from "@/lib/i18n";
 import { getRequestLocale } from "@/lib/request-locale";
-import { getAuthSession } from "@/lib/session";
+import { safeUrlOrUndefined } from "@/lib/safe-url";
 
+export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export default async function Home() {
   const locale = await getRequestLocale();
   const text = copy[locale];
-  const session = await getAuthSession();
   const defaultGuildId = defaultPublicGuildId();
   const leaderboardHref = defaultGuildId
     ? localizedPath(`/leaderboard/${defaultGuildId}/${DEFAULT_SEASON}`, locale)
@@ -41,179 +40,154 @@ export default async function Home() {
   const profileHref = localizedPath("/me", locale);
   const gamesHref = localizedPath("/games", locale);
 
+  const games = listGames();
+  const latestPosts = listLatestPublishedNewsPosts(locale, 3);
+  const gameTitleOf = (slug: string) => {
+    const game = games.find((g) => g.slug === slug);
+    return game ? localizeText(game.title, locale) : slug;
+  };
+
   return (
     <main lang={locale} dir={directionForLocale(locale)} className="flex-1">
-      <section className="mx-auto grid max-w-6xl gap-10 px-5 py-12 sm:px-8 lg:grid-cols-[1.05fr_0.95fr] lg:items-start lg:py-16">
-        <div className="flex flex-col gap-8">
-          <div className="flex flex-col items-start gap-5">
-            <Badge variant="outline">{text.home.eyebrow}</Badge>
-            <div className="flex max-w-3xl flex-col gap-5">
-              <h1 className="text-4xl font-semibold leading-tight text-balance sm:text-5xl">
-                {text.home.title}
-              </h1>
-              <p className="max-w-2xl text-base leading-7 text-muted-foreground sm:text-lg">
-                {text.home.description}
-              </p>
-            </div>
-          </div>
-          <div className="flex flex-wrap gap-3">
+      {/* Hero */}
+      <section className="mx-auto flex max-w-6xl flex-col items-start gap-6 px-5 py-14 sm:px-8 lg:py-20">
+        <Badge variant="outline">{text.home.eyebrow}</Badge>
+        <h1 className="max-w-3xl text-4xl font-semibold leading-tight text-balance sm:text-5xl">
+          {text.home.title}
+        </h1>
+        <p className="max-w-2xl text-base leading-7 text-muted-foreground sm:text-lg">
+          {text.home.description}
+        </p>
+        <div className="flex flex-wrap gap-3">
+          <Button render={<Link href={gamesHref} />} nativeButton={false} size="lg">
+            <Gamepad2Icon data-icon="inline-start" />
+            {text.home.openGames}
+            <ArrowRightIcon data-icon="inline-end" className="rtl:rotate-180" />
+          </Button>
+          {leaderboardHref ? (
             <Button
-              render={<Link href={gamesHref} />}
-              nativeButton={false}
-              size="lg"
-            >
-              <Gamepad2Icon data-icon="inline-start" />
-              {text.home.openGames}
-              <ArrowRightIcon
-                data-icon="inline-end"
-                className="rtl:rotate-180"
-              />
-            </Button>
-            {leaderboardHref ? (
-              <Button
-                render={<Link href={leaderboardHref} />}
-                nativeButton={false}
-                size="lg"
-                variant="outline"
-              >
-                <TrophyIcon data-icon="inline-start" />
-                {text.home.openLeaderboard}
-              </Button>
-            ) : null}
-            <Button
-              render={<Link href={profileHref} />}
+              render={<Link href={leaderboardHref} />}
               nativeButton={false}
               size="lg"
               variant="outline"
             >
-              <UserRoundIcon data-icon="inline-start" />
-              {text.home.openProfile}
+              <TrophyIcon data-icon="inline-start" />
+              {text.home.openLeaderboard}
             </Button>
-          </div>
+          ) : null}
+          <Button
+            render={<Link href={profileHref} />}
+            nativeButton={false}
+            size="lg"
+            variant="outline"
+          >
+            <UserRoundIcon data-icon="inline-start" />
+            {text.home.openProfile}
+          </Button>
         </div>
-
-        <Card>
-          <CardHeader>
-            <Badge variant="secondary" className="mb-2 w-fit">
-              {text.home.scoreboardLabel}
-            </Badge>
-            <CardTitle>{text.home.previewTitle}</CardTitle>
-            <CardDescription>{text.home.previewDescription}</CardDescription>
-          </CardHeader>
-          <CardContent className="flex flex-col">
-            {text.home.scoreboardRows.map(([label, description], index) => (
-              <div key={label}>
-                {index > 0 ? <Separator /> : null}
-                <div className="grid gap-1 py-4 sm:grid-cols-[10rem_1fr] sm:gap-4">
-                  <p className="font-medium">{label}</p>
-                  <p className="text-sm leading-6 text-muted-foreground">
-                    {description}
-                  </p>
-                </div>
-              </div>
-            ))}
-            <Separator />
-            <div className="flex flex-col gap-2 py-4">
-              <p className="text-sm text-muted-foreground">
-                {text.common.publicLeaderboard}
-              </p>
-              <p className="font-mono text-sm" dir="ltr">
-                {text.home.previewName} | {text.home.previewTeams}
-              </p>
-            </div>
-          </CardContent>
-        </Card>
       </section>
 
+      {/* Games the community follows */}
+      {games.length ? (
+        <section className="border-t">
+          <div className="mx-auto flex max-w-6xl flex-col gap-6 px-5 py-10 sm:px-8">
+            <div className="flex items-end justify-between gap-3">
+              <div>
+                <h2 className="text-2xl font-semibold leading-tight">{text.home.gamesHeading}</h2>
+                <p className="mt-1 text-sm text-muted-foreground">{text.home.gamesSubtitle}</p>
+              </div>
+              <Button
+                render={<Link href={gamesHref} />}
+                nativeButton={false}
+                variant="ghost"
+                size="sm"
+                className="shrink-0"
+              >
+                {text.home.seeAll}
+                <ArrowRightIcon data-icon="inline-end" className="rtl:rotate-180" />
+              </Button>
+            </div>
+            <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-3">
+              {games.slice(0, 6).map((game) => (
+                <Link
+                  key={game.slug}
+                  href={localizedPath(`/games/${game.slug}`, locale)}
+                  className="group block"
+                >
+                  <Card
+                    size="sm"
+                    className="h-full transition-[box-shadow] group-hover:shadow-md group-hover:ring-primary/40"
+                  >
+                    <CardHeader>
+                      <Badge variant="secondary" className="mb-2 w-fit">
+                        <Gamepad2Icon data-icon="inline-start" />
+                        {localizeText(game.status, locale)}
+                      </Badge>
+                      <CardTitle>{localizeText(game.title, locale)}</CardTitle>
+                      <CardDescription className="line-clamp-2">
+                        {localizeText(game.description, locale)}
+                      </CardDescription>
+                    </CardHeader>
+                  </Card>
+                </Link>
+              ))}
+            </div>
+          </div>
+        </section>
+      ) : null}
+
+      {/* Latest news */}
       <section className="border-t">
-        <div className="mx-auto flex max-w-6xl flex-col gap-8 px-5 py-10 sm:px-8">
-          <div className="max-w-2xl">
-            <h2 className="text-2xl font-semibold leading-tight">
-              {text.home.featureTitle}
-            </h2>
-            <p className="mt-3 text-sm leading-6 text-muted-foreground">
-              {text.home.featureDescription}
-            </p>
+        <div className="mx-auto flex max-w-6xl flex-col gap-6 px-5 py-10 sm:px-8">
+          <div>
+            <h2 className="text-2xl font-semibold leading-tight">{text.home.newsHeading}</h2>
+            <p className="mt-1 text-sm text-muted-foreground">{text.home.newsSubtitle}</p>
           </div>
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-            {session ? (
-              <ActionCard
-                icon={ShieldCheckIcon}
-                title={text.home.adminTitle}
-                description={text.home.adminDescription}
-                href={localizedPath("/admin", locale)}
-                action={text.common.admin}
-              />
-            ) : null}
-            <ActionCard
-              icon={Gamepad2Icon}
-              title={text.home.gamePagesTitle}
-              description={text.home.gamePagesDescription}
-              href={gamesHref}
-              action={text.home.openGames}
-            />
-            <ActionCard
-              icon={NewspaperIcon}
-              title={text.home.newsTitle}
-              description={text.home.newsDescription}
-              href={gamesHref}
-              action={text.common.games}
-            />
-            <ActionCard
-              icon={MegaphoneIcon}
-              title={text.home.predictionsTitle}
-              description={
-                leaderboardHref
-                  ? text.home.predictionsDescription
-                  : `${text.home.predictionsDescription} ${text.home.noDefaultLeaderboard}`
-              }
-              href={leaderboardHref}
-              action={text.home.openLeaderboard}
-            />
-          </div>
+          {latestPosts.length ? (
+            <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-3">
+              {latestPosts.map((post) => {
+                const cover = safeUrlOrUndefined(post.coverImageUrl);
+                return (
+                  <Link
+                    key={post.id}
+                    href={localizedPath(`/games/${post.gameSlug}/news/${post.id}`, locale)}
+                    className="group block"
+                  >
+                    <Card
+                      size="sm"
+                      className="h-full overflow-hidden transition-[box-shadow] group-hover:shadow-md group-hover:ring-primary/40"
+                    >
+                      {cover ? (
+                        // eslint-disable-next-line @next/next/no-img-element -- external/admin URL, validated http(s)
+                        <img src={cover} alt="" className="aspect-video w-full object-cover" />
+                      ) : null}
+                      <CardHeader>
+                        <Badge variant="secondary" className="mb-2 w-fit">
+                          <NewspaperIcon data-icon="inline-start" />
+                          {gameTitleOf(post.gameSlug)}
+                        </Badge>
+                        <CardTitle>{post.title}</CardTitle>
+                        {post.summary ? (
+                          <CardDescription className="article-copy line-clamp-2">
+                            {post.summary}
+                          </CardDescription>
+                        ) : null}
+                        {post.publishedAt ? (
+                          <p className="mt-1 text-xs text-muted-foreground">
+                            {formatDateTime(post.publishedAt, locale)}
+                          </p>
+                        ) : null}
+                      </CardHeader>
+                    </Card>
+                  </Link>
+                );
+              })}
+            </div>
+          ) : (
+            <p className="text-sm text-muted-foreground">{text.home.newsEmpty}</p>
+          )}
         </div>
       </section>
     </main>
-  );
-}
-
-function ActionCard({
-  icon: Icon,
-  title,
-  description,
-  href,
-  action,
-}: {
-  icon: LucideIcon;
-  title: string;
-  description: string;
-  href: string | null;
-  action: string;
-}) {
-  return (
-    <Card size="sm">
-      <CardHeader>
-        <div className="mb-2 flex size-8 items-center justify-center rounded-md border bg-muted">
-          <Icon />
-        </div>
-        <CardTitle>{title}</CardTitle>
-        <CardDescription>{description}</CardDescription>
-      </CardHeader>
-      <CardContent>
-        {href ? (
-          <Button
-            render={<Link href={href} />}
-            nativeButton={false}
-            variant="outline"
-            size="sm"
-          >
-            {action}
-            <ArrowRightIcon data-icon="inline-end" className="rtl:rotate-180" />
-          </Button>
-        ) : (
-          <Badge variant="outline">/leaderboard/server_id/2026</Badge>
-        )}
-      </CardContent>
-    </Card>
   );
 }

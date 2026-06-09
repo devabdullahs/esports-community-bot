@@ -9,7 +9,9 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { communityGames, localizeText } from "@/lib/community-content";
+import { localizeText } from "@/lib/community-content";
+import { listGames } from "@/lib/games";
+import { listLatestPublishedNewsPosts } from "@/lib/news";
 import {
   copy,
   directionForLocale,
@@ -17,9 +19,18 @@ import {
 } from "@/lib/i18n";
 import { getRequestLocale } from "@/lib/request-locale";
 
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+
 export default async function GamesPage() {
   const locale = await getRequestLocale();
   const text = copy[locale].games;
+  const games = listGames();
+  const latestPosts = listLatestPublishedNewsPosts(locale, 2);
+  const gameTitle = (slug: string) => {
+    const game = games.find((g) => g.slug === slug);
+    return game ? localizeText(game.title, locale) : slug;
+  };
 
   return (
     <main
@@ -43,8 +54,8 @@ export default async function GamesPage() {
       </section>
 
       <section className="grid gap-4 md:grid-cols-3">
-        {communityGames.map((game) => (
-          <Card key={game.slug} size="sm">
+        {games.map((game) => (
+          <Card key={game.slug} size="sm" className="h-full">
             <CardHeader>
               <Badge variant="secondary" className="mb-2 w-fit">
                 {localizeText(game.status, locale)}
@@ -54,7 +65,7 @@ export default async function GamesPage() {
                 {localizeText(game.description, locale)}
               </CardDescription>
             </CardHeader>
-            <CardContent className="flex flex-col gap-4">
+            <CardContent className="flex flex-1 flex-col gap-4">
               <div className="flex flex-wrap gap-2">
                 {game.focus.map((item) => (
                   <Badge key={localizeText(item, locale)} variant="outline">
@@ -67,6 +78,7 @@ export default async function GamesPage() {
                 nativeButton={false}
                 variant="outline"
                 size="sm"
+                className="mt-auto w-full"
               >
                 {text.openGame}
                 <ArrowRightIcon
@@ -79,39 +91,47 @@ export default async function GamesPage() {
         ))}
       </section>
 
-      <section className="border-t pt-10">
-        <div className="grid gap-4 lg:grid-cols-[0.85fr_1.15fr]">
-          <div className="flex flex-col gap-3">
-            <Badge variant="outline" className="w-fit">
-              <NewspaperIcon data-icon="inline-start" />
-              {text.newsLabel}
-            </Badge>
-            <h2 className="text-2xl font-semibold leading-tight">
-              {text.newsTitle}
-            </h2>
-            <p className="text-sm leading-6 text-muted-foreground">
-              {text.newsDescription}
-            </p>
+      {latestPosts.length ? (
+        <section className="border-t pt-10">
+          <div className="grid gap-4 lg:grid-cols-[0.85fr_1.15fr]">
+            <div className="flex flex-col gap-3">
+              <Badge variant="outline" className="w-fit">
+                <NewspaperIcon data-icon="inline-start" />
+                {text.newsLabel}
+              </Badge>
+              <h2 className="text-2xl font-semibold leading-tight">
+                {text.newsTitle}
+              </h2>
+              <p className="text-sm leading-6 text-muted-foreground">
+                {text.newsDescription}
+              </p>
+            </div>
+            <div className="grid gap-4 sm:grid-cols-2">
+              {latestPosts.map((post) => (
+                <Link
+                  key={post.id}
+                  href={localizedPath(`/games/${post.gameSlug}/news/${post.id}`, locale)}
+                  className="group block"
+                >
+                  <Card size="sm" className="h-full transition-[box-shadow] group-hover:shadow-md group-hover:ring-primary/40">
+                    <CardHeader>
+                      <Badge variant="secondary" className="mb-2 w-fit">
+                        {gameTitle(post.gameSlug)}
+                      </Badge>
+                      <CardTitle>{post.title}</CardTitle>
+                      {post.summary ? (
+                        <CardDescription className="article-copy line-clamp-2">
+                          {post.summary}
+                        </CardDescription>
+                      ) : null}
+                    </CardHeader>
+                  </Card>
+                </Link>
+              ))}
+            </div>
           </div>
-          <div className="grid gap-4 sm:grid-cols-2">
-            {communityGames.slice(0, 2).flatMap((game) =>
-              game.posts.slice(0, 1).map((post) => (
-                <Card key={`${game.slug}-${localizeText(post.title, locale)}`} size="sm">
-                  <CardHeader>
-                    <Badge variant="secondary" className="mb-2 w-fit">
-                      {localizeText(post.label, locale)}
-                    </Badge>
-                    <CardTitle>{localizeText(post.title, locale)}</CardTitle>
-                    <CardDescription>
-                      {localizeText(post.summary, locale)}
-                    </CardDescription>
-                  </CardHeader>
-                </Card>
-              )),
-            )}
-          </div>
-        </div>
-      </section>
+        </section>
+      ) : null}
     </main>
   );
 }

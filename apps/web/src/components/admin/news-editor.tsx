@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   BoldIcon,
@@ -36,7 +36,8 @@ import {
   toggleLinePrefix,
   toggleWrap,
 } from "@bot/lib/markdownTools.js";
-import { communityGames, localizeText } from "@/lib/community-content";
+import { localizeText } from "@/lib/community-content";
+import type { GameRecord } from "@/lib/games";
 import type { Locale } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 import type { NewsContentMode, NewsPost, NewsStatus } from "@/lib/news";
@@ -194,17 +195,20 @@ function counterText(value: number, max: number) {
 export function NewsEditor({
   mode,
   post,
+  games,
 }: {
   mode: "create" | "edit";
   post?: NewsPost;
+  games: GameRecord[];
 }) {
   const router = useRouter();
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const uploadTargetRef = useRef<"body" | "cover">("body");
+  const pendingSelectionRef = useRef<SelectionState | null>(null);
 
   const initialDefaultLocale = post?.defaultLocale || post?.locale || "en";
-  const [gameSlug, setGameSlug] = useState(post?.gameSlug || communityGames[0]?.slug || "");
+  const [gameSlug, setGameSlug] = useState(post?.gameSlug || games[0]?.slug || "");
   const [contentMode, setContentMode] = useState<NewsContentMode>(post?.contentMode || "shared");
   const [defaultLocale, setDefaultLocale] = useState<Locale>(initialDefaultLocale);
   const [activeLocale, setActiveLocale] = useState<Locale>(initialDefaultLocale);
@@ -219,7 +223,7 @@ export function NewsEditor({
 
   const editLocale = contentMode === "shared" ? defaultLocale : activeLocale;
   const current = translations[editLocale];
-  const game = communityGames.find((g) => g.slug === gameSlug);
+  const game = games.find((g) => g.slug === gameSlug);
   const activeMarks = useMemo(
     () => getMarkdownActiveState(current.body, selection.start, selection.end),
     [current.body, selection.end, selection.start],
@@ -242,17 +246,30 @@ export function NewsEditor({
   }
 
   function apply(transform: Transform) {
-    const textarea = textareaRef.current;
-    const start = textarea?.selectionStart ?? selection.start;
-    const end = textarea?.selectionEnd ?? selection.end;
-    const result = transform(current.body, start, end);
+    // Use the remembered selection (captured on the textarea's select/click/keyup), not
+    // the live textarea selection. A controlled-textarea re-render (e.g. from the active-
+    // state recompute) can reset the live selection to the end, which would make toggle
+    // buttons insert markers at the end instead of unwrapping the current selection. The
+    // pending ref + layout effect below restore the visible selection deterministically.
+    const result = transform(current.body, selection.start, selection.end);
     updateTranslation(editLocale, { body: result.text });
-    setSelection({ start: result.selStart, end: result.selEnd });
-    requestAnimationFrame(() => {
-      textareaRef.current?.focus();
-      textareaRef.current?.setSelectionRange(result.selStart, result.selEnd);
-    });
+    const nextSelection = { start: result.selStart, end: result.selEnd };
+    setSelection(nextSelection);
+    pendingSelectionRef.current = nextSelection;
   }
+
+  // Restore the textarea selection after a toolbar action changes the body, so it
+  // survives the controlled re-render. Only runs for programmatic edits (typing leaves
+  // pendingSelectionRef null), so normal typing is never interfered with.
+  useLayoutEffect(() => {
+    const pending = pendingSelectionRef.current;
+    if (!pending) return;
+    pendingSelectionRef.current = null;
+    const textarea = textareaRef.current;
+    if (!textarea) return;
+    textarea.focus();
+    textarea.setSelectionRange(pending.start, pending.end);
+  }, [current.body, editLocale]);
 
   function switchContentMode(nextMode: NewsContentMode) {
     setContentMode(nextMode);
@@ -455,7 +472,7 @@ export function NewsEditor({
                     </SelectTrigger>
                     <SelectContent>
                       <SelectGroup>
-                        {communityGames.map((item) => (
+                        {games.map((item) => (
                           <SelectItem key={item.slug} value={item.slug}>
                             {localizeText(item.title, "en")}
                           </SelectItem>

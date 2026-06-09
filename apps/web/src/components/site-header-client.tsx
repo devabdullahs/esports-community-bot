@@ -1,10 +1,28 @@
 "use client";
 
-import { Gamepad2Icon, LanguagesIcon, TrophyIcon, UserRoundIcon } from "lucide-react";
+import {
+  Gamepad2Icon,
+  LanguagesIcon,
+  LayoutGridIcon,
+  NewspaperIcon,
+  ShieldCheckIcon,
+  TargetIcon,
+  TrophyIcon,
+  Tv2Icon,
+  UserRoundIcon,
+} from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ModeToggle } from "@/components/mode-toggle";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuGroup,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import {
   LOCALE_COOKIE_MAX_AGE,
   LOCALE_COOKIE_NAME,
@@ -54,26 +72,53 @@ export function SiteHeaderClient({
           </span>
         </Link>
         <nav className="ms-auto flex shrink-0 items-center gap-1 sm:gap-2">
-          <Button
-            render={<Link href={localizedPath("/games", locale)} />}
-            nativeButton={false}
-            variant="ghost"
-            size="sm"
-            className="size-8 px-0 sm:size-auto sm:px-2.5"
-            aria-label={text.common.games}
-          >
-            <Gamepad2Icon className="sm:hidden" />
-            <span className="hidden sm:inline">{text.common.games}</span>
-          </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger
+              render={
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="size-9 gap-1.5 px-0 sm:size-auto sm:px-2.5"
+                  aria-label={text.common.browse}
+                />
+              }
+            >
+              <LayoutGridIcon />
+              <span className="hidden sm:inline">{text.common.browse}</span>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="min-w-44">
+              <DropdownMenuGroup>
+                <DropdownMenuItem render={<Link href={localizedPath("/games", locale)} />}>
+                  <Gamepad2Icon />
+                  {text.common.games}
+                </DropdownMenuItem>
+                <DropdownMenuItem render={<Link href={localizedPath("/news", locale)} />}>
+                  <NewspaperIcon />
+                  {text.common.news}
+                </DropdownMenuItem>
+                <DropdownMenuItem render={<Link href={localizedPath("/media", locale)} />}>
+                  <Tv2Icon />
+                  {text.common.media}
+                </DropdownMenuItem>
+              </DropdownMenuGroup>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem render={<Link href={localizedPath("/predictions", locale)} />}>
+                <TargetIcon />
+                {text.common.predictions}
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
           {hasSession ? (
             <Button
               render={<Link href={localizedPath("/admin", locale)} />}
               nativeButton={false}
               variant="ghost"
               size="sm"
-              className="hidden sm:inline-flex"
+              className="size-9 gap-1.5 px-0 sm:size-auto sm:px-2.5"
+              aria-label={text.common.admin}
             >
-              {text.common.admin}
+              <ShieldCheckIcon />
+              <span className="hidden sm:inline">{text.common.admin}</span>
             </Button>
           ) : null}
           <Button
@@ -81,25 +126,23 @@ export function SiteHeaderClient({
             nativeButton={false}
             variant="outline"
             size="sm"
-            className="hidden sm:inline-flex"
+            className="size-9 gap-1.5 px-0 sm:size-auto sm:px-2.5"
             aria-label={text.common.myProfile}
           >
-            <UserRoundIcon data-icon="inline-start" />
-            {text.common.myProfile}
+            <UserRoundIcon />
+            <span className="hidden sm:inline">{text.common.myProfile}</span>
           </Button>
           <Button
             variant="ghost"
             size="sm"
             onClick={switchLanguage}
-            className="size-8 px-0 sm:size-auto sm:px-2.5"
+            className="size-9 gap-1.5 px-0 sm:size-auto sm:px-2.5"
             aria-label={text.common.languageSwitch}
           >
-            <LanguagesIcon data-icon="inline-start" />
+            <LanguagesIcon />
             <span className="hidden sm:inline">{text.common.languageSwitch}</span>
           </Button>
-          <div className="hidden sm:block">
-            <ModeToggle label={text.common.themeToggle} />
-          </div>
+          <ModeToggle label={text.common.themeToggle} />
         </nav>
       </div>
     </header>

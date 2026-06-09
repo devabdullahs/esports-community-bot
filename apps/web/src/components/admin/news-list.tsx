@@ -4,7 +4,8 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { PencilIcon, PlusIcon, Trash2Icon } from "lucide-react";
-import { communityGames, localizeText } from "@/lib/community-content";
+import { localizeText } from "@/lib/community-content";
+import type { GameRecord } from "@/lib/games";
 import { formatDateTime } from "@/lib/i18n";
 import type { NewsPost } from "@/lib/news";
 import { Badge } from "@/components/ui/badge";
@@ -18,13 +19,12 @@ import {
   TableRow,
 } from "@/components/ui/table";
 
-function gameTitle(slug: string) {
-  const game = communityGames.find((g) => g.slug === slug);
-  return game ? localizeText(game.title, "en") : slug;
-}
-
-export function NewsList({ posts }: { posts: NewsPost[] }) {
+export function NewsList({ posts, games }: { posts: NewsPost[]; games: GameRecord[] }) {
   const router = useRouter();
+  const gameTitle = (slug: string) => {
+    const game = games.find((g) => g.slug === slug);
+    return game ? localizeText(game.title, "en") : slug;
+  };
   const [deletingId, setDeletingId] = useState<number | null>(null);
 
   async function remove(id: number) {

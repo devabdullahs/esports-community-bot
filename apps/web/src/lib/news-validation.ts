@@ -1,4 +1,3 @@
-import { getCommunityGame } from "@/lib/community-content";
 import { isSafeUrl } from "@/lib/safe-url";
 import {
   NEWS_BODY_MAX_LENGTH,
@@ -31,7 +30,7 @@ export function validateNewsInput(
   const body = (raw ?? {}) as Record<string, unknown>;
 
   const gameSlug = typeof body.gameSlug === "string" ? body.gameSlug.trim() : "";
-  if (!gameSlug || !getCommunityGame(gameSlug)) return { ok: false, error: "Unknown game" };
+  if (!gameSlug) return { ok: false, error: "Game is required" };
 
   const content = validateNewsContentInput(body) as NewsContentValidationResult;
   if (!content.ok) return { ok: false, error: content.error };

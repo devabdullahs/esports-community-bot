@@ -18,7 +18,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" suppressHydrationWarning className="h-full antialiased">
-      <body className="min-h-full">
+      <body className="min-h-full" suppressHydrationWarning>
         <div className="app-root flex min-h-full flex-col">
           <Providers>
             <Suspense fallback={null}>

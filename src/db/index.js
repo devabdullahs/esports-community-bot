@@ -229,6 +229,7 @@ db.exec(`
     body              TEXT NOT NULL DEFAULT '',
     status            TEXT NOT NULL DEFAULT 'draft' CHECK (status IN ('draft','published')),
     author_discord_id TEXT,
+    author_name       TEXT,
     cover_image_url   TEXT,
     created_at        TEXT NOT NULL DEFAULT (datetime('now')),
     updated_at        TEXT NOT NULL DEFAULT (datetime('now')),
@@ -250,6 +251,50 @@ db.exec(`
     updated_at TEXT NOT NULL DEFAULT (datetime('now')),
     PRIMARY KEY (post_id, locale)
   );
+
+  CREATE TABLE IF NOT EXISTS ewc_games (
+    slug             TEXT PRIMARY KEY,
+    title_json       TEXT NOT NULL,
+    description_json TEXT NOT NULL,
+    status_json      TEXT NOT NULL,
+    owner_json       TEXT NOT NULL,
+    focus_json       TEXT NOT NULL DEFAULT '[]',
+    sort_order       INTEGER NOT NULL DEFAULT 0,
+    created_at       TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at       TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_ewc_games_sort ON ewc_games(sort_order, slug);
+
+  CREATE TABLE IF NOT EXISTS ewc_media_channels (
+    slug             TEXT PRIMARY KEY,
+    name_json        TEXT NOT NULL,
+    description_json TEXT NOT NULL,
+    logo_url         TEXT,
+    links_json       TEXT NOT NULL DEFAULT '[]',
+    sort_order       INTEGER NOT NULL DEFAULT 0,
+    created_at       TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at       TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+  CREATE INDEX IF NOT EXISTS idx_ewc_media_channels_sort ON ewc_media_channels(sort_order, slug);
+
+  CREATE TABLE IF NOT EXISTS ewc_admins (
+    discord_id   TEXT PRIMARY KEY,
+    display_name TEXT NOT NULL DEFAULT '',
+    created_at   TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+
+  CREATE TABLE IF NOT EXISTS ewc_admin_game_scopes (
+    discord_id TEXT NOT NULL,
+    game_slug  TEXT NOT NULL,
+    PRIMARY KEY (discord_id, game_slug)
+  );
+
+  CREATE TABLE IF NOT EXISTS ewc_admin_media_scopes (
+    discord_id TEXT NOT NULL,
+    media_slug TEXT NOT NULL,
+    PRIMARY KEY (discord_id, media_slug)
+  );
 `);
 
 ensureColumns('ewc_prediction_weeks', [['score_after', 'INTEGER']]);
@@ -257,6 +302,7 @@ ensureColumns('ewc_prediction_seasons', [['score_after', 'INTEGER'], ['best_week
 ensureColumns('ewc_news_posts', [
   ['content_mode', "TEXT NOT NULL DEFAULT 'shared' CHECK (content_mode IN ('shared','translated'))"],
   ['default_locale', "TEXT NOT NULL DEFAULT 'en' CHECK (default_locale IN ('en','ar'))"],
+  ['author_name', 'TEXT'],
 ]);
 
 db.exec(`

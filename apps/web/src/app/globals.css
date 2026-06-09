@@ -6,7 +6,7 @@
 
 @font-face {
   font-family: "Thmanyah Sans";
-  src: url("/fonts/thmanyahsans/woff2/thmanyahsans-Light.woff2") format("woff2");
+  src: url("https://assets.moonbot.info/thmanyahsans/woff2/thmanyahsans-Light.woff2") format("woff2");
   font-style: normal;
   font-weight: 300;
   font-display: swap;
@@ -14,7 +14,7 @@
 
 @font-face {
   font-family: "Thmanyah Sans";
-  src: url("/fonts/thmanyahsans/woff2/thmanyahsans-Regular.woff2") format("woff2");
+  src: url("https://assets.moonbot.info/thmanyahsans/woff2/thmanyahsans-Regular.woff2") format("woff2");
   font-style: normal;
   font-weight: 400;
   font-display: swap;
@@ -22,7 +22,7 @@
 
 @font-face {
   font-family: "Thmanyah Sans";
-  src: url("/fonts/thmanyahsans/woff2/thmanyahsans-Medium.woff2") format("woff2");
+  src: url("https://assets.moonbot.info/thmanyahsans/woff2/thmanyahsans-Medium.woff2") format("woff2");
   font-style: normal;
   font-weight: 500;
   font-display: swap;
@@ -30,7 +30,7 @@
 
 @font-face {
   font-family: "Thmanyah Sans";
-  src: url("/fonts/thmanyahsans/woff2/thmanyahsans-Bold.woff2") format("woff2");
+  src: url("https://assets.moonbot.info/thmanyahsans/woff2/thmanyahsans-Bold.woff2") format("woff2");
   font-style: normal;
   font-weight: 700;
   font-display: swap;
@@ -38,7 +38,7 @@
 
 @font-face {
   font-family: "Thmanyah Sans";
-  src: url("/fonts/thmanyahsans/woff2/thmanyahsans-Black.woff2") format("woff2");
+  src: url("https://assets.moonbot.info/thmanyahsans/woff2/thmanyahsans-Black.woff2") format("woff2");
   font-style: normal;
   font-weight: 900;
   font-display: swap;
@@ -46,7 +46,7 @@
 
 @font-face {
   font-family: "Thmanyah Serif Display";
-  src: url("/fonts/thmanyahserifdisplay/woff2/thmanyahserifdisplay-Light.woff2") format("woff2");
+  src: url("https://assets.moonbot.info/thmanyahserifdisplay/woff2/thmanyahserifdisplay-Light.woff2") format("woff2");
   font-style: normal;
   font-weight: 300;
   font-display: swap;
@@ -54,7 +54,7 @@
 
 @font-face {
   font-family: "Thmanyah Serif Display";
-  src: url("/fonts/thmanyahserifdisplay/woff2/thmanyahserifdisplay-Regular.woff2") format("woff2");
+  src: url("https://assets.moonbot.info/thmanyahserifdisplay/woff2/thmanyahserifdisplay-Regular.woff2") format("woff2");
   font-style: normal;
   font-weight: 400;
   font-display: swap;
@@ -62,7 +62,7 @@
 
 @font-face {
   font-family: "Thmanyah Serif Display";
-  src: url("/fonts/thmanyahserifdisplay/woff2/thmanyahserifdisplay-Medium.woff2") format("woff2");
+  src: url("https://assets.moonbot.info/thmanyahserifdisplay/woff2/thmanyahserifdisplay-Medium.woff2") format("woff2");
   font-style: normal;
   font-weight: 500;
   font-display: swap;
@@ -70,7 +70,7 @@
 
 @font-face {
   font-family: "Thmanyah Serif Display";
-  src: url("/fonts/thmanyahserifdisplay/woff2/thmanyahserifdisplay-Bold.woff2") format("woff2");
+  src: url("https://assets.moonbot.info/thmanyahserifdisplay/woff2/thmanyahserifdisplay-Bold.woff2") format("woff2");
   font-style: normal;
   font-weight: 700;
   font-display: swap;
@@ -78,7 +78,7 @@
 
 @font-face {
   font-family: "Thmanyah Serif Display";
-  src: url("/fonts/thmanyahserifdisplay/woff2/thmanyahserifdisplay-Black.woff2") format("woff2");
+  src: url("https://assets.moonbot.info/thmanyahserifdisplay/woff2/thmanyahserifdisplay-Black.woff2") format("woff2");
   font-style: normal;
   font-weight: 900;
   font-display: swap;
@@ -86,7 +86,7 @@
 
 @font-face {
   font-family: "Thmanyah Serif Text";
-  src: url("/fonts/thmanyahseriftext/woff2/thmanyahseriftext-Light.woff2") format("woff2");
+  src: url("https://assets.moonbot.info/thmanyahseriftext/woff2/thmanyahseriftext-Light.woff2") format("woff2");
   font-style: normal;
   font-weight: 300;
   font-display: swap;
@@ -94,7 +94,7 @@
 
 @font-face {
   font-family: "Thmanyah Serif Text";
-  src: url("/fonts/thmanyahseriftext/woff2/thmanyahseriftext-Regular.woff2") format("woff2");
+  src: url("https://assets.moonbot.info/thmanyahseriftext/woff2/thmanyahseriftext-Regular.woff2") format("woff2");
   font-style: normal;
   font-weight: 400;
   font-display: swap;
@@ -102,7 +102,7 @@
 
 @font-face {
   font-family: "Thmanyah Serif Text";
-  src: url("/fonts/thmanyahseriftext/woff2/thmanyahseriftext-Medium.woff2") format("woff2");
+  src: url("https://assets.moonbot.info/thmanyahseriftext/woff2/thmanyahseriftext-Medium.woff2") format("woff2");
   font-style: normal;
   font-weight: 500;
   font-display: swap;
@@ -110,7 +110,7 @@
 
 @font-face {
   font-family: "Thmanyah Serif Text";
-  src: url("/fonts/thmanyahseriftext/woff2/thmanyahseriftext-Bold.woff2") format("woff2");
+  src: url("https://assets.moonbot.info/thmanyahseriftext/woff2/thmanyahseriftext-Bold.woff2") format("woff2");
   font-style: normal;
   font-weight: 700;
   font-display: swap;
@@ -118,7 +118,7 @@
 
 @font-face {
   font-family: "Thmanyah Serif Text";
-  src: url("/fonts/thmanyahseriftext/woff2/thmanyahseriftext-Black.woff2") format("woff2");
+  src: url("https://assets.moonbot.info/thmanyahseriftext/woff2/thmanyahseriftext-Black.woff2") format("woff2");
   font-style: normal;
   font-weight: 900;
   font-display: swap;

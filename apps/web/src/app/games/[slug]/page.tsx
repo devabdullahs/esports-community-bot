@@ -17,10 +17,8 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
-import {
-  getCommunityGame,
-  localizeText,
-} from "@/lib/community-content";
+import { localizeText } from "@/lib/community-content";
+import { getGame } from "@/lib/games";
 import {
   copy,
   directionForLocale,
@@ -41,7 +39,7 @@ export default async function GamePage({
   params: Promise<{ slug: string }>;
 }) {
   const { slug } = await params;
-  const game = getCommunityGame(slug);
+  const game = getGame(slug);
   if (!game) notFound();
 
   const locale = await getRequestLocale();
@@ -146,23 +144,6 @@ export default async function GamePage({
                 </Link>
               );
             })}
-          </div>
-        ) : game.posts.length ? (
-          <div className="grid gap-4 md:grid-cols-2">
-            {game.posts.map((post) => (
-              <Card key={localizeText(post.title, locale)}>
-                <CardHeader>
-                  <Badge variant="secondary" className="mb-2 w-fit">
-                    <NewspaperIcon data-icon="inline-start" />
-                    {localizeText(post.label, locale)}
-                  </Badge>
-                  <CardTitle>{localizeText(post.title, locale)}</CardTitle>
-                  <CardDescription className="article-copy news-card-summary">
-                    {localizeText(post.summary, locale)}
-                  </CardDescription>
-                </CardHeader>
-              </Card>
-            ))}
           </div>
         ) : (
           <p className="text-sm text-muted-foreground">{text.postsEmpty}</p>

@@ -3,7 +3,8 @@ import { notFound } from "next/navigation";
 import { ArrowLeftIcon } from "lucide-react";
 import { PostBody } from "@/components/news/post-body";
 import { Button } from "@/components/ui/button";
-import { getCommunityGame, localizeText } from "@/lib/community-content";
+import { localizeText } from "@/lib/community-content";
+import { getGame } from "@/lib/games";
 import {
   directionForLocale,
   formatDateTime,
@@ -25,7 +26,7 @@ export default async function NewsPostPage({
   const { slug, id } = await params;
   const locale = await getRequestLocale();
 
-  const game = getCommunityGame(slug);
+  const game = getGame(slug);
   if (!game) notFound();
 
   const postId = parsePostId(id);
@@ -55,8 +56,12 @@ export default async function NewsPostPage({
       <article className="flex flex-col gap-5">
         <header className="flex flex-col gap-3">
           <h1 className="text-3xl font-semibold leading-tight sm:text-4xl">{post.title}</h1>
-          {post.publishedAt ? (
-            <p className="text-sm text-muted-foreground">{formatDateTime(post.publishedAt, locale)}</p>
+          {post.authorName || post.publishedAt ? (
+            <p className="text-sm text-muted-foreground">
+              {post.authorName ? `${locale === "ar" ? "بقلم" : "By"} ${post.authorName}` : ""}
+              {post.authorName && post.publishedAt ? " · " : ""}
+              {post.publishedAt ? formatDateTime(post.publishedAt, locale) : ""}
+            </p>
           ) : null}
           {post.summary ? (
             <p className="article-copy text-base text-muted-foreground">{post.summary}</p>

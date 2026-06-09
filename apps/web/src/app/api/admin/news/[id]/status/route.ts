@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getAdminAccess } from "@/lib/admin";
+import { canManageGame, getAdminAccess } from "@/lib/admin";
 import { getNewsPost, setNewsPostStatus } from "@/lib/news";
 import { parsePostId } from "@/lib/news-validation";
 import { validateNewsContentInput } from "@bot/lib/ewcNewsContent.js";
@@ -11,9 +11,9 @@ export async function POST(
   request: Request,
   context: { params: Promise<{ id: string }> },
 ) {
-  const { session, allowed } = await getAdminAccess();
-  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  if (!allowed) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  const access = await getAdminAccess();
+  if (!access.session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!access.allowed) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   const { id } = await context.params;
   const postId = parsePostId(id);
@@ -27,6 +27,9 @@ export async function POST(
 
   const existing = getNewsPost(postId);
   if (!existing) return NextResponse.json({ error: "Not found" }, { status: 404 });
+  if (!canManageGame(access, existing.gameSlug)) {
+    return NextResponse.json({ error: "You are not assigned to this game" }, { status: 403 });
+  }
   if (status === "published") {
     const validated = validateNewsContentInput({ ...existing, status });
     if (!validated.ok) return NextResponse.json({ error: validated.error }, { status: 400 });

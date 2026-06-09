@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
-import { getAdminAccess } from "@/lib/admin";
+import { canManageGame, getAdminAccess } from "@/lib/admin";
+import { getGame } from "@/lib/games";
 import { createNewsPost, listAdminNewsPosts, type NewsStatus } from "@/lib/news";
 import { validateNewsInput } from "@/lib/news-validation";
 
@@ -7,9 +8,9 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function GET(request: Request) {
-  const { session, allowed } = await getAdminAccess();
-  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  if (!allowed) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  const access = await getAdminAccess();
+  if (!access.session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!access.allowed) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   const url = new URL(request.url);
   const gameSlug = url.searchParams.get("game");
@@ -17,18 +18,32 @@ export async function GET(request: Request) {
   const status =
     statusParam === "draft" || statusParam === "published" ? (statusParam as NewsStatus) : null;
 
-  return NextResponse.json({ posts: listAdminNewsPosts({ gameSlug, status }) });
+  const posts = listAdminNewsPosts({ gameSlug, status });
+  // Scope: regular admins only see posts for their assigned games.
+  const scoped =
+    access.games === "ALL" ? posts : posts.filter((p) => access.games.includes(p.gameSlug));
+  return NextResponse.json({ posts: scoped });
 }
 
 export async function POST(request: Request) {
-  const { session, allowed, discordUserId } = await getAdminAccess();
-  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  if (!allowed) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  const access = await getAdminAccess();
+  if (!access.session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!access.allowed) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   const body = await request.json().catch(() => ({}));
   const validated = validateNewsInput(body);
   if (!validated.ok) return NextResponse.json({ error: validated.error }, { status: 400 });
+  if (!getGame(validated.value.gameSlug)) {
+    return NextResponse.json({ error: "Unknown game" }, { status: 400 });
+  }
+  if (!canManageGame(access, validated.value.gameSlug)) {
+    return NextResponse.json({ error: "You are not assigned to this game" }, { status: 403 });
+  }
 
-  const post = createNewsPost({ ...validated.value, authorDiscordId: discordUserId ?? null });
+  const post = createNewsPost({
+    ...validated.value,
+    authorDiscordId: access.discordUserId ?? null,
+    authorName: access.displayName ?? null,
+  });
   return NextResponse.json(post);
 }
