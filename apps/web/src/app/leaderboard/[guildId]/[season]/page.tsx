@@ -15,9 +15,9 @@ import {
   copy,
   directionForLocale,
   formatNumber,
-  localeFromSearchParams,
   localizedPath,
 } from "@/lib/i18n";
+import { getRequestLocale } from "@/lib/request-locale";
 import { getPublicEwcLeaderboard } from "@bot/lib/ewcProfileStats.js";
 
 export const runtime = "nodejs";
@@ -25,13 +25,11 @@ export const dynamic = "force-dynamic";
 
 export default async function LeaderboardPage({
   params,
-  searchParams,
 }: {
   params: Promise<{ guildId: string; season: string }>;
-  searchParams: Promise<{ lang?: string }>;
 }) {
   const { guildId, season } = await params;
-  const locale = localeFromSearchParams(await searchParams);
+  const locale = await getRequestLocale();
   const text = copy[locale];
   const leaderboard = getPublicEwcLeaderboard({ guildId, season, limit: 100 });
   const topScore = leaderboard.rows[0]?.overallPoints || 0;

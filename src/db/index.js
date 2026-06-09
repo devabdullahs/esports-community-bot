@@ -217,10 +217,69 @@ db.exec(`
     created_at       TEXT NOT NULL DEFAULT (datetime('now')),
     updated_at       TEXT NOT NULL DEFAULT (datetime('now'))
   );
+
+  CREATE TABLE IF NOT EXISTS ewc_news_posts (
+    id                INTEGER PRIMARY KEY AUTOINCREMENT,
+    game_slug         TEXT NOT NULL,
+    locale            TEXT NOT NULL DEFAULT 'en' CHECK (locale IN ('en','ar')),
+    content_mode      TEXT NOT NULL DEFAULT 'shared' CHECK (content_mode IN ('shared','translated')),
+    default_locale    TEXT NOT NULL DEFAULT 'en' CHECK (default_locale IN ('en','ar')),
+    title             TEXT NOT NULL,
+    summary           TEXT NOT NULL DEFAULT '',
+    body              TEXT NOT NULL DEFAULT '',
+    status            TEXT NOT NULL DEFAULT 'draft' CHECK (status IN ('draft','published')),
+    author_discord_id TEXT,
+    cover_image_url   TEXT,
+    created_at        TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at        TEXT NOT NULL DEFAULT (datetime('now')),
+    published_at      TEXT
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_ewc_news_posts_game_status
+    ON ewc_news_posts(game_slug, status, published_at DESC);
+  CREATE INDEX IF NOT EXISTS idx_ewc_news_posts_status_updated
+    ON ewc_news_posts(status, updated_at DESC);
+
+  CREATE TABLE IF NOT EXISTS ewc_news_post_translations (
+    post_id    INTEGER NOT NULL REFERENCES ewc_news_posts(id) ON DELETE CASCADE,
+    locale     TEXT NOT NULL CHECK (locale IN ('en','ar')),
+    title      TEXT NOT NULL DEFAULT '',
+    summary    TEXT NOT NULL DEFAULT '',
+    body       TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+    PRIMARY KEY (post_id, locale)
+  );
 `);
 
 ensureColumns('ewc_prediction_weeks', [['score_after', 'INTEGER']]);
 ensureColumns('ewc_prediction_seasons', [['score_after', 'INTEGER'], ['best_weeks', 'INTEGER']]);
+ensureColumns('ewc_news_posts', [
+  ['content_mode', "TEXT NOT NULL DEFAULT 'shared' CHECK (content_mode IN ('shared','translated'))"],
+  ['default_locale', "TEXT NOT NULL DEFAULT 'en' CHECK (default_locale IN ('en','ar'))"],
+]);
+
+db.exec(`
+  UPDATE ewc_news_posts
+  SET default_locale = CASE WHEN locale = 'ar' THEN 'ar' ELSE 'en' END
+  WHERE default_locale NOT IN ('en', 'ar') OR default_locale IS NULL;
+
+  UPDATE ewc_news_posts
+  SET content_mode = 'shared'
+  WHERE content_mode NOT IN ('shared', 'translated') OR content_mode IS NULL;
+
+  INSERT OR IGNORE INTO ewc_news_post_translations
+    (post_id, locale, title, summary, body, created_at, updated_at)
+  SELECT
+    id,
+    CASE WHEN locale = 'ar' THEN 'ar' ELSE 'en' END,
+    title,
+    summary,
+    body,
+    created_at,
+    updated_at
+  FROM ewc_news_posts;
+`);
 
 // Canonicalize old game keys after slug changes. Keep this tiny and explicit so existing
 // per-game boards continue to work without creating duplicate alias rows later.

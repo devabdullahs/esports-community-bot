@@ -23,19 +23,15 @@ import { DEFAULT_SEASON, defaultPublicGuildId } from "@/lib/env";
 import {
   copy,
   directionForLocale,
-  localeFromSearchParams,
   localizedPath,
 } from "@/lib/i18n";
+import { getRequestLocale } from "@/lib/request-locale";
 import { getAuthSession } from "@/lib/session";
 
 export const dynamic = "force-dynamic";
 
-export default async function Home({
-  searchParams,
-}: {
-  searchParams: Promise<{ lang?: string }>;
-}) {
-  const locale = localeFromSearchParams(await searchParams);
+export default async function Home() {
+  const locale = await getRequestLocale();
   const text = copy[locale];
   const session = await getAuthSession();
   const defaultGuildId = defaultPublicGuildId();

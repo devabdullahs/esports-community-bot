@@ -6,8 +6,7 @@
 
 @font-face {
   font-family: "Thmanyah Sans";
-  src: url("https://assets.moonbot.info/thmanyahsans/woff2/thmanyahsans-Light.woff2")
-    format("woff2");
+  src: url("/fonts/thmanyahsans/woff2/thmanyahsans-Light.woff2") format("woff2");
   font-style: normal;
   font-weight: 300;
   font-display: swap;
@@ -15,8 +14,7 @@
 
 @font-face {
   font-family: "Thmanyah Sans";
-  src: url("https://assets.moonbot.info/thmanyahsans/woff2/thmanyahsans-Regular.woff2")
-    format("woff2");
+  src: url("/fonts/thmanyahsans/woff2/thmanyahsans-Regular.woff2") format("woff2");
   font-style: normal;
   font-weight: 400;
   font-display: swap;
@@ -24,8 +22,7 @@
 
 @font-face {
   font-family: "Thmanyah Sans";
-  src: url("https://assets.moonbot.info/thmanyahsans/woff2/thmanyahsans-Medium.woff2")
-    format("woff2");
+  src: url("/fonts/thmanyahsans/woff2/thmanyahsans-Medium.woff2") format("woff2");
   font-style: normal;
   font-weight: 500;
   font-display: swap;
@@ -33,8 +30,7 @@
 
 @font-face {
   font-family: "Thmanyah Sans";
-  src: url("https://assets.moonbot.info/thmanyahsans/woff2/thmanyahsans-Bold.woff2")
-    format("woff2");
+  src: url("/fonts/thmanyahsans/woff2/thmanyahsans-Bold.woff2") format("woff2");
   font-style: normal;
   font-weight: 700;
   font-display: swap;
@@ -42,8 +38,7 @@
 
 @font-face {
   font-family: "Thmanyah Sans";
-  src: url("https://assets.moonbot.info/thmanyahsans/woff2/thmanyahsans-Black.woff2")
-    format("woff2");
+  src: url("/fonts/thmanyahsans/woff2/thmanyahsans-Black.woff2") format("woff2");
   font-style: normal;
   font-weight: 900;
   font-display: swap;
@@ -51,8 +46,15 @@
 
 @font-face {
   font-family: "Thmanyah Serif Display";
-  src: url("https://assets.moonbot.info/thmanyahserifdisplay/woff2/thmanyahserifdisplay-Regular.woff2")
-    format("woff2");
+  src: url("/fonts/thmanyahserifdisplay/woff2/thmanyahserifdisplay-Light.woff2") format("woff2");
+  font-style: normal;
+  font-weight: 300;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Thmanyah Serif Display";
+  src: url("/fonts/thmanyahserifdisplay/woff2/thmanyahserifdisplay-Regular.woff2") format("woff2");
   font-style: normal;
   font-weight: 400;
   font-display: swap;
@@ -60,17 +62,39 @@
 
 @font-face {
   font-family: "Thmanyah Serif Display";
-  src: url("https://assets.moonbot.info/thmanyahserifdisplay/woff2/thmanyahserifdisplay-Bold.woff2")
-    format("woff2");
+  src: url("/fonts/thmanyahserifdisplay/woff2/thmanyahserifdisplay-Medium.woff2") format("woff2");
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Thmanyah Serif Display";
+  src: url("/fonts/thmanyahserifdisplay/woff2/thmanyahserifdisplay-Bold.woff2") format("woff2");
   font-style: normal;
   font-weight: 700;
   font-display: swap;
 }
 
 @font-face {
+  font-family: "Thmanyah Serif Display";
+  src: url("/fonts/thmanyahserifdisplay/woff2/thmanyahserifdisplay-Black.woff2") format("woff2");
+  font-style: normal;
+  font-weight: 900;
+  font-display: swap;
+}
+
+@font-face {
   font-family: "Thmanyah Serif Text";
-  src: url("https://assets.moonbot.info/thmanyahseriftext/woff2/thmanyahseriftext-Regular.woff2")
-    format("woff2");
+  src: url("/fonts/thmanyahseriftext/woff2/thmanyahseriftext-Light.woff2") format("woff2");
+  font-style: normal;
+  font-weight: 300;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Thmanyah Serif Text";
+  src: url("/fonts/thmanyahseriftext/woff2/thmanyahseriftext-Regular.woff2") format("woff2");
   font-style: normal;
   font-weight: 400;
   font-display: swap;
@@ -78,8 +102,7 @@
 
 @font-face {
   font-family: "Thmanyah Serif Text";
-  src: url("https://assets.moonbot.info/thmanyahseriftext/woff2/thmanyahseriftext-Medium.woff2")
-    format("woff2");
+  src: url("/fonts/thmanyahseriftext/woff2/thmanyahseriftext-Medium.woff2") format("woff2");
   font-style: normal;
   font-weight: 500;
   font-display: swap;
@@ -87,10 +110,17 @@
 
 @font-face {
   font-family: "Thmanyah Serif Text";
-  src: url("https://assets.moonbot.info/thmanyahseriftext/woff2/thmanyahseriftext-Bold.woff2")
-    format("woff2");
+  src: url("/fonts/thmanyahseriftext/woff2/thmanyahseriftext-Bold.woff2") format("woff2");
   font-style: normal;
   font-weight: 700;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Thmanyah Serif Text";
+  src: url("/fonts/thmanyahseriftext/woff2/thmanyahseriftext-Black.woff2") format("woff2");
+  font-style: normal;
+  font-weight: 900;
   font-display: swap;
 }
 
@@ -146,72 +176,72 @@
     Helvetica, sans-serif;
   --font-system-mono: "SFMono-Regular", Consolas, "Liberation Mono", Menlo,
     monospace;
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0 0);
+  --background: oklch(0.99 0.003 258);
+  --foreground: oklch(0.22 0.02 262);
   --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
+  --card-foreground: oklch(0.22 0.02 262);
   --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.205 0 0);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.97 0 0);
-  --secondary-foreground: oklch(0.205 0 0);
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.97 0 0);
-  --accent-foreground: oklch(0.205 0 0);
-  --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0);
-  --ring: oklch(0.708 0 0);
-  --chart-1: oklch(0.646 0.222 41.116);
-  --chart-2: oklch(0.6 0.118 184.704);
-  --chart-3: oklch(0.398 0.07 227.392);
-  --chart-4: oklch(0.828 0.189 84.429);
-  --chart-5: oklch(0.769 0.188 70.08);
+  --popover-foreground: oklch(0.22 0.02 262);
+  --primary: oklch(0.55 0.2 258);
+  --primary-foreground: oklch(0.985 0.008 258);
+  --secondary: oklch(0.965 0.008 262);
+  --secondary-foreground: oklch(0.26 0.03 262);
+  --muted: oklch(0.965 0.008 262);
+  --muted-foreground: oklch(0.52 0.025 260);
+  --accent: oklch(0.95 0.03 258);
+  --accent-foreground: oklch(0.3 0.06 258);
+  --destructive: oklch(0.58 0.22 27.3);
+  --border: oklch(0.9 0.012 260);
+  --input: oklch(0.9 0.012 260);
+  --ring: oklch(0.55 0.2 258);
+  --chart-1: oklch(0.55 0.2 258);
+  --chart-2: oklch(0.62 0.15 230);
+  --chart-3: oklch(0.68 0.13 200);
+  --chart-4: oklch(0.6 0.12 180);
+  --chart-5: oklch(0.5 0.18 275);
   --radius: 0.625rem;
-  --sidebar: oklch(0.985 0 0);
-  --sidebar-foreground: oklch(0.145 0 0);
-  --sidebar-primary: oklch(0.205 0 0);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.97 0 0);
-  --sidebar-accent-foreground: oklch(0.205 0 0);
-  --sidebar-border: oklch(0.922 0 0);
-  --sidebar-ring: oklch(0.708 0 0);
+  --sidebar: oklch(0.985 0.005 260);
+  --sidebar-foreground: oklch(0.22 0.02 262);
+  --sidebar-primary: oklch(0.55 0.2 258);
+  --sidebar-primary-foreground: oklch(0.985 0.008 258);
+  --sidebar-accent: oklch(0.95 0.03 258);
+  --sidebar-accent-foreground: oklch(0.3 0.06 258);
+  --sidebar-border: oklch(0.9 0.012 260);
+  --sidebar-ring: oklch(0.55 0.2 258);
 }
 
 .dark {
-  --background: oklch(0.145 0 0);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.205 0 0);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.205 0 0);
-  --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.922 0 0);
-  --primary-foreground: oklch(0.205 0 0);
-  --secondary: oklch(0.269 0 0);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.269 0 0);
-  --muted-foreground: oklch(0.708 0 0);
-  --accent: oklch(0.269 0 0);
-  --accent-foreground: oklch(0.985 0 0);
-  --destructive: oklch(0.704 0.191 22.216);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.556 0 0);
-  --chart-1: oklch(0.488 0.243 264.376);
-  --chart-2: oklch(0.696 0.17 162.48);
-  --chart-3: oklch(0.769 0.188 70.08);
-  --chart-4: oklch(0.627 0.265 303.9);
-  --chart-5: oklch(0.645 0.246 16.439);
-  --sidebar: oklch(0.205 0 0);
-  --sidebar-foreground: oklch(0.985 0 0);
-  --sidebar-primary: oklch(0.488 0.243 264.376);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.269 0 0);
-  --sidebar-accent-foreground: oklch(0.985 0 0);
-  --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.556 0 0);
+  --background: oklch(0.165 0.012 264);
+  --foreground: oklch(0.97 0.005 250);
+  --card: oklch(0.205 0.014 264);
+  --card-foreground: oklch(0.97 0.005 250);
+  --popover: oklch(0.205 0.014 264);
+  --popover-foreground: oklch(0.97 0.005 250);
+  --primary: oklch(0.62 0.2 258);
+  --primary-foreground: oklch(0.985 0.01 258);
+  --secondary: oklch(0.27 0.015 264);
+  --secondary-foreground: oklch(0.97 0.005 250);
+  --muted: oklch(0.27 0.015 264);
+  --muted-foreground: oklch(0.71 0.015 260);
+  --accent: oklch(0.3 0.018 264);
+  --accent-foreground: oklch(0.97 0.005 250);
+  --destructive: oklch(0.7 0.19 22.2);
+  --border: oklch(1 0 0 / 8%);
+  --input: oklch(1 0 0 / 12%);
+  --ring: oklch(0.62 0.2 258 / 55%);
+  --chart-1: oklch(0.62 0.2 258);
+  --chart-2: oklch(0.7 0.15 230);
+  --chart-3: oklch(0.75 0.13 200);
+  --chart-4: oklch(0.68 0.12 180);
+  --chart-5: oklch(0.58 0.18 275);
+  --sidebar: oklch(0.185 0.013 264);
+  --sidebar-foreground: oklch(0.97 0.005 250);
+  --sidebar-primary: oklch(0.62 0.2 258);
+  --sidebar-primary-foreground: oklch(0.985 0.01 258);
+  --sidebar-accent: oklch(0.3 0.018 264);
+  --sidebar-accent-foreground: oklch(0.97 0.005 250);
+  --sidebar-border: oklch(1 0 0 / 8%);
+  --sidebar-ring: oklch(0.62 0.2 258 / 55%);
 }
 
 @layer base {
@@ -224,9 +254,18 @@
   }
   body {
     @apply bg-background text-foreground;
+    overflow-x: hidden;
     text-rendering: optimizeLegibility;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
+  }
+  main,
+  section,
+  article,
+  [data-slot="card"],
+  [data-slot="card-header"],
+  [data-slot="card-content"] {
+    min-width: 0;
   }
   html {
     @apply font-sans;
@@ -241,11 +280,180 @@
   h4 {
     font-family: var(--font-heading-family);
   }
+  h1,
+  h2,
+  h3,
+  h4,
+  p,
+  [data-slot="card-title"],
+  [data-slot="card-description"] {
+    overflow-wrap: break-word;
+  }
+  button,
+  input,
+  select,
+  textarea {
+    font-family: var(--font-system-sans);
+  }
   :lang(ar) {
     font-family: var(--font-system-sans);
   }
   .article-copy {
     font-family: var(--font-article-family);
+  }
+  textarea.article-copy {
+    font-family: var(--font-article-family);
+  }
+  .news-card-summary {
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+  /* Rendered markdown (shared by the admin preview and the public post pages). */
+  .post-body {
+    line-height: 1.75;
+  }
+  .post-body > * + * {
+    margin-top: 0.9rem;
+  }
+  .post-body h1,
+  .post-body h2,
+  .post-body h3 {
+    font-family: var(--font-heading-family);
+    font-weight: 600;
+    line-height: 1.25;
+    margin-top: 1.6rem;
+  }
+  .post-body h1 {
+    font-size: 1.6rem;
+  }
+  .post-body h2 {
+    font-size: 1.35rem;
+  }
+  .post-body h3 {
+    font-size: 1.15rem;
+  }
+  .post-body ul,
+  .post-body ol {
+    padding-inline-start: 1.5rem;
+  }
+  .post-body ul {
+    list-style: disc;
+  }
+  .post-body ol {
+    list-style: decimal;
+  }
+  .post-body li {
+    margin-top: 0.3rem;
+  }
+  .post-body li::marker {
+    color: var(--muted-foreground);
+  }
+  .post-body a {
+    color: var(--primary);
+    text-decoration: underline;
+    text-underline-offset: 2px;
+  }
+  .post-body blockquote {
+    border-inline-start: 3px solid var(--primary);
+    padding-inline-start: 1rem;
+    color: var(--muted-foreground);
+    font-style: italic;
+  }
+  .post-body img {
+    border-radius: var(--radius);
+    max-width: 100%;
+    height: auto;
+  }
+  .post-body hr {
+    border-color: var(--border);
+    margin: 1.5rem 0;
+  }
+  .post-body code {
+    font-family: var(--font-system-mono);
+    background: var(--muted);
+    padding: 0.1rem 0.35rem;
+    border-radius: 0.3rem;
+    font-size: 0.85em;
+  }
+  .post-body pre {
+    background: var(--muted);
+    padding: 0.9rem 1rem;
+    border-radius: var(--radius);
+    overflow-x: auto;
+  }
+  .post-body pre code {
+    background: transparent;
+    padding: 0;
+    font-size: 0.85em;
+  }
+  /* Syntax highlighting (rehype-highlight / hljs classes), themed to the palette. */
+  .post-body .hljs {
+    color: var(--foreground);
+    background: transparent;
+  }
+  .post-body .hljs-comment,
+  .post-body .hljs-quote {
+    color: var(--muted-foreground);
+    font-style: italic;
+  }
+  .post-body .hljs-keyword,
+  .post-body .hljs-selector-tag,
+  .post-body .hljs-literal,
+  .post-body .hljs-section {
+    color: oklch(0.72 0.15 270);
+  }
+  .post-body .hljs-string,
+  .post-body .hljs-attr,
+  .post-body .hljs-addition,
+  .post-body .hljs-template-tag {
+    color: oklch(0.75 0.13 162);
+  }
+  .post-body .hljs-number,
+  .post-body .hljs-built_in,
+  .post-body .hljs-type,
+  .post-body .hljs-literal.hljs-number {
+    color: oklch(0.78 0.12 70);
+  }
+  .post-body .hljs-title,
+  .post-body .hljs-name,
+  .post-body .hljs-selector-id,
+  .post-body .hljs-selector-class {
+    color: oklch(0.7 0.16 250);
+  }
+  .post-body .hljs-attribute,
+  .post-body .hljs-variable,
+  .post-body .hljs-tag,
+  .post-body .hljs-deletion {
+    color: oklch(0.72 0.16 25);
+  }
+  .post-body .hljs-meta,
+  .post-body .hljs-symbol {
+    color: var(--muted-foreground);
+  }
+  .post-body .hljs-emphasis {
+    font-style: italic;
+  }
+  .post-body .hljs-strong {
+    font-weight: 700;
+  }
+  .post-body mark {
+    background: color-mix(in oklch, var(--primary) 30%, transparent);
+    color: inherit;
+    border-radius: 0.2rem;
+    padding: 0 0.15rem;
+  }
+  .post-body table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.9em;
+  }
+  .post-body th,
+  .post-body td {
+    border: 1px solid var(--border);
+    padding: 0.4rem 0.6rem;
+    text-align: start;
   }
   code,
   kbd,

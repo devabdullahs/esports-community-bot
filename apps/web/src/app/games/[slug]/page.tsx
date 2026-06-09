@@ -18,36 +18,36 @@ import {
 } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import {
-  communityGames,
   getCommunityGame,
   localizeText,
 } from "@/lib/community-content";
 import {
   copy,
   directionForLocale,
-  localeFromSearchParams,
+  formatDateTime,
   localizedPath,
 } from "@/lib/i18n";
+import { listPublishedNewsPosts } from "@/lib/news";
+import { getRequestLocale } from "@/lib/request-locale";
+import { safeUrlOrUndefined } from "@/lib/safe-url";
 import { getAuthSession } from "@/lib/session";
 
-export function generateStaticParams() {
-  return communityGames.map((game) => ({ slug: game.slug }));
-}
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 
 export default async function GamePage({
   params,
-  searchParams,
 }: {
   params: Promise<{ slug: string }>;
-  searchParams: Promise<{ lang?: string }>;
 }) {
   const { slug } = await params;
   const game = getCommunityGame(slug);
   if (!game) notFound();
 
-  const locale = localeFromSearchParams(await searchParams);
+  const locale = await getRequestLocale();
   const text = copy[locale].game;
   const session = await getAuthSession();
+  const posts = listPublishedNewsPosts(slug, locale);
 
   return (
     <main
@@ -108,21 +108,65 @@ export default async function GamePage({
         </Card>
       </section>
 
-      <section className="grid gap-4 md:grid-cols-2">
-        {game.posts.map((post) => (
-          <Card key={localizeText(post.title, locale)}>
-            <CardHeader>
-              <Badge variant="secondary" className="mb-2 w-fit">
-                <NewspaperIcon data-icon="inline-start" />
-                {localizeText(post.label, locale)}
-              </Badge>
-              <CardTitle>{localizeText(post.title, locale)}</CardTitle>
-              <CardDescription className="article-copy">
-                {localizeText(post.summary, locale)}
-              </CardDescription>
-            </CardHeader>
-          </Card>
-        ))}
+      <section className="flex flex-col gap-4">
+        <h2 className="text-xl font-semibold">{text.postsTitle}</h2>
+        {posts.length ? (
+          <div className="grid gap-4 md:grid-cols-2">
+            {posts.map((post) => {
+              const cover = safeUrlOrUndefined(post.coverImageUrl);
+
+              return (
+                <Link
+                  key={post.id}
+                  href={localizedPath(`/games/${slug}/news/${post.id}`, locale)}
+                  className="group block"
+                >
+                  <Card className="h-full overflow-hidden transition-[box-shadow] group-hover:shadow-md group-hover:ring-primary/40">
+                    {cover ? (
+                      // eslint-disable-next-line @next/next/no-img-element -- external/admin URL, validated http(s)
+                      <img
+                        src={cover}
+                        alt=""
+                        className="aspect-video w-full object-cover"
+                      />
+                    ) : null}
+                    <CardHeader>
+                      <Badge variant="secondary" className="mb-2 w-fit">
+                        <NewspaperIcon data-icon="inline-start" />
+                        {post.publishedAt ? formatDateTime(post.publishedAt, locale) : text.published}
+                      </Badge>
+                      <CardTitle>{post.title}</CardTitle>
+                      {post.summary ? (
+                        <CardDescription className="article-copy news-card-summary">
+                          {post.summary}
+                        </CardDescription>
+                      ) : null}
+                    </CardHeader>
+                  </Card>
+                </Link>
+              );
+            })}
+          </div>
+        ) : game.posts.length ? (
+          <div className="grid gap-4 md:grid-cols-2">
+            {game.posts.map((post) => (
+              <Card key={localizeText(post.title, locale)}>
+                <CardHeader>
+                  <Badge variant="secondary" className="mb-2 w-fit">
+                    <NewspaperIcon data-icon="inline-start" />
+                    {localizeText(post.label, locale)}
+                  </Badge>
+                  <CardTitle>{localizeText(post.title, locale)}</CardTitle>
+                  <CardDescription className="article-copy news-card-summary">
+                    {localizeText(post.summary, locale)}
+                  </CardDescription>
+                </CardHeader>
+              </Card>
+            ))}
+          </div>
+        ) : (
+          <p className="text-sm text-muted-foreground">{text.postsEmpty}</p>
+        )}
       </section>
     </main>
   );

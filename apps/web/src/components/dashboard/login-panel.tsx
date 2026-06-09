@@ -15,13 +15,12 @@ import {
 } from "@/components/ui/card";
 import {
   copy,
-  localeFromSearchParams,
+  type Locale,
 } from "@/lib/i18n";
 
-export function LoginPanel() {
+export function LoginPanel({ locale }: { locale: Locale }) {
   const searchParams = useSearchParams();
   const [error, setError] = useState<string | null>(null);
-  const locale = localeFromSearchParams(searchParams);
   const text = copy[locale].login;
   const callbackURL = searchParams.get("callbackURL") || "/me";
 

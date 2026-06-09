@@ -123,12 +123,18 @@ Useful dashboard URLs:
 ```text
 /me
 /leaderboard/<guildId>/2026
-/leaderboard/<guildId>/2026?lang=ar
+/games
 ```
 
-The dashboard supports English by default and Arabic with `?lang=ar`. Set
-`EWC_DASHBOARD_DEFAULT_GUILD_ID` when you want the home page to include a direct public
-leaderboard button.
+The dashboard stores the selected language in the `ewc_locale` cookie. Legacy links
+with `?lang=en` or `?lang=ar` are redirected to the same URL without the query parameter
+while setting the cookie. If no cookie is present, Arabic browsers default to Arabic
+from `Accept-Language`; everyone else gets English. Set `EWC_DASHBOARD_DEFAULT_GUILD_ID`
+when you want the home page to include a direct public leaderboard button.
+
+The web app uses hosted Thmanyah WOFF2 files through the same-origin `/fonts/...` proxy.
+Set `THMANYAH_FONT_BASE_URL` to the public R2/custom-domain base URL that contains
+`thmanyahsans/woff2`, `thmanyahserifdisplay/woff2`, and `thmanyahseriftext/woff2`.
 
 ## Configuration (`.env`)
 
@@ -146,6 +152,7 @@ leaderboard button.
 | `EWC_DASHBOARD_PUBLIC_URL`, `EWC_DASHBOARD_INTERNAL_URL`, `EWC_DASHBOARD_INTERNAL_SECRET` | Public dashboard URL and bot-to-web internal sync settings |
 | `EWC_DASHBOARD_ADMIN_DISCORD_IDS` | Optional comma-separated Discord user IDs for future admin dashboard routes |
 | `EWC_DASHBOARD_DEFAULT_GUILD_ID` | Optional guild ID used for the home page public leaderboard shortcut |
+| `THMANYAH_FONT_BASE_URL` | Public base URL for hosted Thmanyah WOFF2 files used by the web app font proxy |
 | `LOGO_CACHE_DIR`, `LOGO_CACHE_CONCURRENCY` | Persistent logo cache path and max concurrent logo downloads |
 | `LOGO_DOWNLOAD_MIN_GAP_MS`, `LOGO_RATE_LIMIT_BACKOFF_MS`, `LOGO_RATE_STATE_PATH` | Logo download throttle and restart-safe rate-limit state |
 | `LOGO_FAILURE_TTL_MS`, `LOGO_MAX_BYTES` | Logo retry delay for bad URLs and maximum accepted logo size |

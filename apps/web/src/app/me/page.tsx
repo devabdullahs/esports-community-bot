@@ -1,11 +1,8 @@
 import { redirect } from "next/navigation";
 import { ProfileDashboard } from "@/components/dashboard/profile-dashboard";
 import { DEFAULT_SEASON } from "@/lib/env";
-import {
-  copy,
-  directionForLocale,
-  localeFromSearchParams,
-} from "@/lib/i18n";
+import { copy, directionForLocale } from "@/lib/i18n";
+import { getRequestLocale } from "@/lib/request-locale";
 import { getOptionalSession } from "@/lib/session";
 
 export const runtime = "nodejs";
@@ -14,21 +11,19 @@ export const dynamic = "force-dynamic";
 export default async function MePage({
   searchParams,
 }: {
-  searchParams: Promise<{ guildId?: string; season?: string; lang?: string }>;
+  searchParams: Promise<{ guildId?: string; season?: string }>;
 }) {
   const session = await getOptionalSession();
   const params = await searchParams;
-  const locale = localeFromSearchParams(params);
+  const locale = await getRequestLocale();
   const text = copy[locale].profile;
   const callbackParams = new URLSearchParams();
   if (params.guildId) callbackParams.set("guildId", params.guildId);
   callbackParams.set("season", params.season || DEFAULT_SEASON);
-  if (locale === "ar") callbackParams.set("lang", locale);
   const callbackURL = `/me?${callbackParams.toString()}`;
 
   if (!session) {
     const loginParams = new URLSearchParams({ callbackURL });
-    if (locale === "ar") loginParams.set("lang", locale);
     redirect(`/login?${loginParams.toString()}`);
   }
 

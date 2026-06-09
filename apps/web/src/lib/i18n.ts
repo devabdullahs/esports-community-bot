@@ -1,4 +1,6 @@
 export const LOCALES = ["en", "ar"] as const;
+export const LOCALE_COOKIE_NAME = "ewc_locale";
+export const LOCALE_COOKIE_MAX_AGE = 60 * 60 * 24 * 365;
 
 export type Locale = (typeof LOCALES)[number];
 
@@ -9,10 +11,23 @@ function hasSearchParamGetter(searchParams: LangSearchParams | GetSearchParams):
   return typeof (searchParams as GetSearchParams).get === "function";
 }
 
+export function localeFromString(value?: string | null): Locale | null {
+  return value === "ar" || value === "en" ? value : null;
+}
+
+export function localeFromAcceptLanguage(value?: string | null): Locale {
+  if (!value) return "en";
+  const languages = value
+    .split(",")
+    .map((item) => item.trim().split(";")[0]?.toLowerCase())
+    .filter(Boolean);
+  return languages.some((language) => language === "ar" || language.startsWith("ar-")) ? "ar" : "en";
+}
+
 export function localeFromSearchParams(searchParams?: LangSearchParams | GetSearchParams | null): Locale {
   if (!searchParams) return "en";
   const value = hasSearchParamGetter(searchParams) ? searchParams.get("lang") : Array.isArray(searchParams.lang) ? searchParams.lang[0] : searchParams.lang;
-  return value === "ar" ? "ar" : "en";
+  return localeFromString(value) || "en";
 }
 
 export function directionForLocale(locale: Locale) { return locale === "ar" ? "rtl" : "ltr"; }
@@ -26,13 +41,14 @@ export function formatDateTime(value: string, locale: Locale) {
 }
 
 export function localizedPath(pathname: string, locale: Locale) {
-  if (locale === "en") return pathname;
-  return pathname + (pathname.includes("?") ? "&" : "?") + "lang=" + locale;
+  void locale;
+  return pathname;
 }
 
 export function localizedHref(pathname: string, searchParams: { toString(): string } | null | undefined, locale: Locale) {
+  void locale;
   const params = new URLSearchParams(searchParams?.toString());
-  if (locale === "en") params.delete("lang"); else params.set("lang", locale);
+  params.delete("lang");
   const query = params.toString();
   return query ? pathname + "?" + query : pathname;
 }
@@ -110,6 +126,10 @@ const baseCopy = {
       back: "Back to games",
       admin: "Admin",
       owner: "Owner",
+      postsTitle: "Latest posts",
+      postsEmpty: "No posts here yet. Check back soon.",
+      readMore: "Read post",
+      published: "Published",
     },
     leaderboard: {
       back: "Back home",
@@ -231,6 +251,10 @@ const baseCopy = {
       back: "\u0627\u0644\u0639\u0648\u062f\u0629 \u0644\u0644\u0623\u0644\u0639\u0627\u0628",
       admin: "\u0627\u0644\u0625\u062f\u0627\u0631\u0629",
       owner: "\u0627\u0644\u0645\u0633\u0624\u0648\u0644",
+      postsTitle: "\u0623\u062d\u062f\u062b \u0627\u0644\u0645\u0646\u0634\u0648\u0631\u0627\u062a",
+      postsEmpty: "\u0644\u0627 \u062a\u0648\u062c\u062f \u0645\u0646\u0634\u0648\u0631\u0627\u062a \u0628\u0639\u062f. \u062a\u0627\u0628\u0639\u0646\u0627 \u0642\u0631\u064a\u0628\u064b\u0627.",
+      readMore: "\u0627\u0642\u0631\u0623 \u0627\u0644\u0645\u0646\u0634\u0648\u0631",
+      published: "\u0645\u0646\u0634\u0648\u0631",
     },
     leaderboard: {
       back: "\u0627\u0644\u0639\u0648\u062f\u0629 \u0644\u0644\u0631\u0626\u064a\u0633\u064a\u0629",

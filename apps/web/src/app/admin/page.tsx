@@ -1,7 +1,8 @@
 import { ShieldIcon } from "lucide-react";
 import Link from "next/link";
-import { NewsComposer } from "@/components/admin/news-composer";
+import { NewsList } from "@/components/admin/news-list";
 import { getAdminAccess } from "@/lib/admin";
+import { listAdminNewsPosts } from "@/lib/news";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import {
@@ -17,6 +18,7 @@ export const dynamic = "force-dynamic";
 
 export default async function AdminPage() {
   const access = await getAdminAccess();
+  const posts = access.allowed ? listAdminNewsPosts() : [];
 
   return (
     <main className="mx-auto flex w-full max-w-6xl flex-1 flex-col gap-8 px-5 py-10 sm:px-8">
@@ -48,8 +50,8 @@ export default async function AdminPage() {
             <Alert>
               <AlertTitle>Admin tools enabled</AlertTitle>
               <AlertDescription>
-                You can draft and preview posts below. Persistence and Discord
-                publishing can connect to this workflow next.
+                Create, edit, publish, and delete posts below. Published posts
+                appear on the matching game page. Discord publishing can connect next.
               </AlertDescription>
             </Alert>
           ) : !access.session ? (
@@ -78,7 +80,17 @@ export default async function AdminPage() {
         </CardContent>
       </Card>
 
-      {access.allowed ? <NewsComposer /> : null}
+      {access.allowed ? (
+        <section className="flex flex-col gap-4">
+          <div>
+            <h2 className="text-xl font-semibold">News &amp; posts</h2>
+            <p className="text-sm text-muted-foreground">
+              Draft, edit, publish, and remove the updates shown on game pages.
+            </p>
+          </div>
+          <NewsList posts={posts} />
+        </section>
+      ) : null}
     </main>
   );
 }

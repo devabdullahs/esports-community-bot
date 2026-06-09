@@ -97,7 +97,6 @@ export function ProfileDashboard({
       const params = new URLSearchParams();
       if (guildId) params.set("guildId", guildId);
       params.set("season", season);
-      if (locale === "ar") params.set("lang", locale);
       return jsonOrThrow(await fetch(`/api/me/ewc?${params.toString()}`));
     },
   });
@@ -123,7 +122,7 @@ export function ProfileDashboard({
       ),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ["me-ewc"] });
-      router.replace(localizedPath(`/me?season=${encodeURIComponent(season)}`, locale));
+      router.replace(`/me?season=${encodeURIComponent(season)}`);
     },
   });
 

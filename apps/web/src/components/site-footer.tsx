@@ -1,15 +1,11 @@
-"use client";
-
-import { useSearchParams } from "next/navigation";
 import {
   copy,
   directionForLocale,
-  localeFromSearchParams,
 } from "@/lib/i18n";
+import { getRequestLocale } from "@/lib/request-locale";
 
-export function SiteFooter() {
-  const searchParams = useSearchParams();
-  const locale = localeFromSearchParams(searchParams);
+export async function SiteFooter() {
+  const locale = await getRequestLocale();
   const text = copy[locale].footer;
 
   return (

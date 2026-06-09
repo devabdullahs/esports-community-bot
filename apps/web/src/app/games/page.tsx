@@ -13,16 +13,12 @@ import { communityGames, localizeText } from "@/lib/community-content";
 import {
   copy,
   directionForLocale,
-  localeFromSearchParams,
   localizedPath,
 } from "@/lib/i18n";
+import { getRequestLocale } from "@/lib/request-locale";
 
-export default async function GamesPage({
-  searchParams,
-}: {
-  searchParams: Promise<{ lang?: string }>;
-}) {
-  const locale = localeFromSearchParams(await searchParams);
+export default async function GamesPage() {
+  const locale = await getRequestLocale();
   const text = copy[locale].games;
 
   return (
