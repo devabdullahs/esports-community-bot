@@ -11,10 +11,21 @@ export async function POST(request: Request) {
   if (!isSuper(access)) return NextResponse.json({ error: "Super admin only" }, { status: 403 });
 
   const body = await request.json().catch(() => ({}));
-  const slugs = Array.isArray(body.slugs) ? body.slugs.filter((s: unknown) => typeof s === "string") : null;
-  if (!slugs || slugs.length === 0) {
-    return NextResponse.json({ error: "slugs array is required" }, { status: 400 });
+  if (
+    !Array.isArray(body.slugs) ||
+    body.slugs.length === 0 ||
+    !body.slugs.every((s: unknown) => typeof s === "string")
+  ) {
+    return NextResponse.json(
+      { error: "slugs must be a non-empty array of strings" },
+      { status: 400 },
+    );
   }
+  const slugs: string[] = body.slugs;
 
-  return NextResponse.json({ channels: reorderMediaChannels(slugs) });
+  try {
+    return NextResponse.json({ channels: reorderMediaChannels(slugs) });
+  } catch (err) {
+    return NextResponse.json({ error: (err as Error).message }, { status: 400 });
+  }
 }

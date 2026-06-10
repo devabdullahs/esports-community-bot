@@ -125,6 +125,14 @@ export function deleteEwcGame(slug) {
 }
 
 export function reorderEwcGames(slugs) {
+  const existing = db.prepare('SELECT slug FROM ewc_games').all().map((r) => r.slug);
+  if (
+    slugs.length !== existing.length ||
+    new Set(slugs).size !== slugs.length ||
+    !slugs.every((s) => existing.includes(s))
+  ) {
+    throw new Error('Reorder must include every existing slug exactly once.');
+  }
   const update = db.prepare('UPDATE ewc_games SET sort_order = ?, updated_at = datetime(\'now\') WHERE slug = ?');
   const tx = db.transaction((orderedSlugs) => {
     orderedSlugs.forEach((slug, index) => update.run(index, slug));
