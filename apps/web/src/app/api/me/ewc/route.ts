@@ -20,7 +20,7 @@ export async function GET(request: Request) {
   });
 
   return NextResponse.json({
-    user: session.user,
+    user: { id: session.user.id, name: session.user.name, image: session.user.image ?? null },
     ...payload,
   });
 }
