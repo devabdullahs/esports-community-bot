@@ -4,6 +4,11 @@ import type { Locale } from "@/lib/i18n";
 
 export { normalizeSlug };
 
+export const MEDIA_NAME_MAX_LENGTH = 120;
+export const MEDIA_TEXT_MAX_LENGTH = 600;
+export const MEDIA_URL_MAX_LENGTH = 512;
+export const MEDIA_LINKS_MAX_ITEMS = 12;
+
 export const MEDIA_PLATFORMS = [
   "x",
   "youtube",
@@ -34,10 +39,11 @@ export function parseMediaLinks(raw: unknown): MediaLink[] {
     const platform = typeof obj.platform === "string" ? obj.platform : "";
     const url = typeof obj.url === "string" ? obj.url.trim() : "";
     if (!PLATFORM_SET.has(platform) || !url) continue;
+    if (url.length > MEDIA_URL_MAX_LENGTH) continue;
     if (!isSafeUrl(url)) continue;
     links.push({ platform: platform as MediaPlatform, url });
   }
-  return links;
+  return links.slice(0, MEDIA_LINKS_MAX_ITEMS);
 }
 
 export type ValidatedMediaContent = {
@@ -56,14 +62,30 @@ export function validateMediaContent(
   if (!name.en || !name.ar) {
     return { ok: false, error: "Name is required in English and Arabic" };
   }
+  if (name.en.length > MEDIA_NAME_MAX_LENGTH) {
+    return { ok: false, error: `Name must be ${MEDIA_NAME_MAX_LENGTH} characters or fewer` };
+  }
+  if (name.ar.length > MEDIA_NAME_MAX_LENGTH) {
+    return { ok: false, error: `Name must be ${MEDIA_NAME_MAX_LENGTH} characters or fewer` };
+  }
 
   const description = localized(body.description);
+  if (description.en.length > MEDIA_TEXT_MAX_LENGTH) {
+    return { ok: false, error: `Description must be ${MEDIA_TEXT_MAX_LENGTH} characters or fewer` };
+  }
+  if (description.ar.length > MEDIA_TEXT_MAX_LENGTH) {
+    return { ok: false, error: `Description must be ${MEDIA_TEXT_MAX_LENGTH} characters or fewer` };
+  }
 
   let logoUrl: string | null = null;
   const rawLogo = body.logoUrl;
   if (typeof rawLogo === "string" && rawLogo.trim() !== "") {
+    const trimmedLogo = rawLogo.trim();
+    if (trimmedLogo.length > MEDIA_URL_MAX_LENGTH) {
+      return { ok: false, error: `Logo URL must be ${MEDIA_URL_MAX_LENGTH} characters or fewer` };
+    }
     if (!isSafeUrl(rawLogo)) return { ok: false, error: "Logo must be a valid http(s) URL" };
-    logoUrl = rawLogo.trim();
+    logoUrl = trimmedLogo;
   }
 
   const links = parseMediaLinks(body.links);
