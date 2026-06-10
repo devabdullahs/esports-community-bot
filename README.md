@@ -209,7 +209,7 @@ Liquipedia data remains under CC-BY-SA 3.0 as noted above.
 
 - [x] Swiss-stage match parsing (Rocket League and similar)
 - [x] Per-game leaderboards **and** voice channels (a separate channel per game)
-- [x] LPDB API client wired — preferred over HTML parsing when `LPDB_API_KEY` is set (activate once your key is approved)
+- [x] LPDB API client integrated (optional) — used instead of HTML parsing when `LPDB_API_KEY` is set; falls back to HTML parsing otherwise (default)
 - [x] Start.gg + PandaScore integrations (free tier) — structured match data with live status
 - [x] Per-match detail view — `/match` (autocomplete) opens a focused card + link to full details
 - [x] Generated match-card images for `/match` and per-game live card channels
