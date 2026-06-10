@@ -14,6 +14,7 @@ const {
   getEwcNewsPostById,
   getPublishedEwcNewsPost,
   listPublishedEwcNewsPosts,
+  setEwcNewsPostStatus,
 } = await import('../src/db/ewcNewsPosts.js');
 const {
   NEWS_SUMMARY_MAX_LENGTH,
@@ -125,6 +126,42 @@ test('resolves translated posts by requested locale', () => {
 
   assert.equal(getPublishedEwcNewsPost(post.id, 'en').title, 'English update');
   assert.equal(getPublishedEwcNewsPost(post.id, 'ar').title, 'Arabic update');
+});
+
+test('setEwcNewsPostStatus publishes a draft and re-drafts it', () => {
+  // Create a draft post with both translations (required for publishing at route layer,
+  // but setEwcNewsPostStatus itself does NOT validate — it is a raw DB setter).
+  const post = createEwcNewsPost({
+    gameSlug: 'valorant',
+    status: 'draft',
+    contentMode: 'translated',
+    defaultLocale: 'en',
+    translations: {
+      en: { title: 'Status test EN', summary: 'EN summary', body: 'EN body' },
+      ar: { title: 'Status test AR', summary: 'AR summary', body: 'AR body' },
+    },
+  });
+  assert.equal(post.status, 'draft');
+
+  // Publish: should now appear in getPublishedEwcNewsPost
+  const published = setEwcNewsPostStatus(post.id, 'published');
+  assert.equal(published.status, 'published');
+  assert.ok(getPublishedEwcNewsPost(post.id, 'en') !== null, 'post visible via getPublishedEwcNewsPost after publish');
+
+  // published_at is set on first publish
+  assert.ok(published.publishedAt !== null, 'publishedAt is set when published');
+
+  // Re-draft: should disappear from published listings but still readable by id
+  const redrafted = setEwcNewsPostStatus(post.id, 'draft');
+  assert.equal(redrafted.status, 'draft');
+  assert.equal(getPublishedEwcNewsPost(post.id, 'en'), null, 'post hidden after re-draft');
+  assert.ok(getEwcNewsPostById(post.id) !== null, 'post still readable by id after re-draft');
+});
+
+test('setEwcNewsPostStatus on nonexistent id returns null (characterization)', () => {
+  // The function does a raw UPDATE; if changes === 0 it returns null, not an error.
+  const result = setEwcNewsPostStatus(999999, 'published');
+  assert.equal(result, null);
 });
 
 test('falls back to legacy columns when translations are missing', () => {
