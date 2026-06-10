@@ -1,12 +1,11 @@
 import axios from 'axios';
 import * as cheerio from 'cheerio';
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { dirname, resolve } from 'node:path';
 import { config } from '../config.js';
 import { logger } from '../lib/logger.js';
 import { formatLiquipediaPageTitle } from '../lib/parseTournamentInput.js';
 import { normalizeTeamName } from '../lib/render.js';
 import * as lpdb from './lpdb.js';
+import { rateState, loadRateState, saveRateState } from './liquipedia/rateState.js';
 
 // PRIMARY (free) data source. Covers VCT, LCS/Worlds, IEM/CS2, RLCS, OWCS, EWC, etc.
 //
@@ -20,7 +19,6 @@ import * as lpdb from './lpdb.js';
 const PARSE_MIN_GAP_MS = Math.max(30_000, Number(process.env.LIQUIPEDIA_PARSE_MIN_GAP_MS || 30_000));
 const CACHE_TTL_MS = Math.max(60_000, Number(process.env.LIQUIPEDIA_CACHE_TTL_MS || 5 * 60_000));
 const BACKOFF_MS = Math.max(60_000, Number(process.env.LIQUIPEDIA_BACKOFF_MS || 20 * 60_000));
-const RATE_STATE_PATH = resolve(process.env.LIQUIPEDIA_RATE_STATE_PATH || 'data/liquipedia-rate-limit.json');
 // Player/page lookup uses action=opensearch (NOT action=parse): it falls under the general
 // MediaWiki limit of 1 request / 2s, so it gets its own lighter throttle + cache. We only use it
 // to resolve a typed name to its existing page URL — never to fetch or parse the page itself.
@@ -36,10 +34,7 @@ const client = axios.create({
   headers: { 'User-Agent': config.liquipedia.userAgent, 'Accept-Encoding': 'gzip' },
 });
 
-let lastRequestAt = 0;
-let blockedUntil = 0;
 let lastSearchAt = 0;
-let rateStateLoaded = false;
 const cache = new Map(); // key -> { at, data }
 const inFlight = new Map(); // key -> Promise<parse response>
 const searchCache = new Map(); // `${game}:${q}` -> { at, results }
@@ -62,27 +57,6 @@ const isPlaceholderTeam = (s) => {
   const name = cleanName(s);
   return !name || /^TBD$/i.test(name);
 };
-
-function loadRateState() {
-  if (rateStateLoaded) return;
-  rateStateLoaded = true;
-  try {
-    const data = JSON.parse(readFileSync(RATE_STATE_PATH, 'utf8'));
-    lastRequestAt = Number(data.lastRequestAt) || 0;
-    blockedUntil = Number(data.blockedUntil) || 0;
-  } catch {
-    // Missing or invalid state just means this is the first run.
-  }
-}
-
-function saveRateState() {
-  try {
-    mkdirSync(dirname(RATE_STATE_PATH), { recursive: true });
-    writeFileSync(RATE_STATE_PATH, JSON.stringify({ lastRequestAt, blockedUntil }, null, 2));
-  } catch (e) {
-    logger.debug(`[liquipedia] could not save rate state: ${e.message}`);
-  }
-}
 
 function normalizeImageUrl(src) {
   if (!src || src.startsWith('data:')) return null;
@@ -140,10 +114,10 @@ function deriveStatus({ winA = false, winB = false, scoreA, scoreB, bestOf, sche
 async function throttle() {
   loadRateState();
   // Honor both the parse sub-limit (1/30s) and the general floor (1/2s) vs any recent search.
-  const floor = Math.max(lastRequestAt + PARSE_MIN_GAP_MS, lastSearchAt + SEARCH_MIN_GAP_MS);
+  const floor = Math.max(rateState.lastRequestAt + PARSE_MIN_GAP_MS, lastSearchAt + SEARCH_MIN_GAP_MS);
   const wait = floor - Date.now();
   if (wait > 0) await new Promise((r) => setTimeout(r, wait));
-  lastRequestAt = Date.now();
+  rateState.lastRequestAt = Date.now();
   saveRateState();
 }
 
@@ -156,7 +130,7 @@ export async function parsePage(game, page) {
   if (inFlight.has(key)) return inFlight.get(key);
 
   // If Liquipedia recently rate-limited us, don't touch the network — serve stale or fail fast.
-  if (Date.now() < blockedUntil) {
+  if (Date.now() < rateState.blockedUntil) {
     if (hit) return hit.data;
     throw new Error('Liquipedia: backing off after a rate limit');
   }
@@ -181,7 +155,7 @@ export async function parsePage(game, page) {
     const status = err.response?.status;
     const body = typeof err.response?.data === 'string' ? err.response.data : '';
     if (status === 403 || status === 429 || status === 503 || /rate.?limit|cloudflare|temporarily blocked/i.test(body)) {
-      blockedUntil = Date.now() + BACKOFF_MS;
+      rateState.blockedUntil = Date.now() + BACKOFF_MS;
       saveRateState();
       logger.warn(`[liquipedia] rate limited (HTTP ${status ?? '?'}) — pausing requests for ${BACKOFF_MS / 60000} min`);
     }
@@ -201,7 +175,7 @@ function scheduleSearch(task) {
   if (searchQueueDepth >= SEARCH_MAX_QUEUE) return Promise.reject(new Error('search queue full'));
   searchQueueDepth++;
   const run = searchChain.then(async () => {
-    const wait = Math.max(lastSearchAt, lastRequestAt) + SEARCH_MIN_GAP_MS - Date.now();
+    const wait = Math.max(lastSearchAt, rateState.lastRequestAt) + SEARCH_MIN_GAP_MS - Date.now();
     if (wait > 0) await new Promise((r) => setTimeout(r, wait));
     lastSearchAt = Date.now();
     return task();
@@ -235,14 +209,14 @@ export async function searchPages(game, query, limit = 6) {
   if (cached && Date.now() - cached.at < SEARCH_CACHE_TTL_MS) return cached.results;
 
   loadRateState();
-  if (Date.now() < blockedUntil) return cached ? cached.results : [];
+  if (Date.now() < rateState.blockedUntil) return cached ? cached.results : [];
   if (searchInFlight.has(key)) return searchInFlight.get(key); // collapse duplicate concurrent lookups
 
   const promise = scheduleSearch(async () => {
     // A duplicate may have resolved + cached this while we waited our turn in the queue.
     const fresh = searchCache.get(key);
     if (fresh && Date.now() - fresh.at < SEARCH_CACHE_TTL_MS) return fresh.results;
-    if (Date.now() < blockedUntil) return cached ? cached.results : [];
+    if (Date.now() < rateState.blockedUntil) return cached ? cached.results : [];
 
     const { data } = await client.get(apiUrl(game), {
       params: { action: 'opensearch', search: q, limit: normalizedLimit, namespace: 0, redirects: 'resolve', format: 'json' },
@@ -264,7 +238,7 @@ export async function searchPages(game, query, limit = 6) {
     .catch((err) => {
       const status = err.response?.status;
       if (status === 403 || status === 429 || status === 503) {
-        blockedUntil = Date.now() + BACKOFF_MS;
+        rateState.blockedUntil = Date.now() + BACKOFF_MS;
         saveRateState();
         logger.warn(`[liquipedia] search rate limited (HTTP ${status}) — pausing requests for ${BACKOFF_MS / 60000} min`);
       } else if (err.message !== 'search queue full') {
