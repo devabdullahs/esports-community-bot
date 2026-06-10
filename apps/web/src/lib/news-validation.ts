@@ -38,6 +38,9 @@ export function validateNewsInput(
   let coverImageUrl: string | null = null;
   const rawCover = body.coverImageUrl;
   if (typeof rawCover === "string" && rawCover.trim() !== "") {
+    if (rawCover.trim().length > 512) {
+      return { ok: false, error: "Cover image URL must be 512 characters or fewer" };
+    }
     if (!isSafeUrl(rawCover)) {
       return { ok: false, error: "Cover image must be a valid http(s) URL" };
     }
