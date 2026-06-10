@@ -5,6 +5,7 @@ import {
   syncEwcProfileForAuthUser,
 } from "@/lib/ewc-profile-sync";
 import { getOptionalSession } from "@/lib/session";
+import { isSnowflake, isSeason } from "@/lib/validate";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -14,6 +15,14 @@ export async function POST(request: Request) {
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const body = await request.json().catch(() => ({}));
+
+  if (body.guildId !== undefined && body.guildId !== null && !isSnowflake(body.guildId)) {
+    return NextResponse.json({ error: "Invalid guildId." }, { status: 400 });
+  }
+  if (body.season !== undefined && body.season !== null && !isSeason(body.season)) {
+    return NextResponse.json({ error: "Invalid season." }, { status: 400 });
+  }
+
   const current = await getEwcMePayload({
     authUserId: session.user.id,
     guildId: body.guildId,
