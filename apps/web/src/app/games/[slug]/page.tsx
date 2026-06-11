@@ -18,14 +18,14 @@ import {
 } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { localizeText } from "@/lib/community-content";
-import { getGame } from "@/lib/games";
+import { getGameCached } from "@/lib/games";
 import {
   copy,
   directionForLocale,
   formatDateTime,
   localizedPath,
 } from "@/lib/i18n";
-import { listPublishedNewsPosts } from "@/lib/news";
+import { listPublishedNewsPostsCached } from "@/lib/news";
 import { getRequestLocale } from "@/lib/request-locale";
 import { safeUrlOrUndefined } from "@/lib/safe-url";
 import { getAuthSession } from "@/lib/session";
@@ -39,13 +39,13 @@ export default async function GamePage({
   params: Promise<{ slug: string }>;
 }) {
   const { slug } = await params;
-  const game = getGame(slug);
+  const game = await getGameCached(slug);
   if (!game) notFound();
 
   const locale = await getRequestLocale();
   const text = copy[locale].game;
   const session = await getAuthSession();
-  const posts = listPublishedNewsPosts(slug, locale);
+  const posts = await listPublishedNewsPostsCached(slug, locale);
 
   return (
     <main

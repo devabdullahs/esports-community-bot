@@ -9,6 +9,7 @@ import {
   updateEwcMediaChannel as _update,
 } from "@bot/db/ewcMediaChannels.js";
 import type { Locale } from "@/lib/i18n";
+import { unstable_cache } from "next/cache";
 
 export type LocalizedText = Record<Locale, string>;
 
@@ -71,3 +72,20 @@ export function deleteMediaChannel(slug: string): { deleted: number } {
 export function reorderMediaChannels(slugs: string[]): MediaChannelRecord[] {
   return reorder(slugs);
 }
+
+// ---------------------------------------------------------------------------
+// Cached public-read variants (tags: cms-media)
+// Admin pages keep using the uncached functions above.
+// ---------------------------------------------------------------------------
+
+export const listMediaChannelsCached = unstable_cache(
+  async () => listMediaChannels(),
+  ["media-list"],
+  { tags: ["cms-media"] },
+);
+
+export const getMediaChannelCached = unstable_cache(
+  async (slug: string) => getMediaChannel(slug),
+  ["media-get"],
+  { tags: ["cms-media"] },
+);

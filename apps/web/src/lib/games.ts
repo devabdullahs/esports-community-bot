@@ -9,6 +9,7 @@ import {
   updateEwcGame as _update,
 } from "@bot/db/ewcGames.js";
 import type { Locale } from "@/lib/i18n";
+import { unstable_cache } from "next/cache";
 
 export type LocalizedText = Record<Locale, string>;
 
@@ -64,3 +65,21 @@ export function deleteGame(slug: string): { gameDeleted: number; postsDeleted: n
 export function reorderGames(slugs: string[]): GameRecord[] {
   return reorder(slugs);
 }
+
+// ---------------------------------------------------------------------------
+// Cached public-read variants (tags: cms-games)
+// Admin pages must keep using the uncached functions above so they see
+// drafts / edits instantly without waiting for tag invalidation.
+// ---------------------------------------------------------------------------
+
+export const listGamesCached = unstable_cache(
+  async () => listGames(),
+  ["games-list"],
+  { tags: ["cms-games"] },
+);
+
+export const getGameCached = unstable_cache(
+  async (slug: string) => getGame(slug),
+  ["games-get"],
+  { tags: ["cms-games"] },
+);

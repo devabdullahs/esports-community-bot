@@ -10,7 +10,7 @@ import {
 } from "@/components/ui/card";
 import { localizeText } from "@/lib/community-content";
 import { directionForLocale, localizedPath } from "@/lib/i18n";
-import { listMediaChannels } from "@/lib/media";
+import { listMediaChannelsCached } from "@/lib/media";
 import { getRequestLocale } from "@/lib/request-locale";
 import { safeUrlOrUndefined } from "@/lib/safe-url";
 
@@ -35,7 +35,7 @@ const COPY = {
 export default async function MediaPage() {
   const locale = await getRequestLocale();
   const t = COPY[locale];
-  const channels = listMediaChannels();
+  const channels = await listMediaChannelsCached();
 
   return (
     <main

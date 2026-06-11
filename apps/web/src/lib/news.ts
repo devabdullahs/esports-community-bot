@@ -16,6 +16,7 @@ import {
   updateEwcNewsPost as _update,
 } from "@bot/db/ewcNewsPosts.js";
 import type { Locale } from "@/lib/i18n";
+import { unstable_cache } from "next/cache";
 
 export type NewsStatus = "draft" | "published";
 export type NewsContentMode = "shared" | "translated";
@@ -117,3 +118,27 @@ export function setNewsPostStatus(id: number, status: NewsStatus): NewsPost | nu
 export function deleteNewsPost(id: number): { changes: number } {
   return remove(id);
 }
+
+// ---------------------------------------------------------------------------
+// Cached public-read variants
+// Tags: cms-news (and cms-games for reads that embed game data).
+// Admin pages keep using the uncached functions above so drafts are visible.
+// ---------------------------------------------------------------------------
+
+export const getPublishedNewsPostCached = unstable_cache(
+  async (id: number, locale?: Locale) => getPublishedNewsPost(id, locale),
+  ["news-get-published"],
+  { tags: ["cms-news", "cms-games"] },
+);
+
+export const listPublishedNewsPostsCached = unstable_cache(
+  async (gameSlug: string, locale: Locale) => listPublishedNewsPosts(gameSlug, locale),
+  ["news-list-published"],
+  { tags: ["cms-news", "cms-games"] },
+);
+
+export const listLatestPublishedNewsPostsCached = unstable_cache(
+  async (locale: Locale, limit = 4) => listLatestPublishedNewsPosts(locale, limit),
+  ["news-list-latest"],
+  { tags: ["cms-news", "cms-games"] },
+);
