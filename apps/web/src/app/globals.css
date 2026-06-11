@@ -258,6 +258,14 @@
     text-rendering: optimizeLegibility;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
+    /* Soft Royal Azure ambiance behind the top of every page — adds depth in
+       both themes without touching component backgrounds. */
+    background-image: radial-gradient(
+      ellipse 85% 48% at 50% -12%,
+      color-mix(in oklab, var(--primary) 12%, transparent),
+      transparent 68%
+    );
+    background-repeat: no-repeat;
   }
   main,
   section,

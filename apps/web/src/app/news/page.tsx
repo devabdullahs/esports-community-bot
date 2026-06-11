@@ -67,7 +67,7 @@ export default async function NewsHubPage() {
               >
                 <Card
                   size="sm"
-                  className="h-full overflow-hidden transition-[box-shadow] group-hover:shadow-md group-hover:ring-primary/40"
+                  className="h-full overflow-hidden ring-1 ring-transparent transition-all group-hover:-translate-y-0.5 group-hover:border-primary/30 group-hover:shadow-md group-hover:ring-primary/40"
                 >
                   {cover ? (
                     // eslint-disable-next-line @next/next/no-img-element
@@ -77,9 +77,9 @@ export default async function NewsHubPage() {
                     <Badge variant="secondary" className="mb-2 w-fit">
                       {gameTitleOf(post.gameSlug)}
                     </Badge>
-                    <CardTitle>{post.title}</CardTitle>
+                    <CardTitle dir="auto">{post.title}</CardTitle>
                     {post.summary ? (
-                      <CardDescription className="article-copy line-clamp-2">
+                      <CardDescription dir="auto" className="article-copy line-clamp-2">
                         {post.summary}
                       </CardDescription>
                     ) : null}

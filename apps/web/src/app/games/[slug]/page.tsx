@@ -116,7 +116,7 @@ export default async function GamePage({
                   href={localizedPath(`/games/${slug}/news/${post.id}`, locale)}
                   className="group block"
                 >
-                  <Card className="h-full overflow-hidden transition-[box-shadow] group-hover:shadow-md group-hover:ring-primary/40">
+                  <Card className="h-full overflow-hidden ring-1 ring-transparent transition-all group-hover:-translate-y-0.5 group-hover:border-primary/30 group-hover:shadow-md group-hover:ring-primary/40">
                     {cover ? (
                       // eslint-disable-next-line @next/next/no-img-element -- external/admin URL, validated http(s)
                       <img
@@ -130,9 +130,9 @@ export default async function GamePage({
                         <NewspaperIcon data-icon="inline-start" />
                         {post.publishedAt ? formatDateTime(post.publishedAt, locale) : text.published}
                       </Badge>
-                      <CardTitle>{post.title}</CardTitle>
+                      <CardTitle dir="auto">{post.title}</CardTitle>
                       {post.summary ? (
-                        <CardDescription className="article-copy news-card-summary">
+                        <CardDescription dir="auto" className="article-copy news-card-summary">
                           {post.summary}
                         </CardDescription>
                       ) : null}

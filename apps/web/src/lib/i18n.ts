@@ -334,7 +334,7 @@ export const copy = {
     leaderboard: {
       ...baseCopy.en.leaderboard,
       title: (season: string) => "EWC " + season + " prediction leaderboard",
-      description: (total: number, guildId: string) => formatNumber(total, "en") + " ranked member" + (total === 1 ? "" : "s") + " for server " + guildId,
+      description: (total: number) => formatNumber(total, "en") + " ranked member" + (total === 1 ? "" : "s") + " this season",
       page: (page: number, pages: number) => "Page " + formatNumber(page, "en") + " of " + formatNumber(pages, "en"),
     },
     profile: {
@@ -348,7 +348,7 @@ export const copy = {
     leaderboard: {
       ...baseCopy.ar.leaderboard,
       title: (season: string) => "\u0644\u0648\u062d\u0629 \u062a\u0648\u0642\u0639\u0627\u062a EWC " + season,
-      description: (total: number, guildId: string) => formatNumber(total, "ar") + " \u0639\u0636\u0648 \u0641\u064a \u0627\u0644\u062a\u0631\u062a\u064a\u0628 \u0644\u0633\u064a\u0631\u0641\u0631 " + guildId,
+      description: (total: number) => formatNumber(total, "ar") + " \u0639\u0636\u0648 \u0641\u064a \u0627\u0644\u062a\u0631\u062a\u064a\u0628 \u0647\u0630\u0627 \u0627\u0644\u0645\u0648\u0633\u0645",
       page: (page: number, pages: number) => "\u0635\u0641\u062d\u0629 " + formatNumber(page, "ar") + " \u0645\u0646 " + formatNumber(pages, "ar"),
     },
     profile: {

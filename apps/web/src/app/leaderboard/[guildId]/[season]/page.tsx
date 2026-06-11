@@ -58,7 +58,7 @@ export default async function LeaderboardPage({
               {text.leaderboard.title(season)}
             </h1>
             <p className="text-sm leading-6 text-muted-foreground">
-              {text.leaderboard.description(leaderboard.total, guildId)}
+              {text.leaderboard.description(leaderboard.total)}
             </p>
           </div>
         </div>
@@ -85,7 +85,7 @@ export default async function LeaderboardPage({
       <Card>
         <CardHeader>
           <CardTitle>{text.common.publicLeaderboard}</CardTitle>
-          <CardDescription>{text.leaderboard.description(leaderboard.total, guildId)}</CardDescription>
+          <CardDescription>{text.leaderboard.description(leaderboard.total)}</CardDescription>
         </CardHeader>
         <CardContent>
           <LeaderboardTable rows={leaderboard.rows} locale={locale} />

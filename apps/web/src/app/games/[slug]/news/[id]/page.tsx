@@ -50,7 +50,7 @@ export default async function NewsPostPage({
         {localizeText(game.title, locale)}
       </Button>
 
-      <article className="flex flex-col gap-5">
+      <article dir="auto" className="flex flex-col gap-5">
         <header className="flex flex-col gap-3">
           <h1 className="text-3xl font-semibold leading-tight sm:text-4xl">{post.title}</h1>
           {post.authorName || post.publishedAt ? (

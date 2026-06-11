@@ -50,7 +50,9 @@ export default async function Home() {
     <main className="flex-1">
       {/* Hero */}
       <section className="mx-auto flex max-w-6xl flex-col items-start gap-6 px-5 py-14 sm:px-8 lg:py-20">
-        <Badge variant="outline">{text.home.eyebrow}</Badge>
+        <Badge variant="outline" className="border-primary/35 bg-primary/10 text-primary">
+          {text.home.eyebrow}
+        </Badge>
         <h1 className="max-w-3xl text-4xl font-semibold leading-tight text-balance sm:text-5xl">
           {text.home.title}
         </h1>
@@ -92,7 +94,10 @@ export default async function Home() {
           <div className="mx-auto flex max-w-6xl flex-col gap-6 px-5 py-10 sm:px-8">
             <div className="flex items-end justify-between gap-3">
               <div>
-                <h2 className="text-2xl font-semibold leading-tight">{text.home.gamesHeading}</h2>
+                <h2 className="flex items-center gap-2.5 text-2xl font-semibold leading-tight">
+                  <span aria-hidden className="h-5 w-1 shrink-0 rounded-full bg-primary" />
+                  {text.home.gamesHeading}
+                </h2>
                 <p className="mt-1 text-sm text-muted-foreground">{text.home.gamesSubtitle}</p>
               </div>
               <Button
@@ -115,7 +120,7 @@ export default async function Home() {
                 >
                   <Card
                     size="sm"
-                    className="h-full transition-[box-shadow] group-hover:shadow-md group-hover:ring-primary/40"
+                    className="h-full ring-1 ring-transparent transition-all group-hover:-translate-y-0.5 group-hover:border-primary/30 group-hover:shadow-md group-hover:ring-primary/40"
                   >
                     <CardHeader>
                       <Badge variant="secondary" className="mb-2 w-fit">
@@ -139,7 +144,10 @@ export default async function Home() {
       <section className="border-t">
         <div className="mx-auto flex max-w-6xl flex-col gap-6 px-5 py-10 sm:px-8">
           <div>
-            <h2 className="text-2xl font-semibold leading-tight">{text.home.newsHeading}</h2>
+            <h2 className="flex items-center gap-2.5 text-2xl font-semibold leading-tight">
+              <span aria-hidden className="h-5 w-1 shrink-0 rounded-full bg-primary" />
+              {text.home.newsHeading}
+            </h2>
             <p className="mt-1 text-sm text-muted-foreground">{text.home.newsSubtitle}</p>
           </div>
           {latestPosts.length ? (
@@ -154,7 +162,7 @@ export default async function Home() {
                   >
                     <Card
                       size="sm"
-                      className="h-full overflow-hidden transition-[box-shadow] group-hover:shadow-md group-hover:ring-primary/40"
+                      className="h-full overflow-hidden ring-1 ring-transparent transition-all group-hover:-translate-y-0.5 group-hover:border-primary/30 group-hover:shadow-md group-hover:ring-primary/40"
                     >
                       {cover ? (
                         // eslint-disable-next-line @next/next/no-img-element -- external/admin URL, validated http(s)
@@ -165,9 +173,9 @@ export default async function Home() {
                           <NewspaperIcon data-icon="inline-start" />
                           {gameTitleOf(post.gameSlug)}
                         </Badge>
-                        <CardTitle>{post.title}</CardTitle>
+                        <CardTitle dir="auto">{post.title}</CardTitle>
                         {post.summary ? (
-                          <CardDescription className="article-copy line-clamp-2">
+                          <CardDescription dir="auto" className="article-copy line-clamp-2">
                             {post.summary}
                           </CardDescription>
                         ) : null}
