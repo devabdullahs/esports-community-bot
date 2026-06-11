@@ -169,11 +169,11 @@
 }
 
 :root {
-  --font-system-sans: "Thmanyah Sans", Arial, Helvetica, sans-serif;
-  --font-heading-family: "Thmanyah Serif Display", "Thmanyah Sans", Arial,
-    Helvetica, sans-serif;
-  --font-article-family: "Thmanyah Serif Text", "Thmanyah Sans", Arial,
-    Helvetica, sans-serif;
+  --font-system-sans: "Thmanyah Sans", system-ui, "Segoe UI", Tahoma, sans-serif;
+  --font-heading-family: "Thmanyah Serif Display", "Thmanyah Sans", system-ui,
+    "Segoe UI", Tahoma, sans-serif;
+  --font-article-family: "Thmanyah Serif Text", "Thmanyah Sans", system-ui,
+    "Segoe UI", Tahoma, sans-serif;
   --font-system-mono: "SFMono-Regular", Consolas, "Liberation Mono", Menlo,
     monospace;
   --background: oklch(0.99 0.003 258);
