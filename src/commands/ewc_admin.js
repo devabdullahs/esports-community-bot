@@ -2,6 +2,7 @@ import { SlashCommandBuilder, PermissionFlagsBits, InteractionContextType, Messa
 import {
   clearSeasonPredictionScores,
   clearWeeklyPredictionScores,
+  deleteEwcWeek,
   getEwcSeason,
   getEwcWeek,
   listEwcWeeks,
@@ -156,6 +157,14 @@ export const data = new SlashCommandBuilder()
       .setDescription('Score a weekly round from baseline vs final standings.')
       .addStringOption((o) => o.setName('week').setDescription('Week key').setRequired(true))
       .addStringOption((o) => o.setName('season').setDescription('Season year').setRequired(false)),
+  )
+  .addSubcommand((s) =>
+    s
+      .setName('delete_week')
+      .setDescription('Permanently delete a prediction week and all its picks.')
+      .addStringOption((o) => o.setName('week').setDescription('Week key, e.g. week-8').setRequired(true))
+      .addStringOption((o) => o.setName('season').setDescription('Season year').setRequired(false))
+      .addBooleanOption((o) => o.setName('confirm').setDescription('Set to True to really delete').setRequired(true)),
   )
   .addSubcommand((s) =>
     s
@@ -433,6 +442,32 @@ export async function execute(interaction) {
         actor: interaction.user,
         target: `${round.season} ${round.week_key}`,
         details: 'Scores were cleared. Existing picks are preserved.',
+        color: 'config',
+      });
+      return;
+    }
+
+    if (sub === 'delete_week') {
+      const weekKey = interaction.options.getString('week', true);
+      if (!interaction.options.getBoolean('confirm', true)) {
+        throw new Error('Deletion not confirmed. Re-run with `confirm: True`.');
+      }
+      const round = getEwcWeek(interaction.guildId, seasonYear, weekKey);
+      if (!round) throw new Error(`Week \`${weekKey}\` does not exist.`);
+      if (round.status === 'scored') {
+        throw new Error('This week is already scored. Reopen it first if you really want to delete it.');
+      }
+      const picks = listWeeklyPredictions(round.id).length;
+      const result = deleteEwcWeek(round.id);
+      await interaction.reply({
+        content: `🗑️ Deleted **${round.label || round.week_key}** (${result.predictions} prediction(s) removed).`,
+        flags: MessageFlags.Ephemeral,
+      });
+      await sendAuditLog(interaction.client, interaction.guildId, {
+        action: 'EWC Prediction Week Deleted',
+        actor: interaction.user,
+        target: `${round.season} ${round.week_key}`,
+        details: `Predictions removed: ${picks}`,
         color: 'config',
       });
       return;
