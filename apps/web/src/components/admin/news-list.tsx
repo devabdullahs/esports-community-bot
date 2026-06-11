@@ -8,6 +8,7 @@ import { localizeText } from "@/lib/community-content";
 import type { GameRecord } from "@/lib/games";
 import { formatDateTime } from "@/lib/i18n";
 import type { NewsPost } from "@/lib/news";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -26,13 +27,23 @@ export function NewsList({ posts, games }: { posts: NewsPost[]; games: GameRecor
     return game ? localizeText(game.title, "en") : slug;
   };
   const [deletingId, setDeletingId] = useState<number | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   async function remove(id: number) {
     if (!window.confirm("Delete this post? This cannot be undone.")) return;
     setDeletingId(id);
+    setDeleteError(null);
     try {
-      await fetch(`/api/admin/news/${id}`, { method: "DELETE" });
+      const res = await fetch(`/api/admin/news/${id}`, { method: "DELETE" });
+      if (!res.ok) {
+        const body = await res.json().catch(() => null);
+        setDeleteError(body?.error || `Delete failed (${res.status})`);
+        return;
+      }
+      setDeleteError(null);
       router.refresh();
+    } catch {
+      setDeleteError("Network error — try again.");
     } finally {
       setDeletingId(null);
     }
@@ -40,6 +51,12 @@ export function NewsList({ posts, games }: { posts: NewsPost[]; games: GameRecor
 
   return (
     <div className="flex flex-col gap-4">
+      {deleteError ? (
+        <Alert variant="destructive">
+          <AlertTitle>Could not delete</AlertTitle>
+          <AlertDescription>{deleteError}</AlertDescription>
+        </Alert>
+      ) : null}
       <div className="flex items-center justify-between gap-3">
         <p className="text-sm text-muted-foreground">
           {posts.length} post{posts.length === 1 ? "" : "s"}
