@@ -6,6 +6,7 @@ node_modules/
 # Local Docker/NAS deployment files
 docker-compose*.yml
 compose*.yml
+!compose.example.yml
 *.tar
 *.tar.gz
 

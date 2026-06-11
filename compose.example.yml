@@ -1,0 +1,51 @@
+# Example production compose for the UGREEN NAS (combined bot + web + tunnel).
+# Copy to compose.ugreen.yml (git-ignored) and fill secrets in .env.docker.
+# See docs/DEPLOYMENT.md for the full runbook.
+services:
+  esports-bot:
+    # Pull the published image instead of building on the NAS:
+    image: ${ESPORTS_BOT_IMAGE:-ghcr.io/devabdullahs/esports-community-bot:latest}
+    container_name: esports-community-bot
+    restart: unless-stopped
+    # .env.docker holds DISCORD_TOKEN (+ bot vars) AND the web/dashboard vars:
+    #   BETTER_AUTH_SECRET, BETTER_AUTH_URL=https://<domain>,
+    #   EWC_DASHBOARD_PUBLIC_URL=https://<domain>, EWC_DASHBOARD_INTERNAL_SECRET,
+    #   EWC_DASHBOARD_SUPER_ADMIN_DISCORD_IDS, DISCORD_CLIENT_ID/SECRET,
+    #   CLOUDFLARE_TUNNEL_TOKEN, and (optional) R2_* upload vars.
+    env_file:
+      - path: ./.env.docker
+        required: false
+    environment:
+      DB_PATH: /app/data/bot.sqlite
+      LOGO_CACHE_DIR: /app/data/logo-cache
+      SCHEDULER_TIMEZONE: Asia/Riyadh
+      DEPLOY_DISCORD_COMMANDS: "true"
+      # Bot and web run in THIS container — internal calls stay on localhost.
+      EWC_DASHBOARD_INTERNAL_URL: http://127.0.0.1:3000
+      WEB_HOST: 0.0.0.0
+      WEB_PORT: "3000"
+      RUN_BOT: "true"
+      RUN_WEB: "true"
+    volumes:
+      - ./data:/app/data
+    # Optional LAN access; public traffic uses the tunnel below, not this port.
+    ports:
+      - "${EWC_DASHBOARD_PORT:-3000}:3000"
+    networks:
+      - internal_net
+
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    container_name: ecb-cloudflared
+    restart: unless-stopped
+    command: tunnel --no-autoupdate run
+    environment:
+      TUNNEL_TOKEN: ${CLOUDFLARE_TUNNEL_TOKEN:?set CLOUDFLARE_TUNNEL_TOKEN in .env.docker}
+    depends_on:
+      - esports-bot
+    networks:
+      - internal_net
+
+networks:
+  internal_net:
+    driver: bridge
