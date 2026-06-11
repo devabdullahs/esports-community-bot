@@ -25,6 +25,8 @@ Built with **discord.js v14** on **Node ≥ 20.12**. Primary data source is **Li
 - **Localized times** — all match times use Discord timestamps, shown in each viewer's zone.
 - **Liquipedia attribution** — every match tag links back to its Liquipedia page, and each
   embed credits Liquipedia (CC-BY-SA).
+- **News & Media CMS** — bilingual (EN/AR) news posts and a media channel directory, authored
+  at `/admin` on the EWC prediction dashboard with role-based access control.
 
 ### Commands (all admin-gated except `/list_tournaments`)
 
@@ -136,6 +138,36 @@ The web app uses hosted Thmanyah WOFF2 files through the same-origin `/fonts/...
 Set `THMANYAH_FONT_BASE_URL` to the public R2/custom-domain base URL that contains
 `thmanyahsans/woff2`, `thmanyahserifdisplay/woff2`, and `thmanyahseriftext/woff2`.
 
+## News & Media CMS
+
+The dashboard includes a bilingual news/media CMS, accessible at `/admin` to authorized
+staff. Admins can publish game-specific news posts in English, Arabic (RTL), or both, as
+well as manage a media channel directory.
+
+**Roles model**
+
+- **Super admins** are declared via `EWC_DASHBOARD_SUPER_ADMIN_DISCORD_IDS` (comma-separated
+  Discord user IDs). They have full access, including the ability to manage the admin roster.
+- The legacy variable `EWC_DASHBOARD_ADMIN_DISCORD_IDS` is still honored and grants the same
+  super-admin level for back-compat.
+- **Scoped admins** are assigned per game and per media channel at `/admin/team` (super-only
+  page) and stored in the bot database — no env change required.
+
+**Publish lifecycle**
+
+Posts start as drafts. A post in `shared` mode uses one language with a configured default
+locale. A post in `translated` mode requires both EN and AR content before it can be
+published. Published posts appear on the public game pages with locale-aware fallback (cookie
+or `Accept-Language`). Content limits: title 90 chars, summary 180 chars, body 12,000 chars.
+
+**Image uploads (Cloudflare R2)**
+
+Cover images are uploaded to Cloudflare R2 (S3-compatible). Accepted formats: PNG, JPEG,
+WebP, GIF, AVIF (SVG is excluded — script risk). Maximum size: 8 MB. Files are stored under
+`news/YYYY-MM-DD/<uuid>.<ext>` and served from `R2_PUBLIC_BASE_URL`. R2 is optional — when
+the five `R2_*` env vars are not set, the upload endpoint returns 503 and admins can paste
+image URLs instead. See `apps/web/README.md` for R2 setup steps.
+
 ## Configuration (`.env`)
 
 | Variable | Purpose |
@@ -209,7 +241,7 @@ Liquipedia data remains under CC-BY-SA 3.0 as noted above.
 
 - [x] Swiss-stage match parsing (Rocket League and similar)
 - [x] Per-game leaderboards **and** voice channels (a separate channel per game)
-- [x] LPDB API client wired — preferred over HTML parsing when `LPDB_API_KEY` is set (activate once your key is approved)
+- [x] LPDB API client integrated (optional) — used instead of HTML parsing when `LPDB_API_KEY` is set; falls back to HTML parsing otherwise (default)
 - [x] Start.gg + PandaScore integrations (free tier) — structured match data with live status
 - [x] Per-match detail view — `/match` (autocomplete) opens a focused card + link to full details
 - [x] Generated match-card images for `/match` and per-game live card channels
