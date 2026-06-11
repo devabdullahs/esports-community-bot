@@ -48,7 +48,7 @@ add multi-tenant complexity.
   `src/services/liquipedia/client.js` — never add a parallel fetch path or
   call axios directly to liquipedia.net.
 - Parse requests: >= 30s apart (`LIQUIPEDIA_PARSE_MIN_GAP_MS`); search:
-  >= 2.5s. Cache TTL 5 min in prod (`LIQUIPEDIA_CACHE_TTL_MS=300000`).
+  >= 2.5s. Cache TTL 15 min in prod (`compose.ugreen.yml` sets `LIQUIPEDIA_CACHE_TTL_MS=900000`; dev default 5 min).
   Backoff state persists across restarts (`data/liquipedia-rate-limit.json`).
 - Tests must NEVER hit liquipedia.net; use fixtures
   (`tests/liquipediaParsers.test.mjs`).
