@@ -14,7 +14,12 @@ import { deployCommands } from './lib/commandRegistry.js';
 const here = dirname(fileURLToPath(import.meta.url));
 
 // Slash commands + channel renames need only the Guilds intent (no privileged intents).
-const client = new Client({ intents: [GatewayIntentBits.Guilds] });
+// Mentions in message content render but never ping; nothing this bot posts
+// should notify members (leaderboards render <@id> tags on purpose).
+const client = new Client({
+  intents: [GatewayIntentBits.Guilds],
+  allowedMentions: { parse: [] },
+});
 client.commands = new Collection();
 
 // --- Load commands ---

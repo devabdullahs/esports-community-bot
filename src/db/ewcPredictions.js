@@ -140,6 +140,21 @@ export function clearWeeklyPredictionScores(weekId) {
   return db.prepare('UPDATE ewc_weekly_predictions SET score = NULL, details_json = NULL WHERE week_id = ?').run(weekId);
 }
 
+export function deleteEwcWeek(weekId) {
+  // FK cascade is inert (PRAGMA foreign_keys is never enabled) — delete
+  // children explicitly and atomically.
+  const run = db.transaction((id) => {
+    const predictions = db
+      .prepare(`DELETE FROM ewc_weekly_predictions WHERE week_id = ?`)
+      .run(id).changes;
+    const weeks = db
+      .prepare(`DELETE FROM ewc_prediction_weeks WHERE id = ?`)
+      .run(id).changes;
+    return { weeks, predictions };
+  });
+  return run(weekId);
+}
+
 export function weeklyLeaderboard(weekId, limit = 20, offset = 0) {
   return db
     .prepare(

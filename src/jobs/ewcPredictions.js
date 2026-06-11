@@ -22,6 +22,7 @@ import {
   setEwcPredictionsMentionsMessage,
   setEwcPredictionsLeaderboardMessage,
 } from '../db/settings.js';
+import { db } from '../db/index.js';
 import { logger } from '../lib/logger.js';
 import { scoreSeasonPrediction, scoreWeeklyPrediction } from '../lib/ewcPredictions.js';
 import { renderEwcPredictionLeaderboardCard } from '../lib/ewcPredictionLeaderboardCard.js';
@@ -251,19 +252,23 @@ async function processWeek(client, round) {
   }
 
   const predictions = listWeeklyPredictions(round.id);
-  for (const prediction of predictions) {
-    try {
-      const result = scoreWeeklyPrediction(prediction.picks, round.baseline, final);
-      saveWeeklyPredictionScore(round.guild_id, round.id, prediction.user_id, result.score, result.details);
-    } catch (error) {
-      logger.warn(`[ewc-predictions] skipped malformed weekly pick ${prediction.user_id}/${round.week_key}: ${error.message}`);
-      saveWeeklyPredictionScore(round.guild_id, round.id, prediction.user_id, 0, {
-        error: error.message,
-        picks: prediction.picks,
-      });
+  // Wrap all writes in a transaction so a mid-loop crash leaves scores consistent.
+  const applyScores = db.transaction(() => {
+    for (const prediction of predictions) {
+      try {
+        const result = scoreWeeklyPrediction(prediction.picks, round.baseline, final);
+        saveWeeklyPredictionScore(round.guild_id, round.id, prediction.user_id, result.score, result.details);
+      } catch (error) {
+        logger.warn(`[ewc-predictions] skipped malformed weekly pick ${prediction.user_id}/${round.week_key}: ${error.message}`);
+        saveWeeklyPredictionScore(round.guild_id, round.id, prediction.user_id, 0, {
+          error: error.message,
+          picks: prediction.picks,
+        });
+      }
     }
-  }
-  markEwcWeekScored(round.id, final);
+    markEwcWeekScored(round.id, final);
+  });
+  applyScores();
   logger.info(`[ewc-predictions] scored ${predictions.length} weekly prediction(s) for ${round.guild_id}/${round.season}/${round.week_key}`);
   const scored = listWeeklyPredictions(round.id);
   await announce(
@@ -294,19 +299,23 @@ async function processSeason(client, round) {
   }
 
   const predictions = listSeasonPredictions(round.guild_id, round.season);
-  for (const prediction of predictions) {
-    try {
-      const result = scoreSeasonPrediction(prediction.picks, final, round.top_size);
-      saveSeasonPredictionScore(round.guild_id, round.season, prediction.user_id, result.score, result.details);
-    } catch (error) {
-      logger.warn(`[ewc-predictions] skipped malformed season pick ${prediction.user_id}/${round.season}: ${error.message}`);
-      saveSeasonPredictionScore(round.guild_id, round.season, prediction.user_id, 0, {
-        error: error.message,
-        picks: prediction.picks,
-      });
+  // Wrap all writes in a transaction so a mid-loop crash leaves scores consistent.
+  const applyScores = db.transaction(() => {
+    for (const prediction of predictions) {
+      try {
+        const result = scoreSeasonPrediction(prediction.picks, final, round.top_size);
+        saveSeasonPredictionScore(round.guild_id, round.season, prediction.user_id, result.score, result.details);
+      } catch (error) {
+        logger.warn(`[ewc-predictions] skipped malformed season pick ${prediction.user_id}/${round.season}: ${error.message}`);
+        saveSeasonPredictionScore(round.guild_id, round.season, prediction.user_id, 0, {
+          error: error.message,
+          picks: prediction.picks,
+        });
+      }
     }
-  }
-  markEwcSeasonScored(round.guild_id, round.season, final);
+    markEwcSeasonScored(round.guild_id, round.season, final);
+  });
+  applyScores();
   logger.info(`[ewc-predictions] scored ${predictions.length} season prediction(s) for ${round.guild_id}/${round.season}`);
   const scored = listSeasonPredictions(round.guild_id, round.season);
   await announce(
