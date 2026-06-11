@@ -4,6 +4,7 @@ import {
   getEwcMePayload,
   syncEwcProfileForAuthUser,
 } from "@/lib/ewc-profile-sync";
+import { rateLimitOr429 } from "@/lib/rate-limit";
 import { getOptionalSession } from "@/lib/session";
 import { isSnowflake, isSeason } from "@/lib/validate";
 
@@ -13,6 +14,9 @@ export const dynamic = "force-dynamic";
 export async function POST(request: Request) {
   const session = await getOptionalSession();
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  const limited = rateLimitOr429({ key: `ewc-sync:${session.user.id}`, limit: 3, windowSec: 300 });
+  if (limited) return limited;
 
   const body = await request.json().catch(() => ({}));
 
@@ -34,11 +38,23 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Choose a guild from a Discord link first." }, { status: 400 });
   }
 
-  return NextResponse.json(
-    await syncEwcProfileForAuthUser({
-      authUserId: session.user.id,
-      guildId,
-      season,
-    }),
-  );
+  try {
+    return NextResponse.json(
+      await syncEwcProfileForAuthUser({
+        authUserId: session.user.id,
+        guildId,
+        season,
+      }),
+    );
+  } catch (error) {
+    const err = error as Error & { retryAfterSec?: number };
+    if (err.retryAfterSec !== undefined) {
+      const retry = Math.max(1, err.retryAfterSec);
+      return NextResponse.json(
+        { error: `Discord is rate limiting profile updates — try again in ${retry} seconds.` },
+        { status: 429, headers: { "Retry-After": String(retry) } },
+      );
+    }
+    return NextResponse.json({ error: "Profile sync failed — try again later." }, { status: 502 });
+  }
 }
