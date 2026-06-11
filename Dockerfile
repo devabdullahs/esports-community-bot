@@ -36,4 +36,8 @@ COPY --from=build --chown=node:node /app/src ./src
 
 USER node
 
-CMD ["npm", "run", "start:production"]
+# Exec Node directly (not `npm run`) so this process is PID 1 and receives
+# SIGTERM itself — start-production.js forwards it to the bot/web children and
+# exits 0 on a clean stop. Going through npm makes npm PID 1, which mishandles
+# the signal and reports a spurious exit 1 on every shutdown.
+CMD ["node", "src/start-production.js"]
