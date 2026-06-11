@@ -7,6 +7,7 @@ RUN apt-get update \
   && rm -rf /var/lib/apt/lists/*
 
 COPY package*.json ./
+COPY apps/web/package.json ./apps/web/package.json
 RUN npm ci --omit=dev
 
 FROM node:24-bookworm-slim
@@ -26,6 +27,7 @@ RUN apt-get update \
 
 COPY --from=deps --chown=node:node /app/node_modules ./node_modules
 COPY --chown=node:node package*.json ./
+COPY --chown=node:node apps/web ./apps/web
 COPY --chown=node:node src ./src
 
 CMD ["npm", "start"]

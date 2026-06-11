@@ -18,7 +18,20 @@ const ALLOWED_TYPES: Record<string, string> = {
 
 const MAX_BYTES = 8 * 1024 * 1024; // 8 MB
 
-function matchesMagicBytes(bytes: Uint8Array, mimeType: string): boolean {
+function isBrand(bytes: Uint8Array, offset: number, brand: string): boolean {
+  return (
+    bytes[offset] === brand.charCodeAt(0) &&
+    bytes[offset + 1] === brand.charCodeAt(1) &&
+    bytes[offset + 2] === brand.charCodeAt(2) &&
+    bytes[offset + 3] === brand.charCodeAt(3)
+  );
+}
+
+function isAvifBrand(bytes: Uint8Array, offset: number): boolean {
+  return isBrand(bytes, offset, "avif") || isBrand(bytes, offset, "avis");
+}
+
+export function matchesMagicBytes(bytes: Uint8Array, mimeType: string): boolean {
   if (bytes.length < 12) return false;
   switch (mimeType) {
     case "image/png":
@@ -43,8 +56,18 @@ function matchesMagicBytes(bytes: Uint8Array, mimeType: string): boolean {
         bytes[11] === 0x50
       );
     case "image/avif":
-      // ftyp at offset 4
-      return bytes[4] === 0x66 && bytes[5] === 0x74 && bytes[6] === 0x79 && bytes[7] === 0x70;
+      // ISO-BMFF files share "ftyp"; AVIF must declare avif/avis as the
+      // major brand or one of the compatible brands in that box.
+      if (!isBrand(bytes, 4, "ftyp")) return false;
+      if (isAvifBrand(bytes, 8)) return true;
+      if (bytes.length < 16) return false;
+      const declaredBoxSize = ((bytes[0] << 24) | (bytes[1] << 16) | (bytes[2] << 8) | bytes[3]) >>> 0;
+      const brandEnd =
+        declaredBoxSize >= 16 && declaredBoxSize <= bytes.length ? declaredBoxSize : bytes.length;
+      for (let offset = 16; offset + 3 < brandEnd; offset += 4) {
+        if (isAvifBrand(bytes, offset)) return true;
+      }
+      return false;
     default:
       return false;
   }

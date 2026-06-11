@@ -92,8 +92,9 @@ test('deleteEwcGame cascades: removes posts, translations, and admin scopes with
   assert.equal(getEwcNewsPostById(post1.id), null, 'post1 removed after cascade delete');
   assert.equal(getEwcNewsPostById(post2.id), null, 'post2 removed after cascade delete');
 
-  // 3. Translations for those posts are gone (FK CASCADE is NOT enabled in this repo —
-  //    the manual multi-step transaction in deleteEwcGame handles cleanup instead)
+  // 3. Translations for those posts are gone. deleteEwcGame removes them
+  //    explicitly before deleting posts, so this verifies the cleanup path
+  //    instead of depending on cascade side effects.
   const translationCount = db
     .prepare(
       `SELECT COUNT(*) AS n FROM ewc_news_post_translations

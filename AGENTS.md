@@ -7,11 +7,11 @@ Deployed as a single Docker container (GHCR -> UGREEN NAS).
 add multi-tenant complexity.
 
 ## Verify (run before claiming done)
-- Bot tests: `npm test` (node:test, 63 tests across 6 files in `tests/*.test.mjs`)
+- Bot tests: `npm test` (node:test suite in `tests/*.test.mjs`)
 - Web lint:  `npm --workspace @esports-community-bot/web run lint`
+- Web tests: `npm --workspace @esports-community-bot/web run test`
 - Web build: `npm run web:build`
-- Web has no `test` script in this tree; a `test` script may appear after
-  pending merges land. CI runs lint + build for the web workspace.
+- CI runs lint, tests, and build for the web workspace.
 - There is no bot-side linter; match existing style (single quotes, ESM,
   sparse why-comments).
 

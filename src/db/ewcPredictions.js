@@ -141,8 +141,8 @@ export function clearWeeklyPredictionScores(weekId) {
 }
 
 export function deleteEwcWeek(weekId) {
-  // FK cascade is inert (PRAGMA foreign_keys is never enabled) — delete
-  // children explicitly and atomically.
+  // FK cascade is enabled, but explicit child deletes let callers report the
+  // deleted prediction count while keeping the operation atomic.
   const run = db.transaction((id) => {
     const predictions = db
       .prepare(`DELETE FROM ewc_weekly_predictions WHERE week_id = ?`)

@@ -3,7 +3,10 @@ npm-debug.log*
 .git
 .env
 .env.*
+apps/**/.env
+apps/**/.env.*
 data
+apps/**/data
 *.sqlite
 *.sqlite-*
 *.log
@@ -25,7 +28,6 @@ shopify-frost-card.png
 /*.png
 tmp-*.mjs
 backups
-apps
 plans
 .github
 **/node_modules
