@@ -278,6 +278,12 @@ db.exec(`
   );
   CREATE INDEX IF NOT EXISTS idx_ewc_media_channels_sort ON ewc_media_channels(sort_order, slug);
 
+  CREATE TABLE IF NOT EXISTS ewc_rate_limits (
+    key           TEXT PRIMARY KEY,
+    window_start  INTEGER NOT NULL,
+    amount        INTEGER NOT NULL
+  );
+
   CREATE TABLE IF NOT EXISTS ewc_admins (
     discord_id   TEXT PRIMARY KEY,
     display_name TEXT NOT NULL DEFAULT '',
