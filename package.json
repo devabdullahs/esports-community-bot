@@ -19,7 +19,8 @@
     "web:dev": "npm --workspace @esports-community-bot/web run dev",
     "web:build": "npm --workspace @esports-community-bot/web run build",
     "web:start": "npm --workspace @esports-community-bot/web run start",
-    "web:auth:migrate": "npm --workspace @esports-community-bot/web run auth:migrate"
+    "web:auth:migrate": "npm --workspace @esports-community-bot/web run auth:migrate",
+    "seed:dev": "node scripts/seed-dev.mjs"
   },
   "license": "MIT",
   "dependencies": {

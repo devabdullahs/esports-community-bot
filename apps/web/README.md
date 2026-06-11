@@ -10,6 +10,23 @@ npm run web:dev
 The app shares `DB_PATH` with the Discord bot and exposes internal sync endpoints protected by
 `EWC_DASHBOARD_INTERNAL_SECRET`.
 
+## Sample data
+
+To browse the dashboard locally with realistic content (games, bilingual news, prediction
+leaderboard, and a pre-linked dev user):
+
+1. Set `DB_PATH` in `apps/web/.env.local` to a **disposable** SQLite file, e.g.:
+   ```
+   DB_PATH=./data/dev-dashboard.sqlite
+   ```
+2. Run the seed script with the same path:
+   ```bash
+   DB_PATH="./data/dev-dashboard.sqlite" npm run seed:dev
+   ```
+3. Start the dev server (`npm run web:dev`). Games, news, leaderboard, and `/me`
+   all render with sample content — the dev-bypass user (`EWC_DASHBOARD_DEV_AUTH_BYPASS`)
+   is pre-linked to the seeded guild and season.
+
 ## Admin roster
 
 Set `EWC_DASHBOARD_SUPER_ADMIN_DISCORD_IDS` to a comma-separated list of Discord user IDs

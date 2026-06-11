@@ -9,9 +9,11 @@ add multi-tenant complexity.
 ## Verify (run before claiming done)
 - Bot tests: `npm test` (node:test suite in `tests/*.test.mjs`)
 - Web lint:  `npm --workspace @esports-community-bot/web run lint`
-- Web tests: `npm --workspace @esports-community-bot/web run test`
+- Web tests: `npm --workspace @esports-community-bot/web run test` (vitest)
 - Web build: `npm run web:build`
 - CI runs lint, tests, and build for the web workspace.
+- Sample data: `DB_PATH="<disposable-path>" npm run seed:dev` seeds a local
+  dashboard DB for visual preview (games, news, prediction leaderboard, dev user).
 - There is no bot-side linter; match existing style (single quotes, ESM,
   sparse why-comments).
 
@@ -31,6 +33,10 @@ add multi-tenant complexity.
   `src/db/ewcGames.js` for the exemplar).
 - `src/db/*.js` — prepared-statement modules (always parameterized); CMS
   modules: `src/db/{ewcGames,ewcMediaChannels,ewcNewsPosts,ewcAdmins}.js`.
+- `src/db/ewcAdminAuditLog.js` + `apps/web/src/lib/audit.ts` — audit-log
+  module pair: the web admin routes WRITE rows via `recordAdminAudit` and the
+  super-only `/admin/audit` page reads them; the bot-side file is just the
+  shared DB layer.
 - `src/lib/ewcPredictions.js` — EWC scoring math (pure functions; tests in
   `tests/ewcPredictionScoring.test.mjs`). This is the money path.
 - `src/lib/markdownTools.js` — shared markdown helpers (also tested in
