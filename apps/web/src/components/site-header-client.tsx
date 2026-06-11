@@ -27,7 +27,6 @@ import {
   LOCALE_COOKIE_MAX_AGE,
   LOCALE_COOKIE_NAME,
   copy,
-  directionForLocale,
   localizedPath,
   type Locale,
 } from "@/lib/i18n";
@@ -49,15 +48,11 @@ export function SiteHeaderClient({
   }
 
   return (
-    <header
-      lang={locale}
-      dir={directionForLocale(locale)}
-      className="sticky top-0 z-40 w-full border-b bg-background/95 supports-[backdrop-filter]:bg-background/80"
-    >
+    <header className="sticky top-0 z-40 w-full border-b bg-background/95 supports-[backdrop-filter]:bg-background/80">
       <div className="mx-auto flex h-16 w-full max-w-6xl items-center gap-3 px-4 sm:gap-4 sm:px-8">
         <Link
           href={localizedPath("/", locale)}
-          className="flex min-w-0 items-center gap-2.5"
+          className="flex min-w-0 items-center gap-2.5 rounded-md outline-none transition-opacity hover:opacity-80 focus-visible:ring-2 focus-visible:ring-ring"
         >
           <span className="flex size-8 shrink-0 items-center justify-center rounded-md border bg-muted text-foreground">
             <TrophyIcon />
