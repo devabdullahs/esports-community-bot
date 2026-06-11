@@ -7,11 +7,12 @@ Deployed as a single Docker container (GHCR -> UGREEN NAS).
 add multi-tenant complexity.
 
 ## Verify (run before claiming done)
-- Bot tests: `npm test` (node:test, 63 tests across 6 files in `tests/*.test.mjs`)
+- Bot tests: `npm test` (node:test, 77 tests across 9 files in `tests/*.test.mjs`)
+- Web tests: `npm --workspace @esports-community-bot/web run test` (vitest, 107 tests)
 - Web lint:  `npm --workspace @esports-community-bot/web run lint`
 - Web build: `npm run web:build`
-- Web has no `test` script in this tree; a `test` script may appear after
-  pending merges land. CI runs lint + build for the web workspace.
+- Sample data: `DB_PATH="<disposable-path>" npm run seed:dev` seeds a local
+  dashboard DB for visual preview (games, news, prediction leaderboard, dev user).
 - There is no bot-side linter; match existing style (single quotes, ESM,
   sparse why-comments).
 
@@ -31,6 +32,9 @@ add multi-tenant complexity.
   `src/db/ewcGames.js` for the exemplar).
 - `src/db/*.js` — prepared-statement modules (always parameterized); CMS
   modules: `src/db/{ewcGames,ewcMediaChannels,ewcNewsPosts,ewcAdmins}.js`.
+- `src/db/ewcAdminAuditLog.js` + `apps/web/src/lib/audit.ts` — audit-log
+  module pair: bot side writes log rows; web side reads them for the admin
+  activity feed.
 - `src/lib/ewcPredictions.js` — EWC scoring math (pure functions; tests in
   `tests/ewcPredictionScoring.test.mjs`). This is the money path.
 - `src/lib/markdownTools.js` — shared markdown helpers (also tested in
