@@ -3,8 +3,10 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { Loader2Icon, PlusIcon, SaveIcon, Trash2Icon, UploadIcon } from "lucide-react";
-import { normalizeSlug } from "@/lib/media-validation";
+import { normalizeSlug, MEDIA_URL_MAX_LENGTH } from "@/lib/media-validation";
 import type { LocalizedText, MediaChannelRecord, MediaLink, MediaPlatform } from "@/lib/media";
+import { copy, type Locale } from "@/lib/i18n";
+import { isSafeUrl } from "@/lib/safe-url";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -56,12 +58,21 @@ function BiField({
   );
 }
 
+function isInvalidLinkUrl(url: string): boolean {
+  const trimmed = url.trim();
+  if (!trimmed) return false; // empty is ignored, not invalid
+  if (trimmed.length > MEDIA_URL_MAX_LENGTH) return true;
+  return !isSafeUrl(trimmed);
+}
+
 export function MediaEditor({
   mode,
   channel,
+  locale = "en",
 }: {
   mode: "create" | "edit";
   channel?: MediaChannelRecord;
+  locale?: Locale;
 }) {
   const router = useRouter();
   const [slug, setSlug] = useState(channel?.slug || "");
@@ -74,7 +85,9 @@ export function MediaEditor({
   const [busy, setBusy] = useState(false);
   const [uploading, setUploading] = useState(false);
 
-  const canSave = Boolean(name.en.trim() && name.ar.trim() && (mode === "edit" || slug.trim()));
+  const adminErrors = copy[locale].adminErrors as Record<string, string>;
+  const hasInvalidLinks = links.some((l) => isInvalidLinkUrl(l.url));
+  const canSave = Boolean(name.en.trim() && name.ar.trim() && (mode === "edit" || slug.trim()) && !hasInvalidLinks);
 
   async function uploadLogo(file: File) {
     setError(null);
@@ -96,6 +109,10 @@ export function MediaEditor({
 
   async function save() {
     setError(null);
+    if (hasInvalidLinks) {
+      setError(adminErrors["link-url-invalid"] ?? "Link must be a valid http(s) URL");
+      return;
+    }
     setBusy(true);
     try {
       const payload = {
@@ -205,51 +222,62 @@ export function MediaEditor({
             <Field>
               <FieldLabel>Social & platform links</FieldLabel>
               <div className="flex flex-col gap-2">
-                {links.map((link, index) => (
-                  <div key={index} className="flex items-center gap-2">
-                    <Select
-                      value={link.platform}
-                      onValueChange={(value) =>
-                        setLinks((prev) =>
-                          prev.map((l, i) => (i === index ? { ...l, platform: value as MediaPlatform } : l)),
-                        )
-                      }
-                    >
-                      <SelectTrigger className="w-40 shrink-0">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectGroup>
-                          {PLATFORMS.map((p) => (
-                            <SelectItem key={p} value={p}>
-                              {PLATFORM_LABELS[p]}
-                            </SelectItem>
-                          ))}
-                        </SelectGroup>
-                      </SelectContent>
-                    </Select>
-                    <Input
-                      value={link.url}
-                      dir="ltr"
-                      placeholder="https://..."
-                      className="flex-1"
-                      onChange={(e) =>
-                        setLinks((prev) => prev.map((l, i) => (i === index ? { ...l, url: e.target.value } : l)))
-                      }
-                    />
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon-sm"
-                      className="text-destructive"
-                      title="Remove link"
-                      aria-label="Remove link"
-                      onClick={() => setLinks((prev) => prev.filter((_, i) => i !== index))}
-                    >
-                      <Trash2Icon />
-                    </Button>
-                  </div>
-                ))}
+                {links.map((link, index) => {
+                  const urlInvalid = isInvalidLinkUrl(link.url);
+                  return (
+                    <div key={index} className="flex flex-col gap-1">
+                      <div className="flex items-center gap-2">
+                        <Select
+                          value={link.platform}
+                          onValueChange={(value) =>
+                            setLinks((prev) =>
+                              prev.map((l, i) => (i === index ? { ...l, platform: value as MediaPlatform } : l)),
+                            )
+                          }
+                        >
+                          <SelectTrigger className="w-40 shrink-0">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectGroup>
+                              {PLATFORMS.map((p) => (
+                                <SelectItem key={p} value={p}>
+                                  {PLATFORM_LABELS[p]}
+                                </SelectItem>
+                              ))}
+                            </SelectGroup>
+                          </SelectContent>
+                        </Select>
+                        <Input
+                          value={link.url}
+                          dir="ltr"
+                          placeholder="https://..."
+                          className="flex-1"
+                          aria-invalid={urlInvalid}
+                          onChange={(e) =>
+                            setLinks((prev) => prev.map((l, i) => (i === index ? { ...l, url: e.target.value } : l)))
+                          }
+                        />
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon-sm"
+                          className="text-destructive"
+                          title="Remove link"
+                          aria-label="Remove link"
+                          onClick={() => setLinks((prev) => prev.filter((_, i) => i !== index))}
+                        >
+                          <Trash2Icon />
+                        </Button>
+                      </div>
+                      {urlInvalid ? (
+                        <p className="text-xs text-destructive">
+                          {adminErrors["link-url-invalid"] ?? "Link must be a valid http(s) URL"}
+                        </p>
+                      ) : null}
+                    </div>
+                  );
+                })}
                 <Button
                   type="button"
                   variant="outline"

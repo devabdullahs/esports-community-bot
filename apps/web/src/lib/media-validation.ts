@@ -53,28 +53,36 @@ export type ValidatedMediaContent = {
   links: MediaLink[];
 };
 
+export type MediaValidationCode =
+  | "name-required"
+  | "name-too-long"
+  | "description-too-long"
+  | "logo-url-too-long"
+  | "logo-url-invalid"
+  | "link-url-invalid";
+
 export function validateMediaContent(
   raw: unknown,
-): { ok: true; value: ValidatedMediaContent } | { ok: false; error: string } {
+): { ok: true; value: ValidatedMediaContent } | { ok: false; error: string; code: MediaValidationCode } {
   const body = (raw ?? {}) as Record<string, unknown>;
 
   const name = localized(body.name);
   if (!name.en || !name.ar) {
-    return { ok: false, error: "Name is required in English and Arabic" };
+    return { ok: false, error: "Name is required in English and Arabic", code: "name-required" };
   }
   if (name.en.length > MEDIA_NAME_MAX_LENGTH) {
-    return { ok: false, error: `Name must be ${MEDIA_NAME_MAX_LENGTH} characters or fewer` };
+    return { ok: false, error: `Name must be ${MEDIA_NAME_MAX_LENGTH} characters or fewer`, code: "name-too-long" };
   }
   if (name.ar.length > MEDIA_NAME_MAX_LENGTH) {
-    return { ok: false, error: `Name must be ${MEDIA_NAME_MAX_LENGTH} characters or fewer` };
+    return { ok: false, error: `Name must be ${MEDIA_NAME_MAX_LENGTH} characters or fewer`, code: "name-too-long" };
   }
 
   const description = localized(body.description);
   if (description.en.length > MEDIA_TEXT_MAX_LENGTH) {
-    return { ok: false, error: `Description must be ${MEDIA_TEXT_MAX_LENGTH} characters or fewer` };
+    return { ok: false, error: `Description must be ${MEDIA_TEXT_MAX_LENGTH} characters or fewer`, code: "description-too-long" };
   }
   if (description.ar.length > MEDIA_TEXT_MAX_LENGTH) {
-    return { ok: false, error: `Description must be ${MEDIA_TEXT_MAX_LENGTH} characters or fewer` };
+    return { ok: false, error: `Description must be ${MEDIA_TEXT_MAX_LENGTH} characters or fewer`, code: "description-too-long" };
   }
 
   let logoUrl: string | null = null;
@@ -82,9 +90,9 @@ export function validateMediaContent(
   if (typeof rawLogo === "string" && rawLogo.trim() !== "") {
     const trimmedLogo = rawLogo.trim();
     if (trimmedLogo.length > MEDIA_URL_MAX_LENGTH) {
-      return { ok: false, error: `Logo URL must be ${MEDIA_URL_MAX_LENGTH} characters or fewer` };
+      return { ok: false, error: `Logo URL must be ${MEDIA_URL_MAX_LENGTH} characters or fewer`, code: "logo-url-too-long" };
     }
-    if (!isSafeUrl(rawLogo)) return { ok: false, error: "Logo must be a valid http(s) URL" };
+    if (!isSafeUrl(rawLogo)) return { ok: false, error: "Logo must be a valid http(s) URL", code: "logo-url-invalid" };
     logoUrl = trimmedLogo;
   }
 
