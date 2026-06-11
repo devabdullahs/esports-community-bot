@@ -20,7 +20,6 @@ import { listGamesCached } from "@/lib/games";
 import { listLatestPublishedNewsPostsCached } from "@/lib/news";
 import {
   copy,
-  directionForLocale,
   formatDateTime,
   localizedPath,
 } from "@/lib/i18n";
@@ -48,7 +47,7 @@ export default async function Home() {
   };
 
   return (
-    <main lang={locale} dir={directionForLocale(locale)} className="flex-1">
+    <main className="flex-1">
       {/* Hero */}
       <section className="mx-auto flex max-w-6xl flex-col items-start gap-6 px-5 py-14 sm:px-8 lg:py-20">
         <Badge variant="outline">{text.home.eyebrow}</Badge>

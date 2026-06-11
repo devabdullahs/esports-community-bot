@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { ProfileDashboard } from "@/components/dashboard/profile-dashboard";
 import { DEFAULT_SEASON } from "@/lib/env";
-import { copy, directionForLocale } from "@/lib/i18n";
+import { copy } from "@/lib/i18n";
 import { getRequestLocale } from "@/lib/request-locale";
 import { getOptionalSession } from "@/lib/session";
 
@@ -29,8 +29,6 @@ export default async function MePage({
 
   return (
     <main
-      lang={locale}
-      dir={directionForLocale(locale)}
       className="mx-auto flex w-full max-w-6xl flex-1 flex-col gap-8 px-5 py-10 sm:px-8"
     >
       <div className="flex max-w-3xl flex-col gap-2">

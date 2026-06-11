@@ -13,7 +13,6 @@ import {
 } from "@/components/ui/card";
 import {
   copy,
-  directionForLocale,
   formatNumber,
   localizedPath,
 } from "@/lib/i18n";
@@ -36,8 +35,6 @@ export default async function LeaderboardPage({
 
   return (
     <main
-      lang={locale}
-      dir={directionForLocale(locale)}
       className="mx-auto flex w-full max-w-6xl flex-1 flex-col gap-8 px-5 py-10 sm:px-8"
     >
       <Button

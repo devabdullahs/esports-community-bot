@@ -6,7 +6,6 @@ import { Button } from "@/components/ui/button";
 import { localizeText } from "@/lib/community-content";
 import { getGameCached } from "@/lib/games";
 import {
-  directionForLocale,
   formatDateTime,
   localizedPath,
 } from "@/lib/i18n";
@@ -39,8 +38,6 @@ export default async function NewsPostPage({
 
   return (
     <main
-      lang={locale}
-      dir={directionForLocale(locale)}
       className="mx-auto flex w-full max-w-3xl flex-1 flex-col gap-6 px-5 py-10 sm:px-8"
     >
       <Button

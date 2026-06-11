@@ -3,6 +3,8 @@ import { Suspense } from "react";
 import { Providers } from "@/components/providers";
 import { SiteFooter } from "@/components/site-footer";
 import { SiteHeader } from "@/components/site-header";
+import { directionForLocale } from "@/lib/i18n";
+import { getRequestLocale } from "@/lib/request-locale";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -11,13 +13,14 @@ export const metadata: Metadata = {
     "Community esports hub for game pages, news, prediction boards, and Discord profile showcase.",
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const locale = await getRequestLocale();
   return (
-    <html lang="en" suppressHydrationWarning className="h-full antialiased">
+    <html lang={locale} dir={directionForLocale(locale)} suppressHydrationWarning className="h-full antialiased">
       <body className="min-h-full" suppressHydrationWarning>
         <div className="app-root flex min-h-full flex-col">
           <Providers>

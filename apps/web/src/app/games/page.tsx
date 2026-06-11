@@ -14,7 +14,6 @@ import { listGamesCached } from "@/lib/games";
 import { listLatestPublishedNewsPostsCached } from "@/lib/news";
 import {
   copy,
-  directionForLocale,
   localizedPath,
 } from "@/lib/i18n";
 import { getRequestLocale } from "@/lib/request-locale";
@@ -34,8 +33,6 @@ export default async function GamesPage() {
 
   return (
     <main
-      lang={locale}
-      dir={directionForLocale(locale)}
       className="mx-auto flex w-full max-w-6xl flex-1 flex-col gap-10 px-5 py-10 sm:px-8"
     >
       <section className="flex max-w-3xl flex-col items-start gap-4">

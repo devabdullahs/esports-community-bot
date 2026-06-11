@@ -10,7 +10,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { DEFAULT_SEASON, defaultPublicGuildId } from "@/lib/env";
-import { directionForLocale, localizedPath } from "@/lib/i18n";
+import { localizedPath } from "@/lib/i18n";
 import { getRequestLocale } from "@/lib/request-locale";
 
 export const runtime = "nodejs";
@@ -55,8 +55,6 @@ export default async function PredictionsPage() {
 
   return (
     <main
-      lang={locale}
-      dir={directionForLocale(locale)}
       className="mx-auto flex w-full max-w-4xl flex-1 flex-col gap-8 px-5 py-10 sm:px-8"
     >
       <section className="flex max-w-3xl flex-col items-start gap-4">

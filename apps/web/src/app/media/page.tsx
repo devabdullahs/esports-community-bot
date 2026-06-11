@@ -9,7 +9,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { localizeText } from "@/lib/community-content";
-import { directionForLocale, localizedPath } from "@/lib/i18n";
+import { localizedPath } from "@/lib/i18n";
 import { listMediaChannelsCached } from "@/lib/media";
 import { getRequestLocale } from "@/lib/request-locale";
 import { safeUrlOrUndefined } from "@/lib/safe-url";
@@ -39,8 +39,6 @@ export default async function MediaPage() {
 
   return (
     <main
-      lang={locale}
-      dir={directionForLocale(locale)}
       className="mx-auto flex w-full max-w-6xl flex-1 flex-col gap-8 px-5 py-10 sm:px-8"
     >
       <section className="flex max-w-3xl flex-col items-start gap-4">
