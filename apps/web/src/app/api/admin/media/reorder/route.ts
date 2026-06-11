@@ -1,6 +1,7 @@
 import { revalidateTag } from "next/cache";
 import { NextResponse } from "next/server";
 import { getAdminAccess, isSuper } from "@/lib/admin";
+import { recordAdminAudit } from "@/lib/audit";
 import { reorderMediaChannels } from "@/lib/media";
 
 export const runtime = "nodejs";
@@ -27,6 +28,7 @@ export async function POST(request: Request) {
   try {
     const channels = reorderMediaChannels(slugs);
     revalidateTag("cms-media", "default");
+    recordAdminAudit(access, "media.reorder", null);
     return NextResponse.json({ channels });
   } catch (err) {
     return NextResponse.json({ error: (err as Error).message }, { status: 400 });

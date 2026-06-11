@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getAdminAccess, isSuper } from "@/lib/admin";
+import { recordAdminAudit } from "@/lib/audit";
 import {
   getAdmin,
   listAdmins,
@@ -49,5 +50,6 @@ export async function POST(request: Request) {
   upsertAdmin({ discordId, displayName });
   setAdminGameScopes(discordId, games);
   setAdminMediaScopes(discordId, media);
+  recordAdminAudit(access, "team.upsert", discordId);
   return NextResponse.json(getAdmin(discordId));
 }

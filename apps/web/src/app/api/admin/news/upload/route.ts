@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { NextResponse } from "next/server";
 import { getAdminAccess } from "@/lib/admin";
+import { recordAdminAudit } from "@/lib/audit";
 import { isR2Configured, uploadToR2 } from "@/lib/r2";
 
 export const runtime = "nodejs";
@@ -50,7 +51,8 @@ function matchesMagicBytes(bytes: Uint8Array, mimeType: string): boolean {
 }
 
 export async function POST(request: Request) {
-  const { session, allowed } = await getAdminAccess();
+  const access = await getAdminAccess();
+  const { session, allowed } = access;
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   if (!allowed) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
@@ -95,6 +97,7 @@ export async function POST(request: Request) {
 
   try {
     const url = await uploadToR2({ key, body: bytes, contentType: file.type });
+    recordAdminAudit(access, "news.upload", null, { key });
     return NextResponse.json({ url });
   } catch (error) {
     return NextResponse.json({ error: (error as Error).message }, { status: 502 });

@@ -1,6 +1,7 @@
 import { revalidateTag } from "next/cache";
 import { NextResponse } from "next/server";
 import { getAdminAccess, isSuper } from "@/lib/admin";
+import { recordAdminAudit } from "@/lib/audit";
 import { reorderGames } from "@/lib/games";
 
 export const runtime = "nodejs";
@@ -27,6 +28,7 @@ export async function POST(request: Request) {
   try {
     const games = reorderGames(slugs);
     revalidateTag("cms-games", "default");
+    recordAdminAudit(access, "game.reorder", null);
     return NextResponse.json({ games });
   } catch (err) {
     return NextResponse.json({ error: (err as Error).message }, { status: 400 });

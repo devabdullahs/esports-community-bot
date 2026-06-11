@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getAdminAccess, isSuper } from "@/lib/admin";
+import { recordAdminAudit } from "@/lib/audit";
 import {
   deleteAdmin,
   getAdmin,
@@ -46,6 +47,7 @@ export async function PATCH(
   upsertAdmin({ discordId, displayName });
   setAdminGameScopes(discordId, games);
   setAdminMediaScopes(discordId, media);
+  recordAdminAudit(access, "team.update", discordId);
   return NextResponse.json(getAdmin(discordId));
 }
 
@@ -60,5 +62,6 @@ export async function DELETE(
   const { discordId } = await context.params;
   const result = deleteAdmin(discordId);
   if (result.deleted === 0) return NextResponse.json({ error: "Not found" }, { status: 404 });
+  recordAdminAudit(access, "team.delete", discordId);
   return NextResponse.json({ ok: true });
 }
