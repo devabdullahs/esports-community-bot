@@ -8,9 +8,9 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { localizeText } from "@/lib/community-content";
-import { listGames } from "@/lib/games";
+import { listGamesCached } from "@/lib/games";
 import { directionForLocale, formatDateTime, localizedPath } from "@/lib/i18n";
-import { listLatestPublishedNewsPosts } from "@/lib/news";
+import { listLatestPublishedNewsPostsCached } from "@/lib/news";
 import { getRequestLocale } from "@/lib/request-locale";
 import { safeUrlOrUndefined } from "@/lib/safe-url";
 
@@ -35,8 +35,8 @@ const COPY = {
 export default async function NewsHubPage() {
   const locale = await getRequestLocale();
   const t = COPY[locale];
-  const posts = listLatestPublishedNewsPosts(locale, 20);
-  const games = listGames();
+  const posts = await listLatestPublishedNewsPostsCached(locale, 20);
+  const games = await listGamesCached();
   const gameTitleOf = (slug: string) => {
     const game = games.find((g) => g.slug === slug);
     return game ? localizeText(game.title, locale) : slug;

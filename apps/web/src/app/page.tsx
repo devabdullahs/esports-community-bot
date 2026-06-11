@@ -16,8 +16,8 @@ import {
 } from "@/components/ui/card";
 import { localizeText } from "@/lib/community-content";
 import { DEFAULT_SEASON, defaultPublicGuildId } from "@/lib/env";
-import { listGames } from "@/lib/games";
-import { listLatestPublishedNewsPosts } from "@/lib/news";
+import { listGamesCached } from "@/lib/games";
+import { listLatestPublishedNewsPostsCached } from "@/lib/news";
 import {
   copy,
   directionForLocale,
@@ -40,8 +40,8 @@ export default async function Home() {
   const profileHref = localizedPath("/me", locale);
   const gamesHref = localizedPath("/games", locale);
 
-  const games = listGames();
-  const latestPosts = listLatestPublishedNewsPosts(locale, 3);
+  const games = await listGamesCached();
+  const latestPosts = await listLatestPublishedNewsPostsCached(locale, 3);
   const gameTitleOf = (slug: string) => {
     const game = games.find((g) => g.slug === slug);
     return game ? localizeText(game.title, locale) : slug;

@@ -1,5 +1,7 @@
+import { revalidateTag } from "next/cache";
 import { NextResponse } from "next/server";
 import { getAdminAccess, isSuper } from "@/lib/admin";
+import { recordAdminAudit } from "@/lib/audit";
 import { createGame, getGame, listGames } from "@/lib/games";
 import { normalizeSlug, validateGameContent } from "@/lib/game-validation";
 
@@ -28,5 +30,8 @@ export async function POST(request: Request) {
   const validated = validateGameContent(body);
   if (!validated.ok) return NextResponse.json({ error: validated.error }, { status: 400 });
 
-  return NextResponse.json(createGame({ slug, ...validated.value }));
+  const game = createGame({ slug, ...validated.value });
+  revalidateTag("cms-games", "default");
+  recordAdminAudit(access, "game.create", slug);
+  return NextResponse.json(game);
 }

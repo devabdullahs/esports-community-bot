@@ -1,5 +1,7 @@
+import { revalidateTag } from "next/cache";
 import { NextResponse } from "next/server";
 import { canManageGame, getAdminAccess } from "@/lib/admin";
+import { recordAdminAudit } from "@/lib/audit";
 import { getGame } from "@/lib/games";
 import { createNewsPost, listAdminNewsPosts, type NewsStatus } from "@/lib/news";
 import { validateNewsInput } from "@/lib/news-validation";
@@ -45,5 +47,7 @@ export async function POST(request: Request) {
     authorDiscordId: access.discordUserId ?? null,
     authorName: access.displayName ?? null,
   });
+  revalidateTag("cms-news", "default");
+  recordAdminAudit(access, "news.create", String((post as { id: number }).id));
   return NextResponse.json(post);
 }

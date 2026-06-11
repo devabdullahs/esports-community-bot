@@ -4,7 +4,7 @@ import { ArrowLeftIcon, ExternalLinkIcon, Tv2Icon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { localizeText } from "@/lib/community-content";
 import { directionForLocale, localizedPath } from "@/lib/i18n";
-import { getMediaChannel } from "@/lib/media";
+import { getMediaChannelCached } from "@/lib/media";
 import { getRequestLocale } from "@/lib/request-locale";
 import { safeUrlOrUndefined } from "@/lib/safe-url";
 
@@ -29,7 +29,7 @@ export default async function MediaChannelPage({
 }) {
   const { slug } = await params;
   const locale = await getRequestLocale();
-  const channel = getMediaChannel(slug);
+  const channel = await getMediaChannelCached(slug);
   if (!channel) notFound();
 
   const logo = safeUrlOrUndefined(channel.logoUrl);

@@ -10,8 +10,8 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { localizeText } from "@/lib/community-content";
-import { listGames } from "@/lib/games";
-import { listLatestPublishedNewsPosts } from "@/lib/news";
+import { listGamesCached } from "@/lib/games";
+import { listLatestPublishedNewsPostsCached } from "@/lib/news";
 import {
   copy,
   directionForLocale,
@@ -25,8 +25,8 @@ export const dynamic = "force-dynamic";
 export default async function GamesPage() {
   const locale = await getRequestLocale();
   const text = copy[locale].games;
-  const games = listGames();
-  const latestPosts = listLatestPublishedNewsPosts(locale, 2);
+  const games = await listGamesCached();
+  const latestPosts = await listLatestPublishedNewsPostsCached(locale, 2);
   const gameTitle = (slug: string) => {
     const game = games.find((g) => g.slug === slug);
     return game ? localizeText(game.title, locale) : slug;

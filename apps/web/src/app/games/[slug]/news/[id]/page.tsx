@@ -4,13 +4,13 @@ import { ArrowLeftIcon } from "lucide-react";
 import { PostBody } from "@/components/news/post-body";
 import { Button } from "@/components/ui/button";
 import { localizeText } from "@/lib/community-content";
-import { getGame } from "@/lib/games";
+import { getGameCached } from "@/lib/games";
 import {
   directionForLocale,
   formatDateTime,
   localizedPath,
 } from "@/lib/i18n";
-import { getPublishedNewsPost } from "@/lib/news";
+import { getPublishedNewsPostCached } from "@/lib/news";
 import { parsePostId } from "@/lib/news-validation";
 import { getRequestLocale } from "@/lib/request-locale";
 import { safeUrlOrUndefined } from "@/lib/safe-url";
@@ -26,12 +26,12 @@ export default async function NewsPostPage({
   const { slug, id } = await params;
   const locale = await getRequestLocale();
 
-  const game = getGame(slug);
+  const game = await getGameCached(slug);
   if (!game) notFound();
 
   const postId = parsePostId(id);
   if (postId === null) notFound();
-  const post = getPublishedNewsPost(postId, locale);
+  const post = await getPublishedNewsPostCached(postId, locale);
   // Reject drafts (handled by getPublishedNewsPost) and cross-game id guessing.
   if (!post || post.gameSlug !== slug) notFound();
 

@@ -1,5 +1,7 @@
+import { revalidateTag } from "next/cache";
 import { NextResponse } from "next/server";
 import { canManageGame, getAdminAccess } from "@/lib/admin";
+import { recordAdminAudit } from "@/lib/audit";
 import { getNewsPost, setNewsPostStatus } from "@/lib/news";
 import { parsePostId } from "@/lib/news-validation";
 import { validateNewsContentInput } from "@bot/lib/ewcNewsContent.js";
@@ -37,5 +39,7 @@ export async function POST(
 
   const post = setNewsPostStatus(postId, status);
   if (!post) return NextResponse.json({ error: "Not found" }, { status: 404 });
+  revalidateTag("cms-news", "default");
+  recordAdminAudit(access, "news.status", String(postId), { status });
   return NextResponse.json(post);
 }

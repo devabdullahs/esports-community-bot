@@ -1,5 +1,7 @@
+import { revalidateTag } from "next/cache";
 import { NextResponse } from "next/server";
 import { getAdminAccess, isSuper } from "@/lib/admin";
+import { recordAdminAudit } from "@/lib/audit";
 import { reorderMediaChannels } from "@/lib/media";
 
 export const runtime = "nodejs";
@@ -11,10 +13,24 @@ export async function POST(request: Request) {
   if (!isSuper(access)) return NextResponse.json({ error: "Super admin only" }, { status: 403 });
 
   const body = await request.json().catch(() => ({}));
-  const slugs = Array.isArray(body.slugs) ? body.slugs.filter((s: unknown) => typeof s === "string") : null;
-  if (!slugs || slugs.length === 0) {
-    return NextResponse.json({ error: "slugs array is required" }, { status: 400 });
+  if (
+    !Array.isArray(body.slugs) ||
+    body.slugs.length === 0 ||
+    !body.slugs.every((s: unknown) => typeof s === "string")
+  ) {
+    return NextResponse.json(
+      { error: "slugs must be a non-empty array of strings" },
+      { status: 400 },
+    );
   }
+  const slugs: string[] = body.slugs;
 
-  return NextResponse.json({ channels: reorderMediaChannels(slugs) });
+  try {
+    const channels = reorderMediaChannels(slugs);
+    revalidateTag("cms-media", "default");
+    recordAdminAudit(access, "media.reorder", null);
+    return NextResponse.json({ channels });
+  } catch (err) {
+    return NextResponse.json({ error: (err as Error).message }, { status: 400 });
+  }
 }

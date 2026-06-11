@@ -295,6 +295,18 @@ db.exec(`
     media_slug TEXT NOT NULL,
     PRIMARY KEY (discord_id, media_slug)
   );
+
+  CREATE TABLE IF NOT EXISTS ewc_admin_audit_log (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    actor_id     TEXT NOT NULL,
+    actor_name   TEXT,
+    action       TEXT NOT NULL,
+    target       TEXT,
+    details      TEXT,
+    created_at   TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+  CREATE INDEX IF NOT EXISTS idx_admin_audit_created
+    ON ewc_admin_audit_log(created_at DESC);
 `);
 
 ensureColumns('ewc_prediction_weeks', [['score_after', 'INTEGER']]);

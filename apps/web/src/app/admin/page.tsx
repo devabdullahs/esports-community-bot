@@ -1,5 +1,6 @@
 import {
   ArrowRightIcon,
+  ClipboardListIcon,
   Gamepad2Icon,
   type LucideIcon,
   ShieldIcon,
@@ -111,6 +112,14 @@ export default async function AdminPage() {
               icon={UsersIcon}
               title="Admin team"
               description="Add admins and assign their games & channels."
+            />
+          ) : null}
+          {access.isSuper ? (
+            <ManageLink
+              href="/admin/audit"
+              icon={ClipboardListIcon}
+              title="Audit log"
+              description="View recent dashboard mutations by all admins."
             />
           ) : null}
         </section>

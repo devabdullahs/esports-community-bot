@@ -108,6 +108,14 @@ export function deleteEwcMediaChannel(slug) {
 }
 
 export function reorderEwcMediaChannels(slugs) {
+  const existing = db.prepare('SELECT slug FROM ewc_media_channels').all().map((r) => r.slug);
+  if (
+    slugs.length !== existing.length ||
+    new Set(slugs).size !== slugs.length ||
+    !slugs.every((s) => existing.includes(s))
+  ) {
+    throw new Error('Reorder must include every existing slug exactly once.');
+  }
   const update = db.prepare(
     "UPDATE ewc_media_channels SET sort_order = ?, updated_at = datetime('now') WHERE slug = ?",
   );

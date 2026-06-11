@@ -1,5 +1,7 @@
+import { revalidateTag } from "next/cache";
 import { NextResponse } from "next/server";
 import { canManageGame, getAdminAccess } from "@/lib/admin";
+import { recordAdminAudit } from "@/lib/audit";
 import { getGame } from "@/lib/games";
 import { deleteNewsPost, getNewsPost, updateNewsPost } from "@/lib/news";
 import { parsePostId, validateNewsInput } from "@/lib/news-validation";
@@ -38,6 +40,8 @@ export async function PATCH(
     authorName: access.displayName ?? null,
   });
   if (!updated) return NextResponse.json({ error: "Not found" }, { status: 404 });
+  revalidateTag("cms-news", "default");
+  recordAdminAudit(access, "news.update", String(postId));
   return NextResponse.json(updated);
 }
 
@@ -61,5 +65,7 @@ export async function DELETE(
 
   const result = deleteNewsPost(postId);
   if (result.changes === 0) return NextResponse.json({ error: "Not found" }, { status: 404 });
+  revalidateTag("cms-news", "default");
+  recordAdminAudit(access, "news.delete", String(postId));
   return NextResponse.json({ ok: true });
 }
