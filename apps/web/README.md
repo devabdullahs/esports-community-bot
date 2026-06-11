@@ -10,6 +10,40 @@ npm run web:dev
 The app shares `DB_PATH` with the Discord bot and exposes internal sync endpoints protected by
 `EWC_DASHBOARD_INTERNAL_SECRET`.
 
+## Admin roster
+
+Set `EWC_DASHBOARD_SUPER_ADMIN_DISCORD_IDS` to a comma-separated list of Discord user IDs
+that should have full admin access. Sign in with Discord at `/login`, then visit `/admin` to
+manage news and media content. Super admins can add and configure scoped staff (per-game and
+per-media-channel access) at `/admin/team`.
+
+The legacy variable `EWC_DASHBOARD_ADMIN_DISCORD_IDS` is still honored and grants the same
+super-admin level — prefer `EWC_DASHBOARD_SUPER_ADMIN_DISCORD_IDS` for new deployments.
+
+## Image uploads (Cloudflare R2)
+
+Cover images for news posts are uploaded to Cloudflare R2 (S3-compatible object storage).
+R2 is optional — skip this section if you want admins to paste image URLs instead.
+
+1. Create an R2 bucket in the [Cloudflare dashboard](https://dash.cloudflare.com/).
+2. Enable public access on the bucket (or connect a custom domain).
+3. Create an R2 API token scoped to that bucket with **Object Read & Write** permissions.
+4. Set the following env vars:
+
+   ```
+   R2_ACCOUNT_ID=<your-cloudflare-account-id>
+   R2_ACCESS_KEY_ID=<r2-token-access-key-id>
+   R2_SECRET_ACCESS_KEY=<r2-token-secret-access-key>
+   R2_BUCKET=<bucket-name>
+   R2_PUBLIC_BASE_URL=https://<your-bucket-public-domain>
+   ```
+
+5. `R2_PUBLIC_BASE_URL` should be the bucket's public or custom domain (no trailing slash).
+
+Allowed upload formats: PNG, JPEG, WebP, GIF, AVIF (SVG is excluded — it can carry scripts).
+Maximum file size: 8 MB. Uploads are stored under `news/YYYY-MM-DD/<uuid>.<ext>`. Until all
+five vars are set, the upload endpoint returns 503 and admins can paste image URLs instead.
+
 ## Security & data handling
 
 ### Storage
