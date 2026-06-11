@@ -2,8 +2,13 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches: [main, "feature/**"]
   pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   bot-tests:
@@ -20,7 +25,9 @@ jobs:
   web:
     runs-on: ubuntu-latest
     env:
-      DB_PATH: ${{ runner.temp }}/ci-bot.sqlite
+      # NOTE: only github/needs/strategy/matrix/vars/secrets/inputs contexts
+      # are valid here — `runner` is NOT (it broke CI once already).
+      DB_PATH: ${{ github.workspace }}/ci-bot.sqlite
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
