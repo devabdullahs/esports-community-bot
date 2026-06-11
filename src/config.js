@@ -67,6 +67,11 @@ export const config = {
     refreshMinutes: Number(get('EWC_PREDICTIONS_REFRESH_MINUTES', 60)),
     scoreDelayHours: Number(get('EWC_PREDICTIONS_SCORE_DELAY_HOURS', 24)),
   },
+  dashboard: {
+    publicUrl: get('EWC_DASHBOARD_PUBLIC_URL'),
+    internalUrl: get('EWC_DASHBOARD_INTERNAL_URL'),
+    internalSecret: get('EWC_DASHBOARD_INTERNAL_SECRET'),
+  },
   db: {
     path: get('DB_PATH', 'data/bot.sqlite'),
   },

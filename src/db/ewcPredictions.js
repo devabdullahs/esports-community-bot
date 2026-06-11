@@ -140,6 +140,21 @@ export function clearWeeklyPredictionScores(weekId) {
   return db.prepare('UPDATE ewc_weekly_predictions SET score = NULL, details_json = NULL WHERE week_id = ?').run(weekId);
 }
 
+export function deleteEwcWeek(weekId) {
+  // FK cascade is enabled, but explicit child deletes let callers report the
+  // deleted prediction count while keeping the operation atomic.
+  const run = db.transaction((id) => {
+    const predictions = db
+      .prepare(`DELETE FROM ewc_weekly_predictions WHERE week_id = ?`)
+      .run(id).changes;
+    const weeks = db
+      .prepare(`DELETE FROM ewc_prediction_weeks WHERE id = ?`)
+      .run(id).changes;
+    return { weeks, predictions };
+  });
+  return run(weekId);
+}
+
 export function weeklyLeaderboard(weekId, limit = 20, offset = 0) {
   return db
     .prepare(
@@ -311,7 +326,7 @@ export function countOverallScored(guildId, season = '2026') {
 // only each user's top-N weekly scores count (fairer: neutralizes participation + week unevenness).
 export function overallLeaderboard(guildId, season = '2026', limit = 20, offset = 0) {
   const s = db.prepare('SELECT best_weeks FROM ewc_prediction_seasons WHERE guild_id = ? AND season = ?').get(guildId, season);
-  const k = s && s.best_weeks > 0 ? s.best_weeks : 999999; // null/0 → count every week
+  const k = s && s.best_weeks > 0 ? s.best_weeks : 999999; // null/0 means count every week
   return db
     .prepare(
       `WITH ranked AS (
@@ -335,6 +350,43 @@ export function overallLeaderboard(guildId, season = '2026', limit = 20, offset 
        LIMIT ? OFFSET ?`,
     )
     .all(guildId, season, k, guildId, season, limit, offset);
+}
+
+export function overallRankForUser(guildId, season = '2026', userId) {
+  const s = db.prepare('SELECT best_weeks FROM ewc_prediction_seasons WHERE guild_id = ? AND season = ?').get(guildId, season);
+  const k = s && s.best_weeks > 0 ? s.best_weeks : 999999;
+  return (
+    db
+      .prepare(
+        `WITH ranked AS (
+           SELECT wp.user_id, wp.score,
+                  ROW_NUMBER() OVER (PARTITION BY wp.user_id ORDER BY wp.score DESC, wp.week_id) AS rn
+           FROM ewc_weekly_predictions wp
+           JOIN ewc_prediction_weeks w ON w.id = wp.week_id
+           WHERE wp.guild_id = ? AND w.season = ? AND wp.score IS NOT NULL
+         ),
+         scores AS (
+           SELECT user_id, score FROM ranked WHERE rn <= ?
+           UNION ALL
+           SELECT user_id, score
+           FROM ewc_season_predictions
+           WHERE guild_id = ? AND season = ? AND score IS NOT NULL
+         ),
+         totals AS (
+           SELECT user_id, SUM(score) AS score
+           FROM scores
+           GROUP BY user_id
+         ),
+         ordered AS (
+           SELECT user_id, score, ROW_NUMBER() OVER (ORDER BY score DESC, user_id ASC) AS rank
+           FROM totals
+         )
+         SELECT rank, score
+         FROM ordered
+         WHERE user_id = ?`,
+      )
+      .get(guildId, season, k, guildId, season, userId) || null
+  );
 }
 
 export function userPredictionProfile(guildId, season, userId) {

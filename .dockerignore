@@ -3,7 +3,10 @@ npm-debug.log*
 .git
 .env
 .env.*
+apps/**/.env
+apps/**/.env.*
 data
+apps/**/data
 *.sqlite
 *.sqlite-*
 *.log
@@ -19,3 +22,13 @@ schedule-cod-card.png
 schedule-counterstrike-card.png
 schedule-logo-faithful-preview.png
 shopify-frost-card.png
+
+# Local artifacts & non-image content
+*.tar.gz
+/*.png
+tmp-*.mjs
+backups
+plans
+.github
+**/node_modules
+**/.next

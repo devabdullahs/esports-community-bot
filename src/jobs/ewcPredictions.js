@@ -15,12 +15,14 @@ import {
   setEwcWeekSnapshot,
   setEwcWeekStatus,
 } from '../db/ewcPredictions.js';
+import { listEwcProfileLinks } from '../db/ewcProfileLinks.js';
 import {
   getGuildsWithEwcPredictionLeaderboard,
   getSettings,
   setEwcPredictionsMentionsMessage,
   setEwcPredictionsLeaderboardMessage,
 } from '../db/settings.js';
+import { db } from '../db/index.js';
 import { logger } from '../lib/logger.js';
 import { scoreSeasonPrediction, scoreWeeklyPrediction } from '../lib/ewcPredictions.js';
 import { renderEwcPredictionLeaderboardCard } from '../lib/ewcPredictionLeaderboardCard.js';
@@ -180,6 +182,35 @@ async function announce(client, guildId, content) {
   await channel.send({ content }).catch((error) => logger.warn(`[ewc-predictions] announcement failed: ${error.message}`));
 }
 
+async function syncLinkedProfileShowcases(guildId, season) {
+  if (!config.dashboard.internalUrl || !config.dashboard.internalSecret) return;
+  const links = listEwcProfileLinks({ guildId, season });
+  if (!links.length) return;
+  const base = config.dashboard.internalUrl.replace(/\/$/, '');
+  for (const link of links) {
+    try {
+      const response = await fetch(`${base}/api/internal/ewc-profile/sync`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-ewc-internal-secret': config.dashboard.internalSecret,
+        },
+        body: JSON.stringify({
+          discordUserId: link.discordUserId,
+          guildId,
+          season,
+        }),
+      });
+      if (!response.ok) {
+        const body = await response.text().catch(() => '');
+        throw new Error(body || `HTTP ${response.status}`);
+      }
+    } catch (error) {
+      logger.warn(`[ewc-predictions] profile showcase sync failed for ${link.discordUserId}: ${error.message}`);
+    }
+  }
+}
+
 async function processWeek(client, round) {
   const now = nowSec();
 
@@ -221,19 +252,23 @@ async function processWeek(client, round) {
   }
 
   const predictions = listWeeklyPredictions(round.id);
-  for (const prediction of predictions) {
-    try {
-      const result = scoreWeeklyPrediction(prediction.picks, round.baseline, final);
-      saveWeeklyPredictionScore(round.guild_id, round.id, prediction.user_id, result.score, result.details);
-    } catch (error) {
-      logger.warn(`[ewc-predictions] skipped malformed weekly pick ${prediction.user_id}/${round.week_key}: ${error.message}`);
-      saveWeeklyPredictionScore(round.guild_id, round.id, prediction.user_id, 0, {
-        error: error.message,
-        picks: prediction.picks,
-      });
+  // Wrap all writes in a transaction so a mid-loop crash leaves scores consistent.
+  const applyScores = db.transaction(() => {
+    for (const prediction of predictions) {
+      try {
+        const result = scoreWeeklyPrediction(prediction.picks, round.baseline, final);
+        saveWeeklyPredictionScore(round.guild_id, round.id, prediction.user_id, result.score, result.details);
+      } catch (error) {
+        logger.warn(`[ewc-predictions] skipped malformed weekly pick ${prediction.user_id}/${round.week_key}: ${error.message}`);
+        saveWeeklyPredictionScore(round.guild_id, round.id, prediction.user_id, 0, {
+          error: error.message,
+          picks: prediction.picks,
+        });
+      }
     }
-  }
-  markEwcWeekScored(round.id, final);
+    markEwcWeekScored(round.id, final);
+  });
+  applyScores();
   logger.info(`[ewc-predictions] scored ${predictions.length} weekly prediction(s) for ${round.guild_id}/${round.season}/${round.week_key}`);
   const scored = listWeeklyPredictions(round.id);
   await announce(
@@ -242,6 +277,7 @@ async function processWeek(client, round) {
     `## EWC Weekly Predictions Scored - ${round.label || round.week_key}\n${topPredictionLines(scored)}\n\nUse \`/ewc_predict leaderboard type:weekly week:${round.week_key}\` for the full board.`,
   );
   await updateEwcPredictionLeaderboard(client, round.guild_id);
+  await syncLinkedProfileShowcases(round.guild_id, round.season);
 }
 
 async function processSeason(client, round) {
@@ -263,19 +299,23 @@ async function processSeason(client, round) {
   }
 
   const predictions = listSeasonPredictions(round.guild_id, round.season);
-  for (const prediction of predictions) {
-    try {
-      const result = scoreSeasonPrediction(prediction.picks, final, round.top_size);
-      saveSeasonPredictionScore(round.guild_id, round.season, prediction.user_id, result.score, result.details);
-    } catch (error) {
-      logger.warn(`[ewc-predictions] skipped malformed season pick ${prediction.user_id}/${round.season}: ${error.message}`);
-      saveSeasonPredictionScore(round.guild_id, round.season, prediction.user_id, 0, {
-        error: error.message,
-        picks: prediction.picks,
-      });
+  // Wrap all writes in a transaction so a mid-loop crash leaves scores consistent.
+  const applyScores = db.transaction(() => {
+    for (const prediction of predictions) {
+      try {
+        const result = scoreSeasonPrediction(prediction.picks, final, round.top_size);
+        saveSeasonPredictionScore(round.guild_id, round.season, prediction.user_id, result.score, result.details);
+      } catch (error) {
+        logger.warn(`[ewc-predictions] skipped malformed season pick ${prediction.user_id}/${round.season}: ${error.message}`);
+        saveSeasonPredictionScore(round.guild_id, round.season, prediction.user_id, 0, {
+          error: error.message,
+          picks: prediction.picks,
+        });
+      }
     }
-  }
-  markEwcSeasonScored(round.guild_id, round.season, final);
+    markEwcSeasonScored(round.guild_id, round.season, final);
+  });
+  applyScores();
   logger.info(`[ewc-predictions] scored ${predictions.length} season prediction(s) for ${round.guild_id}/${round.season}`);
   const scored = listSeasonPredictions(round.guild_id, round.season);
   await announce(
@@ -284,6 +324,7 @@ async function processSeason(client, round) {
     `## EWC ${round.season} Season Predictions Scored\n${topPredictionLines(scored)}\n\nUse \`/ewc_predict leaderboard type:season\` for the full board.`,
   );
   await updateEwcPredictionLeaderboard(client, round.guild_id);
+  await syncLinkedProfileShowcases(round.guild_id, round.season);
 }
 
 export async function runEwcPredictionAutomation(client = null) {

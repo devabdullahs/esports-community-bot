@@ -25,6 +25,8 @@ Built with **discord.js v14** on **Node ≥ 20.12**. Primary data source is **Li
 - **Localized times** — all match times use Discord timestamps, shown in each viewer's zone.
 - **Liquipedia attribution** — every match tag links back to its Liquipedia page, and each
   embed credits Liquipedia (CC-BY-SA).
+- **News & Media CMS** — bilingual (EN/AR) news posts and a media channel directory, authored
+  at `/admin` on the EWC prediction dashboard with role-based access control.
 
 ### Commands (all admin-gated except `/list_tournaments`)
 
@@ -87,17 +89,110 @@ Then, as a server admin:
 /set_ewc url:https://liquipedia.net/esports/Esports_World_Cup/2026 channel:#ewc-standings
 ```
 
+## EWC prediction dashboard and profile showcase
+
+The dashboard is a separate Next.js app in `apps/web`. It reads the same SQLite database as
+the bot, uses Better Auth for Discord login, and can update a user's Discord Application Role
+Connection so their profile can show an EWC prediction summary.
+
+Discord Developer Portal setup:
+
+1. Add the OAuth redirect URL: `{BETTER_AUTH_URL}/api/auth/callback/discord`
+2. Add an Application Role Connection verification URL: `{EWC_DASHBOARD_PUBLIC_URL}/me`
+3. Run `npm run deploy` so slash commands and role-connection metadata are registered.
+
+Local setup:
+
+```bash
+npm install
+npm run web:auth:migrate
+npm run web:build
+npm run web:start   # terminal 1
+npm start           # terminal 2
+```
+
+Both processes should point at the same `DB_PATH`. The bot calls the web app through `EWC_DASHBOARD_INTERNAL_URL` with
+`EWC_DASHBOARD_INTERNAL_SECRET` when `/ewc_predict sync`, `/ewc_predict unlink`, or scoring
+automation refreshes profile showcases.
+
+Docker/NAS setup:
+
+The production image runs both services through `npm run start:production`: the bot starts from
+`src/index.js`, and the dashboard starts with `next start` from `apps/web`. In `compose.ugreen.yml`,
+the dashboard is exposed as `${EWC_DASHBOARD_PORT:-3000}:3000` and the bot talks to it through
+`EWC_DASHBOARD_INTERNAL_URL=http://127.0.0.1:3000`. Set `RUN_WEB=false` only if the dashboard is
+hosted elsewhere, or `RUN_BOT=false` only for a web-only container.
+
+For local dashboard previews without Discord OAuth, start the web app with
+`EWC_DASHBOARD_DEV_AUTH_BYPASS=true`. The preview user defaults to Discord ID
+`100000000000000001`; set `EWC_DASHBOARD_DEV_DISCORD_USER_ID` to view another local
+prediction user. This bypass is ignored when `NODE_ENV=production`.
+
+Useful dashboard URLs:
+
+```text
+/me
+/leaderboard/<guildId>/2026
+/games
+```
+
+The dashboard stores the selected language in the `ewc_locale` cookie. Legacy links
+with `?lang=en` or `?lang=ar` are redirected to the same URL without the query parameter
+while setting the cookie. If no cookie is present, Arabic browsers default to Arabic
+from `Accept-Language`; everyone else gets English. Set `EWC_DASHBOARD_DEFAULT_GUILD_ID`
+when you want the home page to include a direct public leaderboard button.
+
+The web app uses hosted Thmanyah WOFF2 files through the same-origin `/fonts/...` proxy.
+Set `THMANYAH_FONT_BASE_URL` to the public R2/custom-domain base URL that contains
+`thmanyahsans/woff2`, `thmanyahserifdisplay/woff2`, and `thmanyahseriftext/woff2`.
+
+## News & Media CMS
+
+The dashboard includes a bilingual news/media CMS, accessible at `/admin` to authorized
+staff. Admins can publish game-specific news posts in English, Arabic (RTL), or both, as
+well as manage a media channel directory.
+
+**Roles model**
+
+- **Super admins** are declared via `EWC_DASHBOARD_SUPER_ADMIN_DISCORD_IDS` (comma-separated
+  Discord user IDs). They have full access, including the ability to manage the admin roster.
+- The legacy variable `EWC_DASHBOARD_ADMIN_DISCORD_IDS` is still honored and grants the same
+  super-admin level for back-compat.
+- **Scoped admins** are assigned per game and per media channel at `/admin/team` (super-only
+  page) and stored in the bot database — no env change required.
+
+**Publish lifecycle**
+
+Posts start as drafts. A post in `shared` mode uses one language with a configured default
+locale. A post in `translated` mode requires both EN and AR content before it can be
+published. Published posts appear on the public game pages with locale-aware fallback (cookie
+or `Accept-Language`). Content limits: title 90 chars, summary 180 chars, body 12,000 chars.
+
+**Image uploads (Cloudflare R2)**
+
+Cover images are uploaded to Cloudflare R2 (S3-compatible). Accepted formats: PNG, JPEG,
+WebP, GIF, AVIF (SVG is excluded — script risk). Maximum size: 8 MB. Files are stored under
+`news/YYYY-MM-DD/<uuid>.<ext>` and served from `R2_PUBLIC_BASE_URL`. R2 is optional — when
+the five `R2_*` env vars are not set, the upload endpoint returns 503 and admins can paste
+image URLs instead. See `apps/web/README.md` for R2 setup steps.
+
 ## Configuration (`.env`)
 
 | Variable | Purpose |
 |---|---|
 | `DISCORD_TOKEN`, `DISCORD_CLIENT_ID` | Bot credentials (required) |
+| `DISCORD_CLIENT_SECRET` | Discord OAuth client secret for the web dashboard |
 | `DISCORD_GUILD_ID` | Register commands to one server instantly (dev) |
 | `LIQUIPEDIA_PARSE_MIN_GAP_MS`, `LIQUIPEDIA_CACHE_TTL_MS`, `LIQUIPEDIA_BACKOFF_MS`, `LIQUIPEDIA_RATE_STATE_PATH` | Liquipedia parse throttle, cache, and restart-safe rate-limit state |
 | `LIQUIPEDIA_USER_AGENT` | Required by Liquipedia ToS — identify your app + a contact |
 | `SCHEDULER_TIMEZONE`, `MORNING_CRON` | Daily-sync schedule |
 | `LIVE_POLL_INTERVAL_MS` | Live poll cadence (default 3 min; cache keeps fetches well under the limit) |
 | `CC_REFRESH_MINUTES` | Club Championship refresh cadence (default 15) |
+| `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL` | Better Auth secret and public auth base URL |
+| `EWC_DASHBOARD_PUBLIC_URL`, `EWC_DASHBOARD_INTERNAL_URL`, `EWC_DASHBOARD_INTERNAL_SECRET` | Public dashboard URL and bot-to-web internal sync settings |
+| `EWC_DASHBOARD_ADMIN_DISCORD_IDS` | Optional comma-separated Discord user IDs for future admin dashboard routes |
+| `EWC_DASHBOARD_DEFAULT_GUILD_ID` | Optional guild ID used for the home page public leaderboard shortcut |
+| `THMANYAH_FONT_BASE_URL` | Public base URL for hosted Thmanyah WOFF2 files used by the web app font proxy |
 | `LOGO_CACHE_DIR`, `LOGO_CACHE_CONCURRENCY` | Persistent logo cache path and max concurrent logo downloads |
 | `LOGO_DOWNLOAD_MIN_GAP_MS`, `LOGO_RATE_LIMIT_BACKOFF_MS`, `LOGO_RATE_STATE_PATH` | Logo download throttle and restart-safe rate-limit state |
 | `LOGO_FAILURE_TTL_MS`, `LOGO_MAX_BYTES` | Logo retry delay for bad URLs and maximum accepted logo size |
@@ -154,7 +249,7 @@ Liquipedia data remains under CC-BY-SA 3.0 as noted above.
 
 - [x] Swiss-stage match parsing (Rocket League and similar)
 - [x] Per-game leaderboards **and** voice channels (a separate channel per game)
-- [x] LPDB API client wired — preferred over HTML parsing when `LPDB_API_KEY` is set (activate once your key is approved)
+- [x] LPDB API client integrated (optional) — used instead of HTML parsing when `LPDB_API_KEY` is set; falls back to HTML parsing otherwise (default)
 - [x] Start.gg + PandaScore integrations (free tier) — structured match data with live status
 - [x] Per-match detail view — `/match` (autocomplete) opens a focused card + link to full details
 - [x] Generated match-card images for `/match` and per-game live card channels

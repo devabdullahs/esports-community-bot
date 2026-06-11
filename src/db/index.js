@@ -1,15 +1,6 @@
-import { mkdirSync } from 'node:fs';
-import { dirname } from 'node:path';
-import Database from 'better-sqlite3';
-import { config } from '../config.js';
 import { logger } from '../lib/logger.js';
-
-// Ensure the directory that will hold the SQLite file exists.
-mkdirSync(dirname(config.db.path), { recursive: true });
-
-export const db = new Database(config.db.path);
-db.pragma('journal_mode = WAL');
-db.pragma('foreign_keys = ON');
+import { db } from './connection.js';
+export { db, closeDb } from './connection.js';
 
 db.exec(`
   CREATE TABLE IF NOT EXISTS tournaments (
@@ -215,10 +206,144 @@ db.exec(`
     ON ewc_weekly_predictions(week_id, score DESC);
   CREATE INDEX IF NOT EXISTS idx_ewc_season_predictions_season
     ON ewc_season_predictions(guild_id, season, score DESC);
+
+  CREATE TABLE IF NOT EXISTS ewc_profile_links (
+    auth_user_id     TEXT NOT NULL,
+    discord_user_id  TEXT PRIMARY KEY,
+    guild_id         TEXT NOT NULL,
+    season           TEXT NOT NULL DEFAULT '2026',
+    last_synced_at   TEXT,
+    last_sync_error  TEXT,
+    created_at       TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at       TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+
+  CREATE TABLE IF NOT EXISTS ewc_news_posts (
+    id                INTEGER PRIMARY KEY AUTOINCREMENT,
+    game_slug         TEXT NOT NULL,
+    locale            TEXT NOT NULL DEFAULT 'en' CHECK (locale IN ('en','ar')),
+    content_mode      TEXT NOT NULL DEFAULT 'shared' CHECK (content_mode IN ('shared','translated')),
+    default_locale    TEXT NOT NULL DEFAULT 'en' CHECK (default_locale IN ('en','ar')),
+    title             TEXT NOT NULL,
+    summary           TEXT NOT NULL DEFAULT '',
+    body              TEXT NOT NULL DEFAULT '',
+    status            TEXT NOT NULL DEFAULT 'draft' CHECK (status IN ('draft','published')),
+    author_discord_id TEXT,
+    author_name       TEXT,
+    cover_image_url   TEXT,
+    created_at        TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at        TEXT NOT NULL DEFAULT (datetime('now')),
+    published_at      TEXT
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_ewc_news_posts_game_status
+    ON ewc_news_posts(game_slug, status, published_at DESC);
+  CREATE INDEX IF NOT EXISTS idx_ewc_news_posts_status_updated
+    ON ewc_news_posts(status, updated_at DESC);
+
+  CREATE TABLE IF NOT EXISTS ewc_news_post_translations (
+    post_id    INTEGER NOT NULL REFERENCES ewc_news_posts(id) ON DELETE CASCADE,
+    locale     TEXT NOT NULL CHECK (locale IN ('en','ar')),
+    title      TEXT NOT NULL DEFAULT '',
+    summary    TEXT NOT NULL DEFAULT '',
+    body       TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+    PRIMARY KEY (post_id, locale)
+  );
+
+  CREATE TABLE IF NOT EXISTS ewc_games (
+    slug             TEXT PRIMARY KEY,
+    title_json       TEXT NOT NULL,
+    description_json TEXT NOT NULL,
+    status_json      TEXT NOT NULL,
+    owner_json       TEXT NOT NULL,
+    focus_json       TEXT NOT NULL DEFAULT '[]',
+    sort_order       INTEGER NOT NULL DEFAULT 0,
+    created_at       TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at       TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_ewc_games_sort ON ewc_games(sort_order, slug);
+
+  CREATE TABLE IF NOT EXISTS ewc_media_channels (
+    slug             TEXT PRIMARY KEY,
+    name_json        TEXT NOT NULL,
+    description_json TEXT NOT NULL,
+    logo_url         TEXT,
+    links_json       TEXT NOT NULL DEFAULT '[]',
+    sort_order       INTEGER NOT NULL DEFAULT 0,
+    created_at       TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at       TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+  CREATE INDEX IF NOT EXISTS idx_ewc_media_channels_sort ON ewc_media_channels(sort_order, slug);
+
+  CREATE TABLE IF NOT EXISTS ewc_rate_limits (
+    key           TEXT PRIMARY KEY,
+    window_start  INTEGER NOT NULL,
+    amount        INTEGER NOT NULL
+  );
+
+  CREATE TABLE IF NOT EXISTS ewc_admins (
+    discord_id   TEXT PRIMARY KEY,
+    display_name TEXT NOT NULL DEFAULT '',
+    created_at   TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+
+  CREATE TABLE IF NOT EXISTS ewc_admin_game_scopes (
+    discord_id TEXT NOT NULL,
+    game_slug  TEXT NOT NULL,
+    PRIMARY KEY (discord_id, game_slug)
+  );
+
+  CREATE TABLE IF NOT EXISTS ewc_admin_media_scopes (
+    discord_id TEXT NOT NULL,
+    media_slug TEXT NOT NULL,
+    PRIMARY KEY (discord_id, media_slug)
+  );
+
+  CREATE TABLE IF NOT EXISTS ewc_admin_audit_log (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    actor_id     TEXT NOT NULL,
+    actor_name   TEXT,
+    action       TEXT NOT NULL,
+    target       TEXT,
+    details      TEXT,
+    created_at   TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+  CREATE INDEX IF NOT EXISTS idx_admin_audit_created
+    ON ewc_admin_audit_log(created_at DESC);
 `);
 
 ensureColumns('ewc_prediction_weeks', [['score_after', 'INTEGER']]);
 ensureColumns('ewc_prediction_seasons', [['score_after', 'INTEGER'], ['best_weeks', 'INTEGER']]);
+ensureColumns('ewc_news_posts', [
+  ['content_mode', "TEXT NOT NULL DEFAULT 'shared' CHECK (content_mode IN ('shared','translated'))"],
+  ['default_locale', "TEXT NOT NULL DEFAULT 'en' CHECK (default_locale IN ('en','ar'))"],
+  ['author_name', 'TEXT'],
+]);
+
+db.exec(`
+  UPDATE ewc_news_posts
+  SET default_locale = CASE WHEN locale = 'ar' THEN 'ar' ELSE 'en' END
+  WHERE default_locale NOT IN ('en', 'ar') OR default_locale IS NULL;
+
+  UPDATE ewc_news_posts
+  SET content_mode = 'shared'
+  WHERE content_mode NOT IN ('shared', 'translated') OR content_mode IS NULL;
+
+  INSERT OR IGNORE INTO ewc_news_post_translations
+    (post_id, locale, title, summary, body, created_at, updated_at)
+  SELECT
+    id,
+    CASE WHEN locale = 'ar' THEN 'ar' ELSE 'en' END,
+    title,
+    summary,
+    body,
+    created_at,
+    updated_at
+  FROM ewc_news_posts;
+`);
 
 // Canonicalize old game keys after slug changes. Keep this tiny and explicit so existing
 // per-game boards continue to work without creating duplicate alias rows later.
@@ -232,12 +357,4 @@ for (const table of ['game_leaderboards', 'game_voice_channels', 'game_match_car
 }
 db.prepare(`UPDATE tournaments SET game = ? WHERE game = ?`).run('tft', 'teamfighttactics');
 
-logger.info(`SQLite ready at ${config.db.path}`);
-
-export function closeDb() {
-  try {
-    db.close();
-  } catch {
-    /* already closed */
-  }
-}
+logger.info(`SQLite ready at ${process.env.DB_PATH || 'data/bot.sqlite'}`);

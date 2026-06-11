@@ -1,0 +1,388 @@
+export const LOCALES = ["en", "ar"] as const;
+export const LOCALE_COOKIE_NAME = "ewc_locale";
+export const LOCALE_COOKIE_MAX_AGE = 60 * 60 * 24 * 365;
+
+export type Locale = (typeof LOCALES)[number];
+
+type LangSearchParams = { lang?: string | string[] | null };
+type GetSearchParams = { get(name: string): string | null };
+
+function hasSearchParamGetter(searchParams: LangSearchParams | GetSearchParams): searchParams is GetSearchParams {
+  return typeof (searchParams as GetSearchParams).get === "function";
+}
+
+export function localeFromString(value?: string | null): Locale | null {
+  return value === "ar" || value === "en" ? value : null;
+}
+
+export function localeFromAcceptLanguage(value?: string | null): Locale {
+  if (!value) return "en";
+  const languages = value
+    .split(",")
+    .map((item) => item.trim().split(";")[0]?.toLowerCase())
+    .filter(Boolean);
+  return languages.some((language) => language === "ar" || language.startsWith("ar-")) ? "ar" : "en";
+}
+
+export function localeFromSearchParams(searchParams?: LangSearchParams | GetSearchParams | null): Locale {
+  if (!searchParams) return "en";
+  const value = hasSearchParamGetter(searchParams) ? searchParams.get("lang") : Array.isArray(searchParams.lang) ? searchParams.lang[0] : searchParams.lang;
+  return localeFromString(value) || "en";
+}
+
+export function directionForLocale(locale: Locale) { return locale === "ar" ? "rtl" : "ltr"; }
+export function numberLocale(locale: Locale) { return locale === "ar" ? "ar-SA" : "en-US"; }
+export function formatNumber(value: number, locale: Locale) { return new Intl.NumberFormat(numberLocale(locale)).format(value); }
+
+export function formatDateTime(value: string, locale: Locale) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return new Intl.DateTimeFormat(numberLocale(locale), { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }).format(date);
+}
+
+export function localizedPath(pathname: string, locale: Locale) {
+  void locale;
+  return pathname;
+}
+
+export function localizedHref(pathname: string, searchParams: { toString(): string } | null | undefined, locale: Locale) {
+  void locale;
+  const params = new URLSearchParams(searchParams?.toString());
+  params.delete("lang");
+  const query = params.toString();
+  return query ? pathname + "?" + query : pathname;
+}
+
+const baseCopy = {
+  en: {
+    common: {
+      brand: "Esports Community",
+      community: "Dashboard",
+      games: "Games",
+      browse: "Browse",
+      news: "News",
+      media: "Media",
+      predictions: "Predictions",
+      admin: "Admin",
+      myProfile: "My profile",
+      publicLeaderboard: "Public leaderboard",
+      languageSwitch: "\u0627\u0644\u0639\u0631\u0628\u064a\u0629",
+      themeToggle: "Toggle theme",
+      skipToContent: "Skip to main content",
+      season: "Season",
+      points: "Points",
+      rank: "Rank",
+      weeks: "Weeks",
+      wins: "Wins",
+      sweeps: "Sweeps",
+      topTeams: "Top teams",
+      member: "Member",
+      previous: "Previous",
+      next: "Next",
+      notAvailable: "Not available",
+    },
+    home: {
+      eyebrow: "Community hub",
+      title: "Your esports community, all in one place.",
+      description: "Follow the games you love, catch the latest news, and climb your community's prediction leaderboard.",
+      openGames: "Browse games",
+      openProfile: "My profile",
+      openLeaderboard: "Leaderboard",
+      gamesHeading: "Games",
+      gamesSubtitle: "Jump into the games your community follows.",
+      newsHeading: "Latest news",
+      newsSubtitle: "Fresh updates from across the community.",
+      newsEmpty: "No posts yet — check back soon.",
+      seeAll: "View all",
+      adminTitle: "Admin desk",
+      adminDescription: "A private workspace for community content, game pages, news drafts, and bot-facing data.",
+      gamePagesTitle: "Game pages",
+      gamePagesDescription: "Each game gets a public page for coverage, posts, useful links, and community context.",
+      newsTitle: "News and posts",
+      newsDescription: "Prepare concise esports updates for the website and Discord audience.",
+      predictionsTitle: "Prediction boards",
+      predictionsDescription: "Public leaderboards and Discord profile sync stay available as one community module.",
+      profileTitle: "Member profiles",
+      profileDescription: "Rank, points, top teams, sync status, and the exact text shown on Discord.",
+      leaderboardTitle: "Public leaderboard",
+      leaderboardDescription: "Share a public ranking page for any server and season without requiring login.",
+      discordTitle: "Discord connection",
+      discordDescription: "Bot commands can link, sync, and unlink the profile connection from Discord.",
+      routeHint: "Public route",
+      noDefaultLeaderboard: "Open a leaderboard link from Discord or use the public URL format.",
+      previewTitle: "One community hub, several workflows.",
+      previewDescription: "Members get a clean public site. Staff get a private path for publishing, game coverage, and future bot data tools.",
+      previewName: "#2 overall | 1,240 pts",
+      previewTeams: "Falcons, T1, Vitality",
+      scoreboardLabel: "Supports",
+      scoreboardRows: [
+        ["Members", "Browse game pages, news, leaderboards, and profile tools"],
+        ["Game admins", "Maintain dedicated pages for schedules, results, and links"],
+        ["Social managers", "Draft short posts and preview them before publishing"],
+        ["Admins", "Manage community surfaces without exposing staff actions publicly"],
+      ],
+      featureTitle: "Community first, predictions included.",
+      featureDescription: "EWC predictions are one module inside the broader community hub, not the identity of the whole site.",
+    },
+    games: {
+      eyebrow: "Game pages",
+      title: "Dedicated pages for every game your community follows.",
+      description: "Give game admins and social managers a clean place to organize coverage, post summaries, and share links back to Discord.",
+      openGame: "Open game",
+      newsLabel: "Community news",
+      newsTitle: "Posts that can travel from the site to Discord.",
+      newsDescription: "Game pages keep short updates close to the game context, so members can browse by title instead of digging through channels.",
+    },
+    game: {
+      back: "Back to games",
+      admin: "Admin",
+      owner: "Owner",
+      postsTitle: "Latest posts",
+      postsEmpty: "No posts here yet. Check back soon.",
+      readMore: "Read post",
+      published: "Published",
+    },
+    leaderboard: {
+      back: "Back home",
+      badge: "Public board",
+      rankedMembers: "Ranked members",
+      topScore: "Top score",
+      searchPlaceholder: "Search members or teams",
+      empty: "No ranked predictions yet.",
+    },
+    profile: {
+      eyebrow: "EWC dashboard",
+      title: "My prediction profile",
+      discordPending: "Discord account pending",
+      leaderboard: "Leaderboard",
+      sync: "Sync profile",
+      unlink: "Unlink",
+      unavailableTitle: "Profile unavailable",
+      noProfileTitle: "No active prediction profile",
+      noProfileDescription: "Open this page from /ewc_predict link in Discord to select a server.",
+      lastSyncFailed: "Last sync failed",
+      syncFailed: "Sync failed",
+      unlinkFailed: "Unlink failed",
+      unranked: "Unranked",
+      points: "Points",
+      weeksScored: "Weeks scored",
+      weeklyWins: "Weekly wins",
+      showcase: "Showcase",
+      seasonPicks: "Season picks",
+      weeklyHistory: "Weekly history",
+      synced: "Synced",
+      notScored: "Not scored yet",
+      noSeasonPicks: "No season picks yet.",
+      recentWeekly: "Recent weekly rounds",
+      noWeeklyPicks: "No weekly picks yet.",
+      noPicks: "No picks",
+      sweepBonus: "Top 3 sweep bonus",
+    },
+    login: {
+      title: "Discord sign in",
+      description: "Connect your Discord account to manage your profile tools.",
+      failedTitle: "Sign in failed",
+      failedMessage: "Discord sign-in failed.",
+      continue: "Continue with Discord",
+    },
+    adminErrors: {
+      "title-required": "Title is required in both English and Arabic",
+      "title-too-long": "Title is too long",
+      "description-too-long": "Description is too long",
+      "status-too-long": "Status badge text is too long",
+      "owner-too-long": "Owner field is too long",
+      "focus-too-many": "Too many focus tags",
+      "focus-item-too-long": "A focus tag is too long",
+      "name-required": "Name is required in both English and Arabic",
+      "name-too-long": "Name is too long",
+      "logo-url-too-long": "Logo URL is too long",
+      "logo-url-invalid": "Logo must be a valid http(s) URL",
+      "link-url-invalid": "Link must be a valid http(s) URL",
+    },
+    footer: {
+      brand: "Esports Community Bot",
+      note: "Community coverage, prediction boards, and Discord profile showcase.",
+    },
+  },
+  ar: {
+    common: {
+      brand: "\u0645\u062c\u062a\u0645\u0639 \u0627\u0644\u0631\u064a\u0627\u0636\u0627\u062a \u0627\u0644\u0625\u0644\u0643\u062a\u0631\u0648\u0646\u064a\u0629",
+      community: "\u0644\u0648\u062d\u0629 \u0627\u0644\u062a\u062d\u0643\u0645",
+      games: "\u0627\u0644\u0623\u0644\u0639\u0627\u0628",
+      browse: "\u062a\u0635\u0641\u0651\u062d",
+      news: "\u0627\u0644\u0623\u062e\u0628\u0627\u0631",
+      media: "\u0627\u0644\u0625\u0639\u0644\u0627\u0645",
+      predictions: "\u0627\u0644\u062a\u0648\u0642\u0639\u0627\u062a",
+      admin: "\u0627\u0644\u0625\u062f\u0627\u0631\u0629",
+      myProfile: "\u0645\u0644\u0641\u064a",
+      publicLeaderboard: "\u0644\u0648\u062d\u0629 \u0627\u0644\u0635\u062f\u0627\u0631\u0629 \u0627\u0644\u0639\u0627\u0645\u0629",
+      languageSwitch: "English",
+      themeToggle: "\u062a\u0628\u062f\u064a\u0644 \u0627\u0644\u0645\u0638\u0647\u0631",
+      skipToContent: "\u062a\u062e\u0637\u064a \u0625\u0644\u0649 \u0627\u0644\u0645\u062d\u062a\u0648\u0649 \u0627\u0644\u0631\u0626\u064a\u0633\u064a",
+      season: "\u0627\u0644\u0645\u0648\u0633\u0645",
+      points: "\u0627\u0644\u0646\u0642\u0627\u0637",
+      rank: "\u0627\u0644\u062a\u0631\u062a\u064a\u0628",
+      weeks: "\u0627\u0644\u0623\u0633\u0627\u0628\u064a\u0639",
+      wins: "\u0627\u0644\u0641\u0648\u0632",
+      sweeps: "\u062a\u0648\u0642\u0639 \u0643\u0627\u0645\u0644",
+      topTeams: "\u0623\u0641\u0636\u0644 \u0627\u0644\u0641\u0631\u0642",
+      member: "\u0627\u0644\u0639\u0636\u0648",
+      previous: "\u0627\u0644\u0633\u0627\u0628\u0642",
+      next: "\u0627\u0644\u062a\u0627\u0644\u064a",
+      notAvailable: "\u063a\u064a\u0631 \u0645\u062a\u0627\u062d",
+    },
+    home: {
+      eyebrow: "\u0645\u062c\u062a\u0645\u0639\u0643",
+      title: "\u0645\u062c\u062a\u0645\u0639 \u0627\u0644\u0631\u064a\u0627\u0636\u0627\u062a \u0627\u0644\u0625\u0644\u0643\u062a\u0631\u0648\u0646\u064a\u0629 \u0641\u064a \u0645\u0643\u0627\u0646 \u0648\u0627\u062d\u062f.",
+      description: "\u062a\u0627\u0628\u0639 \u0623\u0644\u0639\u0627\u0628\u0643 \u0627\u0644\u0645\u0641\u0636\u0644\u0629\u060c \u0648\u0627\u0637\u0651\u0644\u0639 \u0639\u0644\u0649 \u0622\u062e\u0631 \u0627\u0644\u0623\u062e\u0628\u0627\u0631\u060c \u0648\u062a\u0633\u0644\u0651\u0642 \u0644\u0648\u062d\u0629 \u062a\u0648\u0642\u0639\u0627\u062a \u0645\u062c\u062a\u0645\u0639\u0643.",
+      openGames: "\u062a\u0635\u0641\u062d \u0627\u0644\u0623\u0644\u0639\u0627\u0628",
+      openProfile: "\u0645\u0644\u0641\u064a",
+      openLeaderboard: "\u0644\u0648\u062d\u0629 \u0627\u0644\u0635\u062f\u0627\u0631\u0629",
+      gamesHeading: "\u0627\u0644\u0623\u0644\u0639\u0627\u0628",
+      gamesSubtitle: "\u0627\u062f\u062e\u0644 \u0625\u0644\u0649 \u0627\u0644\u0623\u0644\u0639\u0627\u0628 \u0627\u0644\u062a\u064a \u064a\u062a\u0627\u0628\u0639\u0647\u0627 \u0645\u062c\u062a\u0645\u0639\u0643.",
+      newsHeading: "\u0623\u062d\u062f\u062b \u0627\u0644\u0623\u062e\u0628\u0627\u0631",
+      newsSubtitle: "\u0622\u062e\u0631 \u0627\u0644\u062a\u062d\u062f\u064a\u062b\u0627\u062a \u0645\u0646 \u0627\u0644\u0645\u062c\u062a\u0645\u0639.",
+      newsEmpty: "\u0644\u0627 \u062a\u0648\u062c\u062f \u0645\u0646\u0634\u0648\u0631\u0627\u062a \u0628\u0639\u062f \u2014 \u062a\u0627\u0628\u0639\u0646\u0627 \u0642\u0631\u064a\u0628\u064b\u0627.",
+      seeAll: "\u0639\u0631\u0636 \u0627\u0644\u0643\u0644",
+      adminTitle: "\u0645\u0643\u062a\u0628 \u0627\u0644\u0625\u062f\u0627\u0631\u0629",
+      adminDescription: "\u0645\u0633\u0627\u062d\u0629 \u062e\u0627\u0635\u0629 \u0644\u0645\u062d\u062a\u0648\u0649 \u0627\u0644\u0645\u062c\u062a\u0645\u0639 \u0648\u0635\u0641\u062d\u0627\u062a \u0627\u0644\u0623\u0644\u0639\u0627\u0628 \u0648\u0645\u0633\u0648\u062f\u0627\u062a \u0627\u0644\u0623\u062e\u0628\u0627\u0631 \u0648\u0628\u064a\u0627\u0646\u0627\u062a \u0627\u0644\u0628\u0648\u062a.",
+      gamePagesTitle: "\u0635\u0641\u062d\u0627\u062a \u0627\u0644\u0623\u0644\u0639\u0627\u0628",
+      gamePagesDescription: "\u0635\u0641\u062d\u0629 \u0639\u0627\u0645\u0629 \u0644\u0643\u0644 \u0644\u0639\u0628\u0629 \u0644\u0644\u062a\u063a\u0637\u064a\u0629 \u0648\u0627\u0644\u0645\u0646\u0634\u0648\u0631\u0627\u062a \u0648\u0627\u0644\u0631\u0648\u0627\u0628\u0637 \u0627\u0644\u0645\u0647\u0645\u0629 \u0648\u0633\u064a\u0627\u0642 \u0627\u0644\u0645\u062c\u062a\u0645\u0639.",
+      newsTitle: "\u0627\u0644\u0623\u062e\u0628\u0627\u0631 \u0648\u0627\u0644\u0645\u0646\u0634\u0648\u0631\u0627\u062a",
+      newsDescription: "\u062c\u0647\u0632 \u062a\u062d\u062f\u064a\u062b\u0627\u062a \u0645\u062e\u062a\u0635\u0631\u0629 \u0644\u0644\u0645\u0648\u0642\u0639 \u0648\u062c\u0645\u0647\u0648\u0631 \u062f\u064a\u0633\u0643\u0648\u0631\u062f.",
+      predictionsTitle: "\u0644\u0648\u062d\u0627\u062a \u0627\u0644\u062a\u0648\u0642\u0639\u0627\u062a",
+      predictionsDescription: "\u0644\u0648\u062d\u0627\u062a \u0627\u0644\u0635\u062f\u0627\u0631\u0629 \u0648\u0645\u0632\u0627\u0645\u0646\u0629 \u0645\u0644\u0641 \u062f\u064a\u0633\u0643\u0648\u0631\u062f \u062a\u0628\u0642\u0649 \u0643\u0648\u062d\u062f\u0629 \u062f\u0627\u062e\u0644 \u0645\u0631\u0643\u0632 \u0627\u0644\u0645\u062c\u062a\u0645\u0639.",
+      profileTitle: "\u0645\u0644\u0641\u0627\u062a \u0627\u0644\u0623\u0639\u0636\u0627\u0621",
+      profileDescription: "\u0627\u0644\u062a\u0631\u062a\u064a\u0628 \u0648\u0627\u0644\u0646\u0642\u0627\u0637 \u0648\u0623\u0641\u0636\u0644 \u0627\u0644\u0641\u0631\u0642 \u0648\u062d\u0627\u0644\u0629 \u0627\u0644\u0645\u0632\u0627\u0645\u0646\u0629.",
+      leaderboardTitle: "\u0644\u0648\u062d\u0629 \u0635\u062f\u0627\u0631\u0629 \u0639\u0627\u0645\u0629",
+      leaderboardDescription: "\u0634\u0627\u0631\u0643 \u0635\u0641\u062d\u0629 \u062a\u0631\u062a\u064a\u0628 \u0639\u0627\u0645\u0629 \u0644\u0623\u064a \u0633\u064a\u0631\u0641\u0631 \u0648\u0645\u0648\u0633\u0645 \u0628\u062f\u0648\u0646 \u062a\u0633\u062c\u064a\u0644 \u062f\u062e\u0648\u0644.",
+      discordTitle: "\u0631\u0628\u0637 \u062f\u064a\u0633\u0643\u0648\u0631\u062f",
+      discordDescription: "\u0623\u0648\u0627\u0645\u0631 \u0627\u0644\u0628\u0648\u062a \u062a\u0633\u062a\u0637\u064a\u0639 \u0627\u0644\u0631\u0628\u0637 \u0648\u0627\u0644\u0645\u0632\u0627\u0645\u0646\u0629 \u0648\u0641\u0635\u0644 \u0627\u0644\u0631\u0628\u0637.",
+      routeHint: "\u0627\u0644\u0631\u0627\u0628\u0637 \u0627\u0644\u0639\u0627\u0645",
+      noDefaultLeaderboard: "\u0627\u0641\u062a\u062d \u0631\u0627\u0628\u0637 \u0644\u0648\u062d\u0629 \u0627\u0644\u0635\u062f\u0627\u0631\u0629 \u0645\u0646 \u062f\u064a\u0633\u0643\u0648\u0631\u062f \u0623\u0648 \u0627\u0633\u062a\u062e\u062f\u0645 \u0635\u064a\u063a\u0629 \u0627\u0644\u0631\u0627\u0628\u0637 \u0627\u0644\u0639\u0627\u0645\u0629.",
+      previewTitle: "\u0645\u0631\u0643\u0632 \u0645\u062c\u062a\u0645\u0639 \u0648\u0627\u062d\u062f \u0644\u0639\u062f\u0629 \u0623\u0639\u0645\u0627\u0644.",
+      previewDescription: "\u0627\u0644\u0623\u0639\u0636\u0627\u0621 \u064a\u062d\u0635\u0644\u0648\u0646 \u0639\u0644\u0649 \u0645\u0648\u0642\u0639 \u0639\u0627\u0645 \u0648\u0627\u0636\u062d\u060c \u0648\u0627\u0644\u0641\u0631\u064a\u0642 \u064a\u062d\u0635\u0644 \u0639\u0644\u0649 \u0645\u0633\u0627\u0631 \u062e\u0627\u0635 \u0644\u0644\u0646\u0634\u0631 \u0648\u062a\u063a\u0637\u064a\u0629 \u0627\u0644\u0623\u0644\u0639\u0627\u0628 \u0648\u0623\u062f\u0648\u0627\u062a \u0628\u064a\u0627\u0646\u0627\u062a \u0627\u0644\u0628\u0648\u062a \u0627\u0644\u0645\u0633\u062a\u0642\u0628\u0644\u064a\u0629.",
+      previewName: "#2 \u0625\u062c\u0645\u0627\u0644\u064a\u0627 | 1,240 \u0646\u0642\u0637\u0629",
+      previewTeams: "Falcons\u060c T1\u060c Vitality",
+      scoreboardLabel: "\u064a\u062f\u0639\u0645",
+      scoreboardRows: [
+        ["\u0627\u0644\u0623\u0639\u0636\u0627\u0621", "\u062a\u0635\u0641\u062d \u0635\u0641\u062d\u0627\u062a \u0627\u0644\u0623\u0644\u0639\u0627\u0628 \u0648\u0627\u0644\u0623\u062e\u0628\u0627\u0631 \u0648\u0644\u0648\u062d\u0627\u062a \u0627\u0644\u0635\u062f\u0627\u0631\u0629 \u0648\u0623\u062f\u0648\u0627\u062a \u0627\u0644\u0645\u0644\u0641"],
+        ["\u0645\u0634\u0631\u0641\u0648 \u0627\u0644\u0623\u0644\u0639\u0627\u0628", "\u0635\u0641\u062d\u0627\u062a \u0645\u062e\u0635\u0635\u0629 \u0644\u0644\u062c\u062f\u0627\u0648\u0644 \u0648\u0627\u0644\u0646\u062a\u0627\u0626\u062c \u0648\u0627\u0644\u0631\u0648\u0627\u0628\u0637"],
+        ["\u0645\u062f\u064a\u0631\u0648 \u0627\u0644\u062a\u0648\u0627\u0635\u0644", "\u0643\u062a\u0627\u0628\u0629 \u0645\u0646\u0634\u0648\u0631\u0627\u062a \u0642\u0635\u064a\u0631\u0629 \u0648\u0645\u0639\u0627\u064a\u0646\u062a\u0647\u0627 \u0642\u0628\u0644 \u0627\u0644\u0646\u0634\u0631"],
+        ["\u0627\u0644\u0645\u0634\u0631\u0641\u0648\u0646", "\u0625\u062f\u0627\u0631\u0629 \u0648\u0627\u062c\u0647\u0627\u062a \u0627\u0644\u0645\u062c\u062a\u0645\u0639 \u0628\u062f\u0648\u0646 \u0625\u0638\u0647\u0627\u0631 \u0623\u062f\u0648\u0627\u062a \u0627\u0644\u0641\u0631\u064a\u0642 \u0644\u0644\u0639\u0627\u0645\u0629"],
+      ],
+      featureTitle: "\u0627\u0644\u0645\u062c\u062a\u0645\u0639 \u0623\u0648\u0644\u0627\u060c \u0648\u0627\u0644\u062a\u0648\u0642\u0639\u0627\u062a \u0636\u0645\u0646\u0647.",
+      featureDescription: "\u062a\u0648\u0642\u0639\u0627\u062a EWC \u0648\u062d\u062f\u0629 \u062f\u0627\u062e\u0644 \u0645\u0631\u0643\u0632 \u0627\u0644\u0645\u062c\u062a\u0645\u0639 \u0648\u0644\u064a\u0633\u062a \u0647\u0648\u064a\u0629 \u0627\u0644\u0645\u0648\u0642\u0639 \u0628\u0627\u0644\u0643\u0627\u0645\u0644.",
+    },
+    games: {
+      eyebrow: "\u0635\u0641\u062d\u0627\u062a \u0627\u0644\u0623\u0644\u0639\u0627\u0628",
+      title: "\u0635\u0641\u062d\u0627\u062a \u0645\u062e\u0635\u0635\u0629 \u0644\u0643\u0644 \u0644\u0639\u0628\u0629 \u064a\u062a\u0627\u0628\u0639\u0647\u0627 \u0645\u062c\u062a\u0645\u0639\u0643.",
+      description: "\u0627\u0645\u0646\u062d \u0645\u0634\u0631\u0641\u064a \u0627\u0644\u0623\u0644\u0639\u0627\u0628 \u0648\u0645\u062f\u064a\u0631\u064a \u0627\u0644\u062a\u0648\u0627\u0635\u0644 \u0645\u0643\u0627\u0646\u0627 \u0648\u0627\u0636\u062d\u0627 \u0644\u062a\u0646\u0638\u064a\u0645 \u0627\u0644\u062a\u063a\u0637\u064a\u0629 \u0648\u0646\u0634\u0631 \u0627\u0644\u0645\u0644\u062e\u0635\u0627\u062a \u0648\u0645\u0634\u0627\u0631\u0643\u0629 \u0627\u0644\u0631\u0648\u0627\u0628\u0637 \u0641\u064a \u062f\u064a\u0633\u0643\u0648\u0631\u062f.",
+      openGame: "\u0627\u0641\u062a\u062d \u0627\u0644\u0644\u0639\u0628\u0629",
+      newsLabel: "\u0623\u062e\u0628\u0627\u0631 \u0627\u0644\u0645\u062c\u062a\u0645\u0639",
+      newsTitle: "\u0645\u0646\u0634\u0648\u0631\u0627\u062a \u064a\u0645\u0643\u0646 \u0623\u0646 \u062a\u0646\u062a\u0642\u0644 \u0645\u0646 \u0627\u0644\u0645\u0648\u0642\u0639 \u0625\u0644\u0649 \u062f\u064a\u0633\u0643\u0648\u0631\u062f.",
+      newsDescription: "\u062a\u0628\u0642\u064a \u0635\u0641\u062d\u0627\u062a \u0627\u0644\u0623\u0644\u0639\u0627\u0628 \u0627\u0644\u062a\u062d\u062f\u064a\u062b\u0627\u062a \u0627\u0644\u0642\u0635\u064a\u0631\u0629 \u0642\u0631\u064a\u0628\u0629 \u0645\u0646 \u0633\u064a\u0627\u0642 \u0627\u0644\u0644\u0639\u0628\u0629.",
+    },
+    game: {
+      back: "\u0627\u0644\u0639\u0648\u062f\u0629 \u0644\u0644\u0623\u0644\u0639\u0627\u0628",
+      admin: "\u0627\u0644\u0625\u062f\u0627\u0631\u0629",
+      owner: "\u0627\u0644\u0645\u0633\u0624\u0648\u0644",
+      postsTitle: "\u0623\u062d\u062f\u062b \u0627\u0644\u0645\u0646\u0634\u0648\u0631\u0627\u062a",
+      postsEmpty: "\u0644\u0627 \u062a\u0648\u062c\u062f \u0645\u0646\u0634\u0648\u0631\u0627\u062a \u0628\u0639\u062f. \u062a\u0627\u0628\u0639\u0646\u0627 \u0642\u0631\u064a\u0628\u064b\u0627.",
+      readMore: "\u0627\u0642\u0631\u0623 \u0627\u0644\u0645\u0646\u0634\u0648\u0631",
+      published: "\u0645\u0646\u0634\u0648\u0631",
+    },
+    leaderboard: {
+      back: "\u0627\u0644\u0639\u0648\u062f\u0629 \u0644\u0644\u0631\u0626\u064a\u0633\u064a\u0629",
+      badge: "\u0644\u0648\u062d\u0629 \u0639\u0627\u0645\u0629",
+      rankedMembers: "\u0627\u0644\u0623\u0639\u0636\u0627\u0621 \u0627\u0644\u0645\u0635\u0646\u0641\u0648\u0646",
+      topScore: "\u0623\u0639\u0644\u0649 \u0646\u0642\u0627\u0637",
+      searchPlaceholder: "\u0627\u0628\u062d\u062b \u0639\u0646 \u0639\u0636\u0648 \u0623\u0648 \u0641\u0631\u064a\u0642",
+      empty: "\u0644\u0627 \u062a\u0648\u062c\u062f \u062a\u0648\u0642\u0639\u0627\u062a \u0645\u0635\u0646\u0641\u0629 \u062d\u062a\u0649 \u0627\u0644\u0622\u0646.",
+    },
+    profile: {
+      eyebrow: "\u0644\u0648\u062d\u0629 EWC",
+      title: "\u0645\u0644\u0641 \u062a\u0648\u0642\u0639\u0627\u062a\u064a",
+      discordPending: "\u062d\u0633\u0627\u0628 \u062f\u064a\u0633\u0643\u0648\u0631\u062f \u063a\u064a\u0631 \u0645\u0631\u0628\u0648\u0637",
+      leaderboard: "\u0644\u0648\u062d\u0629 \u0627\u0644\u0635\u062f\u0627\u0631\u0629",
+      sync: "\u0645\u0632\u0627\u0645\u0646\u0629 \u0627\u0644\u0645\u0644\u0641",
+      unlink: "\u0641\u0635\u0644 \u0627\u0644\u0631\u0628\u0637",
+      unavailableTitle: "\u0627\u0644\u0645\u0644\u0641 \u063a\u064a\u0631 \u0645\u062a\u0627\u062d",
+      noProfileTitle: "\u0644\u0627 \u064a\u0648\u062c\u062f \u0645\u0644\u0641 \u062a\u0648\u0642\u0639\u0627\u062a \u0646\u0634\u0637",
+      noProfileDescription: "\u0627\u0641\u062a\u062d \u0647\u0630\u0647 \u0627\u0644\u0635\u0641\u062d\u0629 \u0645\u0646 \u0623\u0645\u0631 /ewc_predict link \u0641\u064a \u062f\u064a\u0633\u0643\u0648\u0631\u062f \u0644\u0627\u062e\u062a\u064a\u0627\u0631 \u0627\u0644\u0633\u064a\u0631\u0641\u0631.",
+      lastSyncFailed: "\u0641\u0634\u0644\u062a \u0622\u062e\u0631 \u0645\u0632\u0627\u0645\u0646\u0629",
+      syncFailed: "\u0641\u0634\u0644\u062a \u0627\u0644\u0645\u0632\u0627\u0645\u0646\u0629",
+      unlinkFailed: "\u0641\u0634\u0644 \u0641\u0635\u0644 \u0627\u0644\u0631\u0628\u0637",
+      unranked: "\u063a\u064a\u0631 \u0645\u0635\u0646\u0641",
+      points: "\u0627\u0644\u0646\u0642\u0627\u0637",
+      weeksScored: "\u0623\u0633\u0627\u0628\u064a\u0639 \u0645\u062d\u0633\u0648\u0628\u0629",
+      weeklyWins: "\u0627\u0646\u062a\u0635\u0627\u0631\u0627\u062a \u0623\u0633\u0628\u0648\u0639\u064a\u0629",
+      showcase: "\u0627\u0644\u0627\u0633\u062a\u0639\u0631\u0627\u0636",
+      seasonPicks: "\u0627\u062e\u062a\u064a\u0627\u0631\u0627\u062a \u0627\u0644\u0645\u0648\u0633\u0645",
+      weeklyHistory: "\u0627\u0644\u0633\u062c\u0644 \u0627\u0644\u0623\u0633\u0628\u0648\u0639\u064a",
+      synced: "\u062a\u0645\u062a \u0627\u0644\u0645\u0632\u0627\u0645\u0646\u0629",
+      notScored: "\u0644\u0645 \u064a\u062a\u0645 \u0627\u062d\u062a\u0633\u0627\u0628\u0647 \u0628\u0639\u062f",
+      noSeasonPicks: "\u0644\u0627 \u062a\u0648\u062c\u062f \u0627\u062e\u062a\u064a\u0627\u0631\u0627\u062a \u0644\u0644\u0645\u0648\u0633\u0645 \u062d\u062a\u0649 \u0627\u0644\u0622\u0646.",
+      recentWeekly: "\u0622\u062e\u0631 \u0627\u0644\u062c\u0648\u0644\u0627\u062a \u0627\u0644\u0623\u0633\u0628\u0648\u0639\u064a\u0629",
+      noWeeklyPicks: "\u0644\u0627 \u062a\u0648\u062c\u062f \u0627\u062e\u062a\u064a\u0627\u0631\u0627\u062a \u0623\u0633\u0628\u0648\u0639\u064a\u0629 \u062d\u062a\u0649 \u0627\u0644\u0622\u0646.",
+      noPicks: "\u0644\u0627 \u062a\u0648\u062c\u062f \u0627\u062e\u062a\u064a\u0627\u0631\u0627\u062a",
+      sweepBonus: "\u0645\u0643\u0627\u0641\u0623\u0629 \u062a\u0648\u0642\u0639 \u0623\u0648\u0644 \u062b\u0644\u0627\u062b\u0629",
+    },
+    login: {
+      title: "\u062a\u0633\u062c\u064a\u0644 \u0627\u0644\u062f\u062e\u0648\u0644 \u0628\u062f\u064a\u0633\u0643\u0648\u0631\u062f",
+      description: "\u0627\u0631\u0628\u0637 \u062d\u0633\u0627\u0628\u0643 \u0641\u064a \u062f\u064a\u0633\u0643\u0648\u0631\u062f \u0644\u0625\u062f\u0627\u0631\u0629 \u0623\u062f\u0648\u0627\u062a \u0645\u0644\u0641\u0643.",
+      failedTitle: "\u0641\u0634\u0644 \u062a\u0633\u062c\u064a\u0644 \u0627\u0644\u062f\u062e\u0648\u0644",
+      failedMessage: "\u0641\u0634\u0644 \u062a\u0633\u062c\u064a\u0644 \u0627\u0644\u062f\u062e\u0648\u0644 \u0639\u0628\u0631 \u062f\u064a\u0633\u0643\u0648\u0631\u062f.",
+      continue: "\u0627\u0644\u0645\u062a\u0627\u0628\u0639\u0629 \u0639\u0628\u0631 \u062f\u064a\u0633\u0643\u0648\u0631\u062f",
+    },
+    adminErrors: {
+      "title-required": "\u0639\u0646\u0648\u0627\u0646 \u0627\u0644\u0644\u0639\u0628\u0629 \u0645\u0637\u0644\u0648\u0628 \u0628\u0627\u0644\u0644\u063a\u062a\u064a\u0646 \u0627\u0644\u0639\u0631\u0628\u064a\u0629 \u0648\u0627\u0644\u0625\u0646\u062c\u0644\u064a\u0632\u064a\u0629",
+      "title-too-long": "\u0627\u0644\u0639\u0646\u0648\u0627\u0646 \u0637\u0648\u064a\u0644 \u062c\u062f\u0627\u064b",
+      "description-too-long": "\u0627\u0644\u0648\u0635\u0641 \u0637\u0648\u064a\u0644 \u062c\u062f\u0627\u064b",
+      "status-too-long": "\u0646\u0635 \u0634\u0627\u0631\u0629 \u0627\u0644\u062d\u0627\u0644\u0629 \u0637\u0648\u064a\u0644 \u062c\u062f\u0627\u064b",
+      "owner-too-long": "\u062d\u0642\u0644 \u0627\u0644\u0645\u0633\u0624\u0648\u0644 \u0637\u0648\u064a\u0644 \u062c\u062f\u0627\u064b",
+      "focus-too-many": "\u0639\u062f\u062f \u0648\u0633\u0648\u0645 \u0627\u0644\u062a\u0631\u0643\u064a\u0632 \u062a\u062c\u0627\u0648\u0632 \u0627\u0644\u062d\u062f \u0627\u0644\u0645\u0633\u0645\u0648\u062d",
+      "focus-item-too-long": "\u0623\u062d\u062f \u0648\u0633\u0648\u0645 \u0627\u0644\u062a\u0631\u0643\u064a\u0632 \u0637\u0648\u064a\u0644 \u062c\u062f\u0627\u064b",
+      "name-required": "\u0627\u0633\u0645 \u0627\u0644\u0642\u0646\u0627\u0629 \u0645\u0637\u0644\u0648\u0628 \u0628\u0627\u0644\u0644\u063a\u062a\u064a\u0646 \u0627\u0644\u0639\u0631\u0628\u064a\u0629 \u0648\u0627\u0644\u0625\u0646\u062c\u0644\u064a\u0632\u064a\u0629",
+      "name-too-long": "\u0627\u0644\u0627\u0633\u0645 \u0637\u0648\u064a\u0644 \u062c\u062f\u0627\u064b",
+      "logo-url-too-long": "\u0631\u0627\u0628\u0637 \u0627\u0644\u0634\u0639\u0627\u0631 \u0637\u0648\u064a\u0644 \u062c\u062f\u0627\u064b",
+      "logo-url-invalid": "\u064a\u062c\u0628 \u0623\u0646 \u064a\u0643\u0648\u0646 \u0631\u0627\u0628\u0637 \u0627\u0644\u0634\u0639\u0627\u0631 \u0639\u0646\u0648\u0627\u0646 http(s) \u0635\u062d\u064a\u062d\u0627\u064b",
+      "link-url-invalid": "\u064a\u062c\u0628 \u0623\u0646 \u064a\u0643\u0648\u0646 \u0631\u0627\u0628\u0637 \u0627\u0644\u0642\u0646\u0627\u0629 \u0639\u0646\u0648\u0627\u0646 http(s) \u0635\u062d\u064a\u062d\u0627\u064b",
+    },
+    footer: {
+      brand: "\u0628\u0648\u062a \u0645\u062c\u062a\u0645\u0639 \u0627\u0644\u0631\u064a\u0627\u0636\u0627\u062a \u0627\u0644\u0625\u0644\u0643\u062a\u0631\u0648\u0646\u064a\u0629",
+      note: "\u062a\u063a\u0637\u064a\u0629 \u0627\u0644\u0645\u062c\u062a\u0645\u0639\u060c \u0644\u0648\u062d\u0627\u062a \u0627\u0644\u062a\u0648\u0642\u0639\u0627\u062a\u060c \u0648\u0627\u0633\u062a\u0639\u0631\u0627\u0636 \u0645\u0644\u0641 \u062f\u064a\u0633\u0643\u0648\u0631\u062f.",
+    },
+  },
+} as const;
+
+export const copy = {
+  en: {
+    ...baseCopy.en,
+    leaderboard: {
+      ...baseCopy.en.leaderboard,
+      title: (season: string) => "EWC " + season + " prediction leaderboard",
+      description: (total: number) => formatNumber(total, "en") + " ranked member" + (total === 1 ? "" : "s") + " this season",
+      page: (page: number, pages: number) => "Page " + formatNumber(page, "en") + " of " + formatNumber(pages, "en"),
+    },
+    profile: {
+      ...baseCopy.en.profile,
+      top3Sweep: (count: number) => formatNumber(count, "en") + " top 3 sweep" + (count === 1 ? "" : "s"),
+      scoredWeeks: (count: number) => formatNumber(count, "en") + " scored week" + (count === 1 ? "" : "s"),
+    },
+  },
+  ar: {
+    ...baseCopy.ar,
+    leaderboard: {
+      ...baseCopy.ar.leaderboard,
+      title: (season: string) => "\u0644\u0648\u062d\u0629 \u062a\u0648\u0642\u0639\u0627\u062a EWC " + season,
+      description: (total: number) => formatNumber(total, "ar") + " \u0639\u0636\u0648 \u0641\u064a \u0627\u0644\u062a\u0631\u062a\u064a\u0628 \u0647\u0630\u0627 \u0627\u0644\u0645\u0648\u0633\u0645",
+      page: (page: number, pages: number) => "\u0635\u0641\u062d\u0629 " + formatNumber(page, "ar") + " \u0645\u0646 " + formatNumber(pages, "ar"),
+    },
+    profile: {
+      ...baseCopy.ar.profile,
+      top3Sweep: (count: number) => formatNumber(count, "ar") + " \u062a\u0648\u0642\u0639 \u0643\u0627\u0645\u0644 \u0644\u0644\u0645\u0631\u0627\u0643\u0632 \u0627\u0644\u062b\u0644\u0627\u062b\u0629",
+      scoredWeeks: (count: number) => formatNumber(count, "ar") + " \u0623\u0633\u0627\u0628\u064a\u0639 \u0645\u062d\u0633\u0648\u0628\u0629",
+    },
+  },
+} as const;

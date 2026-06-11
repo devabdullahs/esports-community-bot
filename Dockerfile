@@ -1,4 +1,4 @@
-FROM node:24-bookworm-slim AS deps
+FROM node:24-bookworm-slim AS build
 
 WORKDIR /app
 
@@ -7,7 +7,12 @@ RUN apt-get update \
   && rm -rf /var/lib/apt/lists/*
 
 COPY package*.json ./
-RUN npm ci --omit=dev
+COPY apps/web/package.json ./apps/web/package.json
+RUN npm ci
+
+COPY . .
+RUN npm run web:build
+RUN npm prune --omit=dev
 
 FROM node:24-bookworm-slim
 
@@ -24,8 +29,15 @@ RUN apt-get update \
   && mkdir -p /app/data \
   && chown -R node:node /app
 
-COPY --from=deps --chown=node:node /app/node_modules ./node_modules
-COPY --chown=node:node package*.json ./
-COPY --chown=node:node src ./src
+COPY --from=build --chown=node:node /app/node_modules ./node_modules
+COPY --from=build --chown=node:node /app/package*.json ./
+COPY --from=build --chown=node:node /app/apps/web ./apps/web
+COPY --from=build --chown=node:node /app/src ./src
 
-CMD ["npm", "start"]
+USER node
+
+# Exec Node directly (not `npm run`) so this process is PID 1 and receives
+# SIGTERM itself — start-production.js forwards it to the bot/web children and
+# exits 0 on a clean stop. Going through npm makes npm PID 1, which mishandles
+# the signal and reports a spurious exit 1 on every shutdown.
+CMD ["node", "src/start-production.js"]

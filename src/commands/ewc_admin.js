@@ -2,6 +2,7 @@ import { SlashCommandBuilder, PermissionFlagsBits, InteractionContextType, Messa
 import {
   clearSeasonPredictionScores,
   clearWeeklyPredictionScores,
+  deleteEwcWeek,
   getEwcSeason,
   getEwcWeek,
   listEwcWeeks,
@@ -26,6 +27,7 @@ import {
   setEwcPredictionsMentionsLeaderboard,
 } from '../db/settings.js';
 import { updateEwcPredictionLeaderboard } from '../jobs/ewcPredictions.js';
+import { db } from '../db/index.js';
 import { sendAuditLog } from '../lib/auditLog.js';
 import {
   formatTimestamp,
@@ -155,6 +157,14 @@ export const data = new SlashCommandBuilder()
       .setDescription('Score a weekly round from baseline vs final standings.')
       .addStringOption((o) => o.setName('week').setDescription('Week key').setRequired(true))
       .addStringOption((o) => o.setName('season').setDescription('Season year').setRequired(false)),
+  )
+  .addSubcommand((s) =>
+    s
+      .setName('delete_week')
+      .setDescription('Permanently delete a prediction week and all its picks.')
+      .addStringOption((o) => o.setName('week').setDescription('Week key, e.g. week-8').setRequired(true))
+      .addStringOption((o) => o.setName('season').setDescription('Season year').setRequired(false))
+      .addBooleanOption((o) => o.setName('confirm').setDescription('Set to True to really delete').setRequired(true)),
   )
   .addSubcommand((s) =>
     s
@@ -437,6 +447,32 @@ export async function execute(interaction) {
       return;
     }
 
+    if (sub === 'delete_week') {
+      const weekKey = interaction.options.getString('week', true);
+      if (!interaction.options.getBoolean('confirm', true)) {
+        throw new Error('Deletion not confirmed. Re-run with `confirm: True`.');
+      }
+      const round = getEwcWeek(interaction.guildId, seasonYear, weekKey);
+      if (!round) throw new Error(`Week \`${weekKey}\` does not exist.`);
+      if (round.status === 'scored') {
+        throw new Error('This week is already scored. Reopen it first if you really want to delete it.');
+      }
+      const picks = listWeeklyPredictions(round.id).length;
+      const result = deleteEwcWeek(round.id);
+      await interaction.reply({
+        content: `🗑️ Deleted **${round.label || round.week_key}** (${result.predictions} prediction(s) removed).`,
+        flags: MessageFlags.Ephemeral,
+      });
+      await sendAuditLog(interaction.client, interaction.guildId, {
+        action: 'EWC Prediction Week Deleted',
+        actor: interaction.user,
+        target: `${round.season} ${round.week_key}`,
+        details: `Predictions removed: ${picks}`,
+        color: 'config',
+      });
+      return;
+    }
+
     if (sub === 'score_week') {
       const weekKey = interaction.options.getString('week', true);
       const round = getEwcWeek(interaction.guildId, seasonYear, weekKey);
@@ -447,19 +483,23 @@ export async function execute(interaction) {
       const final = round.final?.length ? round.final : await currentStandings(seasonYear);
       const predictions = listWeeklyPredictions(round.id);
       let malformed = 0;
-      for (const prediction of predictions) {
-        try {
-          const result = scoreWeeklyPrediction(prediction.picks, baseline, final);
-          saveWeeklyPredictionScore(interaction.guildId, round.id, prediction.user_id, result.score, result.details);
-        } catch (error) {
-          malformed += 1;
-          saveWeeklyPredictionScore(interaction.guildId, round.id, prediction.user_id, 0, {
-            error: error.message,
-            picks: prediction.picks,
-          });
+      // Wrap all writes in a transaction so a mid-loop crash leaves scores consistent.
+      const applyScores = db.transaction(() => {
+        for (const prediction of predictions) {
+          try {
+            const result = scoreWeeklyPrediction(prediction.picks, baseline, final);
+            saveWeeklyPredictionScore(interaction.guildId, round.id, prediction.user_id, result.score, result.details);
+          } catch (error) {
+            malformed += 1;
+            saveWeeklyPredictionScore(interaction.guildId, round.id, prediction.user_id, 0, {
+              error: error.message,
+              picks: prediction.picks,
+            });
+          }
         }
-      }
-      markEwcWeekScored(round.id, final);
+        markEwcWeekScored(round.id, final);
+      });
+      applyScores();
       await updateEwcPredictionLeaderboard(interaction.client, interaction.guildId);
       await interaction.editReply({
         content: `✅ Scored **${round.label || round.week_key}** for ${predictions.length} prediction(s).`,
@@ -554,19 +594,23 @@ export async function execute(interaction) {
       const final = await currentStandings(seasonYear);
       const predictions = listSeasonPredictions(interaction.guildId, seasonYear);
       let malformed = 0;
-      for (const prediction of predictions) {
-        try {
-          const result = scoreSeasonPrediction(prediction.picks, final, round.top_size);
-          saveSeasonPredictionScore(interaction.guildId, seasonYear, prediction.user_id, result.score, result.details);
-        } catch (error) {
-          malformed += 1;
-          saveSeasonPredictionScore(interaction.guildId, seasonYear, prediction.user_id, 0, {
-            error: error.message,
-            picks: prediction.picks,
-          });
+      // Wrap all writes in a transaction so a mid-loop crash leaves scores consistent.
+      const applyScores = db.transaction(() => {
+        for (const prediction of predictions) {
+          try {
+            const result = scoreSeasonPrediction(prediction.picks, final, round.top_size);
+            saveSeasonPredictionScore(interaction.guildId, seasonYear, prediction.user_id, result.score, result.details);
+          } catch (error) {
+            malformed += 1;
+            saveSeasonPredictionScore(interaction.guildId, seasonYear, prediction.user_id, 0, {
+              error: error.message,
+              picks: prediction.picks,
+            });
+          }
         }
-      }
-      markEwcSeasonScored(interaction.guildId, seasonYear, final);
+        markEwcSeasonScored(interaction.guildId, seasonYear, final);
+      });
+      applyScores();
       await updateEwcPredictionLeaderboard(interaction.client, interaction.guildId);
       await interaction.editReply({
         content: `✅ Scored EWC ${seasonYear} season predictions for ${predictions.length} member(s).`,
