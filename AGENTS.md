@@ -33,8 +33,9 @@ add multi-tenant complexity.
 - `src/db/*.js` — prepared-statement modules (always parameterized); CMS
   modules: `src/db/{ewcGames,ewcMediaChannels,ewcNewsPosts,ewcAdmins}.js`.
 - `src/db/ewcAdminAuditLog.js` + `apps/web/src/lib/audit.ts` — audit-log
-  module pair: bot side writes log rows; web side reads them for the admin
-  activity feed.
+  module pair: the web admin routes WRITE rows via `recordAdminAudit` and the
+  super-only `/admin/audit` page reads them; the bot-side file is just the
+  shared DB layer.
 - `src/lib/ewcPredictions.js` — EWC scoring math (pure functions; tests in
   `tests/ewcPredictionScoring.test.mjs`). This is the money path.
 - `src/lib/markdownTools.js` — shared markdown helpers (also tested in
