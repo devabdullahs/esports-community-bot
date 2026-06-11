@@ -10,6 +10,7 @@ try {
 
 const dbPath = process.env.DB_PATH || 'data/bot.sqlite';
 mkdirSync(dirname(dbPath), { recursive: true });
+const busyTimeoutMs = Math.max(0, Math.floor(Number(process.env.SQLITE_BUSY_TIMEOUT_MS) || 5000));
 
 const key = Symbol.for('esports-community-bot.db');
 const existing = globalThis[key];
@@ -18,6 +19,7 @@ export const db =
   existing ||
   (() => {
     const database = new Database(dbPath);
+    database.pragma(`busy_timeout = ${busyTimeoutMs}`);
     database.pragma('journal_mode = WAL');
     database.pragma('foreign_keys = ON');
     globalThis[key] = database;

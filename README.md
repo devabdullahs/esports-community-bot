@@ -107,13 +107,21 @@ Local setup:
 npm install
 npm run web:auth:migrate
 npm run web:build
-npm run web:start
+npm run web:start   # terminal 1
+npm start           # terminal 2
 ```
 
-Run the bot separately with `npm start`. Both processes should point at the same `DB_PATH`.
-The bot calls the web app through `EWC_DASHBOARD_INTERNAL_URL` with
+Both processes should point at the same `DB_PATH`. The bot calls the web app through `EWC_DASHBOARD_INTERNAL_URL` with
 `EWC_DASHBOARD_INTERNAL_SECRET` when `/ewc_predict sync`, `/ewc_predict unlink`, or scoring
 automation refreshes profile showcases.
+
+Docker/NAS setup:
+
+The production image runs both services through `npm run start:production`: the bot starts from
+`src/index.js`, and the dashboard starts with `next start` from `apps/web`. In `compose.ugreen.yml`,
+the dashboard is exposed as `${EWC_DASHBOARD_PORT:-3000}:3000` and the bot talks to it through
+`EWC_DASHBOARD_INTERNAL_URL=http://127.0.0.1:3000`. Set `RUN_WEB=false` only if the dashboard is
+hosted elsewhere, or `RUN_BOT=false` only for a web-only container.
 
 For local dashboard previews without Discord OAuth, start the web app with
 `EWC_DASHBOARD_DEV_AUTH_BYPASS=true`. The preview user defaults to Discord ID

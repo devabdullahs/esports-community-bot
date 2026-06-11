@@ -3,6 +3,7 @@ import { db } from '../db/connection.js';
 import {
   countOverallScored,
   overallLeaderboard,
+  overallRankForUser,
   userPredictionProfile,
 } from '../db/ewcPredictions.js';
 import { WEEKLY_TOP_THREE_SWEEP_BONUS } from './ewcPredictions.js';
@@ -66,15 +67,10 @@ function leaderboardRows(guildId, season, limit = 50, offset = 0) {
   return overallLeaderboard(guildId, season, clampLimit(limit), Math.max(0, Math.floor(Number(offset)) || 0));
 }
 
-function allLeaderboardRows(guildId, season) {
-  return overallLeaderboard(guildId, season, 5000, 0);
-}
-
 function rankForUser(guildId, season, userId) {
-  const rows = allLeaderboardRows(guildId, season);
-  const index = rows.findIndex((row) => row.user_id === userId);
-  if (index < 0) return { rank: null, score: 0 };
-  return { rank: index + 1, score: Number(rows[index].score || 0) };
+  const row = overallRankForUser(guildId, season, userId);
+  if (!row) return { rank: null, score: 0 };
+  return { rank: Number(row.rank), score: Number(row.score || 0) };
 }
 
 function weeklyAggregateStats(guildId, season, userId) {
@@ -93,21 +89,22 @@ function weeklyAggregateStats(guildId, season, userId) {
   const weeklyWins = db
     .prepare(
       `WITH winners AS (
-         SELECT week_id, MAX(score) AS max_score
-         FROM ewc_weekly_predictions
-         WHERE guild_id = ? AND score IS NOT NULL
-         GROUP BY week_id
+         SELECT wp.week_id, MAX(wp.score) AS max_score
+         FROM ewc_weekly_predictions wp
+         JOIN ewc_prediction_weeks w2 ON w2.id = wp.week_id
+         WHERE wp.guild_id = ? AND w2.season = ? AND wp.score IS NOT NULL
+         GROUP BY wp.week_id
        )
        SELECT COUNT(*) AS c
        FROM ewc_weekly_predictions wp
        JOIN ewc_prediction_weeks w ON w.id = wp.week_id
        JOIN winners win ON win.week_id = wp.week_id AND win.max_score = wp.score
        WHERE wp.guild_id = ?
-         AND w.season = ?
-         AND wp.user_id = ?
-         AND wp.score IS NOT NULL`,
+          AND w.season = ?
+          AND wp.user_id = ?
+          AND wp.score IS NOT NULL`,
     )
-    .get(guildId, guildId, season, userId).c;
+    .get(guildId, season, guildId, season, userId).c;
 
   return {
     weeksScored: weeklyRows.length,
@@ -117,8 +114,80 @@ function weeklyAggregateStats(guildId, season, userId) {
   };
 }
 
+function emptyWeeklyAggregate() {
+  return { weeksScored: 0, weeklyWins: 0, top3Sweeps: 0 };
+}
+
+function weeklyAggregateStatsForUsers(guildId, season, userIds) {
+  const uniqueIds = [...new Set(userIds.filter(Boolean))];
+  const stats = new Map(uniqueIds.map((userId) => [userId, emptyWeeklyAggregate()]));
+  if (!uniqueIds.length) return stats;
+
+  const placeholders = uniqueIds.map(() => '?').join(', ');
+  const weeklyRows = db
+    .prepare(
+      `SELECT wp.user_id, wp.week_id, wp.score, wp.details_json
+       FROM ewc_weekly_predictions wp
+       JOIN ewc_prediction_weeks w ON w.id = wp.week_id
+       WHERE wp.guild_id = ?
+         AND w.season = ?
+         AND wp.score IS NOT NULL
+         AND wp.user_id IN (${placeholders})`,
+    )
+    .all(guildId, season, ...uniqueIds);
+
+  const winningRows = db
+    .prepare(
+      `SELECT wp.week_id, MAX(wp.score) AS max_score
+       FROM ewc_weekly_predictions wp
+       JOIN ewc_prediction_weeks w ON w.id = wp.week_id
+       WHERE wp.guild_id = ?
+         AND w.season = ?
+         AND wp.score IS NOT NULL
+       GROUP BY wp.week_id`,
+    )
+    .all(guildId, season);
+  const winningScoreByWeek = new Map(winningRows.map((row) => [row.week_id, Number(row.max_score || 0)]));
+
+  for (const row of weeklyRows) {
+    const current = stats.get(row.user_id) || emptyWeeklyAggregate();
+    const score = Number(row.score || 0);
+    current.weeksScored += 1;
+    if (score === winningScoreByWeek.get(row.week_id)) current.weeklyWins += 1;
+    if (Number(parseJson(row.details_json, {})?.bonus || 0) >= WEEKLY_TOP_THREE_SWEEP_BONUS) {
+      current.top3Sweeps += 1;
+    }
+    stats.set(row.user_id, current);
+  }
+
+  return stats;
+}
+
 function seasonPickTeams(profile) {
   return profile?.season?.picks?.length ? profile.season.picks.slice(0, 3) : [];
+}
+
+function seasonPickTeamsForUsers(guildId, season, userIds) {
+  const uniqueIds = [...new Set(userIds.filter(Boolean))];
+  const teams = new Map(uniqueIds.map((userId) => [userId, []]));
+  if (!uniqueIds.length) return teams;
+
+  const placeholders = uniqueIds.map(() => '?').join(', ');
+  const rows = db
+    .prepare(
+      `SELECT user_id, picks_json
+       FROM ewc_season_predictions
+       WHERE guild_id = ?
+         AND season = ?
+         AND user_id IN (${placeholders})`,
+    )
+    .all(guildId, season, ...uniqueIds);
+
+  for (const row of rows) {
+    teams.set(row.user_id, parseJson(row.picks_json, []).slice(0, 3));
+  }
+
+  return teams;
 }
 
 function recentWeekly(profile) {
@@ -172,6 +241,9 @@ export function getEwcUserProfileStats(guildId, season = DEFAULT_EWC_PROFILE_SEA
 
 export function getPublicEwcLeaderboard({ guildId, season = DEFAULT_EWC_PROFILE_SEASON, limit = 50, offset = 0 }) {
   const rows = leaderboardRows(guildId, season, limit, offset);
+  const userIds = rows.map((row) => row.user_id);
+  const weeklyByUser = weeklyAggregateStatsForUsers(guildId, season, userIds);
+  const topTeamsByUser = seasonPickTeamsForUsers(guildId, season, userIds);
   const start = Math.max(0, Math.floor(Number(offset)) || 0);
   return {
     guildId,
@@ -179,8 +251,7 @@ export function getPublicEwcLeaderboard({ guildId, season = DEFAULT_EWC_PROFILE_
     total: countOverallScored(guildId, season),
     rows: rows.map((row, index) => {
       const userId = row.user_id;
-      const weekly = weeklyAggregateStats(guildId, season, userId);
-      const profile = userPredictionProfile(guildId, season, userId);
+      const weekly = weeklyByUser.get(userId) || emptyWeeklyAggregate();
       return {
         rank: start + index + 1,
         displayName: memberLabel(userId),
@@ -188,7 +259,7 @@ export function getPublicEwcLeaderboard({ guildId, season = DEFAULT_EWC_PROFILE_
         weeksScored: weekly.weeksScored,
         weeklyWins: weekly.weeklyWins,
         top3Sweeps: weekly.top3Sweeps,
-        topTeams: seasonPickTeams(profile),
+        topTeams: topTeamsByUser.get(userId) || [],
       };
     }),
   };
