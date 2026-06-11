@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import { localizeText } from "@/lib/community-content";
 import type { GameRecord } from "@/lib/games";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 
@@ -25,6 +26,7 @@ export function GamesList({
   const router = useRouter();
   const [items, setItems] = useState<GameRecord[]>(games);
   const [busy, setBusy] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   async function move(index: number, dir: -1 | 1) {
     const target = index + dir;
@@ -56,13 +58,20 @@ export function GamesList({
       )
     )
       return;
+    setDeleteError(null);
     setBusy(true);
     try {
       const res = await fetch(`/api/admin/games/${slug}`, { method: "DELETE" });
-      if (res.ok) {
-        setItems((prev) => prev.filter((g) => g.slug !== slug));
-        router.refresh();
+      if (!res.ok) {
+        const body = await res.json().catch(() => null);
+        setDeleteError(body?.error || `Delete failed (${res.status})`);
+        return;
       }
+      setDeleteError(null);
+      setItems((prev) => prev.filter((g) => g.slug !== slug));
+      router.refresh();
+    } catch {
+      setDeleteError("Network error — try again.");
     } finally {
       setBusy(false);
     }
@@ -70,6 +79,12 @@ export function GamesList({
 
   return (
     <div className="flex flex-col gap-4">
+      {deleteError ? (
+        <Alert variant="destructive">
+          <AlertTitle>Could not delete</AlertTitle>
+          <AlertDescription>{deleteError}</AlertDescription>
+        </Alert>
+      ) : null}
       <div className="flex items-center justify-between gap-3">
         <p className="text-sm text-muted-foreground">
           {items.length} game{items.length === 1 ? "" : "s"}

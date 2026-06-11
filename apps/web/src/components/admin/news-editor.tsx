@@ -39,6 +39,7 @@ import {
 import { localizeText } from "@/lib/community-content";
 import type { GameRecord } from "@/lib/games";
 import type { Locale } from "@/lib/i18n";
+import { safeUrlOrUndefined } from "@/lib/safe-url";
 import { cn } from "@/lib/utils";
 import type { NewsContentMode, NewsPost, NewsStatus } from "@/lib/news";
 import {
@@ -369,6 +370,16 @@ export function NewsEditor({
           : "Headline and body are required before publishing.",
       );
       return;
+    }
+    if (contentMode === "shared") {
+      const inactiveLocale = defaultLocale === "en" ? "ar" : "en";
+      if (hasContent(translations[inactiveLocale])) {
+        const inactiveLabel = inactiveLocale === "ar" ? "Arabic (العربية)" : "English";
+        const confirmed = window.confirm(
+          `You are saving in shared mode. The ${inactiveLabel} draft will not be saved and its content will be discarded. Continue?`,
+        );
+        if (!confirmed) return;
+      }
     }
     setBusy(action);
     try {
@@ -730,10 +741,10 @@ export function NewsEditor({
               dir={editLocale === "ar" ? "rtl" : "ltr"}
               className="flex flex-col gap-4"
             >
-              {coverImageUrl.trim() ? (
+              {safeUrlOrUndefined(coverImageUrl) ? (
                 // eslint-disable-next-line @next/next/no-img-element -- external/admin URL, validated http(s)
                 <img
-                  src={coverImageUrl.trim()}
+                  src={safeUrlOrUndefined(coverImageUrl)}
                   alt=""
                   className="aspect-video w-full rounded-lg border border-border object-cover"
                 />

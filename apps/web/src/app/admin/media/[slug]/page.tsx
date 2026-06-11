@@ -4,6 +4,7 @@ import { ArrowLeftIcon } from "lucide-react";
 import { MediaEditor } from "@/components/admin/media-editor";
 import { canManageMedia, getAdminAccess } from "@/lib/admin";
 import { getMediaChannel } from "@/lib/media";
+import { getRequestLocale } from "@/lib/request-locale";
 import { Button } from "@/components/ui/button";
 
 export const runtime = "nodejs";
@@ -22,6 +23,7 @@ export default async function EditMediaChannelPage({
 
   const channel = getMediaChannel(slug);
   if (!channel) notFound();
+  const locale = await getRequestLocale();
 
   return (
     <main className="mx-auto flex w-full max-w-4xl flex-1 flex-col gap-6 px-5 py-10 sm:px-8">
@@ -33,7 +35,7 @@ export default async function EditMediaChannelPage({
         <p className="text-sm text-muted-foreground">Admin publishing</p>
         <h1 className="text-3xl font-semibold leading-tight">Edit media channel</h1>
       </div>
-      <MediaEditor mode="edit" channel={channel} />
+      <MediaEditor mode="edit" channel={channel} locale={locale} />
     </main>
   );
 }

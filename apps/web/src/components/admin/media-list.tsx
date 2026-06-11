@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import { localizeText } from "@/lib/community-content";
 import type { MediaChannelRecord } from "@/lib/media";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 
@@ -27,6 +28,7 @@ export function MediaList({
   const router = useRouter();
   const [items, setItems] = useState<MediaChannelRecord[]>(channels);
   const [busy, setBusy] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
   const canEdit = (slug: string) => isSuper || editableSlugs.includes(slug);
 
   async function move(index: number, dir: -1 | 1) {
@@ -54,13 +56,20 @@ export function MediaList({
 
   async function remove(slug: string, name: string) {
     if (!window.confirm(`Delete "${name}"? This cannot be undone.`)) return;
+    setDeleteError(null);
     setBusy(true);
     try {
       const res = await fetch(`/api/admin/media/${slug}`, { method: "DELETE" });
-      if (res.ok) {
-        setItems((prev) => prev.filter((c) => c.slug !== slug));
-        router.refresh();
+      if (!res.ok) {
+        const body = await res.json().catch(() => null);
+        setDeleteError(body?.error || `Delete failed (${res.status})`);
+        return;
       }
+      setDeleteError(null);
+      setItems((prev) => prev.filter((c) => c.slug !== slug));
+      router.refresh();
+    } catch {
+      setDeleteError("Network error — try again.");
     } finally {
       setBusy(false);
     }
@@ -68,6 +77,12 @@ export function MediaList({
 
   return (
     <div className="flex flex-col gap-4">
+      {deleteError ? (
+        <Alert variant="destructive">
+          <AlertTitle>Could not delete</AlertTitle>
+          <AlertDescription>{deleteError}</AlertDescription>
+        </Alert>
+      ) : null}
       <div className="flex items-center justify-between gap-3">
         <p className="text-sm text-muted-foreground">
           {items.length} channel{items.length === 1 ? "" : "s"}

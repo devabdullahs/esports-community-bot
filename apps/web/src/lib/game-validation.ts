@@ -34,57 +34,66 @@ export type ValidatedGameContent = {
   focus: LocalizedText[];
 };
 
+export type GameValidationCode =
+  | "title-required"
+  | "title-too-long"
+  | "description-too-long"
+  | "status-too-long"
+  | "owner-too-long"
+  | "focus-too-many"
+  | "focus-item-too-long";
+
 export function validateGameContent(
   raw: unknown,
-): { ok: true; value: ValidatedGameContent } | { ok: false; error: string } {
+): { ok: true; value: ValidatedGameContent } | { ok: false; error: string; code: GameValidationCode } {
   const body = (raw ?? {}) as Record<string, unknown>;
 
   const title = localized(body.title);
   if (!title.en || !title.ar) {
-    return { ok: false, error: "Title is required in English and Arabic" };
+    return { ok: false, error: "Title is required in English and Arabic", code: "title-required" };
   }
   if (title.en.length > GAME_TITLE_MAX_LENGTH) {
-    return { ok: false, error: `Title must be ${GAME_TITLE_MAX_LENGTH} characters or fewer` };
+    return { ok: false, error: `Title must be ${GAME_TITLE_MAX_LENGTH} characters or fewer`, code: "title-too-long" };
   }
   if (title.ar.length > GAME_TITLE_MAX_LENGTH) {
-    return { ok: false, error: `Title must be ${GAME_TITLE_MAX_LENGTH} characters or fewer` };
+    return { ok: false, error: `Title must be ${GAME_TITLE_MAX_LENGTH} characters or fewer`, code: "title-too-long" };
   }
 
   const description = localized(body.description);
   if (description.en.length > GAME_TEXT_MAX_LENGTH) {
-    return { ok: false, error: `Description must be ${GAME_TEXT_MAX_LENGTH} characters or fewer` };
+    return { ok: false, error: `Description must be ${GAME_TEXT_MAX_LENGTH} characters or fewer`, code: "description-too-long" };
   }
   if (description.ar.length > GAME_TEXT_MAX_LENGTH) {
-    return { ok: false, error: `Description must be ${GAME_TEXT_MAX_LENGTH} characters or fewer` };
+    return { ok: false, error: `Description must be ${GAME_TEXT_MAX_LENGTH} characters or fewer`, code: "description-too-long" };
   }
 
   const status = localized(body.status);
   if (status.en.length > GAME_TEXT_MAX_LENGTH) {
-    return { ok: false, error: `Status must be ${GAME_TEXT_MAX_LENGTH} characters or fewer` };
+    return { ok: false, error: `Status must be ${GAME_TEXT_MAX_LENGTH} characters or fewer`, code: "status-too-long" };
   }
   if (status.ar.length > GAME_TEXT_MAX_LENGTH) {
-    return { ok: false, error: `Status must be ${GAME_TEXT_MAX_LENGTH} characters or fewer` };
+    return { ok: false, error: `Status must be ${GAME_TEXT_MAX_LENGTH} characters or fewer`, code: "status-too-long" };
   }
 
   const owner = localized(body.owner);
   if (owner.en.length > GAME_TEXT_MAX_LENGTH) {
-    return { ok: false, error: `Owner must be ${GAME_TEXT_MAX_LENGTH} characters or fewer` };
+    return { ok: false, error: `Owner must be ${GAME_TEXT_MAX_LENGTH} characters or fewer`, code: "owner-too-long" };
   }
   if (owner.ar.length > GAME_TEXT_MAX_LENGTH) {
-    return { ok: false, error: `Owner must be ${GAME_TEXT_MAX_LENGTH} characters or fewer` };
+    return { ok: false, error: `Owner must be ${GAME_TEXT_MAX_LENGTH} characters or fewer`, code: "owner-too-long" };
   }
 
   const focusRaw = Array.isArray(body.focus) ? body.focus : [];
   if (focusRaw.length > GAME_FOCUS_MAX_ITEMS) {
-    return { ok: false, error: `Focus may have at most ${GAME_FOCUS_MAX_ITEMS} items` };
+    return { ok: false, error: `Focus may have at most ${GAME_FOCUS_MAX_ITEMS} items`, code: "focus-too-many" };
   }
   const focus = focusRaw.map(localized).filter((item) => item.en || item.ar);
   for (const item of focus) {
     if (item.en.length > GAME_FOCUS_ITEM_MAX_LENGTH) {
-      return { ok: false, error: `Focus item must be ${GAME_FOCUS_ITEM_MAX_LENGTH} characters or fewer` };
+      return { ok: false, error: `Focus item must be ${GAME_FOCUS_ITEM_MAX_LENGTH} characters or fewer`, code: "focus-item-too-long" };
     }
     if (item.ar.length > GAME_FOCUS_ITEM_MAX_LENGTH) {
-      return { ok: false, error: `Focus item must be ${GAME_FOCUS_ITEM_MAX_LENGTH} characters or fewer` };
+      return { ok: false, error: `Focus item must be ${GAME_FOCUS_ITEM_MAX_LENGTH} characters or fewer`, code: "focus-item-too-long" };
     }
   }
 

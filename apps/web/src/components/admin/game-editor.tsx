@@ -3,8 +3,9 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { PlusIcon, SaveIcon, Trash2Icon } from "lucide-react";
-import { normalizeSlug } from "@/lib/game-validation";
+import { normalizeSlug, validateGameContent } from "@/lib/game-validation";
 import type { GameRecord, LocalizedText } from "@/lib/games";
+import { copy, type Locale } from "@/lib/i18n";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -54,9 +55,11 @@ function BiField({
 export function GameEditor({
   mode,
   game,
+  locale = "en",
 }: {
   mode: "create" | "edit";
   game?: GameRecord;
+  locale?: Locale;
 }) {
   const router = useRouter();
   const [slug, setSlug] = useState(game?.slug || "");
@@ -75,22 +78,28 @@ export function GameEditor({
 
   async function save() {
     setError(null);
+    const clientPayload = {
+      slug,
+      title,
+      status,
+      description,
+      owner,
+      focus: focus.filter((f) => f.en.trim() || f.ar.trim()),
+    };
+    const clientValidation = validateGameContent(clientPayload);
+    if (!clientValidation.ok) {
+      const adminErrors = copy[locale].adminErrors as Record<string, string>;
+      setError(adminErrors[clientValidation.code] ?? clientValidation.error);
+      return;
+    }
     setBusy(true);
     try {
-      const payload = {
-        slug,
-        title,
-        status,
-        description,
-        owner,
-        focus: focus.filter((f) => f.en.trim() || f.ar.trim()),
-      };
       const res = await fetch(
         mode === "create" ? "/api/admin/games" : `/api/admin/games/${game?.slug}`,
         {
           method: mode === "create" ? "POST" : "PATCH",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload),
+          body: JSON.stringify(clientPayload),
         },
       );
       const data = await res.json().catch(() => ({}));

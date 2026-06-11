@@ -189,11 +189,11 @@ export function ProfileDashboard({
                 {text.leaderboard}
               </Button>
             ) : null}
-            <Button onClick={() => sync.mutate()} disabled={sync.isPending || !stats}>
+            <Button onClick={() => sync.mutate()} disabled={sync.isPending || unlink.isPending || !stats}>
               <RefreshCcwIcon data-icon="inline-start" />
               {text.sync}
             </Button>
-            <Button variant="outline" onClick={() => unlink.mutate()} disabled={unlink.isPending || !data.link}>
+            <Button variant="outline" onClick={() => unlink.mutate()} disabled={unlink.isPending || sync.isPending || !data.link}>
               <UnlinkIcon data-icon="inline-start" />
               {text.unlink}
             </Button>
