@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { NextResponse } from "next/server";
 import { getAdminAccess } from "@/lib/admin";
 import { recordAdminAudit } from "@/lib/audit";
+import { rateLimitOr429 } from "@/lib/rate-limit";
 import { isR2Configured, uploadToR2 } from "@/lib/r2";
 
 export const runtime = "nodejs";
@@ -56,6 +57,13 @@ export async function POST(request: Request) {
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   if (!allowed) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
+  const countLimited = rateLimitOr429({
+    key: `upload-count:${access.discordUserId}`,
+    limit: 30,
+    windowSec: 3600,
+  });
+  if (countLimited) return countLimited;
+
   if (!isR2Configured()) {
     return NextResponse.json(
       {
@@ -83,6 +91,14 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Image exceeds the 8 MB limit." }, { status: 400 });
   }
 
+  const bytesLimited = rateLimitOr429({
+    key: `upload-bytes:${access.discordUserId}`,
+    limit: 209715200, // 200 MB per day
+    windowSec: 86400,
+    amount: file.size,
+  });
+  if (bytesLimited) return bytesLimited;
+
   const bytes = new Uint8Array(await file.arrayBuffer());
 
   if (!matchesMagicBytes(bytes, file.type)) {
@@ -100,6 +116,11 @@ export async function POST(request: Request) {
     recordAdminAudit(access, "news.upload", null, { key });
     return NextResponse.json({ url });
   } catch (error) {
-    return NextResponse.json({ error: (error as Error).message }, { status: 502 });
+    const errorId = randomUUID().slice(0, 8);
+    console.error(`[upload:${errorId}]`, error);
+    return NextResponse.json(
+      { error: `Upload failed — try again or paste an image URL instead. (ref ${errorId})` },
+      { status: 502 },
+    );
   }
 }

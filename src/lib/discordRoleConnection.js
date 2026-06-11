@@ -11,7 +11,21 @@ function roleConnectionUrl(clientId) {
 async function discordJson(response) {
   if (response.ok) return response.status === 204 ? null : response.json();
   const text = await response.text().catch(() => '');
-  throw new Error(`Discord role connection request failed (${response.status}): ${text || response.statusText}`);
+  const err = new Error(`Discord role connection request failed (${response.status}): ${text || response.statusText}`);
+  if (response.status === 429) {
+    // Surface Retry-After so callers can propagate it to the client.
+    let retryAfterSec = Number(response.headers.get('retry-after'));
+    if (!retryAfterSec || isNaN(retryAfterSec)) {
+      try {
+        const body = JSON.parse(text);
+        retryAfterSec = Number(body.retry_after) || 5;
+      } catch {
+        retryAfterSec = 5;
+      }
+    }
+    err.retryAfterSec = retryAfterSec;
+  }
+  throw err;
 }
 
 export async function updateDiscordRoleConnection({ accessToken, clientId, payload }) {
