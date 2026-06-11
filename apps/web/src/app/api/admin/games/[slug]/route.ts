@@ -1,3 +1,4 @@
+import { revalidateTag } from "next/cache";
 import { NextResponse } from "next/server";
 import { canManageGame, getAdminAccess, isSuper } from "@/lib/admin";
 import { deleteGame, updateGame } from "@/lib/games";
@@ -25,6 +26,7 @@ export async function PATCH(
 
   const updated = updateGame(slug, validated.value);
   if (!updated) return NextResponse.json({ error: "Not found" }, { status: 404 });
+  revalidateTag("cms-games", "default");
   return NextResponse.json(updated);
 }
 
@@ -39,5 +41,7 @@ export async function DELETE(
   const { slug } = await context.params;
   const result = deleteGame(slug);
   if (result.gameDeleted === 0) return NextResponse.json({ error: "Not found" }, { status: 404 });
+  revalidateTag("cms-games", "default");
+  revalidateTag("cms-news", "default");
   return NextResponse.json({ ok: true, postsDeleted: result.postsDeleted });
 }

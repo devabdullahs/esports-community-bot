@@ -6,6 +6,7 @@ export default defineConfig({
   resolve: {
     alias: {
       "server-only": path.resolve(__dirname, "src/test/server-only-stub.ts"),
+      "next/cache": path.resolve(__dirname, "src/test/next-cache-stub.ts"),
       "@bot": path.resolve(__dirname, "../../src"),
       "@": path.resolve(__dirname, "src"),
     },

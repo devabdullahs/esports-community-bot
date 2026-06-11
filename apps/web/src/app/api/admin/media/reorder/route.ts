@@ -1,3 +1,4 @@
+import { revalidateTag } from "next/cache";
 import { NextResponse } from "next/server";
 import { getAdminAccess, isSuper } from "@/lib/admin";
 import { reorderMediaChannels } from "@/lib/media";
@@ -24,7 +25,9 @@ export async function POST(request: Request) {
   const slugs: string[] = body.slugs;
 
   try {
-    return NextResponse.json({ channels: reorderMediaChannels(slugs) });
+    const channels = reorderMediaChannels(slugs);
+    revalidateTag("cms-media", "default");
+    return NextResponse.json({ channels });
   } catch (err) {
     return NextResponse.json({ error: (err as Error).message }, { status: 400 });
   }

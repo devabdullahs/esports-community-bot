@@ -1,3 +1,4 @@
+import { revalidateTag } from "next/cache";
 import { NextResponse } from "next/server";
 import { canManageMedia, getAdminAccess, isSuper } from "@/lib/admin";
 import { deleteMediaChannel, updateMediaChannel } from "@/lib/media";
@@ -25,6 +26,7 @@ export async function PATCH(
 
   const updated = updateMediaChannel(slug, validated.value);
   if (!updated) return NextResponse.json({ error: "Not found" }, { status: 404 });
+  revalidateTag("cms-media", "default");
   return NextResponse.json(updated);
 }
 
@@ -39,5 +41,6 @@ export async function DELETE(
   const { slug } = await context.params;
   const result = deleteMediaChannel(slug);
   if (result.deleted === 0) return NextResponse.json({ error: "Not found" }, { status: 404 });
+  revalidateTag("cms-media", "default");
   return NextResponse.json({ ok: true });
 }

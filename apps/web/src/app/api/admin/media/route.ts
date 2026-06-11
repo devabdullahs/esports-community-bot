@@ -1,3 +1,4 @@
+import { revalidateTag } from "next/cache";
 import { NextResponse } from "next/server";
 import { getAdminAccess, isSuper } from "@/lib/admin";
 import { createMediaChannel, getMediaChannel, listMediaChannels } from "@/lib/media";
@@ -28,5 +29,7 @@ export async function POST(request: Request) {
   const validated = validateMediaContent(body);
   if (!validated.ok) return NextResponse.json({ error: validated.error }, { status: 400 });
 
-  return NextResponse.json(createMediaChannel({ slug, ...validated.value }));
+  const channel = createMediaChannel({ slug, ...validated.value });
+  revalidateTag("cms-media", "default");
+  return NextResponse.json(channel);
 }

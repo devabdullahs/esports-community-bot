@@ -1,3 +1,4 @@
+import { revalidateTag } from "next/cache";
 import { NextResponse } from "next/server";
 import { canManageGame, getAdminAccess } from "@/lib/admin";
 import { getGame } from "@/lib/games";
@@ -45,5 +46,6 @@ export async function POST(request: Request) {
     authorDiscordId: access.discordUserId ?? null,
     authorName: access.displayName ?? null,
   });
+  revalidateTag("cms-news", "default");
   return NextResponse.json(post);
 }
