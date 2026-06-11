@@ -26,6 +26,7 @@ import {
   setEwcPredictionsMentionsLeaderboard,
 } from '../db/settings.js';
 import { updateEwcPredictionLeaderboard } from '../jobs/ewcPredictions.js';
+import { db } from '../db/index.js';
 import { sendAuditLog } from '../lib/auditLog.js';
 import {
   formatTimestamp,
@@ -447,19 +448,23 @@ export async function execute(interaction) {
       const final = round.final?.length ? round.final : await currentStandings(seasonYear);
       const predictions = listWeeklyPredictions(round.id);
       let malformed = 0;
-      for (const prediction of predictions) {
-        try {
-          const result = scoreWeeklyPrediction(prediction.picks, baseline, final);
-          saveWeeklyPredictionScore(interaction.guildId, round.id, prediction.user_id, result.score, result.details);
-        } catch (error) {
-          malformed += 1;
-          saveWeeklyPredictionScore(interaction.guildId, round.id, prediction.user_id, 0, {
-            error: error.message,
-            picks: prediction.picks,
-          });
+      // Wrap all writes in a transaction so a mid-loop crash leaves scores consistent.
+      const applyScores = db.transaction(() => {
+        for (const prediction of predictions) {
+          try {
+            const result = scoreWeeklyPrediction(prediction.picks, baseline, final);
+            saveWeeklyPredictionScore(interaction.guildId, round.id, prediction.user_id, result.score, result.details);
+          } catch (error) {
+            malformed += 1;
+            saveWeeklyPredictionScore(interaction.guildId, round.id, prediction.user_id, 0, {
+              error: error.message,
+              picks: prediction.picks,
+            });
+          }
         }
-      }
-      markEwcWeekScored(round.id, final);
+        markEwcWeekScored(round.id, final);
+      });
+      applyScores();
       await updateEwcPredictionLeaderboard(interaction.client, interaction.guildId);
       await interaction.editReply({
         content: `✅ Scored **${round.label || round.week_key}** for ${predictions.length} prediction(s).`,
@@ -554,19 +559,23 @@ export async function execute(interaction) {
       const final = await currentStandings(seasonYear);
       const predictions = listSeasonPredictions(interaction.guildId, seasonYear);
       let malformed = 0;
-      for (const prediction of predictions) {
-        try {
-          const result = scoreSeasonPrediction(prediction.picks, final, round.top_size);
-          saveSeasonPredictionScore(interaction.guildId, seasonYear, prediction.user_id, result.score, result.details);
-        } catch (error) {
-          malformed += 1;
-          saveSeasonPredictionScore(interaction.guildId, seasonYear, prediction.user_id, 0, {
-            error: error.message,
-            picks: prediction.picks,
-          });
+      // Wrap all writes in a transaction so a mid-loop crash leaves scores consistent.
+      const applyScores = db.transaction(() => {
+        for (const prediction of predictions) {
+          try {
+            const result = scoreSeasonPrediction(prediction.picks, final, round.top_size);
+            saveSeasonPredictionScore(interaction.guildId, seasonYear, prediction.user_id, result.score, result.details);
+          } catch (error) {
+            malformed += 1;
+            saveSeasonPredictionScore(interaction.guildId, seasonYear, prediction.user_id, 0, {
+              error: error.message,
+              picks: prediction.picks,
+            });
+          }
         }
-      }
-      markEwcSeasonScored(interaction.guildId, seasonYear, final);
+        markEwcSeasonScored(interaction.guildId, seasonYear, final);
+      });
+      applyScores();
       await updateEwcPredictionLeaderboard(interaction.client, interaction.guildId);
       await interaction.editReply({
         content: `✅ Scored EWC ${seasonYear} season predictions for ${predictions.length} member(s).`,
