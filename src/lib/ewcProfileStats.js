@@ -183,7 +183,6 @@ export function getPublicEwcLeaderboard({ guildId, season = DEFAULT_EWC_PROFILE_
       const profile = userPredictionProfile(guildId, season, userId);
       return {
         rank: start + index + 1,
-        userId,
         displayName: memberLabel(userId),
         overallPoints: Number(row.score || 0),
         weeksScored: weekly.weeksScored,

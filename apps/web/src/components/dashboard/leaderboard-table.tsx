@@ -33,7 +33,6 @@ import {
 
 export type LeaderboardRow = {
   rank: number;
-  userId: string;
   displayName: string;
   overallPoints: number;
   weeksScored: number;
@@ -73,9 +72,6 @@ export function LeaderboardTable({
         cell: ({ row }) => (
           <div className="flex min-w-44 flex-col">
             <span className="font-medium">{row.original.displayName}</span>
-            <span className="font-mono text-xs text-muted-foreground" dir="ltr">
-              {row.original.userId}
-            </span>
           </div>
         ),
       },

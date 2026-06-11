@@ -108,9 +108,9 @@ test('builds ranked profile stats and Discord role connection payload', () => {
 test('shapes public leaderboard rows', () => {
   const leaderboard = getPublicEwcLeaderboard({ guildId, season, limit: 10 });
   assert.equal(leaderboard.total, 2);
-  assert.equal(leaderboard.rows[0].userId, userA);
+  assert.equal(leaderboard.rows[0].userId, undefined);
   assert.equal(leaderboard.rows[0].rank, 1);
-  assert.equal(leaderboard.rows[1].userId, userB);
+  assert.equal(leaderboard.rows[1].userId, undefined);
   assert.equal(leaderboard.rows[1].rank, 2);
   assert.equal(leaderboard.rows[1].weeklyWins, 1);
 });
