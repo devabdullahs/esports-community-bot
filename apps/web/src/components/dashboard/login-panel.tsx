@@ -30,7 +30,10 @@ export function LoginPanel({ locale }: { locale: Locale }) {
       provider: "discord",
       callbackURL,
     });
-    if (result?.error) setError(result.error.message || text.failedMessage);
+    if (result?.error) {
+      const message = (result.error && typeof result.error.message === "string" && result.error.message) || text.failedMessage;
+      setError(message);
+    }
   }
 
   return (
