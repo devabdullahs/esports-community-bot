@@ -77,7 +77,17 @@ News upload media is stored in Cloudflare R2-compatible object storage. The uplo
 - **Secret generation:** `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"`
 - **Rotating `BETTER_AUTH_SECRET`** invalidates all active sessions and all stored encrypted OAuth tokens simultaneously. Plan for users needing to re-authenticate.
 
+### Content Security Policy
+
+A `Content-Security-Policy` header is enforced in **production only** (`NODE_ENV=production`). It is intentionally absent in dev mode so that Next.js HMR (WebSockets, eval) continues to work.
+
+Key directives and rationale:
+
+- **`img-src 'self' data: blob: https:`** — news cover images are admin-pasted `https://` URLs (validated by `safe-url.ts`); a blanket `https:` is deliberate and required here.
+- **`font-src 'self' https://assets.moonbot.info [r2Host]`** — the Thmanyah font families are loaded via `@font-face` from `assets.moonbot.info`. If `R2_PUBLIC_BASE_URL` is set, its origin is derived at build/start time and appended automatically. **Changing `R2_PUBLIC_BASE_URL` requires a container restart** for the new origin to take effect in the header.
+- **`script-src 'self' 'unsafe-inline'`** — Next.js App Router emits inline hydration scripts. Tightening this to a nonce-based policy requires middleware plumbing and is tracked as the next hardening step (deferred follow-up).
+- **`frame-ancestors 'none'`** — supersedes `X-Frame-Options: DENY` for supporting browsers.
+
 ### Non-goals
 
 - **No disk-level database encryption.** The NAS volume is the physical trust boundary; whole-disk or file-level encryption at rest is out of scope for this project.
-- **No Content Security Policy yet.** CSP is deferred; a future iteration should add it to the security headers in `next.config.ts`.
