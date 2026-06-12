@@ -40,6 +40,13 @@ export function formatDateTime(value: string, locale: Locale) {
   return new Intl.DateTimeFormat(numberLocale(locale), { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }).format(date);
 }
 
+// Match scheduled_at is stored as unix seconds (UTC). Render it with the same
+// locale-aware formatter the rest of the dashboard uses.
+export function formatUnixSeconds(value: number | null | undefined, locale: Locale) {
+  if (value == null || !Number.isFinite(value)) return "";
+  return formatDateTime(new Date(value * 1000).toISOString(), locale);
+}
+
 export function localizedPath(pathname: string, locale: Locale) {
   void locale;
   return pathname;
@@ -62,6 +69,7 @@ const baseCopy = {
       browse: "Browse",
       news: "News",
       media: "Media",
+      tournaments: "Tournaments",
       predictions: "Predictions",
       admin: "Admin",
       myProfile: "My profile",
@@ -132,6 +140,33 @@ const baseCopy = {
       newsLabel: "Community news",
       newsTitle: "Posts that can travel from the site to Discord.",
       newsDescription: "Game pages keep short updates close to the game context, so members can browse by title instead of digging through channels.",
+    },
+    tournaments: {
+      eyebrow: "Tournaments",
+      title: "Tracked tournaments",
+      description: "Live match data from the community's tracked events.",
+      empty: "No tournaments tracked yet.",
+      live: "Live",
+      upcoming: "Upcoming",
+      finished: "Finished",
+      viewMatches: "View matches",
+      back: "Back to tournaments",
+      liveNow: "Live now",
+      results: "Recent results",
+      noLive: "No live matches right now.",
+      noUpcoming: "No upcoming matches.",
+      noResults: "No results yet.",
+      noMatches: "No matches for this tournament yet.",
+      time: "Time",
+      match: "Match",
+      score: "Score",
+      result: "Result",
+      vs: "vs",
+      tbd: "TBD",
+      openSource: "View on source",
+      attribution: "Data from Liquipedia — CC-BY-SA 3.0",
+      attributionView: "liquipedia.net",
+      attributionLicense: "CC-BY-SA 3.0",
     },
     game: {
       back: "Back to games",
@@ -212,6 +247,7 @@ const baseCopy = {
       browse: "\u062a\u0635\u0641\u0651\u062d",
       news: "\u0627\u0644\u0623\u062e\u0628\u0627\u0631",
       media: "\u0627\u0644\u0625\u0639\u0644\u0627\u0645",
+      tournaments: "\u0627\u0644\u0628\u0637\u0648\u0644\u0627\u062a",
       predictions: "\u0627\u0644\u062a\u0648\u0642\u0639\u0627\u062a",
       admin: "\u0627\u0644\u0625\u062f\u0627\u0631\u0629",
       myProfile: "\u0645\u0644\u0641\u064a",
@@ -282,6 +318,33 @@ const baseCopy = {
       newsLabel: "\u0623\u062e\u0628\u0627\u0631 \u0627\u0644\u0645\u062c\u062a\u0645\u0639",
       newsTitle: "\u0645\u0646\u0634\u0648\u0631\u0627\u062a \u064a\u0645\u0643\u0646 \u0623\u0646 \u062a\u0646\u062a\u0642\u0644 \u0645\u0646 \u0627\u0644\u0645\u0648\u0642\u0639 \u0625\u0644\u0649 \u062f\u064a\u0633\u0643\u0648\u0631\u062f.",
       newsDescription: "\u062a\u0628\u0642\u064a \u0635\u0641\u062d\u0627\u062a \u0627\u0644\u0623\u0644\u0639\u0627\u0628 \u0627\u0644\u062a\u062d\u062f\u064a\u062b\u0627\u062a \u0627\u0644\u0642\u0635\u064a\u0631\u0629 \u0642\u0631\u064a\u0628\u0629 \u0645\u0646 \u0633\u064a\u0627\u0642 \u0627\u0644\u0644\u0639\u0628\u0629.",
+    },
+    tournaments: {
+      eyebrow: "\u0627\u0644\u0628\u0637\u0648\u0644\u0627\u062a",
+      title: "\u0627\u0644\u0628\u0637\u0648\u0644\u0627\u062a \u0627\u0644\u0645\u062a\u0627\u0628\u064e\u0639\u0629",
+      description: "\u0628\u064a\u0627\u0646\u0627\u062a \u0627\u0644\u0645\u0628\u0627\u0631\u064a\u0627\u062a \u0627\u0644\u0645\u0628\u0627\u0634\u0631\u0629 \u0645\u0646 \u0627\u0644\u0641\u0639\u0627\u0644\u064a\u0627\u062a \u0627\u0644\u062a\u064a \u064a\u062a\u0627\u0628\u0639\u0647\u0627 \u0627\u0644\u0645\u062c\u062a\u0645\u0639.",
+      empty: "\u0644\u0627 \u062a\u0648\u062c\u062f \u0628\u0637\u0648\u0644\u0627\u062a \u0645\u062a\u0627\u0628\u064e\u0639\u0629 \u0628\u0639\u062f.",
+      live: "\u0645\u0628\u0627\u0634\u0631",
+      upcoming: "\u0627\u0644\u0642\u0627\u062f\u0645\u0629",
+      finished: "\u0627\u0644\u0645\u0646\u062a\u0647\u064a\u0629",
+      viewMatches: "\u0639\u0631\u0636 \u0627\u0644\u0645\u0628\u0627\u0631\u064a\u0627\u062a",
+      back: "\u0627\u0644\u0639\u0648\u062f\u0629 \u0625\u0644\u0649 \u0627\u0644\u0628\u0637\u0648\u0644\u0627\u062a",
+      liveNow: "\u0645\u0628\u0627\u0634\u0631 \u0627\u0644\u0622\u0646",
+      results: "\u0623\u062d\u062f\u062b \u0627\u0644\u0646\u062a\u0627\u0626\u062c",
+      noLive: "\u0644\u0627 \u062a\u0648\u062c\u062f \u0645\u0628\u0627\u0631\u064a\u0627\u062a \u0645\u0628\u0627\u0634\u0631\u0629 \u0627\u0644\u0622\u0646.",
+      noUpcoming: "\u0644\u0627 \u062a\u0648\u062c\u062f \u0645\u0628\u0627\u0631\u064a\u0627\u062a \u0642\u0627\u062f\u0645\u0629.",
+      noResults: "\u0644\u0627 \u062a\u0648\u062c\u062f \u0646\u062a\u0627\u0626\u062c \u0628\u0639\u062f.",
+      noMatches: "\u0644\u0627 \u062a\u0648\u062c\u062f \u0645\u0628\u0627\u0631\u064a\u0627\u062a \u0644\u0647\u0630\u0647 \u0627\u0644\u0628\u0637\u0648\u0644\u0629 \u0628\u0639\u062f.",
+      time: "\u0627\u0644\u0648\u0642\u062a",
+      match: "\u0627\u0644\u0645\u0628\u0627\u0631\u0627\u0629",
+      score: "\u0627\u0644\u0646\u062a\u064a\u062c\u0629",
+      result: "\u0627\u0644\u0646\u062a\u064a\u062c\u0629",
+      vs: "\u0636\u062f",
+      tbd: "\u063a\u064a\u0631 \u0645\u062d\u062f\u062f",
+      openSource: "\u0639\u0631\u0636 \u0639\u0644\u0649 \u0627\u0644\u0645\u0635\u062f\u0631",
+      attribution: "\u0627\u0644\u0628\u064a\u0627\u0646\u0627\u062a \u0645\u0646 Liquipedia \u2014 CC-BY-SA 3.0",
+      attributionView: "liquipedia.net",
+      attributionLicense: "CC-BY-SA 3.0",
     },
     game: {
       back: "\u0627\u0644\u0639\u0648\u062f\u0629 \u0644\u0644\u0623\u0644\u0639\u0627\u0628",
