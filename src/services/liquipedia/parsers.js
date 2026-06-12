@@ -1,6 +1,8 @@
 // Pure HTML parser functions — no imports from client or rateState.
 // Each takes a cheerio `$` (and optionally the element/game) and returns plain data.
 
+import { ewcPlacementPoints, normalizeClubName } from '../../lib/ewcPredictions.js';
+
 // ---------------------------------------------------------------------------
 // Shared helpers
 // ---------------------------------------------------------------------------
@@ -847,4 +849,92 @@ export function parseValveRankingTable($, table, region) {
       });
     });
   return out;
+}
+
+// ---------------------------------------------------------------------------
+// EWC per-game weekly results parsers
+// ---------------------------------------------------------------------------
+
+function playerName($, el) {
+  const $el = $(el);
+  return cleanName(
+    $el.find('.name').first().text() ||
+      $el.find('a[title]').first().attr('title') ||
+      $el.text(),
+  );
+}
+
+// Map a player id -> club, scoped by game when possible. Used to resolve solo
+// games (fighters, chess, etc.) where the prizepool row lists a player, not a
+// team block, back to the EWC club that fielded them.
+function buildEwcPlayerClubLookup(players) {
+  const byPlayer = new Map();
+  for (const player of players || []) {
+    if (!player.id || !player.team || player.team === 'TBD') continue;
+    const gameKey = normalizeClubName(player.game);
+    const idKey = normalizeClubName(player.id);
+    byPlayer.set(`${gameKey}:${idKey}`, player.team);
+    if (!byPlayer.has(idKey)) byPlayer.set(idKey, player.team);
+  }
+  return byPlayer;
+}
+
+function playerClubFor(lookup, game, player) {
+  const idKey = normalizeClubName(player);
+  return lookup.get(`${normalizeClubName(game)}:${idKey}`) || lookup.get(idKey) || null;
+}
+
+function addUniqueClub(clubs, club, participant = null) {
+  const name = cleanName(club);
+  if (!name || name === 'TBD') return;
+  const key = normalizeClubName(name);
+  if (clubs.some((entry) => normalizeClubName(entry.club) === key)) return;
+  clubs.push({ club: name, participant });
+}
+
+function clubsFromPrizepoolRow($, row, game, playerLookup) {
+  const clubs = [];
+  const $row = $(row);
+
+  $row.find('.block-team').each((_i, el) => addUniqueClub(clubs, teamName($, el)));
+  $row.find('.team-template').each((_i, el) => addUniqueClub(clubs, teamName($, el)));
+
+  $row.find('.block-player').each((_i, el) => {
+    const player = playerName($, el);
+    const club = playerClubFor(playerLookup, game, player);
+    if (club) addUniqueClub(clubs, club, player);
+  });
+
+  return clubs;
+}
+
+// Parse a Liquipedia event prizepool table into normalized per-club placements.
+// `event` carries the game label so solo games can be mapped via the player list.
+export function parseEwcEventPlacements($, event, players = []) {
+  const table = $('.prizepooltable').first();
+  if (!table.length) return [];
+  const playerLookup = buildEwcPlayerClubLookup(players);
+  const byClub = new Map();
+
+  table.find('.csstable-widget-row').each((_i, row) => {
+    const $row = $(row);
+    if ($row.hasClass('prizepooltable-header')) return;
+    const place = $row.find('.prizepooltable-place').first().text().replace(/\s+/g, ' ').trim();
+    const points = ewcPlacementPoints(place);
+    if (!place || !points) return;
+
+    for (const entry of clubsFromPrizepoolRow($, row, event.game, playerLookup)) {
+      const key = normalizeClubName(entry.club);
+      const existing = byClub.get(key);
+      if (existing && existing.points >= points) continue;
+      byClub.set(key, {
+        club: entry.club,
+        place,
+        points,
+        participant: entry.participant,
+      });
+    }
+  });
+
+  return [...byClub.values()].sort((a, b) => b.points - a.points || a.club.localeCompare(b.club));
 }

@@ -16,6 +16,7 @@ import {
   parseClubPrizepool,
   parseEwcClubs,
   parseEwcPlayerList,
+  parseEwcEventPlacements,
   parseEwcEventSchedule,
   VRS_REGIONS,
   normalizeValveRankingRegion,
@@ -180,6 +181,48 @@ export async function fetchEwcPlayerList() {
     sourceUrl: 'https://liquipedia.net/esports/Esports_World_Cup/2026/Player_List',
     players: parseEwcPlayerList(cheerio.load(html)),
   };
+}
+
+// Derive the {wiki, page} for a stored EWC game event from its Liquipedia URL.
+function liquipediaEventPage(event) {
+  if (!event?.eventUrl) return null;
+  try {
+    const url = new URL(event.eventUrl);
+    if (!/liquipedia\.net$/i.test(url.hostname)) return null;
+    const parts = url.pathname.split('/').filter(Boolean);
+    if (parts.length < 2) return null;
+    return { wiki: parts[0].toLowerCase(), page: parts.slice(1).join('/') };
+  } catch {
+    return null;
+  }
+}
+
+export async function fetchEwcEventPlacements(event, players = []) {
+  const page = liquipediaEventPage(event);
+  if (!page) return { ...event, placements: [], error: 'Missing Liquipedia event URL' };
+  const data = await parsePage(page.wiki, page.page);
+  const html = data?.parse?.text?.['*'];
+  if (!html) return { ...event, placements: [], error: 'Empty event page' };
+  return {
+    ...event,
+    placements: parseEwcEventPlacements(cheerio.load(html), event, players),
+  };
+}
+
+// Fetch per-game weekly placements for a set of EWC game events. The player
+// list is fetched once and reused as a solo-game scoring fallback. Each event
+// is fetched sequentially so it stays inside the single serialized Liquipedia
+// request queue (never parallelize — see rate rules).
+export async function fetchEwcWeekGameResults(games) {
+  const playerData = await fetchEwcPlayerList().catch((error) => {
+    logger.warn(`[ewc] player list unavailable for solo-game scoring fallback: ${error.message}`);
+    return { players: [] };
+  });
+  const results = [];
+  for (const game of games || []) {
+    results.push(await fetchEwcEventPlacements(game, playerData.players || []));
+  }
+  return results;
 }
 
 export async function fetchEwcEventSchedule(year = 2026) {
