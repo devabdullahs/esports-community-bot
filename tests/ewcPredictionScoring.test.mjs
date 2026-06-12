@@ -11,8 +11,13 @@ const {
   weeklyPointDeltas,
   scoreWeeklyPrediction,
   scoreSeasonPrediction,
+  scorePerGameWeeklyPrediction,
+  ewcPlacementPoints,
+  pendingEwcGameResults,
+  effectiveEwcWeekStatus,
   generateEwcWeekWindows,
   WEEKLY_TOP_THREE_SWEEP_BONUS,
+  WEEKLY_ALL_GAME_WINNERS_BONUS,
   SEASON_EXACT_RANK_BONUS,
 } = await import('../src/lib/ewcPredictions.js');
 
@@ -258,4 +263,178 @@ test('parsePredictionDate: YYYY-MM-DD HH:mm is interpreted as Riyadh time (+03:0
   // This documents that bare datetime strings use Asia/Riyadh offset (+03:00).
   const expected = 1783458000; // = Math.floor(Date.parse('2026-07-08T00:00+03:00') / 1000)
   assert.equal(parsePredictionDate('2026-07-08 00:00'), expected);
+});
+
+// ─── Per-game weekly scoring (the model production runs) ─────────────────────
+//
+// picks_json for a per-game round is an array of objects:
+//   [{ gameKey, game, event, pick, pickedAt }, ...]
+// results is an array of { gameKey, placements: [{ club, points, place, participant }] }.
+// Placement points follow EWC_POINTS_BY_RANK: 1→1000, 2→750, 3→500, 4→300, 5→200,
+// 6→150, 7→100, 8→50, anything else (incl. outside top-8) → 0.
+
+test('ewcPlacementPoints: maps the official EWC rank→points table; outside top-8 → 0', () => {
+  assert.equal(ewcPlacementPoints('1st'), 1000);
+  assert.equal(ewcPlacementPoints('2nd'), 750);
+  assert.equal(ewcPlacementPoints('3rd'), 500);
+  assert.equal(ewcPlacementPoints('4th'), 300);
+  assert.equal(ewcPlacementPoints('5th'), 200);
+  assert.equal(ewcPlacementPoints('6th'), 150);
+  assert.equal(ewcPlacementPoints('7th'), 100);
+  assert.equal(ewcPlacementPoints('8th'), 50);
+  assert.equal(ewcPlacementPoints('9th'), 0); // outside top-8
+  assert.equal(ewcPlacementPoints('9th-12th'), 0); // first number wins, still outside top-8
+  assert.equal(ewcPlacementPoints(''), 0);
+  assert.equal(ewcPlacementPoints(null), 0);
+});
+
+const GAMES = [
+  { key: 'valorant-1', game: 'Valorant', event: 'EWC Valorant' },
+  { key: 'apex-2', game: 'Apex Legends', event: 'EWC ALGS' },
+];
+
+function resultsFor({ valorantWinner = 'Team Falcons', apexWinner = 'Team Liquid' } = {}) {
+  return [
+    {
+      gameKey: 'valorant-1',
+      placements: [
+        { club: valorantWinner, points: 1000, place: '1st' },
+        { club: 'Team Vitality', points: 750, place: '2nd' },
+      ],
+    },
+    {
+      gameKey: 'apex-2',
+      placements: [
+        { club: apexWinner, points: 1000, place: '1st' },
+        { club: 'TSM', points: 750, place: '2nd' },
+      ],
+    },
+  ];
+}
+
+test('scorePerGameWeeklyPrediction: happy path — correct winner per game scores per-rank points', () => {
+  const picks = [
+    { gameKey: 'valorant-1', pick: 'Team Vitality' }, // 2nd → 750
+    { gameKey: 'apex-2', pick: 'Team Liquid' }, // 1st → 1000
+  ];
+  const out = scorePerGameWeeklyPrediction(picks, GAMES, resultsFor());
+  assert.equal(out.details.mode, 'per-game');
+  assert.equal(out.details.picks.length, 2);
+  const valorant = out.details.picks.find((p) => p.gameKey === 'valorant-1');
+  assert.equal(valorant.points, 750);
+  assert.equal(valorant.matchedClub, 'Team Vitality');
+  const apex = out.details.picks.find((p) => p.gameKey === 'apex-2');
+  assert.equal(apex.points, 1000);
+  // No all-winners bonus: only one of the two picks is a winner.
+  assert.equal(out.details.allWinners, false);
+  assert.equal(out.details.bonus, 0);
+  assert.equal(out.score, 1750);
+});
+
+test('scorePerGameWeeklyPrediction: picking every game winner adds the all-winners bonus', () => {
+  const picks = [
+    { gameKey: 'valorant-1', pick: 'Team Falcons' }, // 1st → 1000
+    { gameKey: 'apex-2', pick: 'Team Liquid' }, // 1st → 1000
+  ];
+  const out = scorePerGameWeeklyPrediction(picks, GAMES, resultsFor());
+  assert.equal(out.details.allWinners, true);
+  assert.equal(out.details.bonus, WEEKLY_ALL_GAME_WINNERS_BONUS);
+  assert.equal(out.score, 1000 + 1000 + WEEKLY_ALL_GAME_WINNERS_BONUS);
+});
+
+test('scorePerGameWeeklyPrediction: a pending game (no result) scores 0 for that game and blocks the bonus', () => {
+  const picks = [
+    { gameKey: 'valorant-1', pick: 'Team Falcons' }, // 1st → 1000
+    { gameKey: 'apex-2', pick: 'Team Liquid' }, // result missing → 0
+  ];
+  const results = [resultsFor()[0]]; // only valorant has a result
+  const out = scorePerGameWeeklyPrediction(picks, GAMES, results);
+  const apex = out.details.picks.find((p) => p.gameKey === 'apex-2');
+  assert.equal(apex.points, 0);
+  assert.equal(apex.resultAvailable, false);
+  // Not all games are complete, so the all-winners bonus is withheld.
+  assert.equal(out.details.allWinners, false);
+  assert.equal(out.score, 1000);
+});
+
+test('scorePerGameWeeklyPrediction: an unknown club (no match in results) scores 0 for that game', () => {
+  const picks = [
+    { gameKey: 'valorant-1', pick: 'Nonexistent Club' },
+    { gameKey: 'apex-2', pick: 'Team Liquid' }, // 1st → 1000
+  ];
+  const out = scorePerGameWeeklyPrediction(picks, GAMES, resultsFor());
+  const valorant = out.details.picks.find((p) => p.gameKey === 'valorant-1');
+  assert.equal(valorant.points, 0);
+  assert.equal(valorant.matchedClub, null);
+  assert.equal(out.score, 1000);
+});
+
+test('scorePerGameWeeklyPrediction: a missing pick for a configured game scores 0, pick null', () => {
+  const picks = [{ gameKey: 'valorant-1', pick: 'Team Falcons' }]; // no apex pick
+  const out = scorePerGameWeeklyPrediction(picks, GAMES, resultsFor());
+  const apex = out.details.picks.find((p) => p.gameKey === 'apex-2');
+  assert.equal(apex.pick, null);
+  assert.equal(apex.points, 0);
+  assert.equal(out.score, 1000);
+});
+
+test('scorePerGameWeeklyPrediction: throws when the round has no per-game events configured', () => {
+  assert.throws(() => scorePerGameWeeklyPrediction([], [], []), /no per-game events/);
+});
+
+test('pendingEwcGameResults: flags games whose results are absent or have no 1st-place club', () => {
+  const results = [resultsFor()[0]]; // only valorant resolved
+  const pending = pendingEwcGameResults(results, GAMES);
+  assert.equal(pending.length, 1);
+  assert.equal(pending[0].gameKey, 'apex-2');
+  // Both resolved → none pending.
+  assert.equal(pendingEwcGameResults(resultsFor(), GAMES).length, 0);
+});
+
+// ─── effectiveEwcWeekStatus (per-game lock-window state machine) ──────────────
+//
+// A per-game round carries games[] with a lockAt per game. Effective status is
+// derived from round.status, open_at, close_at, and each game's lockAt vs now.
+
+test('effectiveEwcWeekStatus: open round before its open_at reports "opens"', () => {
+  const round = { status: 'open', open_at: 2000, close_at: 5000, games: [] };
+  const state = effectiveEwcWeekStatus(round, 1000);
+  assert.equal(state.label, 'opens');
+  assert.equal(state.at, 2000);
+});
+
+test('effectiveEwcWeekStatus: per-game round with no games locked yet is "open"', () => {
+  const round = { status: 'open', open_at: 0, games: [{ lockAt: 5000 }, { lockAt: 6000 }] };
+  const state = effectiveEwcWeekStatus(round, 1000);
+  assert.equal(state.label, 'open');
+  assert.equal(state.lockedGames, 0);
+  assert.equal(state.openGames, 2);
+});
+
+test('effectiveEwcWeekStatus: some games past lockAt → "partly open" with the open count', () => {
+  const round = { status: 'open', open_at: 0, games: [{ lockAt: 1000 }, { lockAt: 9000 }] };
+  const state = effectiveEwcWeekStatus(round, 5000); // first game locked, second still open
+  assert.equal(state.label, 'partly open');
+  assert.equal(state.lockedGames, 1);
+  assert.equal(state.openGames, 1);
+  assert.equal(state.totalGames, 2);
+});
+
+test('effectiveEwcWeekStatus: all games past lockAt → "locked"', () => {
+  const round = { status: 'open', open_at: 0, games: [{ lockAt: 1000 }, { lockAt: 2000 }] };
+  const state = effectiveEwcWeekStatus(round, 5000);
+  assert.equal(state.label, 'locked');
+  assert.equal(state.lockedGames, 2);
+  assert.equal(state.openGames, 0);
+});
+
+test('effectiveEwcWeekStatus: aggregate round (no games) past close_at → "closed"', () => {
+  const round = { status: 'open', open_at: 0, close_at: 3000, games: [] };
+  assert.equal(effectiveEwcWeekStatus(round, 5000).label, 'closed');
+  assert.equal(effectiveEwcWeekStatus(round, 1000).label, 'open');
+});
+
+test('effectiveEwcWeekStatus: scored round reports "scored"; missing round reports "missing"', () => {
+  assert.equal(effectiveEwcWeekStatus({ status: 'scored', games: [] }).label, 'scored');
+  assert.equal(effectiveEwcWeekStatus(null).label, 'missing');
 });
