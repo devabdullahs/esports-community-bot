@@ -175,8 +175,8 @@ export const data = new SlashCommandBuilder()
       .setName('delete_week')
       .setDescription('Permanently delete a prediction week and all its picks.')
       .addStringOption((o) => o.setName('week').setDescription('Week key, e.g. week-8').setRequired(true))
-      .addStringOption((o) => o.setName('season').setDescription('Season year').setRequired(false))
-      .addBooleanOption((o) => o.setName('confirm').setDescription('Set to True to really delete').setRequired(true)),
+      .addBooleanOption((o) => o.setName('confirm').setDescription('Set to True to really delete').setRequired(true))
+      .addStringOption((o) => o.setName('season').setDescription('Season year').setRequired(false)),
   )
   .addSubcommand((s) =>
     s
