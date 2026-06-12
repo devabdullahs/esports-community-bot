@@ -10,6 +10,7 @@ import {
   listWeeklyPredictions,
   markEwcSeasonScored,
   markEwcWeekScored,
+  markEwcWeekScoredWithResults,
   reopenEwcSeason,
   reopenEwcWeek,
   saveSeasonPredictionScore,
@@ -30,13 +31,17 @@ import { updateEwcPredictionLeaderboard } from '../jobs/ewcPredictions.js';
 import { db } from '../db/index.js';
 import { sendAuditLog } from '../lib/auditLog.js';
 import {
+  defaultEwcSeasonPredictionWindow,
+  effectiveEwcWeekStatusText,
   formatTimestamp,
   generateEwcWeekWindows,
   parsePredictionDate,
+  pendingEwcGameResults,
+  scorePerGameWeeklyPrediction,
   scoreSeasonPrediction,
   scoreWeeklyPrediction,
 } from '../lib/ewcPredictions.js';
-import { fetchEwcClubStandings, fetchEwcEventSchedule } from '../services/liquipedia.js';
+import { fetchEwcClubStandings, fetchEwcEventSchedule, fetchEwcWeekGameResults } from '../services/liquipedia.js';
 import {
   botChannelPermissionMessage,
   EMBED_BOARD_PERMISSIONS,
@@ -94,9 +99,16 @@ export const data = new SlashCommandBuilder()
       .addIntegerOption((o) =>
         o
           .setName('open_before_hours')
-          .setDescription('Hours before each week starts to open picks; default 48')
+          .setDescription('Hours before the earliest game lock to open picks; default 48')
           .setMinValue(0)
           .setMaxValue(336),
+      )
+      .addIntegerOption((o) =>
+        o
+          .setName('lock_before_hours')
+          .setDescription('Hours before each event starts to lock that game pick; default 24')
+          .setMinValue(0)
+          .setMaxValue(168),
       )
       .addIntegerOption((o) =>
         o
@@ -317,10 +329,11 @@ export async function execute(interaction) {
 
     if (sub === 'generate_weeks') {
       const openBeforeHours = interaction.options.getInteger('open_before_hours') ?? 48;
+      const lockBeforeHours = interaction.options.getInteger('lock_before_hours') ?? 24;
       const scoreDelayHours = interaction.options.getInteger('score_delay_hours') ?? config.ewcPredictions.scoreDelayHours;
       await interaction.deferReply({ flags: MessageFlags.Ephemeral });
       const schedule = await fetchEwcEventSchedule(Number(seasonYear));
-      const weeks = generateEwcWeekWindows(schedule.events, { openBeforeHours, scoreDelayHours });
+      const weeks = generateEwcWeekWindows(schedule.events, { openBeforeHours, lockBeforeHours, scoreDelayHours });
       if (!weeks.length) throw new Error(`No dated EWC events were found for ${seasonYear}.`);
       for (const week of weeks) {
         upsertEwcWeek({
@@ -328,27 +341,31 @@ export async function execute(interaction) {
           season: seasonYear,
           weekKey: week.weekKey,
           label: week.label,
+          startAt: week.startAt,
+          endAt: week.endAt,
           openAt: week.openAt,
           closeAt: week.closeAt,
           scoreAfter: week.scoreAfter,
+          games: week.events,
           createdBy: interaction.user.id,
         });
       }
       const lines = weeks
         .slice(0, 10)
-        .map(
-          (week) =>
-            `- **${week.weekKey}**: ${week.label} - opens ${formatTimestamp(week.openAt)} - locks ${formatTimestamp(week.closeAt)} - scores ${formatTimestamp(week.scoreAfter)}`,
-        );
+        .map((week) => {
+          const games = week.events.map((event) => event.game).join(', ');
+          return `- **${week.weekKey}**: ${week.label} - ${week.events.length} game(s): ${games}\n  opens ${formatTimestamp(week.openAt)} - last lock ${formatTimestamp(week.closeAt)} - scores ${formatTimestamp(week.scoreAfter)}`;
+        });
       await interaction.editReply(
         `✅ Generated **${weeks.length}** EWC ${seasonYear} weekly prediction round(s) from ${schedule.events.length} event(s).\n` +
-          `Open-before: **${openBeforeHours}h**. Score delay: **${scoreDelayHours}h**.\n\n${lines.join('\n')}`,
+          'Official 2026 weeks are anchored to the Paris event dates; events are scored in the week they **end**.\n' +
+          `Open-before: **${openBeforeHours}h**. Game lock-before: **${lockBeforeHours}h**. Score delay: **${scoreDelayHours}h**.\n\n${lines.join('\n')}`,
       );
       await sendAuditLog(interaction.client, interaction.guildId, {
         action: 'EWC Prediction Weeks Generated',
         actor: interaction.user,
         target: `EWC ${seasonYear}`,
-        details: `Weeks: ${weeks.length}\nEvents: ${schedule.events.length}\nOpen-before: ${openBeforeHours}h\nScore delay: ${scoreDelayHours}h`,
+        details: `Weeks: ${weeks.length}\nEvents: ${schedule.events.length}\nOpen-before: ${openBeforeHours}h\nLock-before: ${lockBeforeHours}h\nScore delay: ${scoreDelayHours}h`,
         color: 'config',
       });
       return;
@@ -477,17 +494,30 @@ export async function execute(interaction) {
       const weekKey = interaction.options.getString('week', true);
       const round = getEwcWeek(interaction.guildId, seasonYear, weekKey);
       if (!round) throw new Error(`Week \`${weekKey}\` does not exist.`);
-      const baseline = round.baseline || [];
-      if (!baseline.length) throw new Error('This week has no baseline snapshot yet.');
       await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-      const final = round.final?.length ? round.final : await currentStandings(seasonYear);
+
+      const perGame = Array.isArray(round.games) && round.games.length > 0;
+      const baseline = round.baseline || [];
+      // Network fetch + the pending-results check stay OUTSIDE the transaction.
+      const results = perGame ? (round.results?.length ? round.results : await fetchEwcWeekGameResults(round.games)) : [];
+      const missingResults = perGame ? pendingEwcGameResults(results, round.games) : [];
+      if (missingResults.length) {
+        throw new Error(
+          `Missing complete placement results for: ${missingResults.map((result) => result.game || result.event || result.gameKey).join(', ')}.`,
+        );
+      }
+      if (!perGame && !baseline.length) throw new Error('This week has no baseline snapshot yet.');
+
+      const final = perGame ? round.final || [] : round.final?.length ? round.final : await currentStandings(seasonYear).catch(() => []);
       const predictions = listWeeklyPredictions(round.id);
       let malformed = 0;
       // Wrap all writes in a transaction so a mid-loop crash leaves scores consistent.
       const applyScores = db.transaction(() => {
         for (const prediction of predictions) {
           try {
-            const result = scoreWeeklyPrediction(prediction.picks, baseline, final);
+            const result = perGame
+              ? scorePerGameWeeklyPrediction(prediction.picks, round.games, results)
+              : scoreWeeklyPrediction(prediction.picks, baseline, final);
             saveWeeklyPredictionScore(interaction.guildId, round.id, prediction.user_id, result.score, result.details);
           } catch (error) {
             malformed += 1;
@@ -497,18 +527,19 @@ export async function execute(interaction) {
             });
           }
         }
-        markEwcWeekScored(round.id, final);
+        if (perGame) markEwcWeekScoredWithResults(round.id, final || [], results);
+        else markEwcWeekScored(round.id, final);
       });
       applyScores();
       await updateEwcPredictionLeaderboard(interaction.client, interaction.guildId);
       await interaction.editReply({
-        content: `✅ Scored **${round.label || round.week_key}** for ${predictions.length} prediction(s).`,
+        content: `✅ Scored **${round.label || round.week_key}** for ${predictions.length} prediction(s)${perGame ? ` across ${round.games.length} game(s)` : ''}.`,
       });
       await sendAuditLog(interaction.client, interaction.guildId, {
         action: 'EWC Prediction Week Scored',
         actor: interaction.user,
         target: `${round.season} ${round.week_key}`,
-        details: `Predictions scored: ${predictions.length}${malformed ? `\nMalformed rows scored as 0: ${malformed}` : ''}`,
+        details: `Mode: ${perGame ? 'per-game' : 'aggregate'}\nPredictions scored: ${predictions.length}${malformed ? `\nMalformed rows scored as 0: ${malformed}` : ''}`,
         color: 'success',
       });
       return;
@@ -517,29 +548,39 @@ export async function execute(interaction) {
     if (sub === 'open_season') {
       const topSize = interaction.options.getInteger('top_size') || 10;
       const bestWeeks = interaction.options.getInteger('best_weeks');
-      const closeAt = parseOptionalDate(interaction, 'close_at');
+      const scoreDelayHours = interaction.options.getInteger('score_delay_hours') ?? config.ewcPredictions.scoreDelayHours;
+      const defaultWindow = defaultEwcSeasonPredictionWindow(seasonYear, { scoreDelayHours });
+      const manualOpenAt = parseOptionalDate(interaction, 'open_at');
+      const manualCloseAt = parseOptionalDate(interaction, 'close_at');
+      const openAt = manualOpenAt ?? defaultWindow?.openAt ?? null;
+      const closeAt = manualCloseAt ?? defaultWindow?.closeAt ?? null;
+      const scoreAfter = defaultWindow?.scoreAfter ?? scoreAfterFromClose(interaction, closeAt);
+      const defaultTimingLabel = defaultWindow
+        ? `${manualOpenAt || manualCloseAt ? 'Default timing, overridden where provided' : 'Default timing'}: opens **${defaultWindow.openBeforeDays} days** before the first EWC competition, closes **${defaultWindow.closeBeforeHours} hours** before the first EWC competition.\n`
+        : '';
       const round = upsertEwcSeason({
         guildId: interaction.guildId,
         season: seasonYear,
         label: interaction.options.getString('label') || `EWC ${seasonYear} Season`,
-        openAt: parseOptionalDate(interaction, 'open_at'),
+        openAt,
         closeAt,
-        scoreAfter: scoreAfterFromClose(interaction, closeAt),
+        scoreAfter,
         topSize,
         bestWeeks,
         createdBy: interaction.user.id,
       });
       await interaction.reply({
         content:
-          `✅ Season prediction round is open for **${round.label || round.season}**.\n` +
+          `✅ Season prediction round configured for **${round.label || round.season}**.\n` +
           `Open: ${formatTimestamp(round.open_at)}\nClose: ${formatTimestamp(round.close_at)}\n` +
           `Score after: ${formatTimestamp(round.score_after)}\n` +
+          defaultTimingLabel +
           `Picks counted: **${round.top_size}**\n` +
           `Overall: ${round.best_weeks ? `each member's **best ${round.best_weeks}** weeks` : '**all** weeks count'}`,
         flags: MessageFlags.Ephemeral,
       });
       await sendAuditLog(interaction.client, interaction.guildId, {
-        action: 'EWC Season Prediction Opened',
+        action: 'EWC Season Prediction Configured',
         actor: interaction.user,
         target: round.season,
         details:
@@ -547,7 +588,10 @@ export async function execute(interaction) {
           `Overall best weeks: ${round.best_weeks || 'all'}\n` +
           `Open: ${formatTimestamp(round.open_at)}\n` +
           `Close: ${formatTimestamp(round.close_at)}\n` +
-          `Score after: ${formatTimestamp(round.score_after)}`,
+          `Score after: ${formatTimestamp(round.score_after)}` +
+          (defaultWindow
+            ? `\nDefault first EWC competition: ${formatTimestamp(defaultWindow.firstEventAt)}\nDefault final EWC event end: ${formatTimestamp(defaultWindow.finalEventEndAt)}`
+            : ''),
         color: 'config',
       });
       return;
@@ -633,12 +677,17 @@ export async function execute(interaction) {
       const lines = weeks.length
         ? weeks.map((w) => {
             const hasBaseline = w.baseline?.length;
+            const perGame = w.games?.length;
             // A week past its lock time with no baseline → weekly scoring would be inaccurate.
-            const lateMissing = !hasBaseline && w.status !== 'scored' && w.close_at && now >= w.close_at;
+            const lateMissing = !perGame && !hasBaseline && w.status !== 'scored' && w.close_at && now >= w.close_at;
+            w.status = effectiveEwcWeekStatusText(w, now);
             if (lateMissing) needsBaseline += 1;
-            const snap = `baseline ${hasBaseline ? '✓' : '✗'}${w.final?.length ? ' · final ✓' : ''}`;
-            const warn = lateMissing ? ' — ⚠️ baseline not captured' : '';
-            return `• **${w.week_key}** — ${w.label || 'No label'} — \`${w.status}\` — ${snap}${warn}`;
+            const snap = perGame
+              ? `${w.games.length} game(s) · results ${w.results?.length ? '✓' : '✗'}`
+              : `baseline ${hasBaseline ? '✓' : '✗'}${w.final?.length ? ' · final ✓' : ''}`;
+            const warn = !perGame && lateMissing ? ' — ⚠️ baseline not captured' : '';
+            // No backticks around the status: it may contain <t:…> timestamps, which don't render inside inline code.
+            return `• **${w.week_key}** — ${w.label || 'No label'} — ${w.status} — ${snap}${warn}`;
           })
         : ['No weekly rounds configured.'];
       const seasonLine = seasonRound
@@ -649,7 +698,7 @@ export async function execute(interaction) {
           'Run `/ewc_admin snapshot_week type:baseline` for each so weekly scoring stays accurate.'
         : '';
       await interaction.reply({
-        content: `## EWC ${seasonYear} Prediction Rounds\n${seasonLine}\n\n${lines.join('\n')}${warning}`,
+        content: `## EWC ${seasonYear} Prediction Rounds\n${seasonLine}\n-# Week labels show effective availability from open/lock times.\n\n${lines.join('\n')}${warning}`,
         flags: MessageFlags.Ephemeral,
       });
     }
