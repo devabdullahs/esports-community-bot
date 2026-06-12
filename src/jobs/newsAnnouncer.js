@@ -14,6 +14,13 @@ import {
 import { getTranslationForLocale } from '../lib/ewcNewsContent.js';
 import { logger } from '../lib/logger.js';
 
+// Auto-posts published news to Discord. Lifecycle per design doc, with ONE documented v1
+// deviation on delete-propagation: ewc_news_discord_posts.post_id has ON DELETE CASCADE, so
+// hard-deleting a post removes its row before any tick can observe it. We therefore CANNOT
+// clean up the orphaned Discord message for hard-deleted posts in v1 (the message stays).
+// Unpublish (status -> draft) keeps the post+row alive, so that path DOES delete the message.
+// Acceptable for v1; a future version could soft-capture message ids before deletion.
+
 // Discord embed caps; our content caps (title 90, summary 180) fit comfortably inside these.
 const TITLE_CAP = 256;
 const DESCRIPTION_CAP = 4096;
