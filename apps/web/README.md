@@ -1,6 +1,9 @@
-# EWC Prediction Dashboard
+# Community Dashboard (`apps/web`)
 
-Next.js App Router dashboard for EWC prediction leaderboards and Discord profile showcase sync.
+Next.js App Router community hub — bilingual (EN/AR with full RTL): public game
+pages, news, a media directory, EWC prediction leaderboards, member profiles
+with Discord showcase sync, and a role-gated `/admin` CMS (news, games, media,
+team roster, audit log).
 
 ```bash
 npm run web:auth:migrate

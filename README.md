@@ -25,8 +25,15 @@ Built with **discord.js v14** on **Node ≥ 20.12**. Primary data source is **Li
 - **Localized times** — all match times use Discord timestamps, shown in each viewer's zone.
 - **Liquipedia attribution** — every match tag links back to its Liquipedia page, and each
   embed credits Liquipedia (CC-BY-SA).
+- **EWC predictions** — members pick a club **per game** each week through a guided
+  Components-V2 picker (`/ewc_predict weekly`), plus season-long top-10 picks. Scoring runs
+  automatically from per-game Liquipedia placements; image leaderboards (with champion-pick
+  column) and a best-of-K overall ranking keep the race fair.
+- **Web dashboard** (`apps/web`, Next.js) — bilingual EN/AR (full RTL) community hub: game
+  pages, news, media directory, public prediction leaderboards, and a member profile that
+  syncs an **EWC showcase to Discord profiles** via Application Role Connections.
 - **News & Media CMS** — bilingual (EN/AR) news posts and a media channel directory, authored
-  at `/admin` on the EWC prediction dashboard with role-based access control.
+  at `/admin` on the dashboard with role-based access control and an audit log.
 
 ### Commands (all admin-gated except `/list_tournaments`)
 
@@ -40,6 +47,12 @@ Built with **discord.js v14** on **Node ≥ 20.12**. Primary data source is **Li
 | `/set_channel card` | Set the channel for live match image cards, optionally limited to one game |
 | `/set_channel voice` | Set the voice channel used for live status |
 | `/set_ewc` | Track the EWC Club Championship standings in a channel |
+| `/set_cs_rankings` | Auto-refreshing Counter-Strike Valve regional rankings card |
+| `/set_log` | Channel for admin audit-log embeds |
+| `/unset_channel` | Remove a board/card/voice binding (cleans up its messages) |
+| `/lookup` | Liquipedia page lookup for a player or team (no scraping) |
+| `/ewc_predict` | Member-facing predictions: weekly per-game picker, season picks, leaderboards, dashboard link/sync |
+| `/ewc_admin` | Prediction rounds admin: generate/open/close/score/delete weeks, season scoring, baselines |
 
 ## How it works
 
@@ -190,7 +203,10 @@ image URLs instead. See `apps/web/README.md` for R2 setup steps.
 | `CC_REFRESH_MINUTES` | Club Championship refresh cadence (default 15) |
 | `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL` | Better Auth secret and public auth base URL |
 | `EWC_DASHBOARD_PUBLIC_URL`, `EWC_DASHBOARD_INTERNAL_URL`, `EWC_DASHBOARD_INTERNAL_SECRET` | Public dashboard URL and bot-to-web internal sync settings |
-| `EWC_DASHBOARD_ADMIN_DISCORD_IDS` | Optional comma-separated Discord user IDs for future admin dashboard routes |
+| `EWC_DASHBOARD_SUPER_ADMIN_DISCORD_IDS` | Comma-separated Discord IDs with full dashboard control (roster, games, media) |
+| `EWC_DASHBOARD_ADMIN_DISCORD_IDS` | Legacy — still honored, grants the same super-admin level (prefer the var above) |
+| `RUN_BOT`, `RUN_WEB`, `WEB_HOST`, `WEB_PORT` | Combined-container controls for `npm run start:production` |
+| `R2_*` (5 vars) | Optional Cloudflare R2 for news image uploads (see `apps/web/README.md`) |
 | `EWC_DASHBOARD_DEFAULT_GUILD_ID` | Optional guild ID used for the home page public leaderboard shortcut |
 | `THMANYAH_FONT_BASE_URL` | Public base URL for hosted Thmanyah WOFF2 files used by the web app font proxy |
 | `LOGO_CACHE_DIR`, `LOGO_CACHE_CONCURRENCY` | Persistent logo cache path and max concurrent logo downloads |
@@ -200,28 +216,48 @@ image URLs instead. See `apps/web/README.md` for R2 setup steps.
 
 ## Docker / UGREEN NAS
 
-Local NAS deployment files are intentionally ignored by git. Fill `.env.docker`, then run:
+Production runs **one combined container** (bot + dashboard via
+`npm run start:production`) published to GHCR by CI — tag a release
+(`git tag vX.Y.Z && git push --tags`) and the `Publish image` workflow builds
+`ghcr.io/devabdullahs/esports-community-bot`. Public HTTPS comes from a
+**Cloudflare Tunnel** sidecar (no port-forward).
+
+Copy `compose.example.yml` to `compose.ugreen.yml` (git-ignored), fill
+`.env.docker`, then on the NAS:
 
 ```bash
-docker compose -f compose.ugreen.yml build
-docker compose -f compose.ugreen.yml up -d
+docker compose pull
+docker compose up -d
 ```
 
-The compose file stores the SQLite database, logo cache, and persistent Liquipedia/logo rate-limit state under `./data`.
+The full runbook — Cloudflare Tunnel setup, env checklist, Discord OAuth
+redirect, one-time auth migration, smoke checks — is in
+[`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md). The compose file stores the SQLite
+database, logo cache, and persistent rate-limit state under `./data`.
 
 ## Project structure
 
 ```
 src/
-  index.js              entry: load config/commands/events, login, graceful shutdown
-  config.js             env loading + validation
-  deploy-commands.js    register slash commands via Discord REST
-  commands/             add_tournament, list_tournaments, remove_tournament, set_channel, set_ewc
-  events/               ready, interactionCreate (commands + autocomplete)
-  jobs/                 morningSync, pollingManager, leaderboard, clubChampionship, voiceStatus, refresh
-  services/             liquipedia (primary), startgg + pandascore (optional stubs)
-  db/                   SQLite (better-sqlite3): tournaments, matches, settings, game_leaderboards
-  lib/                  logger, time, loaders, render, games, parseTournamentInput
+  index.js               bot entry: load config/commands/events, login, graceful shutdown
+  start-production.js    combined-container entry: spawns bot + web (RUN_BOT / RUN_WEB)
+  config.js              env loading + validation
+  deploy-commands.js     register slash commands via Discord REST
+  commands/              tournaments, boards, match, lookup, ewc_predict, ewc_admin, ...
+  events/                ready, interactionCreate (commands + components + modals)
+  jobs/                  morningSync, pollingManager, leaderboard, ewcPredictions,
+                         clubChampionship, csRankings, voiceStatus, refresh, matchCardBoard
+  services/liquipedia/   client (one serialized queue), parsers, fetchers, rateState
+  db/                    SQLite (better-sqlite3): tournaments, matches, settings,
+                         ewcPredictions, ewcGames, ewcMediaChannels, ewcNewsPosts,
+                         ewcAdmins, ewcAdminAuditLog, ewcRateLimits, ewcProfileLinks
+  lib/                   scoring math (ewcPredictions), canvas cards, logoCache,
+                         markdownTools, render, games, auditLog, ...
+apps/web/                Next.js dashboard (EN/AR, RTL) — pages, /admin CMS, API routes,
+                         vitest suite in src/test/
+scripts/seed-dev.mjs     sample-data seeder for local dashboard preview (npm run seed:dev)
+tests/                   bot test suite (node:test) — scoring, parsers, CMS, limits
+docs/DEPLOYMENT.md       NAS deployment runbook
 ```
 
 ## Data source & attribution
@@ -235,10 +271,10 @@ throttling, aggressive caching, no scraping of generated HTML pages).
 
 ## Known limitations
 
-- **Swiss-stage tournaments** (e.g. some Rocket League events) render matches in a standings
-  grid rather than a bracket/matchlist; parsing those is on the roadmap.
 - Eligibility colors (green/yellow) on the Club Championship board activate once a live EWC
   edition marks them.
+- The `npm audit` moderate advisory (postcss via Next 16.2.x) clears when a stable
+  Next ≥ 16.3.0 ships — tracked, not actionable yet.
 
 ## License
 
@@ -247,9 +283,16 @@ Liquipedia data remains under CC-BY-SA 3.0 as noted above.
 
 ## Roadmap
 
-- [x] Swiss-stage match parsing (Rocket League and similar)
-- [x] Per-game leaderboards **and** voice channels (a separate channel per game)
-- [x] LPDB API client integrated (optional) — used instead of HTML parsing when `LPDB_API_KEY` is set; falls back to HTML parsing otherwise (default)
-- [x] Start.gg + PandaScore integrations (free tier) — structured match data with live status
-- [x] Per-match detail view — `/match` (autocomplete) opens a focused card + link to full details
-- [x] Generated match-card images for `/match` and per-game live card channels
+Everything in earlier roadmaps has shipped (Swiss parsing, per-game boards and
+voice channels, LPDB client, Start.gg/PandaScore, `/match` detail cards,
+rendered match images, the per-game prediction system, the bilingual web
+dashboard + CMS, CI, and the GHCR deployment pipeline). What's actually next:
+
+- [ ] **Tournaments & live matches on the web dashboard** — design ready in
+  [`plans/design/tournaments-dashboard.md`](plans/design/tournaments-dashboard.md)
+  (the bot's tournament/match data, surfaced on the public site).
+- [ ] **Discord news auto-posting** — publish a dashboard news post and the bot
+  announces it in Discord; design ready in
+  [`plans/design/discord-news-posting.md`](plans/design/discord-news-posting.md).
+- [ ] Nonce-based CSP `script-src` (tightening the current conservative policy).
+- [ ] Bump Next when a stable ≥ 16.3.0 ships (clears the postcss audit advisory).
