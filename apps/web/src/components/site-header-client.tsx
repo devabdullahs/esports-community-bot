@@ -95,6 +95,10 @@ export function SiteHeaderClient({
                   <Tv2Icon />
                   {text.common.media}
                 </DropdownMenuItem>
+                <DropdownMenuItem render={<Link href={localizedPath("/tournaments", locale)} />}>
+                  <TrophyIcon />
+                  {text.common.tournaments}
+                </DropdownMenuItem>
               </DropdownMenuGroup>
               <DropdownMenuSeparator />
               <DropdownMenuItem render={<Link href={localizedPath("/predictions", locale)} />}>
