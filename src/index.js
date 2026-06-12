@@ -9,6 +9,7 @@ import { stopAll } from './jobs/pollingManager.js';
 import { stopClubChampionship } from './jobs/clubChampionship.js';
 import { stopCsRankings } from './jobs/csRankings.js';
 import { stopEwcPredictions } from './jobs/ewcPredictions.js';
+import { stopNewsAnnouncer } from './jobs/newsAnnouncer.js';
 import { deployCommands } from './lib/commandRegistry.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -54,6 +55,7 @@ function shutdown(signal) {
   stopClubChampionship();
   stopCsRankings();
   stopEwcPredictions();
+  stopNewsAnnouncer();
   client.destroy();
   closeDb();
   process.exit(0);

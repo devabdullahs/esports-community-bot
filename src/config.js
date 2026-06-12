@@ -67,6 +67,10 @@ export const config = {
     refreshMinutes: Number(get('EWC_PREDICTIONS_REFRESH_MINUTES', 60)),
     scoreDelayHours: Number(get('EWC_PREDICTIONS_SCORE_DELAY_HOURS', 24)),
   },
+  ewcNews: {
+    // How often the news announcer polls for newly published / edited / unpublished posts (ms).
+    announceIntervalMs: Number(get('NEWS_ANNOUNCE_INTERVAL_MS', 120_000)),
+  },
   dashboard: {
     publicUrl: get('EWC_DASHBOARD_PUBLIC_URL'),
     internalUrl: get('EWC_DASHBOARD_INTERNAL_URL'),
