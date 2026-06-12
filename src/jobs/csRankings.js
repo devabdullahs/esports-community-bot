@@ -58,7 +58,8 @@ export async function updateCsRankings(client, guildId) {
   try {
     data = await fetchValveRegionalStandings(s.cs_rankings_region || 'global');
   } catch (e) {
-    logger.error(`[cs-rankings] fetch failed for ${guildId}: ${e.message}`);
+    const level = /backing off after a rate limit/i.test(e.message) ? 'debug' : 'error';
+    logger[level](`[cs-rankings] fetch failed for ${guildId}: ${e.message}`);
     return false;
   }
 
@@ -81,21 +82,32 @@ export async function updateCsRankings(client, guildId) {
 }
 
 let timer = null;
+let running = false;
 
 export function startCsRankings(client) {
   const minutes = Math.max(30, config.csRankings.refreshMinutes);
-  const run = () => {
-    for (const guildId of getGuildsWithCsRankings()) {
-      updateCsRankings(client, guildId).catch((e) => logger.error(`[cs-rankings] ${guildId}: ${e.message}`));
+  const run = async () => {
+    if (running) {
+      logger.debug('[cs-rankings] previous refresh still running; skipping this tick');
+      return;
+    }
+    running = true;
+    try {
+      for (const guildId of getGuildsWithCsRankings()) {
+        await updateCsRankings(client, guildId).catch((e) => logger.error(`[cs-rankings] ${guildId}: ${e.message}`));
+      }
+    } finally {
+      running = false;
     }
   };
-  timer = setInterval(run, minutes * 60 * 1000);
+  timer = setInterval(() => run().catch((e) => logger.error(`[cs-rankings] ${e.message}`)), minutes * 60 * 1000);
   timer.unref?.();
   logger.info(`[cs-rankings] refresh every ${minutes}m.`);
-  run();
+  run().catch((e) => logger.error(`[cs-rankings] ${e.message}`));
 }
 
 export function stopCsRankings() {
   if (timer) clearInterval(timer);
   timer = null;
+  running = false;
 }

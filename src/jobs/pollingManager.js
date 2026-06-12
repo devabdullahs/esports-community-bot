@@ -12,11 +12,32 @@ import { getTournamentById } from '../db/tournaments.js';
 const services = { liquipedia, pandascore, startgg };
 const nowSec = () => Math.floor(Date.now() / 1000);
 const MAX_RUN_SECONDS = 8 * 3600; // safety net: stop polling 8h after a match's start time
+const MAX_TIMEOUT_MS = 2_147_483_647;
+// Must stay wider than the daily (24h) morning-sync interval: that sync is the only re-arm
+// for tournaments with no live match, so a cap of 48h guarantees every match is armed with at
+// least one full sync cycle of lead instead of (at 24h) possibly only seconds.
+const DEFAULT_ARM_LOOKAHEAD_SECONDS = 48 * 3600;
+const ARM_LOOKAHEAD_SECONDS = Math.max(
+  3600,
+  Number(process.env.POLL_ARM_LOOKAHEAD_SECONDS || DEFAULT_ARM_LOOKAHEAD_SECONDS),
+);
 
 const watchers = new Map(); // external_id -> { armTimer?, pollTimer? }
+const tournamentPolls = new Map(); // tournament.id -> Promise<parsed matches>
 
 function isPlaceholderTeam(value) {
-  return !String(value ?? '').trim() || /^TBD$/i.test(String(value ?? '').trim());
+  const name = String(value ?? '').trim();
+  return (
+    !name ||
+    /^TBD$/i.test(name) ||
+    /^to be determined$/i.test(name) ||
+    /^bye$/i.test(name) ||
+    /^(?:lower|higher)\s+seed\b/i.test(name) ||
+    /^(?:remaining|selection)$/i.test(name) ||
+    /^gauntlet winner\b/i.test(name) ||
+    /^group\s+[A-Z]\s*#\d+$/i.test(name) ||
+    /^(?:legend|rise)\s+group\s*#\d+$/i.test(name)
+  );
 }
 
 // Hook for the (next-phase) leaderboard embed + live voice-channel updaters.
@@ -37,31 +58,39 @@ function clearWatcher(externalId) {
   watchers.delete(externalId);
 }
 
+function isLiquipediaBackoff(error) {
+  return /Liquipedia: backing off after a rate limit/i.test(error?.message || '');
+}
+
 export function stopAll() {
   for (const id of [...watchers.keys()]) clearWatcher(id);
 }
 
 // Schedule polling for a match: immediately if it has started, else at its start time.
 export function armMatch(match, tournament) {
-  if (match.status === 'finished') return;
-  if (watchers.has(match.external_id)) return; // already armed or polling
-  if (
-    match.scheduled_at &&
-    match.scheduled_at <= nowSec() &&
-    (isPlaceholderTeam(match.team_a) || isPlaceholderTeam(match.team_b))
-  ) {
-    return;
-  }
+  if (match.status === 'finished') return false;
+  if (watchers.has(match.external_id)) return false; // already armed or polling
+  if (isPlaceholderTeam(match.team_a) || isPlaceholderTeam(match.team_b)) return false;
+  if (!match.scheduled_at && match.status !== 'running') return false;
 
   const delaySec = match.scheduled_at ? match.scheduled_at - nowSec() : 0;
   if (delaySec <= 0) {
     startPolling(match, tournament);
-    return;
+    return true;
+  }
+  if (delaySec > ARM_LOOKAHEAD_SECONDS) {
+    logger.debug(`[poll] not arming ${match.external_id}; starts in ${Math.round(delaySec / 60)}m`);
+    return false;
+  }
+  if (delaySec * 1000 > MAX_TIMEOUT_MS) {
+    logger.debug(`[poll] not arming ${match.external_id}; start is beyond Node's timer limit`);
+    return false;
   }
   const w = {};
   w.armTimer = setTimeout(() => startPolling(match, tournament), delaySec * 1000);
   watchers.set(match.external_id, w);
   logger.info(`[poll] armed ${match.external_id} — starts in ${Math.round(delaySec / 60)}m`);
+  return true;
 }
 
 function startPolling(match, tournament) {
@@ -69,10 +98,22 @@ function startPolling(match, tournament) {
   if (w.pollTimer) return;
   logger.info(`[poll] start ${match.external_id} (${match.team_a} vs ${match.team_b})`);
   const tick = () =>
-    pollOnce(match, tournament).catch((e) => logger.error(`[poll] ${match.external_id}: ${e.message}`));
+    pollOnce(match, tournament).catch((e) => {
+      const message = `[poll] ${match.external_id}: ${e.message}`;
+      if (isLiquipediaBackoff(e)) logger.debug(message);
+      else logger.error(message);
+    });
   w.pollTimer = setInterval(tick, config.scheduler.livePollIntervalMs);
   watchers.set(match.external_id, w);
   tick(); // poll right away
+}
+
+async function fetchTournamentSchedule(service, tournament) {
+  const key = tournament.id || `${tournament.source}:${tournament.external_id}`;
+  if (tournamentPolls.has(key)) return tournamentPolls.get(key);
+  const promise = service.fetchSchedule(tournament).finally(() => tournamentPolls.delete(key));
+  tournamentPolls.set(key, promise);
+  return promise;
 }
 
 async function pollOnce(match, tournament) {
@@ -82,7 +123,7 @@ async function pollOnce(match, tournament) {
     return;
   }
 
-  const all = await service.fetchSchedule(tournament);
+  const all = await fetchTournamentSchedule(service, tournament);
   const currentIds = all.map((m) => m.externalId);
 
   // Refresh EVERY match in this tournament so live scores, final results, winners, and any
@@ -99,6 +140,7 @@ async function pollOnce(match, tournament) {
       before.logo_a !== row.logo_a ||
       before.logo_b !== row.logo_b;
     if (changed) onUpdate('update', row);
+    if (!watchers.has(row.external_id) && row.status !== 'finished') armMatch(row, tournament);
     if (fresh.externalId === match.external_id) polled = row;
   }
   const deleted = deleteTournamentPlaceholderMatches(match.tournament_id, currentIds);
@@ -125,11 +167,12 @@ async function pollOnce(match, tournament) {
 // After a restart, re-arm polling for matches still pending/running in the DB.
 export function resumePolling() {
   let armed = 0;
+  let skipped = 0;
   for (const row of getActiveMatches()) {
     const tournament = getTournamentById(row.tournament_id);
     if (!tournament) continue;
-    armMatch(row, tournament);
-    armed++;
+    if (armMatch(row, tournament)) armed++;
+    else skipped++;
   }
-  if (armed) logger.info(`[poll] resumed ${armed} pending/running match(es) after restart.`);
+  if (armed || skipped) logger.info(`[poll] resumed ${armed} pending/running match watcher(s) after restart; skipped ${skipped}.`);
 }

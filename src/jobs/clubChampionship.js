@@ -67,7 +67,8 @@ export async function updateClubChampionship(client, guildId) {
   try {
     data = await fetchClubChampionship(s.cc_wiki || 'esports', s.cc_page);
   } catch (e) {
-    logger.error(`[cc] fetch failed for ${s.cc_wiki}/${s.cc_page}: ${e.message}`);
+    const level = /backing off after a rate limit/i.test(e.message) ? 'debug' : 'error';
+    logger[level](`[cc] fetch failed for ${s.cc_wiki}/${s.cc_page}: ${e.message}`);
     return false;
   }
 
@@ -90,21 +91,32 @@ export async function updateClubChampionship(client, guildId) {
 }
 
 let timer = null;
+let running = false;
 
 export function startClubChampionship(client) {
   const minutes = Math.max(5, config.clubChampionship.refreshMinutes);
-  const run = () => {
-    for (const guildId of getGuildsWithClubChampionship()) {
-      updateClubChampionship(client, guildId).catch((e) => logger.error(`[cc] ${guildId}: ${e.message}`));
+  const run = async () => {
+    if (running) {
+      logger.debug('[cc] previous refresh still running; skipping this tick');
+      return;
+    }
+    running = true;
+    try {
+      for (const guildId of getGuildsWithClubChampionship()) {
+        await updateClubChampionship(client, guildId).catch((e) => logger.error(`[cc] ${guildId}: ${e.message}`));
+      }
+    } finally {
+      running = false;
     }
   };
-  timer = setInterval(run, minutes * 60 * 1000);
+  timer = setInterval(() => run().catch((e) => logger.error(`[cc] ${e.message}`)), minutes * 60 * 1000);
   timer.unref?.();
   logger.info(`[cc] Club Championship refresh every ${minutes}m.`);
-  run(); // initial paint
+  run().catch((e) => logger.error(`[cc] ${e.message}`)); // initial paint
 }
 
 export function stopClubChampionship() {
   if (timer) clearInterval(timer);
   timer = null;
+  running = false;
 }
