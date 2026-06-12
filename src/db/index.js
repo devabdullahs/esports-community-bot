@@ -85,6 +85,7 @@ ensureColumns('guild_settings', [
   ['ewc_predictions_mentions_channel_id', 'TEXT'],
   ['ewc_predictions_mentions_message_id', 'TEXT'],
   ['ewc_predictions_mentions_season', 'TEXT'],
+  ['ewc_news_channel_id', 'TEXT'],
 ]);
 
 ensureColumns('matches', [
@@ -256,16 +257,27 @@ db.exec(`
     PRIMARY KEY (post_id, locale)
   );
 
+  -- Side table mapping a published news post to the Discord message that announces it.
+  -- ON DELETE CASCADE so deleting a post auto-cleans this row (foreign_keys pragma is ON).
+  CREATE TABLE IF NOT EXISTS ewc_news_discord_posts (
+    post_id    INTEGER PRIMARY KEY REFERENCES ewc_news_posts(id) ON DELETE CASCADE,
+    guild_id   TEXT,
+    channel_id TEXT,
+    message_id TEXT,
+    posted_at  TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+
   CREATE TABLE IF NOT EXISTS ewc_games (
-    slug             TEXT PRIMARY KEY,
-    title_json       TEXT NOT NULL,
-    description_json TEXT NOT NULL,
-    status_json      TEXT NOT NULL,
-    owner_json       TEXT NOT NULL,
-    focus_json       TEXT NOT NULL DEFAULT '[]',
-    sort_order       INTEGER NOT NULL DEFAULT 0,
-    created_at       TEXT NOT NULL DEFAULT (datetime('now')),
-    updated_at       TEXT NOT NULL DEFAULT (datetime('now'))
+    slug               TEXT PRIMARY KEY,
+    title_json         TEXT NOT NULL,
+    description_json   TEXT NOT NULL,
+    status_json        TEXT NOT NULL,
+    owner_json         TEXT NOT NULL,
+    focus_json         TEXT NOT NULL DEFAULT '[]',
+    discord_channel_id TEXT,
+    sort_order         INTEGER NOT NULL DEFAULT 0,
+    created_at         TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at         TEXT NOT NULL DEFAULT (datetime('now'))
   );
 
   CREATE INDEX IF NOT EXISTS idx_ewc_games_sort ON ewc_games(sort_order, slug);
@@ -332,6 +344,8 @@ ensureColumns('ewc_news_posts', [
   ['default_locale', "TEXT NOT NULL DEFAULT 'en' CHECK (default_locale IN ('en','ar'))"],
   ['author_name', 'TEXT'],
 ]);
+// Per-game Discord news channel (nullable; falls back to the guild-level news channel).
+ensureColumns('ewc_games', [['discord_channel_id', 'TEXT']]);
 
 db.exec(`
   UPDATE ewc_news_posts

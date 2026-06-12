@@ -32,6 +32,16 @@ export function setEwcPredictionsChannel(guildId, channelId) {
   ).run(guildId, channelId);
 }
 
+// Guild-level fallback news channel. Per-game ewc_games.discord_channel_id takes precedence;
+// this is used when a game has no dedicated channel configured.
+export function setEwcNewsChannel(guildId, channelId) {
+  db.prepare(
+    `INSERT INTO guild_settings (guild_id, ewc_news_channel_id, updated_at)
+     VALUES (?, ?, datetime('now'))
+     ON CONFLICT (guild_id) DO UPDATE SET ewc_news_channel_id = excluded.ewc_news_channel_id, updated_at = datetime('now')`,
+  ).run(guildId, channelId);
+}
+
 export function setEwcPredictionsLeaderboard(guildId, { channelId, season = '2026' }) {
   db.prepare(
     `INSERT INTO guild_settings

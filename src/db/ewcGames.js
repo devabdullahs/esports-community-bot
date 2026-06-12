@@ -18,6 +18,7 @@ function hydrate(row) {
     status: parseJson(row.status_json, { en: '', ar: '' }),
     owner: parseJson(row.owner_json, { en: '', ar: '' }),
     focus: parseJson(row.focus_json, []),
+    discordChannelId: row.discord_channel_id || null,
     sortOrder: row.sort_order,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -70,13 +71,13 @@ function nextSortOrder() {
   return (row.m == null ? -1 : row.m) + 1;
 }
 
-export function createEwcGame({ slug, title, description, status, owner, focus = [] }) {
+export function createEwcGame({ slug, title, description, status, owner, focus = [], discordChannelId = null }) {
   ensureSeeded();
   db.prepare(
     `INSERT INTO ewc_games
-       (slug, title_json, description_json, status_json, owner_json, focus_json, sort_order,
-        created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))`,
+       (slug, title_json, description_json, status_json, owner_json, focus_json, discord_channel_id,
+        sort_order, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))`,
   ).run(
     slug,
     JSON.stringify(title),
@@ -84,17 +85,18 @@ export function createEwcGame({ slug, title, description, status, owner, focus =
     JSON.stringify(status),
     JSON.stringify(owner),
     JSON.stringify(focus),
+    discordChannelId || null,
     nextSortOrder(),
   );
   return getEwcGame(slug);
 }
 
-export function updateEwcGame(slug, { title, description, status, owner, focus = [] }) {
+export function updateEwcGame(slug, { title, description, status, owner, focus = [], discordChannelId = null }) {
   const info = db
     .prepare(
       `UPDATE ewc_games
        SET title_json = ?, description_json = ?, status_json = ?, owner_json = ?,
-           focus_json = ?, updated_at = datetime('now')
+           focus_json = ?, discord_channel_id = ?, updated_at = datetime('now')
        WHERE slug = ?`,
     )
     .run(
@@ -103,6 +105,7 @@ export function updateEwcGame(slug, { title, description, status, owner, focus =
       JSON.stringify(status),
       JSON.stringify(owner),
       JSON.stringify(focus),
+      discordChannelId || null,
       slug,
     );
   if (info.changes === 0) return null;
