@@ -32,6 +32,7 @@ export type ValidatedGameContent = {
   status: LocalizedText;
   owner: LocalizedText;
   focus: LocalizedText[];
+  discordChannelId: string | null;
 };
 
 export type GameValidationCode =
@@ -41,7 +42,11 @@ export type GameValidationCode =
   | "status-too-long"
   | "owner-too-long"
   | "focus-too-many"
-  | "focus-item-too-long";
+  | "focus-item-too-long"
+  | "news-channel-invalid";
+
+/** Discord snowflake: 17–20 digits. Mirrors isSnowflake in @/lib/validate, kept client-safe here. */
+const SNOWFLAKE_PATTERN = /^\d{17,20}$/;
 
 export function validateGameContent(
   raw: unknown,
@@ -97,5 +102,16 @@ export function validateGameContent(
     }
   }
 
-  return { ok: true, value: { title, description, status, owner, focus } };
+  // Optional per-game Discord news channel. Empty / missing is allowed (no channel set);
+  // when present it must be a valid Discord snowflake.
+  const rawChannel = typeof body.discordChannelId === "string" ? body.discordChannelId.trim() : "";
+  let discordChannelId: string | null = null;
+  if (rawChannel) {
+    if (!SNOWFLAKE_PATTERN.test(rawChannel)) {
+      return { ok: false, error: "Discord channel ID must be a 17-20 digit snowflake", code: "news-channel-invalid" };
+    }
+    discordChannelId = rawChannel;
+  }
+
+  return { ok: true, value: { title, description, status, owner, focus, discordChannelId } };
 }

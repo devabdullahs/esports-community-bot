@@ -20,6 +20,7 @@ export type GameRecord = {
   status: LocalizedText;
   owner: LocalizedText;
   focus: LocalizedText[];
+  discordChannelId: string | null;
   sortOrder: number;
 };
 
@@ -30,6 +31,7 @@ export type GameInput = {
   status: LocalizedText;
   owner: LocalizedText;
   focus: LocalizedText[];
+  discordChannelId: string | null;
 };
 
 const list = _list as () => GameRecord[];

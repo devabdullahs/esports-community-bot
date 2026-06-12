@@ -80,6 +80,36 @@ describe("validateGameContent — error codes", () => {
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.error).toBe("Title is required in English and Arabic");
   });
+
+  test("no discordChannelId → ok, value.discordChannelId null", () => {
+    const result = validateGameContent(validBase);
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.value.discordChannelId).toBeNull();
+  });
+
+  test("blank discordChannelId → ok, value.discordChannelId null", () => {
+    const result = validateGameContent({ ...validBase, discordChannelId: "   " });
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.value.discordChannelId).toBeNull();
+  });
+
+  test("valid snowflake discordChannelId → ok, trimmed value preserved", () => {
+    const result = validateGameContent({ ...validBase, discordChannelId: " 123456789012345678 " });
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.value.discordChannelId).toBe("123456789012345678");
+  });
+
+  test("non-numeric discordChannelId → code 'news-channel-invalid'", () => {
+    const result = validateGameContent({ ...validBase, discordChannelId: "not-a-snowflake" });
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.code).toBe("news-channel-invalid");
+  });
+
+  test("too-short discordChannelId → code 'news-channel-invalid'", () => {
+    const result = validateGameContent({ ...validBase, discordChannelId: "12345" });
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.code).toBe("news-channel-invalid");
+  });
 });
 
 // ---------------------------------------------------------------------------

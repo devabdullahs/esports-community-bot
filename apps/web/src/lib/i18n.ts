@@ -198,6 +198,7 @@ const baseCopy = {
       "logo-url-too-long": "Logo URL is too long",
       "logo-url-invalid": "Logo must be a valid http(s) URL",
       "link-url-invalid": "Link must be a valid http(s) URL",
+      "news-channel-invalid": "Discord channel ID must be a 17-20 digit snowflake",
     },
     footer: {
       brand: "Esports Community Bot",
@@ -348,6 +349,7 @@ const baseCopy = {
       "logo-url-too-long": "\u0631\u0627\u0628\u0637 \u0627\u0644\u0634\u0639\u0627\u0631 \u0637\u0648\u064a\u0644 \u062c\u062f\u0627\u064b",
       "logo-url-invalid": "\u064a\u062c\u0628 \u0623\u0646 \u064a\u0643\u0648\u0646 \u0631\u0627\u0628\u0637 \u0627\u0644\u0634\u0639\u0627\u0631 \u0639\u0646\u0648\u0627\u0646 http(s) \u0635\u062d\u064a\u062d\u0627\u064b",
       "link-url-invalid": "\u064a\u062c\u0628 \u0623\u0646 \u064a\u0643\u0648\u0646 \u0631\u0627\u0628\u0637 \u0627\u0644\u0642\u0646\u0627\u0629 \u0639\u0646\u0648\u0627\u0646 http(s) \u0635\u062d\u064a\u062d\u0627\u064b",
+      "news-channel-invalid": "\u0645\u0639\u0631\u0651\u0641 \u0642\u0646\u0627\u0629 \u062f\u064a\u0633\u0643\u0648\u0631\u062f \u064a\u062c\u0628 \u0623\u0646 \u064a\u0643\u0648\u0646 \u0631\u0642\u0645\u0627\u064b \u0645\u0646 17 \u0625\u0644\u0649 20 \u062e\u0627\u0646\u0629",
     },
     footer: {
       brand: "\u0628\u0648\u062a \u0645\u062c\u062a\u0645\u0639 \u0627\u0644\u0631\u064a\u0627\u0636\u0627\u062a \u0627\u0644\u0625\u0644\u0643\u062a\u0631\u0648\u0646\u064a\u0629",

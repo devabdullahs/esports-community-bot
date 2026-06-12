@@ -69,6 +69,7 @@ export function GameEditor({
   const [description, setDescription] = useState<LocalizedText>(game?.description || empty());
   const [owner, setOwner] = useState<LocalizedText>(game?.owner || empty());
   const [focus, setFocus] = useState<LocalizedText[]>(game?.focus?.length ? game.focus : [empty()]);
+  const [discordChannelId, setDiscordChannelId] = useState(game?.discordChannelId || "");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -85,6 +86,7 @@ export function GameEditor({
       description,
       owner,
       focus: focus.filter((f) => f.en.trim() || f.ar.trim()),
+      discordChannelId: discordChannelId.trim(),
     };
     const clientValidation = validateGameContent(clientPayload);
     if (!clientValidation.ok) {
@@ -163,6 +165,22 @@ export function GameEditor({
             />
             <BiField label="Description" value={description} onChange={setDescription} multiline />
             <BiField label="Owner" value={owner} onChange={setOwner} />
+
+            <Field>
+              <FieldLabel htmlFor="game-discord-channel">Discord news channel ID</FieldLabel>
+              <Input
+                id="game-discord-channel"
+                value={discordChannelId}
+                dir="ltr"
+                inputMode="numeric"
+                placeholder="e.g. 123456789012345678"
+                onChange={(e) => setDiscordChannelId(e.target.value)}
+              />
+              <FieldDescription>
+                Optional. Published news for this game auto-posts here. Leave blank to use the
+                server&apos;s default news channel.
+              </FieldDescription>
+            </Field>
 
             <Field>
               <FieldLabel>Focus tags</FieldLabel>
