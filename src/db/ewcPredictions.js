@@ -16,6 +16,8 @@ function hydrateWeek(row) {
     ...row,
     baseline: parseJson(row.baseline_json, []),
     final: parseJson(row.final_json, []),
+    games: parseJson(row.games_json, []),
+    results: parseJson(row.results_json, []),
   };
 }
 
@@ -28,18 +30,45 @@ function hydratePrediction(row) {
   };
 }
 
-export function upsertEwcWeek({ guildId, season = '2026', weekKey, label, openAt, closeAt, scoreAfter, createdBy }) {
+export function upsertEwcWeek({
+  guildId,
+  season = '2026',
+  weekKey,
+  label,
+  startAt,
+  endAt,
+  openAt,
+  closeAt,
+  scoreAfter,
+  games,
+  createdBy,
+}) {
   db.prepare(
     `INSERT INTO ewc_prediction_weeks
-       (guild_id, season, week_key, label, open_at, close_at, score_after, created_by, status, created_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'open', datetime('now'))
+       (guild_id, season, week_key, label, start_at, end_at, open_at, close_at, score_after, games_json, created_by, status, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'open', datetime('now'))
      ON CONFLICT (guild_id, season, week_key) DO UPDATE SET
        label = excluded.label,
+       start_at = excluded.start_at,
+       end_at = excluded.end_at,
        open_at = excluded.open_at,
        close_at = excluded.close_at,
        score_after = excluded.score_after,
+       games_json = excluded.games_json,
        status = CASE WHEN ewc_prediction_weeks.status = 'scored' THEN 'scored' ELSE 'open' END`,
-  ).run(guildId, season, weekKey, label, openAt ?? null, closeAt ?? null, scoreAfter ?? null, createdBy ?? null);
+  ).run(
+    guildId,
+    season,
+    weekKey,
+    label,
+    startAt ?? null,
+    endAt ?? null,
+    openAt ?? null,
+    closeAt ?? null,
+    scoreAfter ?? null,
+    games ? stringify(games) : null,
+    createdBy ?? null,
+  );
   return getEwcWeek(guildId, season, weekKey);
 }
 
@@ -85,7 +114,7 @@ export function setEwcWeekStatus(weekId, status) {
 export function reopenEwcWeek(weekId) {
   db.prepare(
     `UPDATE ewc_prediction_weeks
-     SET status = 'open', final_json = NULL, scored_at = NULL
+     SET status = 'open', final_json = NULL, results_json = NULL, scored_at = NULL
      WHERE id = ?`,
   ).run(weekId);
 }
@@ -103,6 +132,18 @@ export function markEwcWeekScored(weekId, finalStandings) {
   ).run(stringify(finalStandings), weekId);
 }
 
+export function markEwcWeekScoredWithResults(weekId, finalStandings, results) {
+  db.prepare(
+    `UPDATE ewc_prediction_weeks
+     SET status = 'scored', final_json = ?, results_json = ?, scored_at = datetime('now')
+     WHERE id = ?`,
+  ).run(stringify(finalStandings), stringify(results), weekId);
+}
+
+export function setEwcWeekResults(weekId, results) {
+  db.prepare('UPDATE ewc_prediction_weeks SET results_json = ? WHERE id = ?').run(stringify(results), weekId);
+}
+
 export function upsertWeeklyPrediction({ guildId, weekId, userId, picks }) {
   db.prepare(
     `INSERT INTO ewc_weekly_predictions (guild_id, week_id, user_id, picks_json, created_at, updated_at)
@@ -114,6 +155,24 @@ export function upsertWeeklyPrediction({ guildId, weekId, userId, picks }) {
        updated_at = datetime('now')`,
   ).run(guildId, weekId, userId, stringify(picks));
   return getWeeklyPrediction(guildId, weekId, userId);
+}
+
+export function upsertWeeklyGamePick({ guildId, weekId, userId, gameKey, pick, game = null, event = null }) {
+  const existing = getWeeklyPrediction(guildId, weekId, userId);
+  const current = Array.isArray(existing?.picks) ? existing.picks : [];
+  const next = current.filter((entry) => {
+    if (typeof entry === 'string') return false;
+    return entry?.gameKey !== gameKey;
+  });
+  next.push({
+    gameKey,
+    game,
+    event,
+    pick,
+    pickedAt: Math.floor(Date.now() / 1000),
+  });
+  next.sort((a, b) => String(a.game || a.gameKey).localeCompare(String(b.game || b.gameKey)));
+  return upsertWeeklyPrediction({ guildId, weekId, userId, picks: next });
 }
 
 export function getWeeklyPrediction(guildId, weekId, userId) {

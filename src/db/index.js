@@ -148,6 +148,8 @@ db.exec(`
     season         TEXT NOT NULL DEFAULT '2026',
     week_key       TEXT NOT NULL,
     label          TEXT,
+    start_at       INTEGER,
+    end_at         INTEGER,
     open_at        INTEGER,
     close_at       INTEGER,
     score_after    INTEGER,
@@ -155,6 +157,8 @@ db.exec(`
                      CHECK (status IN ('open','closed','scored')),
     baseline_json  TEXT,
     final_json     TEXT,
+    games_json     TEXT,
+    results_json   TEXT,
     created_by     TEXT,
     created_at     TEXT NOT NULL DEFAULT (datetime('now')),
     scored_at      TEXT,
@@ -315,7 +319,13 @@ db.exec(`
     ON ewc_admin_audit_log(created_at DESC);
 `);
 
-ensureColumns('ewc_prediction_weeks', [['score_after', 'INTEGER']]);
+ensureColumns('ewc_prediction_weeks', [
+  ['score_after', 'INTEGER'],
+  ['start_at', 'INTEGER'],
+  ['end_at', 'INTEGER'],
+  ['games_json', 'TEXT'],
+  ['results_json', 'TEXT'],
+]);
 ensureColumns('ewc_prediction_seasons', [['score_after', 'INTEGER'], ['best_weeks', 'INTEGER']]);
 ensureColumns('ewc_news_posts', [
   ['content_mode', "TEXT NOT NULL DEFAULT 'shared' CHECK (content_mode IN ('shared','translated'))"],
