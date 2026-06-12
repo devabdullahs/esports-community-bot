@@ -12,6 +12,8 @@ export async function SiteFooter() {
     { href: "/news", label: text.common.news },
     { href: "/media", label: text.common.media },
     { href: "/predictions", label: text.common.predictions },
+    { href: "/terms", label: text.common.termsOfService },
+    { href: "/privacy", label: text.common.privacyPolicy },
   ];
 
   return (

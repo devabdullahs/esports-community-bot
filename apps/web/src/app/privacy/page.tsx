@@ -1,0 +1,275 @@
+import { getRequestLocale } from "@/lib/request-locale";
+
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+
+const LAST_UPDATED = "2026-06-12";
+
+const CONTENT = {
+  en: {
+    title: "Privacy Policy",
+    lastUpdated: `Last updated: ${LAST_UPDATED}`,
+    sections: [
+      {
+        heading: "1. Who We Are",
+        body: [
+          "Esports Community Bot is a free, non-commercial community project. There are no advertisements, no paid subscriptions, and no personal data is sold or traded for commercial benefit. The service is operated by volunteer community staff.",
+        ],
+      },
+      {
+        heading: "2. Data Collected via Discord OAuth (Web Dashboard)",
+        body: [
+          "When you sign in to the web dashboard with Discord, the following data is collected and stored:",
+        ],
+        list: [
+          "Discord user ID, display name, username, and profile avatar URL.",
+          "Email address — collected from Discord's OAuth scope and stored as part of your account record.",
+          "Discord OAuth access and refresh tokens — stored encrypted at rest (Better Auth's encryptOAuthTokens is enabled; see auth.ts).",
+        ],
+        after: [
+          "Session records are created for each login, which include your IP address and browser user-agent string. These are stored in the better-auth session table.",
+        ],
+      },
+      {
+        heading: "3. Prediction Data",
+        body: [
+          "If you use the EWC prediction feature (via the /ewc_predict Discord command or the web dashboard), the following is stored:",
+        ],
+        list: [
+          "Your Discord user ID linked to a prediction profile.",
+          "Your weekly per-game team picks and season-long club picks.",
+          "Your accumulated prediction scores and week-by-week history.",
+        ],
+        after: [
+          "On public leaderboard pages, members are identified by a masked label (e.g., \"Member 1234\") derived from a partial Discord ID. Full Discord IDs are never published on public pages.",
+        ],
+      },
+      {
+        heading: "4. Admin Audit Log",
+        body: [
+          "Actions taken by community staff in the /admin dashboard CMS (publishing news, editing games, managing team rosters) are recorded in an audit log. This log is visible only to super-admin staff and is used for accountability within the moderation team.",
+        ],
+      },
+      {
+        heading: "5. Cookies and Local Preferences",
+        body: [
+          "The following cookies are set by this service:",
+        ],
+        list: [
+          "ewc_locale — stores your language preference (English or Arabic). This is a first-party cookie with a one-year expiry.",
+          "Better Auth session cookies — HttpOnly, with Secure flag enabled in production, used to maintain your login session.",
+        ],
+        after: [
+          "No third-party tracking cookies or analytics scripts are used.",
+        ],
+      },
+      {
+        heading: "6. Image Uploads",
+        body: [
+          "Cover images for news posts are optionally uploaded to Cloudflare R2 object storage. Uploaded files are stored under a news/ key prefix. This storage is operated by the same community operators and is subject to Cloudflare's data processing terms.",
+        ],
+      },
+      {
+        heading: "7. Discord Profile Showcase (Role Connection)",
+        body: [
+          "If you use /ewc_predict link or the dashboard's Sync profile button, your prediction summary is pushed to Discord's Application Role Connection API. This allows your Discord profile to display your EWC prediction rank and points.",
+          "This is a user-initiated action. You can remove the showcase at any time by using the Unlink button on your /me profile page or by running /ewc_predict unlink in Discord.",
+        ],
+      },
+      {
+        heading: "8. Infrastructure and Data Processors",
+        body: [
+          "All persistent data is stored in a SQLite database on operator-managed self-hosted infrastructure (a NAS device). No third-party database or analytics service holds your data.",
+          "Public web traffic is routed through Cloudflare, which provides TLS termination and DDoS protection. Cloudflare may process request metadata (IP addresses, headers) in accordance with its own privacy policy.",
+          "The service does not share your personal data with any other third party beyond the processors listed here (Discord and Cloudflare).",
+        ],
+      },
+      {
+        heading: "9. Discord Bot Data",
+        body: [
+          "The Discord bot stores guild and channel configuration (which channels are designated for leaderboards, match cards, voice status, etc.). It tracks tournaments and match data sourced from Liquipedia (CC-BY-SA 3.0). Members' weekly and season prediction picks are stored as described above.",
+          "The bot does not read, log, or store the content of any Discord messages. It only responds to explicit slash command interactions.",
+        ],
+      },
+      {
+        heading: "10. Data Retention",
+        body: [
+          "Account and prediction-link data is retained until you unlink your profile or request deletion. Session records are subject to Better Auth's default session expiry.",
+          "To request deletion of your data, use the Unlink button on your /me profile page and then contact the community server administrators on Discord. They will remove remaining account records on request.",
+        ],
+      },
+      {
+        heading: "11. Minimum Age",
+        body: [
+          "Use of this service requires a Discord account. You must meet Discord's minimum age requirement (13 years old, or the higher minimum in your country where applicable) to use this service.",
+        ],
+      },
+      {
+        heading: "12. Changes to This Policy",
+        body: [
+          "This policy may be updated from time to time. The date at the top of this page reflects the most recent revision. Significant changes will be announced in the community Discord server.",
+        ],
+      },
+      {
+        heading: "13. Contact",
+        body: [
+          "For privacy-related questions or data deletion requests, contact the community server administrators on Discord or open an issue in the GitHub repository.",
+        ],
+      },
+    ],
+  },
+  ar: {
+    title: "سياسة الخصوصية",
+    lastUpdated: `آخر تحديث: ${LAST_UPDATED}`,
+    sections: [
+      {
+        heading: "١. من نحن",
+        body: [
+          "بوت مجتمع الرياضات الإلكترونية مشروع مجتمعي مجاني وغير تجاري. لا توجد إعلانات أو اشتراكات مدفوعة، ولا تُباع البيانات الشخصية أو تُتداول لأغراض تجارية. تُدار الخدمة من قِبل متطوعي المجتمع.",
+        ],
+      },
+      {
+        heading: "٢. البيانات المجمّعة عبر OAuth لديسكورد (لوحة الويب)",
+        body: [
+          "عند تسجيل دخولك إلى لوحة الويب عبر ديسكورد، تُجمَّع البيانات التالية وتُخزَّن:",
+        ],
+        list: [
+          "معرّف مستخدم ديسكورد، الاسم المعروض، اسم المستخدم، ورابط صورة الملف الشخصي.",
+          "عنوان البريد الإلكتروني — يُجمَّع من نطاق OAuth لديسكورد ويُخزَّن ضمن سجل حسابك.",
+          "رموز الوصول والتحديث OAuth لديسكورد — تُخزَّن مشفّرة في حالة السكون (خيار encryptOAuthTokens مفعّل في Better Auth).",
+        ],
+        after: [
+          "تُنشأ سجلات جلسة لكل تسجيل دخول وتتضمن عنوان IP الخاص بك وسلسلة وكيل المتصفح (user-agent). تُخزَّن هذه السجلات في جدول الجلسات الخاص بـ Better Auth.",
+        ],
+      },
+      {
+        heading: "٣. بيانات التوقعات",
+        body: [
+          "إن استخدمت ميزة توقعات EWC (عبر أمر /ewc_predict في ديسكورد أو لوحة الويب)، تُخزَّن البيانات التالية:",
+        ],
+        list: [
+          "معرّف ديسكورد الخاص بك مرتبطاً بملف توقعات.",
+          "اختياراتك الأسبوعية للفرق لكل لعبة واختياراتك للأندية طوال الموسم.",
+          "نقاط توقعاتك المتراكمة وسجل كل أسبوع.",
+        ],
+        after: [
+          'في صفحات جدول الصدارة العامة، يُعرَّف الأعضاء بتسمية مموّهة (مثل "العضو ١٢٣٤") مشتقة من جزء من معرّف ديسكورد. لا تُنشر معرّفات ديسكورد الكاملة على الصفحات العامة أبداً.',
+        ],
+      },
+      {
+        heading: "٤. سجل التدقيق للمشرفين",
+        body: [
+          "الإجراءات التي يتخذها فريق المجتمع في لوحة /admin (نشر الأخبار، تعديل الألعاب، إدارة قائمة الفريق) تُسجَّل في سجل تدقيق. هذا السجل مرئي فقط للمشرفين الرئيسيين ويُستخدم لضمان المساءلة داخل فريق الإشراف.",
+        ],
+      },
+      {
+        heading: "٥. ملفات تعريف الارتباط والتفضيلات المحلية",
+        body: [
+          "تضع هذه الخدمة ملفات تعريف الارتباط التالية:",
+        ],
+        list: [
+          "ewc_locale — يخزّن تفضيل اللغة (الإنجليزية أو العربية). ملف تعريف ارتباط من الطرف الأول بصلاحية سنة واحدة.",
+          "ملفات تعريف ارتباط الجلسة لـ Better Auth — HttpOnly مع علامة Secure في الإنتاج، تُستخدم للحفاظ على جلسة تسجيل دخولك.",
+        ],
+        after: [
+          "لا تُستخدم ملفات تعريف ارتباط التتبع أو سكريبتات التحليلات الخارجية.",
+        ],
+      },
+      {
+        heading: "٦. رفع الصور",
+        body: [
+          "تُرفع صور الغلاف للمنشورات الإخبارية اختيارياً إلى تخزين الكائنات Cloudflare R2. تُخزَّن الملفات المرفوعة تحت بادئة news/. يُدار هذا التخزين من قِبل مشغّلي المجتمع ذاتهم ويخضع لشروط معالجة البيانات لدى Cloudflare.",
+        ],
+      },
+      {
+        heading: "٧. عرض ملف ديسكورد الشخصي (ربط الأدوار)",
+        body: [
+          "إن استخدمت /ewc_predict link أو زر \"مزامنة الملف\" في اللوحة، يُرسَل ملخص توقعاتك إلى واجهة Application Role Connection في ديسكورد. يتيح ذلك لملفك الشخصي على ديسكورد عرض رتبة ونقاط توقعات EWC.",
+          "هذا إجراء يبادر به المستخدم. يمكنك إزالة العرض في أي وقت عبر زر \"فصل الربط\" في صفحة ملفك /me أو بتشغيل /ewc_predict unlink في ديسكورد.",
+        ],
+      },
+      {
+        heading: "٨. البنية التحتية ومعالجو البيانات",
+        body: [
+          "تُخزَّن جميع البيانات الدائمة في قاعدة بيانات SQLite على بنية تحتية مُدارة ذاتياً من قِبل المشغّلين (جهاز NAS). لا تحتفظ أي خدمة قاعدة بيانات أو تحليلات خارجية ببياناتك.",
+          "تمر حركة مرور الويب العامة عبر Cloudflare الذي يوفّر إنهاء TLS والحماية من هجمات DDoS. قد تعالج Cloudflare بيانات تعريف الطلبات (عناوين IP والرؤوس) وفق سياسة خصوصيتها.",
+          "لا تشارك الخدمة بياناتك الشخصية مع أي طرف ثالث آخر غير المعالجين المذكورين هنا (ديسكورد وCloudflare).",
+        ],
+      },
+      {
+        heading: "٩. بيانات بوت ديسكورد",
+        body: [
+          "يخزّن بوت ديسكورد إعدادات السيرفر والقنوات (القنوات المخصصة لجداول الصدارة وبطاقات المباريات وحالة القناة الصوتية وما إلى ذلك). كما يتتبع البطولات وبيانات المباريات المصدرة من Liquipedia (CC-BY-SA 3.0). تُخزَّن اختيارات توقعات الأعضاء الأسبوعية والموسمية كما هو موضح أعلاه.",
+          "لا يقرأ البوت محتوى رسائل ديسكورد ولا يسجّلها ولا يخزّنها. يستجيب فقط للتفاعلات الصريحة عبر أوامر الشرطة المائلة (slash commands).",
+        ],
+      },
+      {
+        heading: "١٠. مدة الاحتفاظ بالبيانات",
+        body: [
+          "تُحتفَظ ببيانات الحساب والربط بالملف الشخصي إلى حين فصل ربط ملفك أو طلب الحذف. تخضع سجلات الجلسات لانتهاء صلاحية الجلسة الافتراضية في Better Auth.",
+          "لطلب حذف بياناتك، استخدم زر \"فصل الربط\" في صفحة ملفك /me ثم تواصل مع مشرفي سيرفر المجتمع على ديسكورد. سيقومون بحذف سجلات الحساب المتبقية بناءً على طلبك.",
+        ],
+      },
+      {
+        heading: "١١. الحد الأدنى للعمر",
+        body: [
+          "يستلزم استخدام هذه الخدمة امتلاك حساب ديسكورد. يجب أن تستوفي متطلب الحد الأدنى للعمر لدى ديسكورد (13 عاماً، أو الحد الأعلى في بلدك حيثما ينطبق) لاستخدام هذه الخدمة.",
+        ],
+      },
+      {
+        heading: "١٢. التعديلات على هذه السياسة",
+        body: [
+          "قد تُحدَّث هذه السياسة من وقت لآخر. يعكس التاريخ في أعلى هذه الصفحة آخر مراجعة. سيُعلن عن التعديلات الجوهرية في سيرفر ديسكورد المجتمعي.",
+        ],
+      },
+      {
+        heading: "١٣. التواصل",
+        body: [
+          "للاستفسارات المتعلقة بالخصوصية أو طلبات حذف البيانات، تواصل مع مشرفي سيرفر المجتمع على ديسكورد أو افتح طلباً (issue) في مستودع GitHub.",
+        ],
+      },
+    ],
+  },
+} as const;
+
+export default async function PrivacyPage() {
+  const locale = await getRequestLocale();
+  const content = CONTENT[locale];
+
+  return (
+    <main className="mx-auto flex w-full max-w-3xl flex-1 flex-col gap-8 px-5 py-10 sm:px-8">
+      <div className="flex flex-col gap-2">
+        <h1 className="text-3xl font-semibold leading-tight sm:text-4xl">{content.title}</h1>
+        <p className="text-sm text-muted-foreground">{content.lastUpdated}</p>
+      </div>
+      <div className="flex flex-col gap-8">
+        {content.sections.map((section) => (
+          <section key={section.heading} className="flex flex-col gap-3">
+            <h2 className="text-lg font-semibold">{section.heading}</h2>
+            {section.body.map((paragraph, i) => (
+              <p key={i} className="text-sm leading-7 text-muted-foreground">
+                {paragraph}
+              </p>
+            ))}
+            {"list" in section && section.list ? (
+              <ul className="list-disc ps-5 flex flex-col gap-1.5">
+                {section.list.map((item, i) => (
+                  <li key={i} className="text-sm leading-6 text-muted-foreground">
+                    {item}
+                  </li>
+                ))}
+              </ul>
+            ) : null}
+            {"after" in section && section.after
+              ? section.after.map((paragraph, i) => (
+                  <p key={`after-${i}`} className="text-sm leading-7 text-muted-foreground">
+                    {paragraph}
+                  </p>
+                ))
+              : null}
+          </section>
+        ))}
+      </div>
+    </main>
+  );
+}

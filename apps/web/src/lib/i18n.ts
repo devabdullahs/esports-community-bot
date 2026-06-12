@@ -88,6 +88,8 @@ const baseCopy = {
       previous: "Previous",
       next: "Next",
       notAvailable: "Not available",
+      termsOfService: "Terms of Service",
+      privacyPolicy: "Privacy Policy",
     },
     home: {
       eyebrow: "Community hub",
@@ -267,6 +269,8 @@ const baseCopy = {
       previous: "\u0627\u0644\u0633\u0627\u0628\u0642",
       next: "\u0627\u0644\u062a\u0627\u0644\u064a",
       notAvailable: "\u063a\u064a\u0631 \u0645\u062a\u0627\u062d",
+      termsOfService: "\u0634\u0631\u0648\u0637 \u0627\u0644\u062e\u062f\u0645\u0629",
+      privacyPolicy: "\u0633\u064a\u0627\u0633\u0629 \u0627\u0644\u062e\u0635\u0648\u0635\u064a\u0629",
     },
     home: {
       eyebrow: "\u0645\u062c\u062a\u0645\u0639\u0643",
