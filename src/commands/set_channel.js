@@ -6,7 +6,7 @@ import {
   ContainerBuilder,
   MessageFlags,
 } from 'discord.js';
-import { setChannel, setGameLeaderboard, setGameMatchCard, setGameVoiceChannel } from '../db/settings.js';
+import { setChannel, setEwcNewsChannel, setGameLeaderboard, setGameMatchCard, setGameVoiceChannel } from '../db/settings.js';
 import { updateLeaderboard } from '../jobs/leaderboard.js';
 import { updateVoiceChannel } from '../jobs/voiceStatus.js';
 import { ALL_GAMES, updateMatchCards } from '../jobs/matchCardBoard.js';
@@ -73,6 +73,18 @@ export const data = new SlashCommandBuilder()
           .setName('game')
           .setDescription('Choose one game or All games')
           .setAutocomplete(true)
+          .setRequired(true),
+      ),
+  )
+  .addSubcommand((sc) =>
+    sc
+      .setName('news')
+      .setDescription('Default channel for auto-posted news (used when a game has no dedicated channel)')
+      .addChannelOption((o) =>
+        o
+          .setName('channel')
+          .setDescription('Text or announcement channel')
+          .addChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement)
           .setRequired(true),
       ),
   )
@@ -153,6 +165,37 @@ export async function execute(interaction) {
       color: 'config',
     });
     await updateMatchCards(interaction.client, interaction.guildId).catch(() => {});
+    return;
+  }
+
+  if (sub === 'news') {
+    const missing = missingBotChannelPermissions(interaction, channel, EMBED_BOARD_PERMISSIONS);
+    if (missing.length) {
+      await interaction.reply({
+        content: botChannelPermissionMessage(channel, missing),
+        flags: MessageFlags.Ephemeral,
+      });
+      return;
+    }
+
+    setEwcNewsChannel(interaction.guildId, channel.id);
+    await interaction.reply({
+      components: [
+        confirm(
+          'Default news channel',
+          channel,
+          '-# Published news posts land here unless a game has its own channel set in the dashboard.',
+        ),
+      ],
+      flags: [MessageFlags.IsComponentsV2, MessageFlags.Ephemeral],
+    });
+    await sendAuditLog(interaction.client, interaction.guildId, {
+      action: 'News Channel Set',
+      actor: interaction.user,
+      target: `Default news channel: ${channel} (${channel.id})`,
+      details: 'Fallback for games without a dedicated Discord news channel.',
+      color: 'config',
+    });
     return;
   }
 
