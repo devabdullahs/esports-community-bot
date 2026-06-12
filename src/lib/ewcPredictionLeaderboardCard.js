@@ -12,6 +12,22 @@ function registerFont(paths, family) {
   return 'sans-serif';
 }
 
+function registerOptionalFont(paths, family) {
+  for (const p of paths) {
+    try {
+      GlobalFonts.registerFromPath(p, family);
+      return family;
+    } catch {
+      /* try next */
+    }
+  }
+  return null;
+}
+
+function systemFamily(name) {
+  return GlobalFonts.families.some((font) => font.family === name) ? name : null;
+}
+
 const HEAD = registerFont(
   [
     'C:/Windows/Fonts/segoeuib.ttf',
@@ -34,6 +50,71 @@ const BODY = registerFont(
   ],
   'EwcPredictionBody',
 );
+const NOTO = systemFamily('Noto Sans') || registerOptionalFont(['/usr/share/fonts/truetype/noto/NotoSans-Regular.ttf'], 'EwcPredictionNoto');
+const ARABIC = systemFamily('Noto Sans Arabic') || registerOptionalFont(
+  [
+    '/usr/share/fonts/truetype/noto/NotoSansArabic-Bold.ttf',
+    '/usr/share/fonts/truetype/noto/NotoSansArabic-Regular.ttf',
+    'C:/Windows/Fonts/segoeui.ttf',
+    '/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf',
+  ],
+  'EwcPredictionArabic',
+);
+const MATH = systemFamily('Noto Sans Math') || registerOptionalFont(
+  [
+    '/usr/share/fonts/truetype/noto/NotoSansMath-Regular.ttf',
+    '/usr/share/fonts/truetype/noto/NotoSansSymbols2-Regular.ttf',
+    'C:/Windows/Fonts/seguisym.ttf',
+  ],
+  'EwcPredictionMath',
+);
+const SYMBOLS = systemFamily('Noto Sans Symbols2') || systemFamily('Noto Sans Symbols') || registerOptionalFont(
+  [
+    'C:/Windows/Fonts/seguisym.ttf',
+    '/usr/share/fonts/truetype/noto/NotoSansSymbols2-Regular.ttf',
+    '/usr/share/fonts/truetype/noto/NotoSansSymbols-Regular.ttf',
+    '/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf',
+  ],
+  'EwcPredictionSymbols',
+);
+const EMOJI = systemFamily('Noto Color Emoji') || registerOptionalFont(
+  ['C:/Windows/Fonts/seguiemj.ttf', '/usr/share/fonts/truetype/noto/NotoColorEmoji.ttf'],
+  'EwcPredictionEmoji',
+);
+const HISTORIC = systemFamily('Noto Sans Cuneiform') || registerOptionalFont(
+  ['C:/Windows/Fonts/seguihis.ttf', '/usr/share/fonts/truetype/noto/NotoSansCuneiform-Regular.ttf'],
+  'EwcPredictionHistoric',
+);
+const CJK = systemFamily('Noto Sans CJK JP') || registerOptionalFont(
+  ['C:/Windows/Fonts/msgothic.ttc', '/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc'],
+  'EwcPredictionCjk',
+);
+const CJK_BOLD = systemFamily('Noto Sans CJK JP') || registerOptionalFont(
+  ['C:/Windows/Fonts/YuGothB.ttc', '/usr/share/fonts/opentype/noto/NotoSansCJK-Bold.ttc'],
+  'EwcPredictionCjkBold',
+);
+const FALLBACKS = [
+  NOTO,
+  ARABIC,
+  MATH,
+  SYMBOLS,
+  EMOJI,
+  HISTORIC,
+  CJK,
+  CJK_BOLD,
+].filter(Boolean);
+
+function cssFamily(family) {
+  if (!family || family.startsWith('"') || family.startsWith("'")) return family;
+  return /[\s,]/.test(family) ? `"${family}"` : family;
+}
+
+function stack(family) {
+  return [family, ...FALLBACKS.filter((fallback) => fallback !== family), 'sans-serif'].filter(Boolean).map(cssFamily).join(', ');
+}
+
+const HEAD_STACK = stack(HEAD);
+const BODY_STACK = stack(BODY);
 
 function roundRect(ctx, x, y, w, h, r) {
   ctx.beginPath();
@@ -53,6 +134,63 @@ function fit(ctx, text, maxWidth, font) {
   return `${t}...`;
 }
 
+function stackForChar(ch, baseStack, weight = '') {
+  const code = ch.codePointAt(0) || 0;
+  if (code >= 0x12000 && code <= 0x123ff && HISTORIC) return stack(HISTORIC);
+  if (code >= 0x1d400 && code <= 0x1d7ff && MATH) return stack(MATH);
+  if (/\p{Script=Arabic}/u.test(ch) && ARABIC) return stack(ARABIC);
+  if ((/[\u3040-\u30ff\u3400-\u9fff]/u.test(ch) || code >= 0x20000) && (weight === 'bold' ? CJK_BOLD || CJK : CJK)) {
+    return stack(weight === 'bold' ? CJK_BOLD || CJK : CJK);
+  }
+  if (code > 0x7f && /\p{Emoji}/u.test(ch) && EMOJI) return stack(EMOJI);
+  if (code > 0x7f && /\p{Script=Latin}/u.test(ch) && NOTO) return stack(NOTO);
+  if (code > 0x7f && SYMBOLS) return stack(SYMBOLS);
+  return baseStack;
+}
+
+function fontString(size, weight, familyStack) {
+  return `${weight ? `${weight} ` : ''}${size}px ${familyStack}`;
+}
+
+function measureMixedText(ctx, text, style) {
+  let width = 0;
+  for (const ch of Array.from(String(text ?? ''))) {
+    ctx.font = fontString(style.size, style.weight, stackForChar(ch, style.baseStack, style.weight));
+    width += ctx.measureText(ch).width;
+  }
+  return width;
+}
+
+function fitMixedText(ctx, text, maxWidth, style) {
+  const chars = Array.from(String(text ?? ''));
+  if (measureMixedText(ctx, chars.join(''), style) <= maxWidth) return chars.join('');
+  while (chars.length > 1 && measureMixedText(ctx, `${chars.join('')}...`, style) > maxWidth) chars.pop();
+  return `${chars.join('')}...`;
+}
+
+function drawFitText(ctx, text, x, y, maxWidth, style) {
+  const fitted = fitMixedText(ctx, text, maxWidth, style);
+  let cursor = x;
+  let run = '';
+  let runStack = null;
+
+  function flush() {
+    if (!run) return;
+    ctx.font = fontString(style.size, style.weight, runStack || style.baseStack);
+    ctx.fillText(run, cursor, y);
+    cursor += ctx.measureText(run).width;
+    run = '';
+  }
+
+  for (const ch of Array.from(fitted)) {
+    const nextStack = stackForChar(ch, style.baseStack, style.weight);
+    if (run && nextStack !== runStack) flush();
+    runStack = nextStack;
+    run += ch;
+  }
+  flush();
+}
+
 function medal(rank) {
   if (rank === 1) return '#1';
   if (rank === 2) return '#2';
@@ -65,10 +203,12 @@ export function renderEwcPredictionLeaderboardCard({
   rows = [],
   scoredWeeks = 0,
   totalWeeks = 0,
+  bestWeeks = null,
+  championPickVisible = false,
   updatedAt = Date.now(),
 } = {}) {
   const W = 1200;
-  const H = 1200;
+  const H = championPickVisible ? 1660 : 1280;
   const canvas = createCanvas(W, H);
   const ctx = canvas.getContext('2d');
 
@@ -86,7 +226,7 @@ export function renderEwcPredictionLeaderboardCard({
   ctx.textBaseline = 'alphabetic';
   ctx.textAlign = 'left';
   ctx.fillStyle = '#ffffff';
-  ctx.font = `bold 46px ${HEAD}`;
+  ctx.font = `bold 46px ${HEAD_STACK}`;
   ctx.fillText(`EWC ${season} Prediction Leaderboard`, 64, 104);
 
   const updated = new Intl.DateTimeFormat('en-GB', {
@@ -96,60 +236,78 @@ export function renderEwcPredictionLeaderboardCard({
     hour12: false,
   }).format(new Date(updatedAt));
   ctx.fillStyle = '#9fb3d1';
-  ctx.font = `28px ${BODY}`;
+  ctx.font = `28px ${BODY_STACK}`;
   ctx.fillText(`Updated ${updated} UTC+3`, 64, 148);
+  ctx.font = `22px ${BODY_STACK}`;
+  ctx.fillText(bestWeeks ? `Overall counts best ${bestWeeks} weekly scores + season picks` : 'Overall counts all weekly scores + season picks', 64, 184);
 
   ctx.textAlign = 'right';
   ctx.fillStyle = '#f1c40f';
-  ctx.font = `bold 34px ${HEAD}`;
+  ctx.font = `bold 34px ${HEAD_STACK}`;
   ctx.fillText('PREDICTIONS', W - 64, 104);
   ctx.fillStyle = '#9fb3d1';
-  ctx.font = `22px ${BODY}`;
+  ctx.font = `22px ${BODY_STACK}`;
   ctx.fillText(`Scored weeks ${scoredWeeks}/${totalWeeks || 0}`, W - 64, 148);
+  ctx.fillText(bestWeeks ? `Best ${bestWeeks} weeks` : 'All weeks', W - 64, 184);
 
   ctx.strokeStyle = 'rgba(130,160,210,0.18)';
   ctx.lineWidth = 2;
   ctx.beginPath();
-  ctx.moveTo(54, 184);
-  ctx.lineTo(W - 54, 184);
+  ctx.moveTo(54, 220);
+  ctx.lineTo(W - 54, 220);
   ctx.stroke();
 
   if (!rows.length) {
     ctx.textAlign = 'center';
     ctx.fillStyle = '#ffffff';
-    ctx.font = `bold 46px ${HEAD}`;
-    ctx.fillText('No scored predictions yet', W / 2, 560);
+    ctx.font = `bold 46px ${HEAD_STACK}`;
+    ctx.fillText('No scored predictions yet', W / 2, 590);
     ctx.fillStyle = '#9fb3d1';
-    ctx.font = `26px ${BODY}`;
-    ctx.fillText('The leaderboard will fill in when weekly or season scores are posted.', W / 2, 604);
+    ctx.font = `26px ${BODY_STACK}`;
+    ctx.fillText('The leaderboard will fill in when weekly or season scores are posted.', W / 2, 634);
   } else {
-    let y = 226;
+    const rowStep = championPickVisible ? 64 : 48;
+    const rowHeight = championPickVisible ? 58 : 44;
+    const rowTop = championPickVisible ? 32 : 28;
+    let y = championPickVisible ? 278 : 264;
     rows.slice(0, 20).forEach((row, index) => {
       const rank = index + 1;
       ctx.fillStyle = rank % 2 ? 'rgba(255,255,255,0.04)' : 'rgba(255,255,255,0.022)';
-      roundRect(ctx, 54, y - 28, W - 108, 44, 8);
+      roundRect(ctx, 54, y - rowTop, W - 108, rowHeight, 8);
       ctx.fill();
 
       ctx.textAlign = 'left';
       ctx.fillStyle = rank <= 3 ? '#f1c40f' : '#8ab4ff';
-      ctx.font = `bold 22px ${HEAD}`;
-      ctx.fillText(medal(rank), 76, y);
+      ctx.font = `bold 22px ${HEAD_STACK}`;
+      ctx.fillText(medal(rank), 76, championPickVisible ? y + 1 : y);
 
       ctx.fillStyle = '#ffffff';
-      ctx.font = `bold 22px ${HEAD}`;
-      ctx.fillText(fit(ctx, row.label || `Member ${row.user_id}`, 620, `bold 22px ${HEAD}`), 150, y);
+      ctx.font = `bold 22px ${HEAD_STACK}`;
+      drawFitText(
+        ctx,
+        row.label || `Member ${row.user_id}`,
+        150,
+        championPickVisible ? y - 8 : y,
+        610,
+        { size: 22, weight: 'bold', baseStack: HEAD_STACK },
+      );
+      if (championPickVisible) {
+        ctx.fillStyle = '#9fb3d1';
+        ctx.font = `17px ${BODY_STACK}`;
+        drawFitText(ctx, `Champion pick: ${row.championPick || '-'}`, 150, y + 15, 670, { size: 17, weight: '', baseStack: BODY_STACK });
+      }
 
       ctx.textAlign = 'right';
       ctx.fillStyle = '#ffffff';
-      ctx.font = `bold 22px ${HEAD}`;
-      ctx.fillText(`${Number(row.score || 0).toLocaleString('en-US')} pts`, W - 80, y);
-      y += 48;
+      ctx.font = `bold 22px ${HEAD_STACK}`;
+      ctx.fillText(`${Number(row.score || 0).toLocaleString('en-US')} pts`, W - 80, championPickVisible ? y + 2 : y);
+      y += rowStep;
     });
   }
 
   ctx.textAlign = 'left';
   ctx.fillStyle = '#9fb3d1';
-  ctx.font = `20px ${BODY}`;
+  ctx.font = `20px ${BODY_STACK}`;
   ctx.fillText('Weekly and season prediction points', 64, H - 42);
 
   return canvas.toBuffer('image/png');

@@ -4,10 +4,12 @@ import {
   listEwcWeeks,
   listEwcSeasonsForAutomation,
   listEwcWeeksForAutomation,
+  getEwcSeason,
   listSeasonPredictions,
   listWeeklyPredictions,
   markEwcSeasonScored,
   markEwcWeekScored,
+  markEwcWeekScoredWithResults,
   overallLeaderboard,
   saveSeasonPredictionScore,
   saveWeeklyPredictionScore,
@@ -24,9 +26,14 @@ import {
 } from '../db/settings.js';
 import { db } from '../db/index.js';
 import { logger } from '../lib/logger.js';
-import { scoreSeasonPrediction, scoreWeeklyPrediction } from '../lib/ewcPredictions.js';
+import {
+  pendingEwcGameResults,
+  scorePerGameWeeklyPrediction,
+  scoreSeasonPrediction,
+  scoreWeeklyPrediction,
+} from '../lib/ewcPredictions.js';
 import { renderEwcPredictionLeaderboardCard } from '../lib/ewcPredictionLeaderboardCard.js';
-import { fetchEwcClubStandings } from '../services/liquipedia.js';
+import { fetchEwcClubStandings, fetchEwcWeekGameResults } from '../services/liquipedia.js';
 
 const nowSec = () => Math.floor(Date.now() / 1000);
 
@@ -51,11 +58,14 @@ function topPredictionLines(predictions) {
   return rows.map((row, index) => `**${index + 1}.** <@${row.user_id}> - \`${Number(row.score).toLocaleString()}\``).join('\n');
 }
 
-function leaderboardLines(rows) {
+function leaderboardLines(rows, { championPickVisible = false } = {}) {
   if (!rows.length) return 'No scored predictions yet.';
   return rows
     .slice(0, 20)
-    .map((row, index) => `**${index + 1}.** <@${row.user_id}> - \`${Number(row.score || 0).toLocaleString()}\``)
+    .map((row, index) => {
+      const pick = championPickVisible ? ` - Champion pick: **${row.championPick || '-'}**` : '';
+      return `**${index + 1}.** <@${row.user_id}> - \`${Number(row.score || 0).toLocaleString()}\`${pick}`;
+    })
     .join('\n');
 }
 
@@ -77,11 +87,28 @@ function leaderboardMeta(guildId, season) {
   const rows = overallLeaderboard(guildId, season, 20, 0);
   const weeks = listEwcWeeks(guildId, season);
   const scoredWeeks = weeks.filter((week) => week.status === 'scored').length;
-  return { rows, weeks, scoredWeeks };
+  const seasonRound = getEwcSeason(guildId, season);
+  const bestWeeks = seasonRound?.best_weeks || null;
+  const championPickVisible = Boolean(
+    seasonRound && (seasonRound.status === 'closed' || seasonRound.status === 'scored' || (seasonRound.close_at && nowSec() >= seasonRound.close_at)),
+  );
+  const championPicks = championPickVisible
+    ? new Map(listSeasonPredictions(guildId, season).map((prediction) => [prediction.user_id, prediction.picks?.[0] || null]))
+    : new Map();
+  return {
+    rows: rows.map((row) => ({
+      ...row,
+      championPick: championPickVisible ? championPicks.get(row.user_id) || null : null,
+    })),
+    weeks,
+    scoredWeeks,
+    bestWeeks,
+    championPickVisible,
+  };
 }
 
 async function buildEwcPredictionLeaderboardPayload(client, guildId, season) {
-  const { rows, weeks, scoredWeeks } = leaderboardMeta(guildId, season);
+  const { rows, weeks, scoredWeeks, bestWeeks, championPickVisible } = leaderboardMeta(guildId, season);
   const namedRows = await leaderboardRowsForImage(client, guildId, rows);
   const imageName = `ewc-predictions-${season}-${Date.now()}.png`;
   const attachment = new AttachmentBuilder(
@@ -90,6 +117,8 @@ async function buildEwcPredictionLeaderboardPayload(client, guildId, season) {
       rows: namedRows,
       scoredWeeks,
       totalWeeks: weeks.length,
+      bestWeeks,
+      championPickVisible,
       updatedAt: Date.now(),
     }),
     { name: imageName },
@@ -100,6 +129,8 @@ async function buildEwcPredictionLeaderboardPayload(client, guildId, season) {
     .setImage(`attachment://${imageName}`)
     .addFields(
       { name: 'Scored weeks', value: `${scoredWeeks}/${weeks.length || 0}`, inline: true },
+      { name: 'Overall rule', value: bestWeeks ? `Best ${bestWeeks} weeks + season` : 'All weeks + season', inline: true },
+      { name: 'Champion picks', value: championPickVisible ? 'Shown' : 'Hidden until season locks', inline: true },
       { name: 'Updated', value: `<t:${nowSec()}:R>`, inline: true },
     )
     .setFooter({ text: 'Weekly and season prediction points' });
@@ -107,13 +138,15 @@ async function buildEwcPredictionLeaderboardPayload(client, guildId, season) {
 }
 
 function buildEwcPredictionMentionsEmbed(guildId, season) {
-  const { rows, weeks, scoredWeeks } = leaderboardMeta(guildId, season);
+  const { rows, weeks, scoredWeeks, bestWeeks, championPickVisible } = leaderboardMeta(guildId, season);
   return new EmbedBuilder()
     .setColor(0xf1c40f)
     .setTitle(`EWC ${season} Prediction Leaderboard - Admin Mentions`)
-    .setDescription(leaderboardLines(rows))
+    .setDescription(leaderboardLines(rows, { championPickVisible }))
     .addFields(
       { name: 'Scored weeks', value: `${scoredWeeks}/${weeks.length || 0}`, inline: true },
+      { name: 'Overall rule', value: bestWeeks ? `Best ${bestWeeks} weeks + season` : 'All weeks + season', inline: true },
+      { name: 'Champion picks', value: championPickVisible ? 'Shown' : 'Hidden until season locks', inline: true },
       { name: 'Updated', value: `<t:${nowSec()}:R>`, inline: true },
     )
     .setFooter({ text: 'Mentions are shown for admin tracking; edits do not ping members.' });
@@ -213,9 +246,11 @@ async function syncLinkedProfileShowcases(guildId, season) {
 
 async function processWeek(client, round) {
   const now = nowSec();
+  const perGame = Array.isArray(round.games) && round.games.length > 0;
 
+  // Aggregate (3-club) weeks need a baseline snapshot; per-game weeks do not.
   const baselineAt = round.close_at || round.open_at;
-  if (!round.baseline?.length && baselineAt && now >= baselineAt) {
+  if (!perGame && !round.baseline?.length && baselineAt && now >= baselineAt) {
     const baseline = await standingsFor(round.season);
     if (!baseline) {
       logger.warn(`[ewc-predictions] baseline pending for ${round.guild_id}/${round.season}/${round.week_key}: standings unavailable`);
@@ -240,13 +275,25 @@ async function processWeek(client, round) {
     return;
   }
 
-  if (!round.baseline?.length) {
+  if (!perGame && !round.baseline?.length) {
     logger.warn(`[ewc-predictions] cannot score ${round.guild_id}/${round.season}/${round.week_key}: no baseline snapshot`);
     return;
   }
 
-  const final = round.final?.length ? round.final : await standingsFor(round.season);
-  if (!final?.length) {
+  // Network fetch + pending-results check happen OUTSIDE the transaction below.
+  const results = perGame ? (round.results?.length ? round.results : await fetchEwcWeekGameResults(round.games)) : [];
+  const missingResults = perGame ? pendingEwcGameResults(results, round.games) : [];
+  if (missingResults.length) {
+    logger.warn(
+      `[ewc-predictions] results pending for ${round.guild_id}/${round.season}/${round.week_key}: ${missingResults
+        .map((result) => result.game || result.event || result.gameKey)
+        .join(', ')}`,
+    );
+    return;
+  }
+
+  const final = perGame ? round.final || [] : round.final?.length ? round.final : await standingsFor(round.season);
+  if (!perGame && !final?.length) {
     logger.warn(`[ewc-predictions] final pending for ${round.guild_id}/${round.season}/${round.week_key}: standings unavailable`);
     return;
   }
@@ -256,7 +303,9 @@ async function processWeek(client, round) {
   const applyScores = db.transaction(() => {
     for (const prediction of predictions) {
       try {
-        const result = scoreWeeklyPrediction(prediction.picks, round.baseline, final);
+        const result = perGame
+          ? scorePerGameWeeklyPrediction(prediction.picks, round.games, results)
+          : scoreWeeklyPrediction(prediction.picks, round.baseline, final);
         saveWeeklyPredictionScore(round.guild_id, round.id, prediction.user_id, result.score, result.details);
       } catch (error) {
         logger.warn(`[ewc-predictions] skipped malformed weekly pick ${prediction.user_id}/${round.week_key}: ${error.message}`);
@@ -266,10 +315,13 @@ async function processWeek(client, round) {
         });
       }
     }
-    markEwcWeekScored(round.id, final);
+    if (perGame) markEwcWeekScoredWithResults(round.id, final || [], results);
+    else markEwcWeekScored(round.id, final);
   });
   applyScores();
-  logger.info(`[ewc-predictions] scored ${predictions.length} weekly prediction(s) for ${round.guild_id}/${round.season}/${round.week_key}`);
+  logger.info(
+    `[ewc-predictions] scored ${predictions.length} weekly prediction(s) for ${round.guild_id}/${round.season}/${round.week_key} (${perGame ? 'per-game' : 'aggregate'})`,
+  );
   const scored = listWeeklyPredictions(round.id);
   await announce(
     client,
@@ -358,17 +410,32 @@ export async function runEwcPredictionAutomation(client = null) {
 }
 
 let timer = null;
+let running = false;
 
 export function startEwcPredictions(client) {
   const minutes = Math.max(15, config.ewcPredictions.refreshMinutes);
-  const run = () => runEwcPredictionAutomation(client).catch((e) => logger.error(`[ewc-predictions] ${e.message}`));
-  timer = setInterval(run, minutes * 60 * 1000);
+  // Guard against overlapping ticks: per-game scoring may make slow Liquipedia
+  // fetches, so a tick can outlast the interval. Skip rather than stack runs.
+  const run = async () => {
+    if (running) {
+      logger.debug('[ewc-predictions] previous automation run still active; skipping this tick');
+      return;
+    }
+    running = true;
+    try {
+      await runEwcPredictionAutomation(client);
+    } finally {
+      running = false;
+    }
+  };
+  timer = setInterval(() => run().catch((e) => logger.error(`[ewc-predictions] ${e.message}`)), minutes * 60 * 1000);
   timer.unref?.();
   logger.info(`[ewc-predictions] automation check every ${minutes}m.`);
-  run();
+  run().catch((e) => logger.error(`[ewc-predictions] ${e.message}`));
 }
 
 export function stopEwcPredictions() {
   if (timer) clearInterval(timer);
   timer = null;
+  running = false;
 }
