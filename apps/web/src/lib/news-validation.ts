@@ -1,4 +1,5 @@
 import { isSafeUrl } from "@/lib/safe-url";
+import { isSnowflake } from "@/lib/validate";
 import {
   isNewsCoverPlacement,
   NEWS_BODY_MAX_LENGTH,
@@ -10,10 +11,14 @@ import type { NewsCoverPlacement, NewsPostInput } from "@/lib/news";
 
 export { NEWS_BODY_MAX_LENGTH, NEWS_SUMMARY_MAX_LENGTH, NEWS_TITLE_MAX_LENGTH };
 
+export const NEWS_AUTHOR_NAME_MAX_LENGTH = 120;
+
 export type ValidatedNewsInput = NewsPostInput & {
   gameSlug: string;
   coverImageUrl: string | null;
   coverPlacement: NewsCoverPlacement;
+  authorDiscordId: string | null;
+  authorName: string | null;
 };
 
 type NewsContentValidationResult =
@@ -61,6 +66,29 @@ export function validateNewsInput(
     coverPlacement = rawPlacement as NewsCoverPlacement;
   }
 
+  // Author is optional. authorDiscordId, when present, must be a snowflake; an
+  // explicit null clears it. authorName is a free-form display string (≤120).
+  let authorDiscordId: string | null = null;
+  const rawAuthorId = body.authorDiscordId;
+  if (rawAuthorId !== undefined && rawAuthorId !== null && rawAuthorId !== "") {
+    if (!isSnowflake(rawAuthorId)) {
+      return { ok: false, error: "Author Discord ID must be a 17-20 digit snowflake" };
+    }
+    authorDiscordId = rawAuthorId;
+  }
+
+  let authorName: string | null = null;
+  const rawAuthorName = body.authorName;
+  if (typeof rawAuthorName === "string" && rawAuthorName.trim() !== "") {
+    if (rawAuthorName.trim().length > NEWS_AUTHOR_NAME_MAX_LENGTH) {
+      return {
+        ok: false,
+        error: `Author name must be ${NEWS_AUTHOR_NAME_MAX_LENGTH} characters or fewer`,
+      };
+    }
+    authorName = rawAuthorName.trim();
+  }
+
   return {
     ok: true,
     value: {
@@ -68,6 +96,8 @@ export function validateNewsInput(
       ...content.value,
       coverImageUrl,
       coverPlacement,
+      authorDiscordId,
+      authorName,
     },
   };
 }

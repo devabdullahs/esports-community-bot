@@ -15,7 +15,6 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { localizeText } from "@/lib/community-content";
-import { DEFAULT_SEASON, defaultPublicGuildId } from "@/lib/env";
 import { listGamesCached } from "@/lib/games";
 import { listLatestPublishedNewsPostsCached } from "@/lib/news";
 import {
@@ -32,10 +31,8 @@ export const dynamic = "force-dynamic";
 export default async function Home() {
   const locale = await getRequestLocale();
   const text = copy[locale];
-  const defaultGuildId = defaultPublicGuildId();
-  const leaderboardHref = defaultGuildId
-    ? localizedPath(`/leaderboard/${defaultGuildId}/${DEFAULT_SEASON}`, locale)
-    : null;
+  // /leaderboard auto-resolves the guild and redirects, so the CTA is always shown.
+  const leaderboardHref = localizedPath("/leaderboard", locale);
   const profileHref = localizedPath("/me", locale);
   const gamesHref = localizedPath("/games", locale);
 
@@ -65,17 +62,15 @@ export default async function Home() {
             {text.home.openGames}
             <ArrowRightIcon data-icon="inline-end" className="rtl:rotate-180" />
           </Button>
-          {leaderboardHref ? (
-            <Button
-              render={<Link href={leaderboardHref} />}
-              nativeButton={false}
-              size="lg"
-              variant="outline"
-            >
-              <TrophyIcon data-icon="inline-start" />
-              {text.home.openLeaderboard}
-            </Button>
-          ) : null}
+          <Button
+            render={<Link href={leaderboardHref} />}
+            nativeButton={false}
+            size="lg"
+            variant="outline"
+          >
+            <TrophyIcon data-icon="inline-start" />
+            {text.home.openLeaderboard}
+          </Button>
           <Button
             render={<Link href={profileHref} />}
             nativeButton={false}

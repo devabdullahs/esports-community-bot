@@ -9,7 +9,6 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { DEFAULT_SEASON, defaultPublicGuildId } from "@/lib/env";
 import { localizedPath } from "@/lib/i18n";
 import { getRequestLocale } from "@/lib/request-locale";
 
@@ -28,7 +27,6 @@ const COPY = {
     leaderboardTitle: "Public leaderboard",
     leaderboardDescription: "Browse a server's full ranking for the season.",
     openLeaderboard: "Open leaderboard",
-    leaderboardHint: "Open a leaderboard link from Discord, or use /leaderboard/<server>/<season>.",
   },
   ar: {
     eyebrow: "التوقعات",
@@ -41,17 +39,15 @@ const COPY = {
     leaderboardTitle: "لوحة الصدارة العامة",
     leaderboardDescription: "تصفّح ترتيب الخادم الكامل للموسم.",
     openLeaderboard: "افتح لوحة الصدارة",
-    leaderboardHint: "افتح رابط لوحة الصدارة من ديسكورد، أو استخدم /leaderboard/<server>/<season>.",
   },
 } as const;
 
 export default async function PredictionsPage() {
   const locale = await getRequestLocale();
   const t = COPY[locale];
-  const defaultGuildId = defaultPublicGuildId();
-  const leaderboardHref = defaultGuildId
-    ? localizedPath(`/leaderboard/${defaultGuildId}/${DEFAULT_SEASON}`, locale)
-    : null;
+  // The /leaderboard index auto-resolves the guild (DB-derived) and redirects,
+  // so we always link to it and never need a Discord-command fallback hint.
+  const leaderboardHref = localizedPath("/leaderboard", locale);
 
   return (
     <main
@@ -92,14 +88,10 @@ export default async function PredictionsPage() {
             <CardDescription>{t.leaderboardDescription}</CardDescription>
           </CardHeader>
           <CardContent>
-            {leaderboardHref ? (
-              <Button render={<Link href={leaderboardHref} />} nativeButton={false} variant="outline" size="sm">
-                {t.openLeaderboard}
-                <ArrowRightIcon data-icon="inline-end" className="rtl:rotate-180" />
-              </Button>
-            ) : (
-              <p className="text-sm text-muted-foreground">{t.leaderboardHint}</p>
-            )}
+            <Button render={<Link href={leaderboardHref} />} nativeButton={false} variant="outline" size="sm">
+              {t.openLeaderboard}
+              <ArrowRightIcon data-icon="inline-end" className="rtl:rotate-180" />
+            </Button>
           </CardContent>
         </Card>
       </section>

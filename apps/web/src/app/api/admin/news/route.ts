@@ -42,10 +42,12 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "You are not assigned to this game" }, { status: 403 });
   }
 
+  // Author defaults to the acting admin, but the editor's Author picker may credit
+  // another eligible admin (super, or roster admin scoped to this game).
   const post = createNewsPost({
     ...validated.value,
-    authorDiscordId: access.discordUserId ?? null,
-    authorName: access.displayName ?? null,
+    authorDiscordId: validated.value.authorDiscordId ?? access.discordUserId ?? null,
+    authorName: validated.value.authorName ?? access.displayName ?? null,
   });
   revalidateTag("cms-news", "default");
   recordAdminAudit(access, "news.create", String((post as { id: number }).id));

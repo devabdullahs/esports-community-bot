@@ -35,9 +35,12 @@ export async function PATCH(
     return NextResponse.json({ error: "You are not assigned to this game" }, { status: 403 });
   }
 
+  // The editor's Author picker chooses who is credited; fall back to the post's
+  // existing author when the payload omits it (COALESCE in the DB layer no-ops on null).
   const updated = updateNewsPost(postId, {
     ...validated.value,
-    authorName: access.displayName ?? null,
+    authorDiscordId: validated.value.authorDiscordId ?? null,
+    authorName: validated.value.authorName ?? null,
   });
   if (!updated) return NextResponse.json({ error: "Not found" }, { status: 404 });
   revalidateTag("cms-news", "default");

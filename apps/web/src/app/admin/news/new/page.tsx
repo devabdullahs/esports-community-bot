@@ -36,7 +36,12 @@ export default async function NewNewsPostPage() {
         <p className="text-sm text-muted-foreground">Admin publishing</p>
         <h1 className="text-3xl font-semibold leading-tight">New post</h1>
       </div>
-      <NewsEditor mode="create" games={games} locale={locale} />
+      <NewsEditor
+        mode="create"
+        games={games}
+        locale={locale}
+        currentUser={{ discordId: access.discordUserId, name: access.displayName }}
+      />
     </main>
   );
 }

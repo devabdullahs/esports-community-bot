@@ -1,6 +1,6 @@
 "use client";
 
-import { useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   BoldIcon,
@@ -92,6 +92,8 @@ type TranslationDraft = {
   summary: string;
   body: string;
 };
+
+type EligibleAuthor = { discordId: string; name: string };
 
 type TranslationMap = Record<Locale, TranslationDraft>;
 type SelectionState = { start: number; end: number };
@@ -219,11 +221,14 @@ export function NewsEditor({
   post,
   games,
   locale = "en",
+  currentUser = null,
 }: {
   mode: "create" | "edit";
   post?: NewsPost;
   games: GameRecord[];
   locale?: Locale;
+  /** The signed-in admin, used as the default author when creating a post. */
+  currentUser?: { discordId: string | null; name: string | null } | null;
 }) {
   const router = useRouter();
   const t = i18nCopy[locale].composer;
@@ -250,6 +255,12 @@ export function NewsEditor({
     post?.coverPlacement || "top",
   );
   const [status, setStatus] = useState<NewsStatus>(post?.status || "draft");
+  // Author picker: list of eligible authors for the current game (fetched), plus
+  // the currently-credited author's discord id. authorName is derived from the
+  // selected option (or the post's stored name when the id isn't in the list).
+  const [authors, setAuthors] = useState<EligibleAuthor[]>([]);
+  const [authorsLoading, setAuthorsLoading] = useState(false);
+  const [authorDiscordId, setAuthorDiscordId] = useState<string>(post?.authorDiscordId || "");
   const [mobileView, setMobileView] = useState<"edit" | "preview">("edit");
   const [busy, setBusy] = useState<null | string>(null);
   const [error, setError] = useState<string | null>(null);
@@ -330,6 +341,55 @@ export function NewsEditor({
     textarea.focus();
     textarea.setSelectionRange(pending.start, pending.end);
   }, [current.body, editLocale]);
+
+  // Fetch eligible authors whenever the target game changes (and on mount). After
+  // loading, default the selection to the post's existing author when it is still
+  // eligible, else the signed-in admin when present, else the first option.
+  useEffect(() => {
+    if (!gameSlug) return;
+    let cancelled = false;
+    // Wrapped in an async fn so the setState calls run inside promise
+    // continuations (callbacks), not synchronously in the effect body.
+    async function loadAuthors(slug: string) {
+      setAuthorsLoading(true);
+      try {
+        const res = await fetch(`/api/admin/authors?game=${encodeURIComponent(slug)}`);
+        const data: { authors?: EligibleAuthor[] } = res.ok ? await res.json() : { authors: [] };
+        if (cancelled) return;
+        const list = Array.isArray(data.authors) ? data.authors : [];
+        setAuthors(list);
+        setAuthorDiscordId((prev) => {
+          if (prev && list.some((a) => a.discordId === prev)) return prev;
+          if (post?.authorDiscordId && list.some((a) => a.discordId === post.authorDiscordId)) {
+            return post.authorDiscordId;
+          }
+          if (currentUser?.discordId && list.some((a) => a.discordId === currentUser.discordId)) {
+            return currentUser.discordId;
+          }
+          return list[0]?.discordId || "";
+        });
+      } catch {
+        if (!cancelled) setAuthors([]);
+      } finally {
+        if (!cancelled) setAuthorsLoading(false);
+      }
+    }
+    void loadAuthors(gameSlug);
+    return () => {
+      cancelled = true;
+    };
+    // post + currentUser are stable for the editor's lifetime; only the game drives refetch.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [gameSlug]);
+
+  // Resolve the display name for the selected author from the fetched list,
+  // falling back to the post's stored author name so editing an existing post
+  // never loses the credit even if that user is no longer in the eligible list.
+  const selectedAuthorName =
+    authors.find((a) => a.discordId === authorDiscordId)?.name ||
+    (authorDiscordId && authorDiscordId === post?.authorDiscordId ? post?.authorName : null) ||
+    authorDiscordId ||
+    "";
 
   function switchContentMode(nextMode: NewsContentMode) {
     setContentMode(nextMode);
@@ -574,6 +634,8 @@ export function NewsEditor({
         coverImageUrl: coverImageUrl.trim() || null,
         coverPlacement,
         status: targetStatus,
+        authorDiscordId: authorDiscordId || null,
+        authorName: selectedAuthorName || null,
       };
       const res = await fetch(
         mode === "create" ? "/api/admin/news" : `/api/admin/news/${post?.id}`,
@@ -721,6 +783,35 @@ export function NewsEditor({
                   <FieldDescription>{t.sharedHint}</FieldDescription>
                 </Field>
               </div>
+
+              {/* Author picker: eligible = super admins + roster admins scoped to this game. */}
+              <Field>
+                <FieldLabel>{t.author}</FieldLabel>
+                <Select
+                  value={authorDiscordId}
+                  onValueChange={(value) => value && setAuthorDiscordId(value)}
+                  disabled={authorsLoading || authors.length === 0}
+                >
+                  <SelectTrigger className="w-full sm:w-64">
+                    <SelectValue>
+                      {(value) => {
+                        if (authorsLoading) return t.authorLoading;
+                        const selected = authors.find((a) => a.discordId === value);
+                        return selected?.name || selectedAuthorName || t.authorEmpty;
+                      }}
+                    </SelectValue>
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectGroup>
+                      {authors.map((author) => (
+                        <SelectItem key={author.discordId} value={author.discordId}>
+                          {author.name}
+                        </SelectItem>
+                      ))}
+                    </SelectGroup>
+                  </SelectContent>
+                </Select>
+              </Field>
 
               {contentMode === "shared" ? (
                 <Field>

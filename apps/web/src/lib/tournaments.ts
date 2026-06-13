@@ -6,7 +6,7 @@ import {
   listActiveTournaments as _listActive,
 } from "@bot/db/tournaments.js";
 import { unstable_cache } from "next/cache";
-import { defaultPublicGuildId } from "@/lib/env";
+import { resolveDefaultGuildId } from "@/lib/guild";
 
 // ---------------------------------------------------------------------------
 // Typed boundary over the bot's tournament/match read helpers (see games.ts).
@@ -105,7 +105,10 @@ const finishedStmt = db.prepare(
 
 /** Active tournaments for the configured guild, each with per-status match counts. */
 export function listTournamentSummaries(): TournamentSummary[] {
-  const guildId = defaultPublicGuildId();
+  // The bot only renders match cards for active tournaments (getMatchesForGuild
+  // joins on t.active = 1), so listActiveTournaments mirrors exactly what Discord
+  // shows. The only gap was the guild id, now DB-derived.
+  const guildId = resolveDefaultGuildId();
   if (!guildId) return [];
   return listActive(guildId).map((t) => ({
     id: t.id,
@@ -128,7 +131,7 @@ export function getTournamentMatches(
   id: number,
   { limit = 50, offset = 0 }: { limit?: number; offset?: number } = {},
 ): TournamentMatches | null {
-  const guildId = defaultPublicGuildId();
+  const guildId = resolveDefaultGuildId();
   if (!guildId) return null;
   const tournament = getById(id);
   if (!tournament || tournament.guild_id !== guildId || tournament.active !== 1) return null;

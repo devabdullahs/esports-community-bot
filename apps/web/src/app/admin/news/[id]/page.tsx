@@ -48,7 +48,13 @@ export default async function EditNewsPostPage({
         <p className="text-sm text-muted-foreground">Admin publishing</p>
         <h1 className="text-3xl font-semibold leading-tight">Edit post</h1>
       </div>
-      <NewsEditor mode="edit" post={post} games={games} locale={locale} />
+      <NewsEditor
+        mode="edit"
+        post={post}
+        games={games}
+        locale={locale}
+        currentUser={{ discordId: access.discordUserId, name: access.displayName }}
+      />
     </main>
   );
 }

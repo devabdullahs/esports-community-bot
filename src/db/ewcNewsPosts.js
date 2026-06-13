@@ -268,6 +268,7 @@ export function updateEwcNewsPost(id, input) {
         `UPDATE ewc_news_posts
          SET game_slug = ?, locale = ?, content_mode = ?, default_locale = ?, title = ?,
              summary = ?, body = ?, status = ?, cover_image_url = ?, cover_placement = ?,
+             author_discord_id = COALESCE(?, author_discord_id),
              author_name = COALESCE(?, author_name),
              updated_at = datetime('now'),
              published_at = COALESCE(published_at, CASE WHEN ? = 'published' THEN datetime('now') ELSE NULL END)
@@ -284,6 +285,7 @@ export function updateEwcNewsPost(id, input) {
         value.status || 'draft',
         value.coverImageUrl || null,
         isNewsCoverPlacement(value.coverPlacement) ? value.coverPlacement : 'top',
+        value.authorDiscordId || null,
         value.authorName || null,
         value.status || 'draft',
         postId,

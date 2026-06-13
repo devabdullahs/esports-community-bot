@@ -73,10 +73,7 @@ const listPublished = _listPublished as (args: {
 }) => NewsPost[];
 const listLatest = _listLatest as (args: { locale: Locale; limit?: number }) => NewsPost[];
 const create = _create as (input: NewsPostInput) => NewsPost;
-const update = _update as (
-  id: number,
-  input: Omit<NewsPostInput, "authorDiscordId">,
-) => NewsPost | null;
+const update = _update as (id: number, input: NewsPostInput) => NewsPost | null;
 const setStatus = _setStatus as (id: number, status: NewsStatus) => NewsPost | null;
 const remove = _delete as (id: number) => { changes: number };
 
@@ -107,10 +104,7 @@ export function createNewsPost(input: NewsPostInput): NewsPost {
   return create(input);
 }
 
-export function updateNewsPost(
-  id: number,
-  input: Omit<NewsPostInput, "authorDiscordId">,
-): NewsPost | null {
+export function updateNewsPost(id: number, input: NewsPostInput): NewsPost | null {
   return update(id, input);
 }
 
