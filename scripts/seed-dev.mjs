@@ -29,6 +29,8 @@ const {
   saveWeeklyPredictionScore,
 } = await import('../src/db/ewcPredictions.js');
 const { upsertEwcProfileLink, markEwcProfileLinkSynced } = await import('../src/db/ewcProfileLinks.js');
+const { addTournament } = await import('../src/db/tournaments.js');
+const { upsertMatch } = await import('../src/db/matches.js');
 
 // 1) Trigger the built-in default seeds for games + media channels.
 const games = listEwcGames();
@@ -164,6 +166,29 @@ members.forEach((m, mi) => {
 // Mark weeks scored with the final standings.
 for (const row of weekRows) markEwcWeekScored(row.id, finalStandings);
 console.log(`season + ${weekRows.length} weeks scored for ${members.length} members`);
+
+// 3b) One tracked tournament + a few matches so /tournaments has data to render.
+// addTournament/upsertMatch upsert on their unique keys, so re-running is idempotent.
+const tournament = addTournament({
+  source: 'liquipedia',
+  external_id: 'EWC/2026/Valorant',
+  game: 'valorant',
+  name: 'EWC 2026 — Valorant',
+  url: 'https://liquipedia.net/valorant/EWC/2026',
+  guild_id: GUILD,
+});
+const nowSeconds = Math.floor(Date.now() / 1000);
+const tMatches = [
+  { external_id: 'Match:val-run', team_a: 'Team Falcons', team_b: 'Team Liquid', score_a: 1, score_b: 0, status: 'running', scheduled_at: nowSeconds - 1800 },
+  { external_id: 'Match:val-sch', team_a: 'Team Vitality', team_b: 'Gen.G', score_a: null, score_b: null, status: 'scheduled', scheduled_at: nowSeconds + 7200 },
+  { external_id: 'Match:val-fin', team_a: 'T1', team_b: 'FaZe Clan', score_a: 2, score_b: 1, status: 'finished', scheduled_at: nowSeconds - 86400 },
+];
+let matchCount = 0;
+for (const m of tMatches) {
+  try { upsertMatch({ tournament_id: tournament.id, source: 'liquipedia', ...m }); matchCount += 1; }
+  catch (e) { console.warn('match skip:', e.message); }
+}
+console.log(`tournament seeded: ${tournament.name} (#${tournament.id}) with ${matchCount} matches`);
 
 // 4) Link the dev auth user to this guild/season so /me resolves automatically.
 upsertEwcProfileLink({ authUserId: DEV_AUTH_USER, discordUserId: DEV_DISCORD_ID, guildId: GUILD, season: SEASON });
