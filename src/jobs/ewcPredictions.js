@@ -217,7 +217,7 @@ async function announce(client, guildId, content) {
 
 async function syncLinkedProfileShowcases(guildId, season) {
   if (!config.dashboard.internalUrl || !config.dashboard.internalSecret) return;
-  const links = listEwcProfileLinks({ guildId, season });
+  const links = await listEwcProfileLinks({ guildId, season });
   if (!links.length) return;
   const base = config.dashboard.internalUrl.replace(/\/$/, '');
   for (const link of links) {

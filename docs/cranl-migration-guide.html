@@ -1,0 +1,618 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Esports Community Bot - Cranl Migration Guide</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #07111f;
+      --panel: #0d1b2d;
+      --panel-2: #122238;
+      --ink: #f7f9fc;
+      --muted: #a9bbd4;
+      --line: #263a56;
+      --blue: #75a7ff;
+      --gold: #f0c419;
+      --green: #5fe0a6;
+      --red: #ff6173;
+      --shadow: rgba(0, 0, 0, 0.35);
+      font-family:
+        Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
+        "Segoe UI", sans-serif;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html {
+      scroll-behavior: smooth;
+    }
+
+    body {
+      margin: 0;
+      background:
+        radial-gradient(circle at 20% 0%, rgba(117, 167, 255, 0.16), transparent 32rem),
+        radial-gradient(circle at 100% 10%, rgba(240, 196, 25, 0.11), transparent 26rem),
+        var(--bg);
+      color: var(--ink);
+      line-height: 1.6;
+    }
+
+    a {
+      color: var(--blue);
+      text-decoration: none;
+    }
+
+    a:hover {
+      text-decoration: underline;
+    }
+
+    .page {
+      width: min(1180px, calc(100% - 32px));
+      margin: 0 auto;
+      padding: 40px 0 56px;
+    }
+
+    header {
+      border: 1px solid rgba(117, 167, 255, 0.28);
+      background: linear-gradient(135deg, rgba(13, 27, 45, 0.95), rgba(7, 17, 31, 0.96));
+      border-radius: 8px;
+      padding: 34px;
+      box-shadow: 0 24px 70px var(--shadow);
+    }
+
+    .eyebrow {
+      margin: 0 0 10px;
+      color: var(--gold);
+      font-size: 13px;
+      font-weight: 800;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    h1 {
+      margin: 0;
+      max-width: 820px;
+      font-size: clamp(34px, 5vw, 58px);
+      line-height: 1.02;
+      letter-spacing: 0;
+    }
+
+    .lead {
+      max-width: 850px;
+      margin: 18px 0 0;
+      color: var(--muted);
+      font-size: 19px;
+    }
+
+    .status-grid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 12px;
+      margin-top: 28px;
+    }
+
+    .status-card {
+      min-height: 118px;
+      padding: 18px;
+      border: 1px solid var(--line);
+      background: rgba(18, 34, 56, 0.72);
+      border-radius: 8px;
+    }
+
+    .status-card strong {
+      display: block;
+      margin-bottom: 6px;
+      font-size: 14px;
+      color: var(--ink);
+    }
+
+    .status-card span {
+      display: block;
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    .layout {
+      display: grid;
+      grid-template-columns: 280px minmax(0, 1fr);
+      gap: 24px;
+      margin-top: 24px;
+      align-items: start;
+    }
+
+    nav {
+      position: sticky;
+      top: 18px;
+      border: 1px solid var(--line);
+      background: rgba(13, 27, 45, 0.88);
+      border-radius: 8px;
+      padding: 16px;
+    }
+
+    nav h2 {
+      margin: 0 0 12px;
+      font-size: 15px;
+    }
+
+    nav a {
+      display: block;
+      padding: 9px 10px;
+      border-radius: 6px;
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    nav a:hover {
+      background: rgba(117, 167, 255, 0.12);
+      color: var(--ink);
+      text-decoration: none;
+    }
+
+    main {
+      display: grid;
+      gap: 18px;
+    }
+
+    section {
+      border: 1px solid var(--line);
+      background: rgba(13, 27, 45, 0.88);
+      border-radius: 8px;
+      padding: 26px;
+      box-shadow: 0 18px 44px rgba(0, 0, 0, 0.18);
+    }
+
+    h2 {
+      margin: 0 0 14px;
+      font-size: 25px;
+      line-height: 1.2;
+      letter-spacing: 0;
+    }
+
+    h3 {
+      margin: 22px 0 8px;
+      font-size: 18px;
+    }
+
+    p {
+      margin: 0 0 13px;
+      color: var(--muted);
+    }
+
+    ul,
+    ol {
+      margin: 12px 0 0;
+      padding-left: 22px;
+      color: var(--muted);
+    }
+
+    li {
+      margin: 7px 0;
+    }
+
+    code {
+      padding: 2px 6px;
+      border: 1px solid rgba(117, 167, 255, 0.22);
+      border-radius: 5px;
+      background: rgba(4, 10, 18, 0.62);
+      color: #dce8ff;
+      font-family: "Cascadia Code", "Fira Code", Consolas, monospace;
+      font-size: 0.92em;
+    }
+
+    pre {
+      overflow-x: auto;
+      margin: 12px 0 0;
+      padding: 16px;
+      border: 1px solid rgba(117, 167, 255, 0.22);
+      border-radius: 8px;
+      background: #040a12;
+      color: #dce8ff;
+      font-size: 14px;
+      line-height: 1.5;
+    }
+
+    pre code {
+      padding: 0;
+      border: 0;
+      background: transparent;
+    }
+
+    .callout {
+      margin: 16px 0;
+      padding: 14px 16px;
+      border-radius: 8px;
+      border: 1px solid rgba(240, 196, 25, 0.35);
+      background: rgba(240, 196, 25, 0.09);
+      color: #ffe38d;
+    }
+
+    .danger {
+      border-color: rgba(255, 97, 115, 0.42);
+      background: rgba(255, 97, 115, 0.1);
+      color: #ffc3cb;
+    }
+
+    .success {
+      border-color: rgba(95, 224, 166, 0.38);
+      background: rgba(95, 224, 166, 0.09);
+      color: #c5f8df;
+    }
+
+    .timeline {
+      display: grid;
+      gap: 12px;
+      counter-reset: phase;
+    }
+
+    .phase {
+      display: grid;
+      grid-template-columns: auto minmax(0, 1fr);
+      gap: 14px;
+      padding: 16px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: rgba(18, 34, 56, 0.6);
+    }
+
+    .phase::before {
+      counter-increment: phase;
+      content: counter(phase);
+      display: grid;
+      place-items: center;
+      width: 34px;
+      height: 34px;
+      border-radius: 50%;
+      background: rgba(117, 167, 255, 0.16);
+      color: var(--blue);
+      font-weight: 800;
+    }
+
+    .phase strong {
+      display: block;
+      margin-bottom: 3px;
+      color: var(--ink);
+    }
+
+    .checklist {
+      display: grid;
+      gap: 8px;
+      padding: 0;
+      list-style: none;
+    }
+
+    .checklist li {
+      display: grid;
+      grid-template-columns: 26px minmax(0, 1fr);
+      gap: 8px;
+      align-items: start;
+      margin: 0;
+      padding: 10px 12px;
+      border-radius: 7px;
+      background: rgba(18, 34, 56, 0.55);
+    }
+
+    .checklist li::before {
+      content: "";
+      width: 16px;
+      height: 16px;
+      margin-top: 4px;
+      border: 2px solid var(--blue);
+      border-radius: 4px;
+    }
+
+    .two-col {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 14px;
+    }
+
+    .mini {
+      padding: 16px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: rgba(18, 34, 56, 0.56);
+    }
+
+    .mini h3 {
+      margin-top: 0;
+    }
+
+    footer {
+      padding: 22px 0 0;
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    @media (max-width: 860px) {
+      .page {
+        width: min(100% - 20px, 720px);
+        padding-top: 20px;
+      }
+
+      header,
+      section {
+        padding: 22px;
+      }
+
+      .status-grid,
+      .layout,
+      .two-col {
+        grid-template-columns: 1fr;
+      }
+
+      nav {
+        position: static;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <header>
+      <p class="eyebrow">Migration Guide</p>
+      <h1>Move Esports Community Bot from UGREEN NAS to Cranl</h1>
+      <p class="lead">
+        A practical guide for moving the bot and dashboard from the current
+        SQLite-backed NAS deployment to Cranl with managed PostgreSQL, without
+        breaking Discord messages, predictions, auth sessions, or Liquipedia rate
+        safety.
+      </p>
+
+      <div class="status-grid" aria-label="Migration status">
+        <div class="status-card">
+          <strong>Recommended Database</strong>
+          <span>PostgreSQL, region MENA / Saudi Arabia</span>
+        </div>
+        <div class="status-card">
+          <strong>Current Production</strong>
+          <span>UGREEN NAS stays live until cutover</span>
+        </div>
+        <div class="status-card">
+          <strong>Current Code State</strong>
+          <span>Importer ready, auth can use PostgreSQL, app runtime still in progress</span>
+        </div>
+        <div class="status-card">
+          <strong>Cutover Rule</strong>
+          <span>Only one Discord bot instance online</span>
+        </div>
+      </div>
+    </header>
+
+    <div class="layout">
+      <nav aria-label="Guide sections">
+        <h2>Sections</h2>
+        <a href="#summary">Summary</a>
+        <a href="#cranl-values">Cranl Values</a>
+        <a href="#phases">Migration Phases</a>
+        <a href="#backup">NAS Backup</a>
+        <a href="#import">Postgres Import</a>
+        <a href="#env">Environment</a>
+        <a href="#testing">Testing</a>
+        <a href="#cutover">Final Cutover</a>
+        <a href="#rollback">Rollback</a>
+      </nav>
+
+      <main>
+        <section id="summary">
+          <h2>1. Summary</h2>
+          <p>
+            The safest approach is to treat this as two separate moves:
+            first migrate the data into PostgreSQL, then port the app runtime
+            from synchronous SQLite to async PostgreSQL.
+          </p>
+          <div class="callout danger">
+            Do not start the Cranl bot as production yet. The current runtime
+            still imports <code>better-sqlite3</code>, so it would use or create
+            a SQLite file instead of the Cranl PostgreSQL database.
+          </div>
+          <p>
+            The importer and PostgreSQL schema are prepared for rehearsals.
+            Better Auth can now resolve PostgreSQL through
+            <code>DATABASE_URL</code>, but the app-owned bot/dashboard tables
+            still need the remaining database-layer port before the bot can run
+            live on Cranl.
+          </p>
+        </section>
+
+        <section id="cranl-values">
+          <h2>2. Cranl Database Values</h2>
+          <div class="two-col">
+            <div class="mini">
+              <h3>Use These</h3>
+              <ul>
+                <li><strong>Type:</strong> PostgreSQL</li>
+                <li><strong>Region:</strong> MENA / Saudi Arabia</li>
+                <li><strong>Display name:</strong> <code>esports-community-postgres</code></li>
+                <li><strong>Database name:</strong> <code>esports_community</code></li>
+                <li><strong>Username:</strong> <code>ecb_app</code></li>
+              </ul>
+            </div>
+            <div class="mini">
+              <h3>Keep Private</h3>
+              <ul>
+                <li>PostgreSQL password</li>
+                <li>Internal and external connection URLs</li>
+                <li>Discord bot token</li>
+                <li><code>BETTER_AUTH_SECRET</code></li>
+                <li>R2/object-storage secrets</li>
+              </ul>
+            </div>
+          </div>
+          <p>
+            Use Cranl's internal <code>DATABASE_URL</code> for the deployed app.
+            Use the external URL only from your local machine for migration and
+            testing.
+          </p>
+        </section>
+
+        <section id="phases">
+          <h2>3. Migration Phases</h2>
+          <div class="timeline">
+            <div class="phase">
+              <div>
+                <strong>Prepare Cranl PostgreSQL</strong>
+                <p>Create the database, keep it idle, and do not run the bot from Cranl yet.</p>
+              </div>
+            </div>
+            <div class="phase">
+              <div>
+                <strong>Rehearse Data Import</strong>
+                <p>Use a copied SQLite backup and import into a disposable or empty PostgreSQL target.</p>
+              </div>
+            </div>
+            <div class="phase">
+              <div>
+                <strong>Port Runtime DB Layer</strong>
+                <p>Replace synchronous SQLite calls with async PostgreSQL queries behind the existing modules.</p>
+              </div>
+            </div>
+            <div class="phase">
+              <div>
+                <strong>Test Cranl With Bot Disabled</strong>
+                <p>Run <code>RUN_BOT=false</code> and <code>RUN_WEB=true</code> first to test dashboard/auth safely.</p>
+              </div>
+            </div>
+            <div class="phase">
+              <div>
+                <strong>Final Cutover</strong>
+                <p>Stop NAS, take final backup, import final data, then start Cranl as the only live bot.</p>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section id="backup">
+          <h2>4. NAS Backup</h2>
+          <p>
+            Stop the NAS bot before the final backup so SQLite and its WAL file
+            are consistent.
+          </p>
+          <pre><code>cd /volume1/docker/ECB
+docker compose stop esports-community-bot
+sqlite3 ./data/bot.sqlite ".backup './backups/bot-$(date +%Y%m%d-%H%M%S).sqlite'"</code></pre>
+          <p>
+            If <code>sqlite3</code> is not installed on the NAS, stop the
+            container and copy all three files:
+          </p>
+          <ul>
+            <li><code>bot.sqlite</code></li>
+            <li><code>bot.sqlite-wal</code></li>
+            <li><code>bot.sqlite-shm</code></li>
+          </ul>
+        </section>
+
+        <section id="import">
+          <h2>5. Import Into PostgreSQL</h2>
+          <p>
+            Start with a dry run. This only reads the SQLite file and prints row
+            counts.
+          </p>
+          <pre><code>npm run db:sqlite-to-pg -- --dry-run --sqlite C:\path\to\bot.sqlite</code></pre>
+          <p>
+            Then import into PostgreSQL by setting <code>DATABASE_URL</code> in
+            your shell. Do not save the real password into Git.
+          </p>
+          <pre><code>$env:DATABASE_URL = "postgresql://ecb_app:&lt;password&gt;@&lt;external-host&gt;:&lt;external-port&gt;/esports_community"
+$env:PGSSLMODE = "require"
+npm run db:sqlite-to-pg -- --sqlite C:\path\to\bot.sqlite
+Remove-Item Env:\DATABASE_URL
+Remove-Item Env:\PGSSLMODE</code></pre>
+          <div class="callout">
+            The importer is safe to rehearse: it uses a whitelist of tables,
+            preserves IDs, resets identity sequences, and uses
+            <code>ON CONFLICT DO NOTHING</code> so reruns do not overwrite rows.
+          </div>
+        </section>
+
+        <section id="env">
+          <h2>6. Cranl Environment</h2>
+          <p>
+            Keep the same secrets from the NAS deployment. The most important
+            value is <code>BETTER_AUTH_SECRET</code>; changing it can break
+            existing dashboard sessions and linked Discord account data.
+          </p>
+          <pre><code>DATABASE_URL=postgresql://...
+DB_DRIVER=postgres
+NODE_ENV=production
+RUN_BOT=false
+RUN_WEB=true
+PORT=3000
+WEB_PORT=3000
+WEB_HOST=0.0.0.0
+BETTER_AUTH_SECRET=&lt;same value as NAS&gt;
+BETTER_AUTH_URL=https://&lt;cranl-or-custom-domain&gt;
+EWC_DASHBOARD_PUBLIC_URL=https://&lt;cranl-or-custom-domain&gt;
+EWC_DASHBOARD_INTERNAL_URL=http://localhost:3000
+DISCORD_TOKEN=&lt;same bot token&gt;
+DISCORD_CLIENT_ID=&lt;app id&gt;
+DISCORD_CLIENT_SECRET=&lt;client secret&gt;
+DISCORD_GUILD_ID=1087350030693838918</code></pre>
+          <p>
+            Begin with <code>RUN_BOT=false</code> on Cranl. Turn it on only
+            during final cutover after the NAS bot is stopped.
+          </p>
+        </section>
+
+        <section id="testing">
+          <h2>7. Testing Checklist</h2>
+          <ul class="checklist">
+            <li>Run the SQLite import dry run and confirm table counts look right.</li>
+            <li>Import into a disposable PostgreSQL database and confirm target counts match.</li>
+            <li>Deploy Cranl with <code>RUN_BOT=false</code> and verify the dashboard starts.</li>
+            <li>Log in with Discord and confirm Better Auth still works.</li>
+            <li>Open admin pages and confirm games, news, audit, predictions, and leaderboard pages load.</li>
+            <li>Submit a test prediction on a staging copy if possible.</li>
+            <li>Confirm Liquipedia rate-limit/backoff state will persist across Cranl restarts.</li>
+            <li>Confirm the NAS bot is the only live Discord bot until cutover.</li>
+          </ul>
+        </section>
+
+        <section id="cutover">
+          <h2>8. Final Cutover</h2>
+          <ol>
+            <li>Announce a short maintenance window.</li>
+            <li>Stop the NAS bot.</li>
+            <li>Take the final SQLite backup.</li>
+            <li>Run the final import into Cranl PostgreSQL.</li>
+            <li>Deploy Cranl with <code>RUN_BOT=true</code> and <code>RUN_WEB=true</code>.</li>
+            <li>Watch logs for one bot login and no duplicate process.</li>
+            <li>Run a Discord smoke test: one public command, one admin command, one dashboard action.</li>
+          </ol>
+          <div class="callout success">
+            Once Cranl is healthy, keep the NAS deployment stopped for a while
+            as rollback insurance. Do not delete the NAS data immediately.
+          </div>
+        </section>
+
+        <section id="rollback">
+          <h2>9. Rollback</h2>
+          <p>
+            If Cranl fails during cutover, stop the Cranl app first, then start
+            the NAS bot again. This avoids duplicate Discord bot sessions.
+          </p>
+          <pre><code># Cranl dashboard
+Stop application
+
+# NAS
+cd /volume1/docker/ECB
+docker compose up -d</code></pre>
+          <p>
+            Keep the failed Cranl PostgreSQL database intact until we inspect it.
+            It may contain useful import logs or partial state from the failed
+            attempt.
+          </p>
+        </section>
+      </main>
+    </div>
+
+    <footer>
+      Generated for the Esports Community Bot Cranl migration. Keep secrets in
+      environment variables only.
+    </footer>
+  </div>
+</body>
+</html>

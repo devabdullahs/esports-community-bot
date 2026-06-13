@@ -48,14 +48,15 @@ describe("audit trail: route mutations write audit rows", () => {
 
     // Audit row must exist.
     const { listAdminAuditLog } = await import("@bot/db/ewcAdminAuditLog.js") as {
-      listAdminAuditLog: (limit?: number, offset?: number) => {
+      listAdminAuditLog: (limit?: number, offset?: number) => Promise<{
         action: string;
         target: string | null;
         actorId: string;
-      }[];
+      }[]>;
     };
 
-    const entries = listAdminAuditLog();
+    await new Promise((resolve) => setImmediate(resolve));
+    const entries = await listAdminAuditLog();
     const row = entries.find((e) => e.action === "game.create" && e.target === slug);
     expect(row).toBeDefined();
     expect(row?.actorId).toBe(superAdmin().discordUserId);

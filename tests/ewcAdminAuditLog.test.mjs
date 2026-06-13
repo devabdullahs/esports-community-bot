@@ -16,8 +16,8 @@ test.after(() => {
   rmSync(dir, { recursive: true, force: true });
 });
 
-test('records two entries and lists them newest-first with hydrated details', () => {
-  recordAdminAudit({
+test('records two entries and lists them newest-first with hydrated details', async () => {
+  await recordAdminAudit({
     actorId: '111111111111111111',
     actorName: 'Alice',
     action: 'game.create',
@@ -25,7 +25,7 @@ test('records two entries and lists them newest-first with hydrated details', ()
     details: { note: 'first' },
   });
 
-  recordAdminAudit({
+  await recordAdminAudit({
     actorId: '222222222222222222',
     actorName: 'Bob',
     action: 'news.delete',
@@ -33,7 +33,7 @@ test('records two entries and lists them newest-first with hydrated details', ()
     details: null,
   });
 
-  const entries = listAdminAuditLog();
+  const entries = await listAdminAuditLog();
 
   assert.equal(entries.length, 2);
 
@@ -57,7 +57,7 @@ test('records two entries and lists them newest-first with hydrated details', ()
   assert.deepEqual(aliceEntry.details, { note: 'first' });
 });
 
-test('malformed details row hydrates to null without throwing', () => {
+test('malformed details row hydrates to null without throwing', async () => {
   // Insert a row with invalid JSON directly via db to simulate corruption.
   db.prepare(
     `INSERT INTO ewc_admin_audit_log (actor_id, actor_name, action, target, details)
@@ -65,16 +65,16 @@ test('malformed details row hydrates to null without throwing', () => {
   ).run('333333333333333333', 'Charlie', 'game.update', 'bad-game', 'not-valid-json{{{');
 
   // listAdminAuditLog must not throw.
-  const entries = listAdminAuditLog();
+  const entries = await listAdminAuditLog();
   const charlie = entries.find((e) => e.actorId === '333333333333333333');
   assert.ok(charlie, 'charlie entry should be present');
   assert.equal(charlie.details, null, 'malformed JSON should hydrate to null');
 });
 
-test('limit and offset are respected', () => {
+test('limit and offset are respected', async () => {
   // We now have at least 3 entries; offset 1 should skip the newest.
-  const all = listAdminAuditLog();
-  const paged = listAdminAuditLog(1, 1);
+  const all = await listAdminAuditLog();
+  const paged = await listAdminAuditLog(1, 1);
   assert.equal(paged.length, 1);
   assert.equal(paged[0].id, all[1].id, 'offset 1 should return the second entry');
 });

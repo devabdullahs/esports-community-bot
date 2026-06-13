@@ -20,7 +20,9 @@
     "web:build": "npm --workspace @esports-community-bot/web run build",
     "web:start": "npm --workspace @esports-community-bot/web run start",
     "web:auth:migrate": "npm --workspace @esports-community-bot/web run auth:migrate",
-    "seed:dev": "node scripts/seed-dev.mjs"
+    "seed:dev": "node scripts/seed-dev.mjs",
+    "db:pg:schema": "node scripts/migrate-sqlite-to-postgres.mjs --schema-only",
+    "db:sqlite-to-pg": "node scripts/migrate-sqlite-to-postgres.mjs"
   },
   "license": "MIT",
   "dependencies": {
@@ -29,6 +31,11 @@
     "better-sqlite3": "^12.10.0",
     "cheerio": "^1.2.0",
     "discord.js": "^14.26.4",
-    "node-cron": "^4.2.1"
+    "node-cron": "^4.2.1",
+    "pg": "^8.21.0"
+  },
+  "devDependencies": {
+    "@types/pg": "^8.20.0",
+    "shadcn": "^4.11.0"
   }
 }

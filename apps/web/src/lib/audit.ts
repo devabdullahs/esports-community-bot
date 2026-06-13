@@ -16,15 +16,15 @@ export type AuditEntry = {
   createdAt: string;
 };
 
-const record = _record as (params: {
+const record = _record as unknown as (params: {
   actorId: string;
   actorName: string | null;
   action: string;
   target: string | null;
   details: Record<string, unknown> | null;
-}) => void;
+}) => Promise<void>;
 
-const list = _list as (limit?: number, offset?: number) => AuditEntry[];
+const list = _list as unknown as (limit?: number, offset?: number) => Promise<AuditEntry[]>;
 
 /**
  * Record a successful admin mutation in the audit log.
@@ -48,19 +48,17 @@ export function recordAdminAudit(
   details?: Record<string, unknown>,
 ): void {
   if (!access.discordUserId) return;
-  try {
-    record({
-      actorId: access.discordUserId,
-      actorName: access.displayName ?? null,
-      action,
-      target,
-      details: details ?? null,
-    });
-  } catch (err) {
+  record({
+    actorId: access.discordUserId,
+    actorName: access.displayName ?? null,
+    action,
+    target,
+    details: details ?? null,
+  }).catch((err) => {
     console.error("[audit] failed to record", err);
-  }
+  });
 }
 
-export function listAuditLog(limit = 100, offset = 0): AuditEntry[] {
+export function listAuditLog(limit = 100, offset = 0): Promise<AuditEntry[]> {
   return list(limit, offset);
 }

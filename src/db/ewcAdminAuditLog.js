@@ -1,4 +1,4 @@
-import { db } from './index.js';
+import { all, run } from './client.js';
 
 /**
  * Safe JSON parser — returns null for missing or malformed detail blobs
@@ -24,12 +24,13 @@ function parseJson(value) {
  * @param {object|null} params.details  - Safe subset of action context (no secrets).
  *                                        Serialised to JSON before storage.
  */
-export function recordAdminAudit({ actorId, actorName, action, target, details }) {
+export async function recordAdminAudit({ actorId, actorName, action, target, details }) {
   const detailsJson = details != null ? JSON.stringify(details) : null;
-  db.prepare(
+  await run(
     `INSERT INTO ewc_admin_audit_log (actor_id, actor_name, action, target, details)
-     VALUES (?, ?, ?, ?, ?)`,
-  ).run(actorId, actorName ?? null, action, target ?? null, detailsJson);
+     VALUES ($1, $2, $3, $4, $5)`,
+    [actorId, actorName ?? null, action, target ?? null, detailsJson],
+  );
 }
 
 /**
@@ -40,15 +41,14 @@ export function recordAdminAudit({ actorId, actorName, action, target, details }
  * @returns {{ id: number, actorId: string, actorName: string|null, action: string,
  *             target: string|null, details: object|null, createdAt: string }[]}
  */
-export function listAdminAuditLog(limit = 100, offset = 0) {
-  const rows = db
-    .prepare(
-      `SELECT id, actor_id, actor_name, action, target, details, created_at
-       FROM ewc_admin_audit_log
-       ORDER BY created_at DESC, id DESC
-       LIMIT ? OFFSET ?`,
-    )
-    .all(Math.max(1, Math.min(500, Number(limit) || 100)), Math.max(0, Number(offset) || 0));
+export async function listAdminAuditLog(limit = 100, offset = 0) {
+  const rows = await all(
+    `SELECT id, actor_id, actor_name, action, target, details, created_at
+     FROM ewc_admin_audit_log
+     ORDER BY created_at DESC, id DESC
+     LIMIT $1 OFFSET $2`,
+    [Math.max(1, Math.min(500, Number(limit) || 100)), Math.max(0, Number(offset) || 0)],
+  );
 
   return rows.map((row) => ({
     id: row.id,

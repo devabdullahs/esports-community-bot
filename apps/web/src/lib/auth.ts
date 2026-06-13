@@ -1,6 +1,6 @@
 import { betterAuth } from "better-auth";
 import { nextCookies } from "better-auth/next-js";
-import { db } from "@bot/db/connection.js";
+import { authDatabase } from "@/lib/auth-database";
 import { dashboardPublicUrl, trustedOrigins } from "@/lib/env";
 
 // Fail closed in production: never serve requests with a known/default auth secret,
@@ -29,7 +29,7 @@ export const auth = betterAuth({
   appName: "EWC Predictions",
   baseURL: dashboardPublicUrl(),
   secret: resolveAuthSecret(),
-  database: db,
+  database: authDatabase,
   trustedOrigins: trustedOrigins(),
   socialProviders: {
     discord: {

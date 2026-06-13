@@ -2,8 +2,8 @@ import "server-only";
 
 import { getAdmin } from "@/lib/admins";
 import type { Session } from "@/lib/auth";
+import { getDiscordAccountForAuthUser } from "@/lib/auth-database";
 import { isDevAuthUser } from "@/lib/dev-auth";
-import { getDiscordAccountForAuthUser } from "@/lib/ewc-profile-sync";
 import { getOptionalSession } from "@/lib/session";
 
 export type AdminAccess = {
@@ -51,7 +51,7 @@ export async function getAdminAccess(): Promise<AdminAccess> {
   const session = await getOptionalSession();
   if (!session) return NO_ACCESS;
 
-  const account = getDiscordAccountForAuthUser(session.user.id);
+  const account = await getDiscordAccountForAuthUser(session.user.id);
   const discordUserId = account?.accountId ?? null;
   const displayName = session.user.name ?? null;
 

@@ -80,7 +80,7 @@ export async function POST(request: Request) {
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   if (!allowed) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
-  const countLimited = rateLimitOr429({
+  const countLimited = await rateLimitOr429({
     key: `upload-count:${access.discordUserId}`,
     limit: 30,
     windowSec: 3600,
@@ -114,7 +114,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Image exceeds the 8 MB limit." }, { status: 400 });
   }
 
-  const bytesLimited = rateLimitOr429({
+  const bytesLimited = await rateLimitOr429({
     key: `upload-bytes:${access.discordUserId}`,
     limit: 209715200, // 200 MB per day
     windowSec: 86400,

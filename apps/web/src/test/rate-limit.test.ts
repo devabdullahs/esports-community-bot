@@ -56,7 +56,7 @@ function fakeSession() {
 // Seed a profile link so sync finds a guild.
 async function seedProfileLink() {
   const { upsertEwcProfileLink } = await import("@bot/db/ewcProfileLinks.js");
-  (upsertEwcProfileLink as (p: { authUserId: string; discordUserId: string; guildId: string; season: string }) => unknown)({
+  await (upsertEwcProfileLink as (p: { authUserId: string; discordUserId: string; guildId: string; season: string }) => Promise<unknown>)({
     authUserId: DEV_USER_ID,
     discordUserId: DEV_DISCORD_ID,
     guildId: GUILD_ID,

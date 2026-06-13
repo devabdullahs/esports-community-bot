@@ -1,13 +1,13 @@
 import "server-only";
-import { consumeRateLimit as _consume } from "@bot/db/ewcRateLimits.js";
+import { consumeRateLimit } from "@bot/db/ewcRateLimits.js";
 import { NextResponse } from "next/server";
 
 type Result = { allowed: boolean; remaining: number; retryAfterSec: number };
-const consume = _consume as (p: { key: string; limit: number; windowSec: number; amount?: number }) => Result;
+type RateLimitInput = { key: string; limit: number; windowSec: number; amount?: number };
 
 /** Returns a ready 429 response when over limit, else null. */
-export function rateLimitOr429(p: { key: string; limit: number; windowSec: number; amount?: number }) {
-  const r = consume(p);
+export async function rateLimitOr429(p: RateLimitInput) {
+  const r = (await consumeRateLimit(p)) as Result;
   if (r.allowed) return null;
   const retry = Math.max(1, r.retryAfterSec);
   return NextResponse.json(

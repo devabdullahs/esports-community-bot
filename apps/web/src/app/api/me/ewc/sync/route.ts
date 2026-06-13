@@ -15,7 +15,7 @@ export async function POST(request: Request) {
   const session = await getOptionalSession();
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const limited = rateLimitOr429({ key: `ewc-sync:${session.user.id}`, limit: 3, windowSec: 300 });
+  const limited = await rateLimitOr429({ key: `ewc-sync:${session.user.id}`, limit: 3, windowSec: 300 });
   if (limited) return limited;
 
   const body = await request.json().catch(() => ({}));

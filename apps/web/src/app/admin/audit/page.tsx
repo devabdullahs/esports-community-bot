@@ -20,7 +20,7 @@ export default async function AdminAuditPage() {
   if (!access.session) redirect("/login?callbackURL=/admin/audit");
   if (!access.isSuper) redirect("/admin");
 
-  const entries = listAuditLog(100);
+  const entries = await listAuditLog(100);
 
   return (
     <main className="mx-auto flex w-full max-w-5xl flex-1 flex-col gap-6 px-5 py-10 sm:px-8">
