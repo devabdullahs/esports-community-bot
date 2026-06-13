@@ -9,6 +9,7 @@ import {
   EyeOffIcon,
   Heading2Icon,
   ImageIcon,
+  ImagePlusIcon,
   ItalicIcon,
   LinkIcon,
   ListIcon,
@@ -38,15 +39,21 @@ import {
 } from "@bot/lib/markdownTools.js";
 import { localizeText } from "@/lib/community-content";
 import type { GameRecord } from "@/lib/games";
-import type { Locale } from "@/lib/i18n";
+import { copy as i18nCopy, type Locale } from "@/lib/i18n";
 import { safeUrlOrUndefined } from "@/lib/safe-url";
 import { cn } from "@/lib/utils";
-import type { NewsContentMode, NewsPost, NewsStatus } from "@/lib/news";
+import type {
+  NewsContentMode,
+  NewsCoverPlacement,
+  NewsPost,
+  NewsStatus,
+} from "@/lib/news";
 import {
   NEWS_BODY_MAX_LENGTH,
   NEWS_SUMMARY_MAX_LENGTH,
   NEWS_TITLE_MAX_LENGTH,
 } from "@/lib/news-validation";
+import { ImageCropDialog } from "@/components/admin/image-crop-dialog";
 import { PostBody } from "@/components/news/post-body";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -66,6 +73,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Field, FieldDescription, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
+import { Separator } from "@/components/ui/separator";
 import {
   Select,
   SelectContent,
@@ -93,16 +101,19 @@ type Transform = (
 ) => { text: string; selStart: number; selEnd: number };
 
 const EMPTY_TRANSLATION: TranslationDraft = { title: "", summary: "", body: "" };
-const ARABIC_LABEL = "\u0627\u0644\u0639\u0631\u0628\u064a\u0629";
+const ARABIC_LABEL = "العربية";
 const LOCALE_LABELS: Record<Locale, string> = {
   en: "English",
   ar: ARABIC_LABEL,
 };
 
+// Formats that the crop canvas cannot re-encode meaningfully; uploaded as-is.
+const NON_CROPPABLE_TYPES = new Set(["image/gif", "image/avif"]);
+
 const EMOJIS = [
   "\u{1F525}",
   "\u{1F3C6}",
-  "\u2B50",
+  "⭐",
   "\u{1F3AE}",
   "\u{1F3AF}",
   "\u{1F4AA}",
@@ -114,13 +125,13 @@ const EMOJIS = [
   "\u{1F64C}",
   "\u{1F44D}",
   "\u{1F44E}",
-  "\u2705",
-  "\u274C",
-  "\u26A1",
+  "✅",
+  "❌",
+  "⚡",
   "\u{1F4A5}",
   "\u{1F680}",
   "\u{1F389}",
-  "\u2764\uFE0F",
+  "❤️",
   "\u{1F947}",
   "\u{1F4E2}",
   "\u{1F440}",
@@ -193,20 +204,37 @@ function counterText(value: number, max: number) {
   return `${value.toLocaleString("en-US")}/${max.toLocaleString("en-US")}`;
 }
 
+function wordCount(value: string) {
+  const matches = value.trim().match(/\S+/g);
+  return matches ? matches.length : 0;
+}
+
+function isImageFile(file: File) {
+  return file.type.startsWith("image/");
+}
+
 export function NewsEditor({
   mode,
   post,
   games,
+  locale = "en",
 }: {
   mode: "create" | "edit";
   post?: NewsPost;
   games: GameRecord[];
+  locale?: Locale;
 }) {
   const router = useRouter();
+  const t = i18nCopy[locale].composer;
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const uploadTargetRef = useRef<"body" | "cover">("body");
   const pendingSelectionRef = useRef<SelectionState | null>(null);
+  // Keep the last picked/pasted cover File in memory so it can be re-cropped. A
+  // remote already-saved cover (no File) cannot be re-cropped (canvas taint).
+  const coverFileRef = useRef<File | null>(null);
+  // Set while the crop dialog is cropping a BODY image (vs the default cover flow).
+  const bodyCropPendingRef = useRef(false);
 
   const initialDefaultLocale = post?.defaultLocale || post?.locale || "en";
   const [gameSlug, setGameSlug] = useState(post?.gameSlug || games[0]?.slug || "");
@@ -215,16 +243,27 @@ export function NewsEditor({
   const [activeLocale, setActiveLocale] = useState<Locale>(initialDefaultLocale);
   const [translations, setTranslations] = useState<TranslationMap>(() => initialTranslations(post));
   const [coverImageUrl, setCoverImageUrl] = useState(post?.coverImageUrl || "");
+  const [coverPlacement, setCoverPlacement] = useState<NewsCoverPlacement>(
+    post?.coverPlacement || "top",
+  );
   const [status, setStatus] = useState<NewsStatus>(post?.status || "draft");
   const [mobileView, setMobileView] = useState<"edit" | "preview">("edit");
   const [busy, setBusy] = useState<null | string>(null);
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
   const [selection, setSelection] = useState<SelectionState>({ start: 0, end: 0 });
+  const [coverDragActive, setCoverDragActive] = useState(false);
+  const [bodyDragActive, setBodyDragActive] = useState(false);
+  const [cropOpen, setCropOpen] = useState(false);
+  const [cropFile, setCropFile] = useState<File | null>(null);
 
   const editLocale = contentMode === "shared" ? defaultLocale : activeLocale;
   const current = translations[editLocale];
+  const isRtl = editLocale === "ar";
   const game = games.find((g) => g.slug === gameSlug);
+  const safeCover = safeUrlOrUndefined(coverImageUrl);
+  const canEditCover = Boolean(safeCover && coverFileRef.current);
   const activeMarks = useMemo(
     () => getMarkdownActiveState(current.body, selection.start, selection.end),
     [current.body, selection.end, selection.start],
@@ -232,6 +271,17 @@ export function NewsEditor({
   const activeToolValues = Object.entries(activeMarks)
     .filter(([, value]) => value)
     .map(([key]) => key);
+
+  const cropCopy = {
+    title: t.cropTitle,
+    description: t.cropDescription,
+    zoom: t.cropZoom,
+    aspect: t.cropAspect,
+    free: t.cropFree,
+    cancel: t.cropCancel,
+    apply: t.cropApply,
+    applying: t.cropApplying,
+  };
 
   function updateTranslation(locale: Locale, patch: Partial<TranslationDraft>) {
     setTranslations((prev) => ({
@@ -304,6 +354,38 @@ export function NewsEditor({
     fileInputRef.current?.click();
   }
 
+  // Decide whether a chosen image file should open the crop dialog first. Cover files
+  // always crop (unless GIF/AVIF). Body image files are uploaded directly here; the crop
+  // affordance for body images is offered separately as a notice.
+  function handleCoverFile(file: File) {
+    if (!isImageFile(file)) return;
+    coverFileRef.current = file;
+    if (NON_CROPPABLE_TYPES.has(file.type)) {
+      setNotice(t.cropSkipNotice);
+      uploadTargetRef.current = "cover";
+      void handleUpload(file);
+      return;
+    }
+    setNotice(null);
+    setCropFile(file);
+    setCropOpen(true);
+  }
+
+  function handleBodyFile(file: File) {
+    if (!isImageFile(file)) return;
+    uploadTargetRef.current = "body";
+    // Body images upload as-is, but offer an optional crop first (skip GIF/AVIF which
+    // the crop canvas cannot re-encode meaningfully).
+    if (!NON_CROPPABLE_TYPES.has(file.type) && window.confirm(t.cropBeforeUpload)) {
+      bodyCropPendingRef.current = true;
+      coverFileRef.current = null;
+      setCropFile(file);
+      setCropOpen(true);
+      return;
+    }
+    void handleUpload(file);
+  }
+
   async function handleUpload(file: File) {
     setError(null);
     setUploading(true);
@@ -313,13 +395,90 @@ export function NewsEditor({
       const res = await fetch("/api/admin/news/upload", { method: "POST", body: data });
       const json = await res.json().catch(() => ({}));
       if (!res.ok) {
-        setError(json.error || "Upload failed");
+        setError(json.error || t.uploadFailed);
         return;
       }
       if (uploadTargetRef.current === "cover") setCoverImageUrl(json.url);
       else apply(imageTransform(json.url, false));
     } finally {
       setUploading(false);
+    }
+  }
+
+  function onCropApply(file: File) {
+    setCropOpen(false);
+    if (bodyCropPendingRef.current) {
+      bodyCropPendingRef.current = false;
+      uploadTargetRef.current = "body";
+      void handleUpload(file);
+      return;
+    }
+    coverFileRef.current = file;
+    uploadTargetRef.current = "cover";
+    void handleUpload(file);
+  }
+
+  function editCover() {
+    const file = coverFileRef.current;
+    if (!file) return;
+    setCropFile(file);
+    setCropOpen(true);
+  }
+
+  function removeCover() {
+    setCoverImageUrl("");
+    coverFileRef.current = null;
+  }
+
+  // --- Paste / drag-drop handlers ---------------------------------------------
+  function firstImageFromDataTransfer(items: DataTransferItemList | null, files: FileList | null) {
+    if (items) {
+      for (const item of Array.from(items)) {
+        if (item.kind === "file" && item.type.startsWith("image/")) {
+          const file = item.getAsFile();
+          if (file) return file;
+        }
+      }
+    }
+    if (files) {
+      for (const file of Array.from(files)) {
+        if (file.type.startsWith("image/")) return file;
+      }
+    }
+    return null;
+  }
+
+  function onCoverPaste(event: React.ClipboardEvent) {
+    const file = firstImageFromDataTransfer(event.clipboardData.items, event.clipboardData.files);
+    if (file) {
+      event.preventDefault();
+      handleCoverFile(file);
+    }
+  }
+
+  function onBodyPaste(event: React.ClipboardEvent<HTMLTextAreaElement>) {
+    const file = firstImageFromDataTransfer(event.clipboardData.items, event.clipboardData.files);
+    if (file) {
+      event.preventDefault();
+      rememberSelection();
+      handleBodyFile(file);
+    }
+  }
+
+  function onCoverDrop(event: React.DragEvent) {
+    event.preventDefault();
+    setCoverDragActive(false);
+    const file = firstImageFromDataTransfer(event.dataTransfer.items, event.dataTransfer.files);
+    if (file) handleCoverFile(file);
+  }
+
+  function onBodyDrop(event: React.DragEvent<HTMLTextAreaElement>) {
+    event.preventDefault();
+    setBodyDragActive(false);
+    const file = firstImageFromDataTransfer(event.dataTransfer.items, event.dataTransfer.files);
+    if (file) {
+      rememberSelection();
+      handleBodyFile(file);
     }
   }
 
@@ -365,19 +524,14 @@ export function NewsEditor({
     setError(null);
     if (targetStatus === "published" && !canPublish) {
       setError(
-        contentMode === "translated"
-          ? "English and Arabic headlines and bodies are required before publishing."
-          : "Headline and body are required before publishing.",
+        contentMode === "translated" ? t.publishRequiredTranslated : t.publishRequiredShared,
       );
       return;
     }
     if (contentMode === "shared") {
       const inactiveLocale = defaultLocale === "en" ? "ar" : "en";
       if (hasContent(translations[inactiveLocale])) {
-        const inactiveLabel = inactiveLocale === "ar" ? "Arabic (العربية)" : "English";
-        const confirmed = window.confirm(
-          `You are saving in shared mode. The ${inactiveLabel} draft will not be saved and its content will be discarded. Continue?`,
-        );
+        const confirmed = window.confirm(t.sharedDiscardConfirm);
         if (!confirmed) return;
       }
     }
@@ -389,6 +543,7 @@ export function NewsEditor({
         defaultLocale,
         translations: translationsToPersist,
         coverImageUrl: coverImageUrl.trim() || null,
+        coverPlacement,
         status: targetStatus,
       };
       const res = await fetch(
@@ -400,7 +555,7 @@ export function NewsEditor({
         },
       );
       const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data.error || "Save failed");
+      if (!res.ok) throw new Error(data.error || t.saveFailed);
       setStatus(targetStatus);
       router.push("/admin");
       router.refresh();
@@ -413,13 +568,13 @@ export function NewsEditor({
 
   async function remove() {
     if (mode !== "edit" || !post) return;
-    if (!window.confirm("Delete this post? This cannot be undone.")) return;
+    if (!window.confirm(t.deleteConfirm)) return;
     setError(null);
     setBusy("delete");
     try {
       const res = await fetch(`/api/admin/news/${post.id}`, { method: "DELETE" });
       const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data.error || "Delete failed");
+      if (!res.ok) throw new Error(data.error || t.deleteFailed);
       router.push("/admin");
       router.refresh();
     } catch (err) {
@@ -428,8 +583,10 @@ export function NewsEditor({
     }
   }
 
+  const words = wordCount(current.body);
+
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex flex-col gap-6" dir={isRtl ? "rtl" : "ltr"}>
       <input
         ref={fileInputRef}
         type="file"
@@ -438,13 +595,20 @@ export function NewsEditor({
         onChange={(event) => {
           const file = event.currentTarget.files?.[0];
           event.currentTarget.value = "";
-          if (file) void handleUpload(file);
+          if (!file) return;
+          if (uploadTargetRef.current === "cover") handleCoverFile(file);
+          else handleBodyFile(file);
         }}
       />
       {error ? (
         <Alert variant="destructive">
-          <AlertTitle>Could not save</AlertTitle>
+          <AlertTitle>{t.couldNotSave}</AlertTitle>
           <AlertDescription>{error}</AlertDescription>
+        </Alert>
+      ) : null}
+      {notice ? (
+        <Alert>
+          <AlertDescription>{notice}</AlertDescription>
         </Alert>
       ) : null}
 
@@ -455,7 +619,7 @@ export function NewsEditor({
           onClick={() => setMobileView("edit")}
         >
           <PencilIcon data-icon="inline-start" />
-          Edit
+          {t.editTab}
         </Button>
         <Button
           variant={mobileView === "preview" ? "default" : "outline"}
@@ -463,20 +627,21 @@ export function NewsEditor({
           onClick={() => setMobileView("preview")}
         >
           <EyeIcon data-icon="inline-start" />
-          Preview
+          {t.previewTab}
         </Button>
       </div>
 
       <div className="grid gap-6 lg:grid-cols-2 lg:items-start">
         <Card className={mobileView === "preview" ? "hidden lg:flex" : undefined}>
           <CardHeader>
-            <CardTitle>{mode === "create" ? "New post" : "Edit post"}</CardTitle>
+            <CardTitle>{mode === "create" ? t.newPost : t.editPost}</CardTitle>
           </CardHeader>
           <CardContent>
             <FieldGroup>
+              {/* Meta controls: game, mode, writing language */}
               <div className="grid gap-4 sm:grid-cols-2">
                 <Field>
-                  <FieldLabel>Game</FieldLabel>
+                  <FieldLabel>{t.game}</FieldLabel>
                   <Select value={gameSlug} onValueChange={(value) => value && setGameSlug(value)}>
                     <SelectTrigger className="w-full">
                       <SelectValue />
@@ -485,7 +650,7 @@ export function NewsEditor({
                       <SelectGroup>
                         {games.map((item) => (
                           <SelectItem key={item.slug} value={item.slug}>
-                            {localizeText(item.title, "en")}
+                            {localizeText(item.title, locale)}
                           </SelectItem>
                         ))}
                       </SelectGroup>
@@ -493,7 +658,7 @@ export function NewsEditor({
                   </Select>
                 </Field>
                 <Field>
-                  <FieldLabel>Content language mode</FieldLabel>
+                  <FieldLabel>{t.contentMode}</FieldLabel>
                   <ToggleGroup
                     value={[contentMode]}
                     onValueChange={(value) => {
@@ -505,21 +670,19 @@ export function NewsEditor({
                     className="w-full"
                   >
                     <ToggleGroupItem value="shared" className="flex-1">
-                      Shared
+                      {t.shared}
                     </ToggleGroupItem>
                     <ToggleGroupItem value="translated" className="flex-1">
-                      Separate
+                      {t.separate}
                     </ToggleGroupItem>
                   </ToggleGroup>
-                  <FieldDescription>
-                    Shared posts show the same text in both site languages.
-                  </FieldDescription>
+                  <FieldDescription>{t.sharedHint}</FieldDescription>
                 </Field>
               </div>
 
               {contentMode === "shared" ? (
                 <Field>
-                  <FieldLabel>Writing language</FieldLabel>
+                  <FieldLabel>{t.writingLanguage}</FieldLabel>
                   <Select
                     value={defaultLocale}
                     onValueChange={(value) => {
@@ -531,100 +694,199 @@ export function NewsEditor({
                     </SelectTrigger>
                     <SelectContent>
                       <SelectGroup>
-                        <SelectItem value="en">English</SelectItem>
-                        <SelectItem value="ar">{ARABIC_LABEL}</SelectItem>
+                        <SelectItem value="en">{t.english}</SelectItem>
+                        <SelectItem value="ar">{t.arabic}</SelectItem>
                       </SelectGroup>
                     </SelectContent>
                   </Select>
                 </Field>
-              ) : (
+              ) : null}
+
+              {/* Cover dropzone (X-Articles style) */}
+              <Field>
+                <div className="flex items-center justify-between gap-2">
+                  <FieldLabel>{t.cover}</FieldLabel>
+                  <span className="text-xs text-muted-foreground">{t.coverHint}</span>
+                </div>
+                <div
+                  className={cn(
+                    "group relative flex aspect-[5/2] w-full items-center justify-center overflow-hidden rounded-xl border-2 border-dashed border-border bg-muted/30 transition-colors",
+                    coverDragActive && "border-primary bg-primary/5",
+                    uploading && "opacity-70",
+                  )}
+                  role="button"
+                  tabIndex={0}
+                  onPaste={onCoverPaste}
+                  onDragOver={(event) => {
+                    event.preventDefault();
+                    setCoverDragActive(true);
+                  }}
+                  onDragLeave={() => setCoverDragActive(false)}
+                  onDrop={onCoverDrop}
+                  onClick={() => {
+                    if (!safeCover && !uploading) pickImage("cover");
+                  }}
+                >
+                  {safeCover ? (
+                    <>
+                      {/* eslint-disable-next-line @next/next/no-img-element -- validated http(s) admin URL */}
+                      <img
+                        src={safeCover}
+                        alt=""
+                        className="absolute inset-0 size-full object-cover"
+                      />
+                      <div className="absolute inset-0 flex items-center justify-center gap-2 bg-black/40 opacity-0 transition-opacity group-hover:opacity-100">
+                        {canEditCover ? (
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="secondary"
+                            disabled={uploading}
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              editCover();
+                            }}
+                          >
+                            <PencilIcon data-icon="inline-start" />
+                            {t.coverEdit}
+                          </Button>
+                        ) : null}
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="secondary"
+                          disabled={uploading}
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            pickImage("cover");
+                          }}
+                        >
+                          <UploadIcon data-icon="inline-start" />
+                          {t.coverReplace}
+                        </Button>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="destructive"
+                          disabled={uploading}
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            removeCover();
+                          }}
+                        >
+                          <Trash2Icon data-icon="inline-start" />
+                          {t.coverRemove}
+                        </Button>
+                      </div>
+                    </>
+                  ) : (
+                    <div className="flex flex-col items-center gap-2 px-4 text-center text-muted-foreground">
+                      {uploading ? (
+                        <Loader2Icon className="size-6 animate-spin" />
+                      ) : (
+                        <ImagePlusIcon className="size-6" />
+                      )}
+                      <span className="text-sm">
+                        {coverDragActive
+                          ? t.dropToUpload
+                          : uploading
+                            ? t.uploading
+                            : t.uploadHint}
+                      </span>
+                    </div>
+                  )}
+                </div>
+                <Input
+                  value={coverImageUrl}
+                  dir="ltr"
+                  onChange={(event) => {
+                    setCoverImageUrl(event.target.value);
+                    // Typed/pasted remote URLs cannot be re-cropped (canvas taint).
+                    coverFileRef.current = null;
+                  }}
+                  placeholder="https://assets.moonbot.info/..."
+                  className="mt-2"
+                />
+              </Field>
+
+              {/* Cover placement (T2) */}
+              <Field>
+                <FieldLabel>{t.coverPlacement}</FieldLabel>
+                <Select
+                  value={coverPlacement}
+                  onValueChange={(value) => {
+                    if (value === "top" || value === "bottom" || value === "card-only") {
+                      setCoverPlacement(value);
+                    }
+                  }}
+                >
+                  <SelectTrigger className="w-full sm:w-64">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectGroup>
+                      <SelectItem value="top">{t.placementTop}</SelectItem>
+                      <SelectItem value="bottom">{t.placementBottom}</SelectItem>
+                      <SelectItem value="card-only">{t.placementCardOnly}</SelectItem>
+                    </SelectGroup>
+                  </SelectContent>
+                </Select>
+              </Field>
+
+              {/* Separate-mode locale tabs */}
+              {contentMode === "translated" ? (
                 <Tabs value={activeLocale} onValueChange={(value) => setActiveLocale(value as Locale)}>
                   <TabsList>
-                    <TabsTrigger value="en">English</TabsTrigger>
-                    <TabsTrigger value="ar">{ARABIC_LABEL}</TabsTrigger>
+                    <TabsTrigger value="en">{t.english}</TabsTrigger>
+                    <TabsTrigger value="ar">{t.arabic}</TabsTrigger>
                   </TabsList>
                   <TabsContent value="en" />
                   <TabsContent value="ar" />
                 </Tabs>
-              )}
+              ) : null}
 
+              {/* Borderless big title */}
               <Field data-invalid={current.title.length > NEWS_TITLE_MAX_LENGTH}>
-                <div className="flex items-center justify-between gap-3">
-                  <FieldLabel htmlFor="news-title">Headline</FieldLabel>
-                  <span className="text-xs text-muted-foreground">
-                    {counterText(current.title.length, NEWS_TITLE_MAX_LENGTH)}
-                  </span>
-                </div>
                 <Input
                   id="news-title"
                   value={current.title}
                   maxLength={NEWS_TITLE_MAX_LENGTH}
                   aria-invalid={current.title.length > NEWS_TITLE_MAX_LENGTH}
-                  dir={editLocale === "ar" ? "rtl" : "ltr"}
+                  dir="auto"
                   onChange={(event) => updateTranslation(editLocale, { title: event.target.value })}
-                  placeholder="Short headline for the community"
+                  placeholder={t.titlePlaceholder}
+                  className="bidi-plaintext h-auto border-0 bg-transparent px-0 py-1 text-3xl font-semibold shadow-none focus-visible:ring-0 sm:text-4xl"
                 />
-                <FieldDescription>
-                  Keep it short enough to fit public post cards.
-                </FieldDescription>
-              </Field>
-
-              <Field data-invalid={current.summary.length > NEWS_SUMMARY_MAX_LENGTH}>
-                <div className="flex items-center justify-between gap-3">
-                  <FieldLabel htmlFor="news-summary">Summary</FieldLabel>
+                <div className="flex justify-end">
                   <span className="text-xs text-muted-foreground">
-                    {counterText(current.summary.length, NEWS_SUMMARY_MAX_LENGTH)}
+                    {counterText(current.title.length, NEWS_TITLE_MAX_LENGTH)}
                   </span>
                 </div>
+              </Field>
+
+              {/* Summary as muted subtitle */}
+              <Field data-invalid={current.summary.length > NEWS_SUMMARY_MAX_LENGTH}>
                 <Textarea
                   id="news-summary"
                   value={current.summary}
                   maxLength={NEWS_SUMMARY_MAX_LENGTH}
                   aria-invalid={current.summary.length > NEWS_SUMMARY_MAX_LENGTH}
-                  dir={editLocale === "ar" ? "rtl" : "ltr"}
+                  dir="auto"
                   onChange={(event) => updateTranslation(editLocale, { summary: event.target.value })}
-                  placeholder="One or two lines shown on the game page card"
+                  placeholder={t.summaryPlaceholder}
+                  className="bidi-plaintext min-h-0 resize-none border-0 bg-transparent px-0 py-1 text-base text-muted-foreground shadow-none focus-visible:ring-0"
+                  rows={2}
                 />
-                <FieldDescription>
-                  Summaries are shown in latest-post cards and are clamped on public pages.
-                </FieldDescription>
-              </Field>
-
-              <Field>
-                <FieldLabel htmlFor="news-cover">Cover image (optional)</FieldLabel>
-                <div className="flex gap-2">
-                  <Input
-                    id="news-cover"
-                    value={coverImageUrl}
-                    onChange={(event) => setCoverImageUrl(event.target.value)}
-                    placeholder="https://assets.moonbot.info/..."
-                    className="flex-1"
-                  />
-                  <Button
-                    type="button"
-                    variant="outline"
-                    disabled={uploading}
-                    onClick={() => pickImage("cover")}
-                  >
-                    {uploading ? (
-                      <Loader2Icon data-icon="inline-start" className="animate-spin" />
-                    ) : (
-                      <UploadIcon data-icon="inline-start" />
-                    )}
-                    Upload
-                  </Button>
-                </div>
-                <FieldDescription>Paste an http(s) image URL or upload a file.</FieldDescription>
-              </Field>
-
-              <Field data-invalid={current.body.length > NEWS_BODY_MAX_LENGTH}>
-                <div className="flex items-center justify-between gap-3">
-                  <FieldLabel htmlFor="news-body">Post body</FieldLabel>
+                <div className="flex justify-end">
                   <span className="text-xs text-muted-foreground">
-                    {counterText(current.body.length, NEWS_BODY_MAX_LENGTH)}
+                    {counterText(current.summary.length, NEWS_SUMMARY_MAX_LENGTH)}
                   </span>
                 </div>
-                <div className="flex flex-wrap gap-1 rounded-md border border-border bg-muted/40 p-1">
+              </Field>
+
+              {/* Slim toolbar row */}
+              <Field data-invalid={current.body.length > NEWS_BODY_MAX_LENGTH}>
+                <div className="flex flex-wrap items-center gap-1 rounded-md border border-border bg-muted/40 p-1">
                   <ToggleGroup
                     multiple
                     value={activeToolValues}
@@ -646,7 +908,8 @@ export function NewsEditor({
                       </ToggleGroupItem>
                     ))}
                   </ToggleGroup>
-                  <div className="flex flex-wrap gap-1">
+                  <Separator orientation="vertical" className="mx-1 h-6" />
+                  <div className="flex flex-wrap items-center gap-1">
                     {INSERT_TOOL_DEFS.map((tool) => (
                       <Button
                         key={tool.label}
@@ -701,23 +964,42 @@ export function NewsEditor({
                     </Button>
                   </div>
                 </div>
+
+                {/* Borderless body */}
                 <Textarea
                   id="news-body"
                   ref={textareaRef}
                   value={current.body}
                   maxLength={NEWS_BODY_MAX_LENGTH}
                   aria-invalid={current.body.length > NEWS_BODY_MAX_LENGTH}
-                  dir={editLocale === "ar" ? "rtl" : "ltr"}
-                  className="article-copy min-h-64 text-sm"
-                  placeholder="Write the update. Use the toolbar for bold, italics, headings, lists, links, and images."
+                  dir="auto"
+                  className={cn(
+                    "bidi-plaintext article-copy min-h-[50vh] resize-y border-0 bg-transparent px-0 text-base leading-7 shadow-none focus-visible:ring-0",
+                    bodyDragActive && "rounded-md bg-primary/5 ring-2 ring-primary",
+                  )}
+                  placeholder={t.bodyPlaceholder}
                   onChange={(event) => updateTranslation(editLocale, { body: event.target.value })}
                   onSelect={rememberSelection}
                   onKeyUp={rememberSelection}
                   onClick={rememberSelection}
+                  onPaste={onBodyPaste}
+                  onDragOver={(event) => {
+                    if (Array.from(event.dataTransfer.types).includes("Files")) {
+                      event.preventDefault();
+                      setBodyDragActive(true);
+                    }
+                  }}
+                  onDragLeave={() => setBodyDragActive(false)}
+                  onDrop={onBodyDrop}
                 />
-                <FieldDescription>
-                  Markdown is supported. Images are inserted on their own line between paragraphs.
-                </FieldDescription>
+                <div className="flex items-center justify-between gap-3">
+                  <span className="text-xs text-muted-foreground">
+                    {counterText(current.body.length, NEWS_BODY_MAX_LENGTH)}
+                  </span>
+                  <span className="text-xs text-muted-foreground">
+                    {words.toLocaleString(locale === "ar" ? "ar-SA" : "en-US")} {t.wordCount}
+                  </span>
+                </div>
               </Field>
             </FieldGroup>
           </CardContent>
@@ -728,42 +1010,52 @@ export function NewsEditor({
             <div className="flex items-center justify-between gap-2">
               <Badge variant="outline">
                 <EyeIcon data-icon="inline-start" />
-                Live preview
+                {t.livePreview}
               </Badge>
               <Badge variant={status === "published" ? "default" : "secondary"}>
-                {status === "published" ? "Published" : "Draft"}
+                {status === "published" ? t.published : t.draft}
               </Badge>
             </div>
           </CardHeader>
           <CardContent>
             <article
               lang={editLocale}
-              dir={editLocale === "ar" ? "rtl" : "ltr"}
+              dir={isRtl ? "rtl" : "ltr"}
               className="flex flex-col gap-4"
             >
-              {safeUrlOrUndefined(coverImageUrl) ? (
+              {safeCover && coverPlacement === "top" ? (
                 // eslint-disable-next-line @next/next/no-img-element -- external/admin URL, validated http(s)
                 <img
-                  src={safeUrlOrUndefined(coverImageUrl)}
+                  src={safeCover}
                   alt=""
-                  className="aspect-video w-full rounded-lg border border-border object-cover"
+                  className="aspect-[5/2] w-full rounded-lg border border-border object-cover"
                 />
               ) : null}
               <div className="flex flex-wrap items-center gap-2">
                 {game ? <Badge variant="secondary">{localizeText(game.title, editLocale)}</Badge> : null}
-                <Badge variant="outline">{contentMode === "shared" ? "Shared" : LOCALE_LABELS[editLocale]}</Badge>
+                <Badge variant="outline">{contentMode === "shared" ? t.shared : LOCALE_LABELS[editLocale]}</Badge>
               </div>
-              <h1 className="text-2xl font-semibold leading-tight">
-                {current.title || "Untitled post"}
+              <h1 dir="auto" className="bidi-plaintext text-2xl font-semibold leading-tight">
+                {current.title || t.untitled}
               </h1>
               {current.summary.trim() ? (
-                <p className="article-copy text-muted-foreground">{current.summary}</p>
+                <p dir="auto" className="bidi-plaintext article-copy text-muted-foreground">
+                  {current.summary}
+                </p>
               ) : null}
               {current.body.trim() ? (
                 <PostBody markdown={current.body} />
               ) : (
-                <p className="text-sm text-muted-foreground">Start writing to preview the post.</p>
+                <p className="text-sm text-muted-foreground">{t.previewEmpty}</p>
               )}
+              {safeCover && coverPlacement === "bottom" ? (
+                // eslint-disable-next-line @next/next/no-img-element -- external/admin URL, validated http(s)
+                <img
+                  src={safeCover}
+                  alt=""
+                  className="aspect-[5/2] w-full rounded-lg border border-border object-cover"
+                />
+              ) : null}
             </article>
           </CardContent>
         </Card>
@@ -776,16 +1068,16 @@ export function NewsEditor({
           variant="outline"
         >
           <SaveIcon data-icon="inline-start" />
-          {mode === "edit" && status === "published" ? "Save as draft" : "Save draft"}
+          {mode === "edit" && status === "published" ? t.saveAsDraft : t.saveDraft}
         </Button>
         <Button onClick={() => persist("published", "publish")} disabled={!canPublish || busy !== null}>
           <SendIcon data-icon="inline-start" />
-          {mode === "edit" && status === "published" ? "Update published" : "Publish"}
+          {mode === "edit" && status === "published" ? t.updatePublished : t.publish}
         </Button>
         {mode === "edit" && status === "published" ? (
           <Button onClick={() => persist("draft", "unpublish")} disabled={busy !== null} variant="outline">
             <EyeOffIcon data-icon="inline-start" />
-            Unpublish
+            {t.unpublish}
           </Button>
         ) : null}
         <div className="ms-auto">
@@ -797,11 +1089,24 @@ export function NewsEditor({
               className={cn("text-destructive")}
             >
               <Trash2Icon data-icon="inline-start" />
-              Delete
+              {t.delete}
             </Button>
           ) : null}
         </div>
       </div>
+
+      <ImageCropDialog
+        open={cropOpen}
+        file={cropFile}
+        locale={locale}
+        copy={cropCopy}
+        defaultAspect={bodyCropPendingRef.current ? "16:9" : "5:2"}
+        onApply={onCropApply}
+        onCancel={() => {
+          setCropOpen(false);
+          bodyCropPendingRef.current = false;
+        }}
+      />
     </div>
   );
 }

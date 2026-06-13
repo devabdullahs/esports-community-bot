@@ -4,6 +4,7 @@ import { ArrowLeftIcon } from "lucide-react";
 import { NewsEditor } from "@/components/admin/news-editor";
 import { getAdminAccess } from "@/lib/admin";
 import { listGames } from "@/lib/games";
+import { getRequestLocale } from "@/lib/request-locale";
 import { Button } from "@/components/ui/button";
 
 export const runtime = "nodejs";
@@ -18,6 +19,7 @@ export default async function NewNewsPostPage() {
   const games =
     access.games === "ALL" ? allGames : allGames.filter((g) => access.games.includes(g.slug));
   if (games.length === 0) redirect("/admin");
+  const locale = await getRequestLocale();
 
   return (
     <main className="mx-auto flex w-full max-w-6xl flex-1 flex-col gap-6 px-5 py-10 sm:px-8">
@@ -34,7 +36,7 @@ export default async function NewNewsPostPage() {
         <p className="text-sm text-muted-foreground">Admin publishing</p>
         <h1 className="text-3xl font-semibold leading-tight">New post</h1>
       </div>
-      <NewsEditor mode="create" games={games} />
+      <NewsEditor mode="create" games={games} locale={locale} />
     </main>
   );
 }

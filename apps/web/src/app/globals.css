@@ -312,6 +312,18 @@
   textarea.article-copy {
     font-family: var(--font-article-family);
   }
+  /* Mixed Arabic+English lines: resolve each line's direction by its first strong
+     character so numbers and Latin words don't get flipped to the wrong side. Used
+     on composer inputs/textareas/preview and (via .article-copy below) public copy. */
+  .bidi-plaintext {
+    unicode-bidi: plaintext;
+    text-align: start;
+  }
+  /* Per-paragraph direction resolution for rendered article markdown. The container
+     keeps dir="auto"; each block element decides its own direction independently. */
+  .article-copy :is(p, li, h1, h2, h3, h4, blockquote) {
+    unicode-bidi: plaintext;
+  }
   .news-card-summary {
     display: -webkit-box;
     -webkit-line-clamp: 3;

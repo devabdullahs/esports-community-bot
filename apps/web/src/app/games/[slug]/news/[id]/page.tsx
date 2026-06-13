@@ -35,6 +35,15 @@ export default async function NewsPostPage({
   if (!post || post.gameSlug !== slug) notFound();
 
   const cover = safeUrlOrUndefined(post.coverImageUrl);
+  const placement = post.coverPlacement;
+  const coverImage = cover ? (
+    // eslint-disable-next-line @next/next/no-img-element -- external/admin URL, validated http(s)
+    <img
+      src={cover}
+      alt=""
+      className="w-full rounded-xl border border-border object-cover"
+    />
+  ) : null;
 
   return (
     <main
@@ -52,7 +61,12 @@ export default async function NewsPostPage({
 
       <article dir="auto" className="flex flex-col gap-5">
         <header className="flex flex-col gap-3">
-          <h1 className="text-3xl font-semibold leading-tight sm:text-4xl">{post.title}</h1>
+          <h1
+            dir="auto"
+            className="bidi-plaintext text-3xl font-semibold leading-tight sm:text-4xl"
+          >
+            {post.title}
+          </h1>
           {post.authorName || post.publishedAt ? (
             <p className="text-sm text-muted-foreground">
               {post.authorName ? `${locale === "ar" ? "بقلم" : "By"} ${post.authorName}` : ""}
@@ -61,20 +75,17 @@ export default async function NewsPostPage({
             </p>
           ) : null}
           {post.summary ? (
-            <p className="article-copy text-base text-muted-foreground">{post.summary}</p>
+            <p dir="auto" className="bidi-plaintext article-copy text-base text-muted-foreground">
+              {post.summary}
+            </p>
           ) : null}
         </header>
 
-        {cover ? (
-          // eslint-disable-next-line @next/next/no-img-element -- external/admin URL, validated http(s)
-          <img
-            src={cover}
-            alt=""
-            className="w-full rounded-xl border border-border object-cover"
-          />
-        ) : null}
+        {placement === "top" ? coverImage : null}
 
         <PostBody markdown={post.body} />
+
+        {placement === "bottom" ? coverImage : null}
       </article>
     </main>
   );
