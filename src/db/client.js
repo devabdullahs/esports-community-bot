@@ -10,6 +10,15 @@ try {
 }
 
 const { Pool } = pg;
+
+// node-pg returns BIGINT (int8, OID 20) as a STRING to avoid precision loss.
+// Every BIGINT in this app's schema (ids, foreign keys, unix-seconds timestamps,
+// counts, scores) is well within Number's safe integer range, and the SQLite
+// path returns these as JS numbers — so parse BIGINT as Number for identical
+// behavior across both backends. Without this, reads like `row.window_start + n`
+// silently string-concatenate.
+pg.types.setTypeParser(20, (value) => (value === null ? null : Number(value)));
+
 const rootDir = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const driver = String(process.env.DB_DRIVER || '').toLowerCase();
 const usePostgres = driver === 'postgres' || (!driver && Boolean(process.env.DATABASE_URL));
