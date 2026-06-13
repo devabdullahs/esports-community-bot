@@ -205,15 +205,27 @@ Run a module's tests against PG with:
 Module port status (✓ = on async client, verified both backends):
 - [x] ewcRateLimits, ewcAdminAuditLog, ewcProfileLinks (prior agent + BIGINT fix)
 - [x] tournaments, matches (+ all bot callers, web lib/tournaments.ts) — Slice A
-- [ ] settings (34 stmts; 14 caller files — channels/leaderboards/voice/cards)
-- [ ] ewcPredictions (38 stmts; the scoring money-path — needs db.transaction care)
-- [ ] ewcGames, ewcMediaChannels, ewcNewsPosts, ewcNewsDiscordPosts, ewcAdmins (CMS)
-- [ ] index.js schema/boot: on PG call `ensurePostgresAppSchema()`, on SQLite keep
-      CREATE TABLE; bot/web entry must `await` schema setup; `closeDb`→`closeDbClient`.
-      NOTE: ported modules no longer transitively import index.js — schema bootstrap
-      must be made explicit at app entry + in test setup.
-- [ ] End-to-end: run FULL suite against PG; create Better Auth tables in Cranl
-      (`npm run web:auth:migrate` against DATABASE_URL); smoke web auth on PG.
+- [x] settings (channels/leaderboards/voice/cards) — commit 2b7ec75
+- [x] ewcPredictions (scoring money-path) — commit 2b7ec75
+- [x] ewcGames, ewcMediaChannels, ewcNewsPosts, ewcNewsDiscordPosts, ewcAdmins — 2b7ec75
+- [x] index.js schema/boot: `ensurePostgresAppSchema()` on PG, lazy SQLite bootstrap
+      via client.js `sqliteDb()→index.js`; `closeDb`→`closeDbClient`; async shutdown.
+- [x] Test fixtures: last raw better-sqlite3 fixtures converted to the unified async
+      client so the bot suite passes on BOTH SQLite and Postgres (was SQLite-only).
+- [x] Dockerfile ships `scripts/postgres/` so PG boot can self-provision the schema.
 
-Recommended remaining order: settings → ewcPredictions → CMS → index/boot → e2e.
-Keep `RUN_BOT=false` on Cranl until all boxes are checked.
+ALL app-owned DB modules are ported and verified (104 bot + 186 web on SQLite;
+all ported-module DB tests on local Postgres). The `RUN_BOT=false` gate is now
+liftable. Remaining work is the Cranl cutover (see "Deploy readiness" below), NOT
+further porting.
+
+### Deploy readiness (blockers before production cutover)
+1. Branch: Cranl app `esports-community-bot` builds `main`; the migration is on
+   `task1/postgres-port` (committed locally, not pushed). Merge→main or repoint.
+2. Env: app is missing `DB_DRIVER=postgres`, `DATABASE_URL` (Cranl-injected
+   internal URL), `PGSSLMODE=disable`. `BETTER_AUTH_SECRET` must be preserved.
+3. Better Auth tables: `npm run web:auth:migrate` against the Cranl `DATABASE_URL`
+   (ensurePostgresAppSchema only creates the 22 app tables, not auth tables).
+4. Data: one-time `npm run db:sqlite-to-pg` from the final NAS SQLite backup, or
+   accept an empty PG start. Reset identity sequences + validate row counts.
+5. Confirm Cranl build type is `dockerfile` (multi-stage runs start-production.js).
