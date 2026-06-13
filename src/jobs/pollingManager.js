@@ -130,8 +130,8 @@ async function pollOnce(match, tournament) {
   // later corrections all propagate — not just the one match this watcher is tied to.
   let polled = null;
   for (const fresh of all) {
-    const before = getMatch(fresh.source, fresh.externalId);
-    const row = upsertMatch(toMatchRow(fresh, match.tournament_id));
+    const before = await getMatch(fresh.source, fresh.externalId);
+    const row = await upsertMatch(toMatchRow(fresh, match.tournament_id));
     const changed =
       !before ||
       before.score_a !== row.score_a ||
@@ -143,9 +143,9 @@ async function pollOnce(match, tournament) {
     if (!watchers.has(row.external_id) && row.status !== 'finished') armMatch(row, tournament);
     if (fresh.externalId === match.external_id) polled = row;
   }
-  const deleted = deleteTournamentPlaceholderMatches(match.tournament_id, currentIds);
+  const deleted = await deleteTournamentPlaceholderMatches(match.tournament_id, currentIds);
   if (deleted) logger.info(`[poll] removed ${deleted} stale placeholder match(es) for tournament ${match.tournament_id}`);
-  if (deleted && !getMatch(match.source, match.external_id)) {
+  if (deleted && !(await getMatch(match.source, match.external_id))) {
     clearWatcher(match.external_id);
     return;
   }
@@ -165,11 +165,11 @@ async function pollOnce(match, tournament) {
 }
 
 // After a restart, re-arm polling for matches still pending/running in the DB.
-export function resumePolling() {
+export async function resumePolling() {
   let armed = 0;
   let skipped = 0;
-  for (const row of getActiveMatches()) {
-    const tournament = getTournamentById(row.tournament_id);
+  for (const row of await getActiveMatches()) {
+    const tournament = await getTournamentById(row.tournament_id);
     if (!tournament) continue;
     if (armMatch(row, tournament)) armed++;
     else skipped++;

@@ -99,7 +99,7 @@ export async function updateMatchCards(client, guildId) {
   const boards = getGameMatchCards(guildId);
   if (!boards.length) return;
 
-  const matches = getMatchesForGuild(guildId);
+  const matches = await getMatchesForGuild(guildId);
   const dedicatedGames = new Set(boards.filter((b) => b.game !== ALL_GAMES).map((b) => normalizeGameSlug(b.game)));
   for (const board of boards) {
     const channel = await client.channels.fetch(board.channel_id).catch(() => null);

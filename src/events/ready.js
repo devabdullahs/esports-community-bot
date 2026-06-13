@@ -39,11 +39,13 @@ export function execute(client) {
   }
 
   // When a match's score/status changes, refresh that guild's leaderboard + voice channel.
-  setUpdateHandler((type, match) => onMatchUpdate(client, type, match));
+  setUpdateHandler((type, match) =>
+    onMatchUpdate(client, type, match).catch((e) => logger.error(`[refresh] match update failed: ${e.message}`)),
+  );
 
   startMorningSync(client);
-  resumePolling(); // re-arm matches still pending/running from before a restart
-  refreshAllGuilds(client); // repaint leaderboards/voice on boot
+  resumePolling().catch((e) => logger.error(`[poll] resume failed: ${e.message}`)); // re-arm matches still pending/running from before a restart
+  refreshAllGuilds(client).catch((e) => logger.error(`[refresh] boot repaint failed: ${e.message}`)); // repaint leaderboards/voice on boot
   startClubChampionship(client); // EWC Club Championship standings refresh loop
   startCsRankings(client); // Counter-Strike Valve rankings refresh loop
   startEwcPredictions(client); // EWC prediction snapshots/scoring automation

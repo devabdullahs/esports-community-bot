@@ -24,7 +24,7 @@ export async function syncTournament(client, t) {
     try {
       const title = await service.resolveTournamentTitle(t);
       if (title && title !== t.name) {
-        updateTournamentName(t.id, title);
+        await updateTournamentName(t.id, title);
         t = { ...t, name: title };
       }
     } catch (e) {
@@ -35,10 +35,10 @@ export async function syncTournament(client, t) {
   const matches = await service.fetchSchedule(t);
   const currentIds = matches.map((m) => m.externalId);
   for (const parsed of matches) {
-    const row = upsertMatch(toMatchRow(parsed, t.id));
+    const row = await upsertMatch(toMatchRow(parsed, t.id));
     armMatch(row, t);
   }
-  const deleted = deleteTournamentPlaceholderMatches(t.id, currentIds);
+  const deleted = await deleteTournamentPlaceholderMatches(t.id, currentIds);
   if (deleted) logger.info(`[sync] removed ${deleted} stale placeholder match(es) for ${t.source}:${t.external_id}`);
   return matches.length;
 }
@@ -46,7 +46,7 @@ export async function syncTournament(client, t) {
 // Daily sweep over every tracked tournament. Runs at 08:00 (and on boot if SYNC_ON_BOOT).
 export async function runMorningSync(client) {
   logger.info('[morning-sync] Starting daily schedule sync…');
-  const tournaments = listActiveTournaments();
+  const tournaments = await listActiveTournaments();
   if (!tournaments.length) {
     logger.info('[morning-sync] No tracked tournaments — use /add_tournament.');
     return;
@@ -63,7 +63,7 @@ export async function runMorningSync(client) {
     }
   }
   logger.info(`[morning-sync] Done — ${tournaments.length} tournament(s), ${total} match(es).`);
-  if (client) refreshAllGuilds(client);
+  if (client) await refreshAllGuilds(client);
 }
 
 export function startMorningSync(client) {
@@ -72,7 +72,11 @@ export function startMorningSync(client) {
     logger.error(`[morning-sync] Invalid cron "${morningCron}" — sync disabled.`);
     return;
   }
-  cron.schedule(morningCron, () => runMorningSync(client), { timezone });
+  cron.schedule(
+    morningCron,
+    () => runMorningSync(client).catch((e) => logger.error('[morning-sync] scheduled run failed:', e)),
+    { timezone },
+  );
   logger.info(`[morning-sync] Scheduled "${morningCron}" (${timezone}).`);
 
   if (syncOnBoot) {

@@ -18,7 +18,7 @@ const STATUS = {
 
 export async function autocomplete(interaction) {
   const q = interaction.options.getFocused().toString().toLowerCase();
-  const choices = getMatchesForGuild(interaction.guildId)
+  const choices = (await getMatchesForGuild(interaction.guildId))
     .filter((m) => `${m.team_a} ${m.team_b}`.toLowerCase().includes(q))
     .sort((a, b) => (STATUS[a.status]?.order ?? 9) - (STATUS[b.status]?.order ?? 9))
     .slice(0, 25)
@@ -31,7 +31,7 @@ export async function autocomplete(interaction) {
 
 export async function execute(interaction) {
   const id = interaction.options.getInteger('match', true);
-  const m = getMatchesForGuild(interaction.guildId).find((x) => x.id === id);
+  const m = (await getMatchesForGuild(interaction.guildId)).find((x) => x.id === id);
   if (!m) {
     await interaction.reply({ content: "That match isn't tracked here anymore.", flags: MessageFlags.Ephemeral });
     return;

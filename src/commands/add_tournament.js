@@ -51,7 +51,7 @@ export async function execute(interaction) {
     return;
   }
 
-  const record = addTournament({
+  const record = await addTournament({
     source: parsed.source,
     external_id: parsed.externalId,
     game: gameOverride || parsed.game,
@@ -61,7 +61,7 @@ export async function execute(interaction) {
     added_by: interaction.user.id,
   });
 
-  const count = listActiveTournaments(interaction.guildId).length;
+  const count = (await listActiveTournaments(interaction.guildId)).length;
   const container = new ContainerBuilder()
     .setAccentColor(0x57f287)
     .addTextDisplayComponents((td) =>

@@ -17,10 +17,10 @@ export const data = new SlashCommandBuilder()
   .setContexts(InteractionContextType.Guild);
 
 export async function execute(interaction) {
-  const tournaments = listActiveTournaments(interaction.guildId).slice(0, 25);
+  const tournaments = (await listActiveTournaments(interaction.guildId)).slice(0, 25);
 
   const counts = {}; // tournament_id -> { live, upcoming }
-  for (const m of getMatchesForGuild(interaction.guildId)) {
+  for (const m of await getMatchesForGuild(interaction.guildId)) {
     const c = (counts[m.tournament_id] ??= { live: 0, upcoming: 0 });
     if (m.status === 'running') c.live++;
     else if (m.status === 'scheduled') c.upcoming++;

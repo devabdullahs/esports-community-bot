@@ -13,8 +13,8 @@ const VOICE_NAME_MAX = 100;
 
 const state = new Map(); // channelId -> { at, name, timer, pending }
 
-export function computeVoiceName(guildId, game = null) {
-  let matches = getMatchesForGuild(guildId);
+export async function computeVoiceName(guildId, game = null) {
+  let matches = await getMatchesForGuild(guildId);
   if (game) matches = matches.filter((m) => sameGame(m.game, game));
 
   const live = matches.find((m) => m.status === 'running');
@@ -37,9 +37,9 @@ export function computeVoiceName(guildId, game = null) {
 // Update the combined voice channel AND every per-game voice channel for a guild.
 export async function updateVoiceChannel(client, guildId) {
   const s = getSettings(guildId);
-  await renameVoice(client, s.voice_channel_id, computeVoiceName(guildId, null));
+  await renameVoice(client, s.voice_channel_id, await computeVoiceName(guildId, null));
   for (const v of getGameVoiceChannels(guildId)) {
-    await renameVoice(client, v.channel_id, computeVoiceName(guildId, v.game));
+    await renameVoice(client, v.channel_id, await computeVoiceName(guildId, v.game));
   }
 }
 

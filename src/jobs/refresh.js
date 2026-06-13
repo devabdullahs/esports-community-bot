@@ -33,14 +33,15 @@ export function refreshGuild(client, guildId) {
 }
 
 // Called by the polling manager's update hook (see events/ready.js).
-export function onMatchUpdate(client, _type, match) {
+export async function onMatchUpdate(client, _type, match) {
   if (!match) return;
-  const tournament = getTournamentById(match.tournament_id);
+  const tournament = await getTournamentById(match.tournament_id);
   if (tournament?.guild_id) refreshGuild(client, tournament.guild_id);
 }
 
-export function refreshAllGuilds(client) {
-  for (const guildId of new Set(listActiveTournaments().map((t) => t.guild_id))) {
+export async function refreshAllGuilds(client) {
+  const tournaments = await listActiveTournaments();
+  for (const guildId of new Set(tournaments.map((t) => t.guild_id))) {
     refreshGuild(client, guildId);
   }
 }

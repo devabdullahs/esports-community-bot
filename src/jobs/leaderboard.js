@@ -47,8 +47,8 @@ function balancedUpcoming(matches, limit = MAX_UPCOMING) {
 
 // Build the live leaderboard as a Components V2 Container. If `game` is set, only that game's
 // matches are shown (a per-game board); otherwise it's the combined "all games" board.
-export function buildLeaderboardContainer(guildId, game = null) {
-  let matches = getMatchesForGuild(guildId);
+export async function buildLeaderboardContainer(guildId, game = null) {
+  let matches = await getMatchesForGuild(guildId);
   if (game) matches = matches.filter((m) => sameGame(m.game, game));
 
   const c = new ContainerBuilder().setAccentColor(0x5865f2);
@@ -89,7 +89,7 @@ async function updateBoard(client, guildId, game, channelId, messageId, saveMess
   const channel = await client.channels.fetch(channelId).catch(() => null);
   if (!channel?.isTextBased?.()) return;
 
-  const payload = { components: [buildLeaderboardContainer(guildId, game)], flags: MessageFlags.IsComponentsV2 };
+  const payload = { components: [await buildLeaderboardContainer(guildId, game)], flags: MessageFlags.IsComponentsV2 };
   if (messageId) {
     const msg = await channel.messages.fetch(messageId).catch(() => null);
     if (msg) {

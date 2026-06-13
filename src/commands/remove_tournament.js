@@ -20,7 +20,7 @@ export const data = new SlashCommandBuilder()
 
 export async function autocomplete(interaction) {
   const query = interaction.options.getFocused().toString().toLowerCase();
-  const choices = listActiveTournaments(interaction.guildId)
+  const choices = (await listActiveTournaments(interaction.guildId))
     .filter((t) => `${t.name ?? ''} ${t.external_id}`.toLowerCase().includes(query))
     .slice(0, 25)
     .map((t) => ({ name: `${t.name || t.external_id} (${t.source})`.slice(0, 100), value: t.id }));
@@ -29,14 +29,14 @@ export async function autocomplete(interaction) {
 
 export async function execute(interaction) {
   const id = interaction.options.getInteger('tournament', true);
-  const t = getTournamentById(id);
+  const t = await getTournamentById(id);
 
   if (!t || t.guild_id !== interaction.guildId || !t.active) {
     await interaction.reply({ content: '❌ That tournament isn’t tracked in this server.', flags: MessageFlags.Ephemeral });
     return;
   }
 
-  deactivateTournament(id, interaction.guildId);
+  await deactivateTournament(id, interaction.guildId);
 
   const container = new ContainerBuilder()
     .setAccentColor(0xed4245)
