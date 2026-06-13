@@ -65,6 +65,8 @@ const baseCopy = {
     common: {
       brand: "Esports Community",
       community: "Dashboard",
+      home: "Home",
+      menu: "Menu",
       games: "Games",
       browse: "Browse",
       news: "News",
@@ -308,6 +310,8 @@ const baseCopy = {
     common: {
       brand: "\u0645\u062c\u062a\u0645\u0639 \u0627\u0644\u0631\u064a\u0627\u0636\u0627\u062a \u0627\u0644\u0625\u0644\u0643\u062a\u0631\u0648\u0646\u064a\u0629",
       community: "\u0644\u0648\u062d\u0629 \u0627\u0644\u062a\u062d\u0643\u0645",
+      home: "\u0627\u0644\u0631\u0626\u064a\u0633\u064a\u0629",
+      menu: "\u0627\u0644\u0642\u0627\u0626\u0645\u0629",
       games: "\u0627\u0644\u0623\u0644\u0639\u0627\u0628",
       browse: "\u062a\u0635\u0641\u0651\u062d",
       news: "\u0627\u0644\u0623\u062e\u0628\u0627\u0631",
