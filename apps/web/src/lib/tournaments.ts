@@ -1,6 +1,6 @@
 import "server-only";
 
-import { db } from "@bot/db/connection.js";
+import { all } from "@bot/db/client.js";
 import {
   getTournamentById as _getById,
   listActiveTournaments as _listActive,
@@ -12,8 +12,9 @@ import { resolveDefaultGuildId } from "@/lib/guild";
 // Typed boundary over the bot's tournament/match read helpers (see games.ts).
 // Phase 1 is read-only and public. Aggregations (per-status match counts and
 // grouped per-tournament matches) are run here as parameterized reads against
-// the shared bot DB — same direct-`db` pattern as ewc-profile-sync.ts — because
-// the bot exposes no helper for them. We never write from the web process.
+// the shared bot DB via the unified async client ($1,$2,... placeholders work
+// on both SQLite and Postgres) — the bot exposes no helper for them. We never
+// write from the web process.
 // ---------------------------------------------------------------------------
 
 export type MatchStatus = "running" | "scheduled" | "finished";
@@ -63,23 +64,24 @@ export type TournamentMatches = {
   total: number;
 };
 
-const listActive = _listActive as (guildId?: string) => TournamentRow[];
-const getById = _getById as (id: number) => TournamentRow | undefined;
+const listActive = _listActive as (guildId?: string) => Promise<TournamentRow[]>;
+const getById = _getById as (id: number) => Promise<TournamentRow | undefined>;
 
-const countsStmt = db.prepare(`
+const COUNTS_SQL = `
   SELECT status, COUNT(*) AS n
   FROM matches
-  WHERE tournament_id = ?
+  WHERE tournament_id = $1
   GROUP BY status
-`);
+`;
 
 function zeroCounts(): MatchCounts {
   return { running: 0, scheduled: 0, finished: 0 };
 }
 
-function matchCountsFor(tournamentId: number): MatchCounts {
+async function matchCountsFor(tournamentId: number): Promise<MatchCounts> {
   const counts = zeroCounts();
-  for (const row of countsStmt.all(tournamentId) as { status: string; n: number }[]) {
+  const rows = (await all(COUNTS_SQL, [tournamentId])) as { status: string; n: number }[];
+  for (const row of rows) {
     if (row.status === "running" || row.status === "scheduled" || row.status === "finished") {
       counts[row.status] = row.n;
     }
@@ -92,34 +94,31 @@ const MATCH_COLUMNS =
 
 // running first, then upcoming by start time, then finished most-recent first
 // — mirrors getMatchesForGuild's ordering in src/db/matches.js.
-const liveStmt = db.prepare(
-  `SELECT ${MATCH_COLUMNS} FROM matches WHERE tournament_id = ? AND status = 'running' ORDER BY scheduled_at ASC`,
-);
-const upcomingStmt = db.prepare(
-  `SELECT ${MATCH_COLUMNS} FROM matches WHERE tournament_id = ? AND status = 'scheduled' ORDER BY scheduled_at ASC`,
-);
-const finishedStmt = db.prepare(
-  `SELECT ${MATCH_COLUMNS} FROM matches WHERE tournament_id = ? AND status = 'finished'
-   ORDER BY scheduled_at DESC LIMIT ? OFFSET ?`,
-);
+const LIVE_SQL = `SELECT ${MATCH_COLUMNS} FROM matches WHERE tournament_id = $1 AND status = 'running' ORDER BY scheduled_at ASC`;
+const UPCOMING_SQL = `SELECT ${MATCH_COLUMNS} FROM matches WHERE tournament_id = $1 AND status = 'scheduled' ORDER BY scheduled_at ASC`;
+const FINISHED_SQL = `SELECT ${MATCH_COLUMNS} FROM matches WHERE tournament_id = $1 AND status = 'finished'
+   ORDER BY scheduled_at DESC LIMIT $2 OFFSET $3`;
 
 /** Active tournaments for the configured guild, each with per-status match counts. */
-export function listTournamentSummaries(): TournamentSummary[] {
+export async function listTournamentSummaries(): Promise<TournamentSummary[]> {
   // The bot only renders match cards for active tournaments (getMatchesForGuild
   // joins on t.active = 1), so listActiveTournaments mirrors exactly what Discord
   // shows. The only gap was the guild id, now DB-derived.
   const guildId = resolveDefaultGuildId();
   if (!guildId) return [];
-  return listActive(guildId).map((t) => ({
-    id: t.id,
-    name: t.name,
-    game: t.game,
-    source: t.source,
-    url: t.url,
-    active: t.active,
-    created_at: t.created_at,
-    matchCounts: matchCountsFor(t.id),
-  }));
+  const tournaments = await listActive(guildId);
+  return Promise.all(
+    tournaments.map(async (t) => ({
+      id: t.id,
+      name: t.name,
+      game: t.game,
+      source: t.source,
+      url: t.url,
+      active: t.active,
+      created_at: t.created_at,
+      matchCounts: await matchCountsFor(t.id),
+    })),
+  );
 }
 
 /**
@@ -127,19 +126,19 @@ export function listTournamentSummaries(): TournamentSummary[] {
  * applies only to the finished list; running + scheduled are returned in full.
  * Returns null when the tournament is missing or belongs to another guild.
  */
-export function getTournamentMatches(
+export async function getTournamentMatches(
   id: number,
   { limit = 50, offset = 0 }: { limit?: number; offset?: number } = {},
-): TournamentMatches | null {
+): Promise<TournamentMatches | null> {
   const guildId = resolveDefaultGuildId();
   if (!guildId) return null;
-  const tournament = getById(id);
+  const tournament = await getById(id);
   if (!tournament || tournament.guild_id !== guildId || tournament.active !== 1) return null;
 
-  const running = liveStmt.all(id) as MatchRow[];
-  const scheduled = upcomingStmt.all(id) as MatchRow[];
-  const finished = finishedStmt.all(id, limit, offset) as MatchRow[];
-  const total = matchCountsFor(id);
+  const running = (await all(LIVE_SQL, [id])) as MatchRow[];
+  const scheduled = (await all(UPCOMING_SQL, [id])) as MatchRow[];
+  const finished = (await all(FINISHED_SQL, [id, limit, offset])) as MatchRow[];
+  const total = await matchCountsFor(id);
 
   return {
     tournament: {

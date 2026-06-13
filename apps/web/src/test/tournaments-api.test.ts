@@ -28,26 +28,31 @@ function ctx(id: string) {
 let tournamentId: number;
 
 async function seed(): Promise<void> {
+  // Bootstrap the SQLite schema on the shared connection. The tournaments/matches
+  // modules now read through the unified async client (which never imports index.js),
+  // so nothing else in this test would create the tables — mirror the bot-side ported
+  // tests that import index.js up front (e.g. tests/ewcRateLimits.test.mjs).
+  await import("@bot/db/index.js");
   const { addTournament } = await import("@bot/db/tournaments.js");
   const { upsertMatch } = await import("@bot/db/matches.js");
 
-  const tournament = addTournament({
+  const tournament = (await addTournament({
     source: "liquipedia",
     external_id: `EWC/2026/Test-${Date.now()}`,
     game: "cs2",
     name: "EWC 2026 — Test CS2",
     url: "https://liquipedia.net/counterstrike/EWC/2026",
     guild_id: GUILD_ID,
-  }) as { id: number };
+  })) as { id: number };
   tournamentId = tournament.id;
 
   const base = { tournament_id: tournamentId, source: "liquipedia" };
   // 1 running, 2 scheduled, 5 finished
-  upsertMatch({ ...base, external_id: `Match:run-${tournamentId}`, team_a: "Falcons", team_b: "T1", score_a: 1, score_b: 0, status: "running", scheduled_at: 1_900_000_000 });
-  upsertMatch({ ...base, external_id: `Match:sch1-${tournamentId}`, team_a: "Vitality", team_b: "NAVI", status: "scheduled", scheduled_at: 1_900_100_000 });
-  upsertMatch({ ...base, external_id: `Match:sch2-${tournamentId}`, team_a: "G2", team_b: "FaZe", status: "scheduled", scheduled_at: 1_900_200_000 });
+  await upsertMatch({ ...base, external_id: `Match:run-${tournamentId}`, team_a: "Falcons", team_b: "T1", score_a: 1, score_b: 0, status: "running", scheduled_at: 1_900_000_000 });
+  await upsertMatch({ ...base, external_id: `Match:sch1-${tournamentId}`, team_a: "Vitality", team_b: "NAVI", status: "scheduled", scheduled_at: 1_900_100_000 });
+  await upsertMatch({ ...base, external_id: `Match:sch2-${tournamentId}`, team_a: "G2", team_b: "FaZe", status: "scheduled", scheduled_at: 1_900_200_000 });
   for (let i = 0; i < 5; i += 1) {
-    upsertMatch({
+    await upsertMatch({
       ...base,
       external_id: `Match:fin${i}-${tournamentId}`,
       team_a: `A${i}`,

@@ -24,7 +24,7 @@ export async function GET(
   const limit = clampInt(url.searchParams.get("limit"), { min: 1, max: 200, fallback: 50 });
   const offset = clampInt(url.searchParams.get("offset"), { min: 0, max: 100_000, fallback: 0 });
 
-  const data = getTournamentMatches(tournamentId, { limit, offset });
+  const data = await getTournamentMatches(tournamentId, { limit, offset });
   if (!data) {
     return NextResponse.json({ error: "Tournament not found." }, { status: 404 });
   }
