@@ -1,43 +1,41 @@
-import { db } from './index.js';
+import { get, all, run } from './client.js';
 
 // Insert (or re-activate) a tracked tournament. Returns the stored row.
-const upsert = db.prepare(`
-  INSERT INTO tournaments (source, external_id, game, name, url, guild_id, added_by)
-  VALUES (@source, @external_id, @game, @name, @url, @guild_id, @added_by)
-  ON CONFLICT (source, external_id, guild_id) DO UPDATE SET
-    game = excluded.game,
-    name = excluded.name,
-    url  = excluded.url,
-    active = 1
-  RETURNING *
-`);
-
-export function addTournament(row) {
-  return upsert.get({
+export async function addTournament(row) {
+  const merged = {
     game: null,
     name: null,
     url: null,
     added_by: null,
     ...row,
-  });
+  };
+  return get(
+    `INSERT INTO tournaments (source, external_id, game, name, url, guild_id, added_by)
+     VALUES ($1, $2, $3, $4, $5, $6, $7)
+     ON CONFLICT (source, external_id, guild_id) DO UPDATE SET
+       game = excluded.game,
+       name = excluded.name,
+       url  = excluded.url,
+       active = 1
+     RETURNING *`,
+    [merged.source, merged.external_id, merged.game, merged.name, merged.url, merged.guild_id, merged.added_by],
+  );
 }
 
-export function listActiveTournaments(guildId) {
+export async function listActiveTournaments(guildId) {
   return guildId
-    ? db
-        .prepare('SELECT * FROM tournaments WHERE active = 1 AND guild_id = ? ORDER BY created_at DESC')
-        .all(guildId)
-    : db.prepare('SELECT * FROM tournaments WHERE active = 1 ORDER BY created_at DESC').all();
+    ? all('SELECT * FROM tournaments WHERE active = 1 AND guild_id = $1 ORDER BY created_at DESC', [guildId])
+    : all('SELECT * FROM tournaments WHERE active = 1 ORDER BY created_at DESC');
 }
 
-export function getTournamentById(id) {
-  return db.prepare('SELECT * FROM tournaments WHERE id = ?').get(id);
+export async function getTournamentById(id) {
+  return get('SELECT * FROM tournaments WHERE id = $1', [id]);
 }
 
-export function updateTournamentName(id, name) {
-  return db.prepare('UPDATE tournaments SET name = ? WHERE id = ?').run(name, id);
+export async function updateTournamentName(id, name) {
+  return run('UPDATE tournaments SET name = $1 WHERE id = $2', [name, id]);
 }
 
-export function deactivateTournament(id, guildId) {
-  return db.prepare('UPDATE tournaments SET active = 0 WHERE id = ? AND guild_id = ?').run(id, guildId);
+export async function deactivateTournament(id, guildId) {
+  return run('UPDATE tournaments SET active = 0 WHERE id = $1 AND guild_id = $2', [id, guildId]);
 }

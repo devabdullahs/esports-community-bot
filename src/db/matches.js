@@ -1,29 +1,12 @@
-import { db } from './index.js';
+import { all, get, run, transaction } from './client.js';
 import { normalizeTeamName } from '../lib/render.js';
 
-const upsert = db.prepare(`
-  INSERT INTO matches
-    (tournament_id, source, external_id, name, team_a, team_b, logo_a, logo_b, score_a, score_b, status, scheduled_at, last_polled_at, updated_at)
-  VALUES
-    (@tournament_id, @source, @external_id, @name, @team_a, @team_b, @logo_a, @logo_b, @score_a, @score_b, @status, @scheduled_at, datetime('now'), datetime('now'))
-  ON CONFLICT (source, external_id) DO UPDATE SET
-    tournament_id = excluded.tournament_id,
-    name          = excluded.name,
-    team_a        = excluded.team_a,
-    team_b        = excluded.team_b,
-    logo_a        = COALESCE(excluded.logo_a, matches.logo_a),
-    logo_b        = COALESCE(excluded.logo_b, matches.logo_b),
-    score_a       = excluded.score_a,
-    score_b       = excluded.score_b,
-    status        = excluded.status,
-    scheduled_at  = excluded.scheduled_at,
-    last_polled_at = datetime('now'),
-    updated_at    = datetime('now')
-  RETURNING *
-`);
+function nowText() {
+  return new Date().toISOString().slice(0, 19).replace('T', ' ');
+}
 
-export function upsertMatch(row) {
-  return upsert.get({
+export async function upsertMatch(row) {
+  const merged = {
     name: null,
     team_a: 'TBD',
     team_b: 'TBD',
@@ -33,7 +16,43 @@ export function upsertMatch(row) {
     score_b: null,
     scheduled_at: null,
     ...row,
-  });
+  };
+  const now = nowText();
+  return get(
+    `INSERT INTO matches
+       (tournament_id, source, external_id, name, team_a, team_b, logo_a, logo_b, score_a, score_b, status, scheduled_at, last_polled_at, updated_at)
+     VALUES
+       ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $13)
+     ON CONFLICT (source, external_id) DO UPDATE SET
+       tournament_id = excluded.tournament_id,
+       name          = excluded.name,
+       team_a        = excluded.team_a,
+       team_b        = excluded.team_b,
+       logo_a        = COALESCE(excluded.logo_a, matches.logo_a),
+       logo_b        = COALESCE(excluded.logo_b, matches.logo_b),
+       score_a       = excluded.score_a,
+       score_b       = excluded.score_b,
+       status        = excluded.status,
+       scheduled_at  = excluded.scheduled_at,
+       last_polled_at = $13,
+       updated_at    = $13
+     RETURNING *`,
+    [
+      merged.tournament_id,
+      merged.source,
+      merged.external_id,
+      merged.name,
+      merged.team_a,
+      merged.team_b,
+      merged.logo_a,
+      merged.logo_b,
+      merged.score_a,
+      merged.score_b,
+      merged.status,
+      merged.scheduled_at,
+      now,
+    ],
+  );
 }
 
 // Map a parser result (camelCase) into a DB row (snake_case).
@@ -54,8 +73,8 @@ export function toMatchRow(parsed, tournamentId) {
   };
 }
 
-export function getMatch(source, externalId) {
-  return db.prepare('SELECT * FROM matches WHERE source = ? AND external_id = ?').get(source, externalId);
+export async function getMatch(source, externalId) {
+  return get('SELECT * FROM matches WHERE source = $1 AND external_id = $2', [source, externalId]);
 }
 
 // Collapse rows that describe the SAME match but were stored separately — e.g. the bracket form
@@ -84,40 +103,40 @@ function dedupeMatches(rows) {
 
 // All matches for a guild's active tournaments, with the tournament's game/name attached.
 // Ordered: live first, then upcoming by start time, then finished.
-export function getMatchesForGuild(guildId) {
-  const rows = db
-    .prepare(
-      `SELECT m.*, t.game AS game, t.name AS tournament_name,
-              t.url AS tournament_url, t.external_id AS tournament_path, t.source AS tournament_source
-       FROM matches m
-       JOIN tournaments t ON t.id = m.tournament_id
-       WHERE t.guild_id = ? AND t.active = 1
-       ORDER BY CASE m.status WHEN 'running' THEN 0 WHEN 'scheduled' THEN 1 ELSE 2 END,
-                m.scheduled_at ASC`,
-    )
-    .all(guildId);
+export async function getMatchesForGuild(guildId) {
+  const rows = await all(
+    `SELECT m.*, t.game AS game, t.name AS tournament_name,
+            t.url AS tournament_url, t.external_id AS tournament_path, t.source AS tournament_source
+     FROM matches m
+     JOIN tournaments t ON t.id = m.tournament_id
+     WHERE t.guild_id = $1 AND t.active = 1
+     ORDER BY CASE m.status WHEN 'running' THEN 0 WHEN 'scheduled' THEN 1 ELSE 2 END,
+              m.scheduled_at ASC`,
+    [guildId],
+  );
   return dedupeMatches(rows);
 }
 
 // Matches that still need watching: pending or running, and not absurdly old.
-export function getActiveMatches() {
-  return db
-    .prepare(
-      `SELECT * FROM matches
-       WHERE status IN ('scheduled','running')
-         AND (scheduled_at IS NULL OR scheduled_at > strftime('%s','now') - 43200)`,
-    )
-    .all();
+export async function getActiveMatches() {
+  const cutoff = Math.floor(Date.now() / 1000) - 43200;
+  return all(
+    `SELECT * FROM matches
+     WHERE status IN ('scheduled','running')
+       AND (scheduled_at IS NULL OR scheduled_at > $1)`,
+    [cutoff],
+  );
 }
 
-export function markFinished(id) {
-  return db.prepare(`UPDATE matches SET status='finished', updated_at=datetime('now') WHERE id = ?`).run(id);
+export async function markFinished(id) {
+  return run(`UPDATE matches SET status='finished', updated_at=$1 WHERE id = $2`, [nowText(), id]);
 }
 
-export function deleteTournamentPlaceholderMatches(tournamentId, currentExternalIds = null) {
-  const rows = db
-    .prepare('SELECT id, external_id, team_a, team_b, scheduled_at FROM matches WHERE tournament_id = ?')
-    .all(tournamentId);
+export async function deleteTournamentPlaceholderMatches(tournamentId, currentExternalIds = null) {
+  const rows = await all(
+    'SELECT id, external_id, team_a, team_b, scheduled_at FROM matches WHERE tournament_id = $1',
+    [tournamentId],
+  );
   const current = currentExternalIds ? new Set(currentExternalIds) : null;
   const now = Math.floor(Date.now() / 1000);
   const staleAfterSeconds = 4 * 3600;
@@ -144,10 +163,8 @@ export function deleteTournamentPlaceholderMatches(tournamentId, currentExternal
     })
     .map((row) => row.id);
   if (!ids.length) return 0;
-  const del = db.prepare('DELETE FROM matches WHERE id = ?');
-  const tx = db.transaction((toDelete) => {
-    for (const id of toDelete) del.run(id);
+  await transaction(async (tx) => {
+    for (const id of ids) await tx.run('DELETE FROM matches WHERE id = $1', [id]);
   });
-  tx(ids);
   return ids.length;
 }
