@@ -1,6 +1,6 @@
 import "server-only";
 
-import { db } from "@bot/db/connection.js";
+import { get } from "@bot/db/client.js";
 import { listEwcAdmins } from "@bot/db/ewcAdmins.js";
 
 export type EligibleAuthor = {
@@ -14,7 +14,7 @@ type AdminRoster = {
   games: string[];
 };
 
-const listAdmins = listEwcAdmins as () => AdminRoster[];
+const listAdmins = listEwcAdmins as () => Promise<AdminRoster[]>;
 
 function parseIds(value: string | undefined): string[] {
   return String(value || "")
@@ -35,22 +35,21 @@ function superAdminDiscordIds(): string[] {
 // Env supers have no roster row, so their display name lives only in the
 // better-auth user table (if they've ever signed in). Mirror the defensive
 // no-such-table handling used by safeAccountQuery in ewc-profile-sync.ts.
-function lookupAuthName(discordId: string): string | null {
+async function lookupAuthName(discordId: string): Promise<string | null> {
   try {
-    const row = db
-      .prepare(
-        `SELECT u.name AS name
-         FROM account a
-         JOIN user u ON u.id = a.userId
-         WHERE a.accountId = ? AND a.providerId = 'discord'
-         ORDER BY a.updatedAt DESC
-         LIMIT 1`,
-      )
-      .get(discordId) as { name?: string | null } | undefined;
+    const row = (await get(
+      `SELECT u.name AS name
+       FROM "account" a
+       JOIN "user" u ON u.id = a."userId"
+       WHERE a."accountId" = $1 AND a."providerId" = 'discord'
+       ORDER BY a."updatedAt" DESC
+       LIMIT 1`,
+      [discordId],
+    )) as { name?: string | null } | null;
     const name = row?.name;
     return typeof name === "string" && name.trim() ? name : null;
   } catch (error) {
-    if (/no such table/i.test(String((error as Error).message))) return null;
+    if (/no such table|does not exist/i.test(String((error as Error).message))) return null;
     throw error;
   }
 }
@@ -64,24 +63,24 @@ function lookupAuthName(discordId: string): string | null {
  * user name, then to the raw discordId. Deduped by discordId, supers first then
  * alphabetical by name.
  */
-export function listEligibleAuthors(gameSlug: string): EligibleAuthor[] {
+export async function listEligibleAuthors(gameSlug: string): Promise<EligibleAuthor[]> {
   const supers = superAdminDiscordIds();
   const superSet = new Set(supers);
-  const roster = listAdmins();
+  const roster = await listAdmins();
   const rosterById = new Map(roster.map((a) => [a.discordId, a]));
 
   const byId = new Map<string, { author: EligibleAuthor; isSuper: boolean }>();
 
-  const nameFor = (discordId: string): string => {
+  const nameFor = async (discordId: string): Promise<string> => {
     const rosterRow = rosterById.get(discordId);
     if (rosterRow?.displayName && rosterRow.displayName.trim()) return rosterRow.displayName;
-    return lookupAuthName(discordId) || discordId;
+    return (await lookupAuthName(discordId)) || discordId;
   };
 
   // Supers first — eligible for any game.
   for (const discordId of supers) {
     if (byId.has(discordId)) continue;
-    byId.set(discordId, { author: { discordId, name: nameFor(discordId) }, isSuper: true });
+    byId.set(discordId, { author: { discordId, name: await nameFor(discordId) }, isSuper: true });
   }
 
   // Roster admins scoped to this game.
@@ -89,7 +88,7 @@ export function listEligibleAuthors(gameSlug: string): EligibleAuthor[] {
     if (byId.has(admin.discordId)) continue;
     if (!admin.games.includes(gameSlug)) continue;
     byId.set(admin.discordId, {
-      author: { discordId: admin.discordId, name: nameFor(admin.discordId) },
+      author: { discordId: admin.discordId, name: await nameFor(admin.discordId) },
       isSuper: superSet.has(admin.discordId),
     });
   }

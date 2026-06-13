@@ -26,7 +26,7 @@ export async function POST(request: Request) {
   const slugs: string[] = body.slugs;
 
   try {
-    const games = reorderGames(slugs);
+    const games = await reorderGames(slugs);
     revalidateTag("cms-games", "default");
     recordAdminAudit(access, "game.reorder", null);
     return NextResponse.json({ games });

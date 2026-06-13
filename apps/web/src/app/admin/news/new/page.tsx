@@ -15,7 +15,7 @@ export default async function NewNewsPostPage() {
   if (!access.session) redirect("/login?callbackURL=/admin/news/new");
   if (!access.allowed) redirect("/admin");
 
-  const allGames = listGames();
+  const allGames = await listGames();
   const games =
     access.games === "ALL" ? allGames : allGames.filter((g) => access.games.includes(g.slug));
   if (games.length === 0) redirect("/admin");

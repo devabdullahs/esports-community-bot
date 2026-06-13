@@ -71,16 +71,16 @@ function buildNewsPayload(post) {
 }
 
 // Single-guild bot: resolve the default news channel + a guild id from the connected guild.
-function guildDefaultNewsChannel(client) {
+async function guildDefaultNewsChannel(client) {
   const guild = client.guilds.cache.first();
   if (!guild) return { guildId: null, channelId: null };
-  return { guildId: guild.id, channelId: getSettings(guild.id).ewc_news_channel_id || null };
+  return { guildId: guild.id, channelId: (await getSettings(guild.id)).ewc_news_channel_id || null };
 }
 
 async function resolveChannel(client, gameSlug) {
-  const game = getEwcGame(gameSlug);
+  const game = await getEwcGame(gameSlug);
   const gameChannelId = game?.discordChannelId || null;
-  const fallback = guildDefaultNewsChannel(client);
+  const fallback = await guildDefaultNewsChannel(client);
   const channelId = resolveNewsChannelId({ gameChannelId, guildNewsChannelId: fallback.channelId });
   if (!channelId) return null;
   const channel = await client.channels.fetch(channelId).catch(() => null);
@@ -91,17 +91,17 @@ async function resolveChannel(client, gameSlug) {
 }
 
 async function postNewPublished(client) {
-  for (const { post_id: postId, game_slug: gameSlug } of listUnpostedPublishedNewsPosts()) {
+  for (const { post_id: postId, game_slug: gameSlug } of await listUnpostedPublishedNewsPosts()) {
     try {
       const resolved = await resolveChannel(client, gameSlug);
       if (!resolved) {
         logger.debug(`[news] no channel resolved for post ${postId} (${gameSlug}); skipping`);
         continue;
       }
-      const post = getEwcNewsPostById(postId);
+      const post = await getEwcNewsPostById(postId);
       if (!post) continue;
       const sent = await resolved.channel.send(buildNewsPayload(post));
-      recordDiscordNewsPost(postId, {
+      await recordDiscordNewsPost(postId, {
         guildId: resolved.guildId,
         channelId: resolved.channel.id,
         messageId: sent.id,
@@ -114,7 +114,7 @@ async function postNewPublished(client) {
 }
 
 async function syncExisting(client) {
-  for (const row of listDiscordNewsPosts()) {
+  for (const row of await listDiscordNewsPosts()) {
     try {
       if (row.status !== 'published') {
         // Unpublished (status back to draft): delete the Discord message and the row.
@@ -124,7 +124,7 @@ async function syncExisting(client) {
           const message = await channel.messages.fetch(row.message_id).catch(() => null);
           if (message) await message.delete().catch((e) => logger.warn(`[news] delete failed for ${row.post_id}: ${e.message}`));
         }
-        deleteDiscordNewsPost(row.post_id);
+        await deleteDiscordNewsPost(row.post_id);
         logger.info(`[news] removed Discord message for unpublished news ${row.post_id}`);
         continue;
       }
@@ -136,14 +136,14 @@ async function syncExisting(client) {
         const message = await channel.messages.fetch(row.message_id).catch(() => null);
         if (!message) {
           // Self-heal: the message was manually deleted. Drop the row so the next tick re-posts.
-          deleteDiscordNewsPost(row.post_id);
+          await deleteDiscordNewsPost(row.post_id);
           logger.warn(`[news] message ${row.message_id} for news ${row.post_id} is gone; re-posting next tick`);
           continue;
         }
-        const post = getEwcNewsPostById(row.post_id);
+        const post = await getEwcNewsPostById(row.post_id);
         if (!post) continue;
         await message.edit(buildNewsPayload(post));
-        touchDiscordNewsPost(row.post_id);
+        await touchDiscordNewsPost(row.post_id);
         logger.info(`[news] edited Discord message for news ${row.post_id}`);
       }
     } catch (error) {

@@ -1,6 +1,6 @@
 import "server-only";
 
-import { db } from "@bot/db/connection.js";
+import { get } from "@bot/db/client.js";
 
 // ---------------------------------------------------------------------------
 // Single-guild deployment: the bot serves exactly ONE Discord guild. The public
@@ -13,13 +13,13 @@ import { db } from "@bot/db/connection.js";
 // some tables may not exist yet — degrades to null instead of throwing.
 // ---------------------------------------------------------------------------
 
-function safeGuildQuery(fn: () => unknown): string | null {
+async function safeGuildQuery(sql: string): Promise<string | null> {
   try {
-    const row = fn() as { guild_id?: string | null } | undefined;
+    const row = (await get(sql)) as { guild_id?: string | null } | null;
     const id = row?.guild_id;
     return typeof id === "string" && id ? id : null;
   } catch (error) {
-    if (/no such table/i.test(String((error as Error).message))) return null;
+    if (/no such table|does not exist/i.test(String((error as Error).message))) return null;
     throw error;
   }
 }
@@ -27,26 +27,11 @@ function safeGuildQuery(fn: () => unknown): string | null {
 // Probes ordered by signal strength: tracked tournaments and prediction seasons
 // are the strongest indicators of "the" guild; the settings table is the final
 // fallback (it always holds exactly one row in a single-guild deployment).
-const PROBES: (() => unknown)[] = [
-  () =>
-    db
-      .prepare(
-        "SELECT guild_id FROM tournaments GROUP BY guild_id ORDER BY COUNT(*) DESC LIMIT 1",
-      )
-      .get(),
-  () =>
-    db
-      .prepare(
-        "SELECT guild_id FROM ewc_prediction_seasons GROUP BY guild_id ORDER BY COUNT(*) DESC LIMIT 1",
-      )
-      .get(),
-  () =>
-    db
-      .prepare(
-        "SELECT guild_id FROM game_leaderboards GROUP BY guild_id ORDER BY COUNT(*) DESC LIMIT 1",
-      )
-      .get(),
-  () => db.prepare("SELECT guild_id FROM guild_settings LIMIT 1").get(),
+const PROBES = [
+  "SELECT guild_id FROM tournaments GROUP BY guild_id ORDER BY COUNT(*) DESC LIMIT 1",
+  "SELECT guild_id FROM ewc_prediction_seasons GROUP BY guild_id ORDER BY COUNT(*) DESC LIMIT 1",
+  "SELECT guild_id FROM game_leaderboards GROUP BY guild_id ORDER BY COUNT(*) DESC LIMIT 1",
+  "SELECT guild_id FROM guild_settings LIMIT 1",
 ];
 
 /**
@@ -57,12 +42,12 @@ const PROBES: (() => unknown)[] = [
  *    probes above.
  * 3. Returns null only for a genuinely empty DB with no override set.
  */
-export function resolveDefaultGuildId(): string | null {
+export async function resolveDefaultGuildId(): Promise<string | null> {
   const override = process.env.EWC_DASHBOARD_DEFAULT_GUILD_ID;
   if (override) return override;
 
   for (const probe of PROBES) {
-    const id = safeGuildQuery(probe);
+    const id = await safeGuildQuery(probe);
     if (id) return id;
   }
   return null;

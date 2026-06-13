@@ -19,36 +19,36 @@ export type AdminRow = {
   media: string[];
 };
 
-const list = _list as () => AdminRow[];
-const get = _get as (discordId: string) => AdminRow | null;
-const gameScopes = _gameScopes as (discordId: string) => string[];
-const mediaScopes = _mediaScopes as (discordId: string) => string[];
-const upsert = _upsert as (input: { discordId: string; displayName?: string }) => AdminRow;
-const setGames = _setGames as (discordId: string, slugs: string[]) => void;
-const setMedia = _setMedia as (discordId: string, slugs: string[]) => void;
-const remove = _delete as (discordId: string) => { deleted: number };
+const list = _list as () => Promise<AdminRow[]>;
+const get = _get as (discordId: string) => Promise<AdminRow | null>;
+const gameScopes = _gameScopes as (discordId: string) => Promise<string[]>;
+const mediaScopes = _mediaScopes as (discordId: string) => Promise<string[]>;
+const upsert = _upsert as (input: { discordId: string; displayName?: string }) => Promise<AdminRow>;
+const setGames = _setGames as (discordId: string, slugs: string[]) => Promise<void>;
+const setMedia = _setMedia as (discordId: string, slugs: string[]) => Promise<void>;
+const remove = _delete as (discordId: string) => Promise<{ deleted: number }>;
 
-export function listAdmins(): AdminRow[] {
+export function listAdmins(): Promise<AdminRow[]> {
   return list();
 }
-export function getAdmin(discordId: string): AdminRow | null {
+export function getAdmin(discordId: string): Promise<AdminRow | null> {
   return get(discordId);
 }
-export function getAdminGameScopes(discordId: string): string[] {
+export function getAdminGameScopes(discordId: string): Promise<string[]> {
   return gameScopes(discordId);
 }
-export function getAdminMediaScopes(discordId: string): string[] {
+export function getAdminMediaScopes(discordId: string): Promise<string[]> {
   return mediaScopes(discordId);
 }
-export function upsertAdmin(input: { discordId: string; displayName?: string }): AdminRow {
+export function upsertAdmin(input: { discordId: string; displayName?: string }): Promise<AdminRow> {
   return upsert(input);
 }
-export function setAdminGameScopes(discordId: string, slugs: string[]): void {
-  setGames(discordId, slugs);
+export function setAdminGameScopes(discordId: string, slugs: string[]): Promise<void> {
+  return setGames(discordId, slugs);
 }
-export function setAdminMediaScopes(discordId: string, slugs: string[]): void {
-  setMedia(discordId, slugs);
+export function setAdminMediaScopes(discordId: string, slugs: string[]): Promise<void> {
+  return setMedia(discordId, slugs);
 }
-export function deleteAdmin(discordId: string): { deleted: number } {
+export function deleteAdmin(discordId: string): Promise<{ deleted: number }> {
   return remove(discordId);
 }

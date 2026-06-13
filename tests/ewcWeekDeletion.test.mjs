@@ -27,23 +27,23 @@ test.after(() => {
   rmSync(dir, { recursive: true, force: true });
 });
 
-test('deleteEwcWeek removes the week and all its predictions atomically', () => {
-  const week = upsertEwcWeek({ guildId, season, weekKey: 'week-8', label: 'Week 8', createdBy: 'admin' });
-  upsertWeeklyPrediction({ guildId, weekId: week.id, userId: userA, picks: ['Team A'] });
-  upsertWeeklyPrediction({ guildId, weekId: week.id, userId: userB, picks: ['Team B'] });
+test('deleteEwcWeek removes the week and all its predictions atomically', async () => {
+  const week = await upsertEwcWeek({ guildId, season, weekKey: 'week-8', label: 'Week 8', createdBy: 'admin' });
+  await upsertWeeklyPrediction({ guildId, weekId: week.id, userId: userA, picks: ['Team A'] });
+  await upsertWeeklyPrediction({ guildId, weekId: week.id, userId: userB, picks: ['Team B'] });
 
-  const result = deleteEwcWeek(week.id);
+  const result = await deleteEwcWeek(week.id);
 
   assert.deepEqual(result, { weeks: 1, predictions: 2 });
-  assert.equal(getEwcWeek(guildId, season, 'week-8'), null);
-  assert.deepEqual(listWeeklyPredictions(week.id), []);
+  assert.equal(await getEwcWeek(guildId, season, 'week-8'), null);
+  assert.deepEqual(await listWeeklyPredictions(week.id), []);
 });
 
-test('deleteEwcWeek on a week with no predictions returns predictions: 0', () => {
-  const week = upsertEwcWeek({ guildId, season, weekKey: 'week-9', label: 'Week 9', createdBy: 'admin' });
+test('deleteEwcWeek on a week with no predictions returns predictions: 0', async () => {
+  const week = await upsertEwcWeek({ guildId, season, weekKey: 'week-9', label: 'Week 9', createdBy: 'admin' });
 
-  const result = deleteEwcWeek(week.id);
+  const result = await deleteEwcWeek(week.id);
 
   assert.deepEqual(result, { weeks: 1, predictions: 0 });
-  assert.equal(getEwcWeek(guildId, season, 'week-9'), null);
+  assert.equal(await getEwcWeek(guildId, season, 'week-9'), null);
 });

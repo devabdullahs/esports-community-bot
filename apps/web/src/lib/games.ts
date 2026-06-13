@@ -34,37 +34,37 @@ export type GameInput = {
   discordChannelId: string | null;
 };
 
-const list = _list as () => GameRecord[];
-const get = _get as (slug: string) => GameRecord | null;
-const create = _create as unknown as (input: GameInput) => GameRecord;
+const list = _list as () => Promise<GameRecord[]>;
+const get = _get as (slug: string) => Promise<GameRecord | null>;
+const create = _create as unknown as (input: GameInput) => Promise<GameRecord>;
 const update = _update as unknown as (
   slug: string,
   input: Omit<GameInput, "slug">,
-) => GameRecord | null;
-const remove = _delete as (slug: string) => { gameDeleted: number; postsDeleted: number };
-const reorder = _reorder as (slugs: string[]) => GameRecord[];
+) => Promise<GameRecord | null>;
+const remove = _delete as (slug: string) => Promise<{ gameDeleted: number; postsDeleted: number }>;
+const reorder = _reorder as (slugs: string[]) => Promise<GameRecord[]>;
 
-export function listGames(): GameRecord[] {
+export function listGames(): Promise<GameRecord[]> {
   return list();
 }
 
-export function getGame(slug: string): GameRecord | null {
+export function getGame(slug: string): Promise<GameRecord | null> {
   return get(slug);
 }
 
-export function createGame(input: GameInput): GameRecord {
+export function createGame(input: GameInput): Promise<GameRecord> {
   return create(input);
 }
 
-export function updateGame(slug: string, input: Omit<GameInput, "slug">): GameRecord | null {
+export function updateGame(slug: string, input: Omit<GameInput, "slug">): Promise<GameRecord | null> {
   return update(slug, input);
 }
 
-export function deleteGame(slug: string): { gameDeleted: number; postsDeleted: number } {
+export function deleteGame(slug: string): Promise<{ gameDeleted: number; postsDeleted: number }> {
   return remove(slug);
 }
 
-export function reorderGames(slugs: string[]): GameRecord[] {
+export function reorderGames(slugs: string[]): Promise<GameRecord[]> {
   return reorder(slugs);
 }
 

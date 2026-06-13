@@ -98,19 +98,19 @@ async function updateBoard(client, guildId, game, channelId, messageId, saveMess
     }
   }
   const sent = await channel.send(payload);
-  saveMessageId(sent.id);
+  await saveMessageId(sent.id);
   logger.info(`[leaderboard] posted ${game || 'all'} board ${sent.id} in guild ${guildId}`);
 }
 
 // Update the combined board AND every per-game board for a guild (all at once).
 export async function updateLeaderboard(client, guildId) {
-  const s = getSettings(guildId);
-  await updateBoard(client, guildId, null, s.leaderboard_channel_id, s.leaderboard_message_id, (id) =>
-    setLeaderboardMessage(guildId, id),
-  );
-  for (const b of getGameLeaderboards(guildId)) {
-    await updateBoard(client, guildId, b.game, b.channel_id, b.message_id, (id) =>
-      setGameLeaderboardMessage(guildId, b.game, id),
-    );
+  const s = await getSettings(guildId);
+  await updateBoard(client, guildId, null, s.leaderboard_channel_id, s.leaderboard_message_id, async (id) => {
+    await setLeaderboardMessage(guildId, id);
+  });
+  for (const b of await getGameLeaderboards(guildId)) {
+    await updateBoard(client, guildId, b.game, b.channel_id, b.message_id, async (id) => {
+      await setGameLeaderboardMessage(guildId, b.game, id);
+    });
   }
 }

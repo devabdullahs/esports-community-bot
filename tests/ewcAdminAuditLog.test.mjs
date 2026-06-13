@@ -8,7 +8,8 @@ const dir = mkdtempSync(join(tmpdir(), 'ewc-audit-'));
 process.env.DB_PATH = join(dir, 'bot.sqlite');
 process.env.LOG_LEVEL = 'error';
 
-const { closeDb, db } = await import('../src/db/index.js');
+const { closeDb } = await import('../src/db/index.js');
+const { run } = await import('../src/db/client.js');
 const { recordAdminAudit, listAdminAuditLog } = await import('../src/db/ewcAdminAuditLog.js');
 
 test.after(() => {
@@ -59,10 +60,11 @@ test('records two entries and lists them newest-first with hydrated details', as
 
 test('malformed details row hydrates to null without throwing', async () => {
   // Insert a row with invalid JSON directly via db to simulate corruption.
-  db.prepare(
+  await run(
     `INSERT INTO ewc_admin_audit_log (actor_id, actor_name, action, target, details)
-     VALUES (?, ?, ?, ?, ?)`,
-  ).run('333333333333333333', 'Charlie', 'game.update', 'bad-game', 'not-valid-json{{{');
+     VALUES ($1, $2, $3, $4, $5)`,
+    ['333333333333333333', 'Charlie', 'game.update', 'bad-game', 'not-valid-json{{{'],
+  );
 
   // listAdminAuditLog must not throw.
   const entries = await listAdminAuditLog();

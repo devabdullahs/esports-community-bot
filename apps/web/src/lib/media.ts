@@ -41,35 +41,35 @@ export type MediaChannelInput = {
   links: MediaLink[];
 };
 
-const list = _list as () => MediaChannelRecord[];
-const get = _get as (slug: string) => MediaChannelRecord | null;
-const create = _create as unknown as (input: MediaChannelInput) => MediaChannelRecord;
+const list = _list as () => Promise<MediaChannelRecord[]>;
+const get = _get as (slug: string) => Promise<MediaChannelRecord | null>;
+const create = _create as unknown as (input: MediaChannelInput) => Promise<MediaChannelRecord>;
 const update = _update as unknown as (
   slug: string,
   input: Omit<MediaChannelInput, "slug">,
-) => MediaChannelRecord | null;
-const remove = _delete as (slug: string) => { deleted: number };
-const reorder = _reorder as (slugs: string[]) => MediaChannelRecord[];
+) => Promise<MediaChannelRecord | null>;
+const remove = _delete as (slug: string) => Promise<{ deleted: number }>;
+const reorder = _reorder as (slugs: string[]) => Promise<MediaChannelRecord[]>;
 
-export function listMediaChannels(): MediaChannelRecord[] {
+export function listMediaChannels(): Promise<MediaChannelRecord[]> {
   return list();
 }
-export function getMediaChannel(slug: string): MediaChannelRecord | null {
+export function getMediaChannel(slug: string): Promise<MediaChannelRecord | null> {
   return get(slug);
 }
-export function createMediaChannel(input: MediaChannelInput): MediaChannelRecord {
+export function createMediaChannel(input: MediaChannelInput): Promise<MediaChannelRecord> {
   return create(input);
 }
 export function updateMediaChannel(
   slug: string,
   input: Omit<MediaChannelInput, "slug">,
-): MediaChannelRecord | null {
+): Promise<MediaChannelRecord | null> {
   return update(slug, input);
 }
-export function deleteMediaChannel(slug: string): { deleted: number } {
+export function deleteMediaChannel(slug: string): Promise<{ deleted: number }> {
   return remove(slug);
 }
-export function reorderMediaChannels(slugs: string[]): MediaChannelRecord[] {
+export function reorderMediaChannels(slugs: string[]): Promise<MediaChannelRecord[]> {
   return reorder(slugs);
 }
 

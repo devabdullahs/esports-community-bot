@@ -25,7 +25,7 @@ export async function GET() {
   const access = await getAdminAccess();
   if (!access.session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   if (!isSuper(access)) return NextResponse.json({ error: "Super admin only" }, { status: 403 });
-  return NextResponse.json({ admins: listAdmins() });
+  return NextResponse.json({ admins: await listAdmins() });
 }
 
 export async function POST(request: Request) {
@@ -44,12 +44,12 @@ export async function POST(request: Request) {
   }
   const displayName = rawDisplayName;
 
-  const games = sanitizeScopes(body.games, listGames().map((g) => g.slug));
-  const media = sanitizeScopes(body.media, listMediaChannels().map((c) => c.slug));
+  const games = sanitizeScopes(body.games, (await listGames()).map((g) => g.slug));
+  const media = sanitizeScopes(body.media, (await listMediaChannels()).map((c) => c.slug));
 
-  upsertAdmin({ discordId, displayName });
-  setAdminGameScopes(discordId, games);
-  setAdminMediaScopes(discordId, media);
-  recordAdminAudit(access, "team.upsert", discordId);
-  return NextResponse.json(getAdmin(discordId));
+  await upsertAdmin({ discordId, displayName });
+  await setAdminGameScopes(discordId, games);
+  await setAdminMediaScopes(discordId, media);
+  await recordAdminAudit(access, "team.upsert", discordId);
+  return NextResponse.json(await getAdmin(discordId));
 }

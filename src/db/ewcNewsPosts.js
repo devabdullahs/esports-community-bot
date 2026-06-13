@@ -1,4 +1,4 @@
-import { db } from './index.js';
+import { all, get, run, transaction } from './client.js';
 import {
   getTranslationForLocale,
   isNewsContentMode,
@@ -6,6 +6,10 @@ import {
   isNewsLocale,
   resolvePostForLocale,
 } from '../lib/ewcNewsContent.js';
+
+function nowText() {
+  return new Date().toISOString().slice(0, 19).replace('T', ' ');
+}
 
 function hydrateTranslation(row) {
   return {
@@ -16,15 +20,14 @@ function hydrateTranslation(row) {
   };
 }
 
-function translationsForPost(id) {
-  const rows = db
-    .prepare(
-      `SELECT locale, title, summary, body
-       FROM ewc_news_post_translations
-       WHERE post_id = ?
-       ORDER BY locale`,
-    )
-    .all(id);
+async function translationsForPost(id) {
+  const rows = await all(
+    `SELECT locale, title, summary, body
+     FROM ewc_news_post_translations
+     WHERE post_id = $1
+     ORDER BY locale`,
+    [id],
+  );
   return Object.fromEntries(rows.map((row) => [row.locale, hydrateTranslation(row)]));
 }
 
@@ -40,7 +43,7 @@ function withResolvedFields(post, locale = post?.defaultLocale || 'en') {
   };
 }
 
-function hydrate(row, locale) {
+async function hydrate(row, locale) {
   if (!row) return null;
   const post = {
     id: row.id,
@@ -55,7 +58,7 @@ function hydrate(row, locale) {
     createdAt: row.created_at,
     updatedAt: row.updated_at,
     publishedAt: row.published_at,
-    translations: translationsForPost(row.id),
+    translations: await translationsForPost(row.id),
   };
 
   if (Object.keys(post.translations).length === 0) {
@@ -140,103 +143,88 @@ function legacyTranslation(input) {
   );
 }
 
-function replaceTranslations(id, translations) {
-  db.prepare('DELETE FROM ewc_news_post_translations WHERE post_id = ?').run(id);
-  const insert = db.prepare(
-    `INSERT INTO ewc_news_post_translations
-       (post_id, locale, title, summary, body, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, datetime('now'), datetime('now'))`,
-  );
+async function replaceTranslations(id, translations, client) {
+  await client.run('DELETE FROM ewc_news_post_translations WHERE post_id = $1', [id]);
+  const now = nowText();
   for (const translation of Object.values(translations)) {
-    insert.run(
-      id,
-      translation.locale,
-      translation.title,
-      translation.summary,
-      translation.body,
+    await client.run(
+      `INSERT INTO ewc_news_post_translations
+         (post_id, locale, title, summary, body, created_at, updated_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+      [id, translation.locale, translation.title, translation.summary, translation.body, now, now],
     );
   }
 }
 
-function syncLegacyColumns(id, input) {
+async function syncLegacyColumns(id, input, client) {
   const fallback = legacyTranslation(input);
-  db.prepare(
+  await client.run(
     `UPDATE ewc_news_posts
-     SET locale = ?, title = ?, summary = ?, body = ?
-     WHERE id = ?`,
-  ).run(fallback.locale, fallback.title, fallback.summary, fallback.body, id);
-}
-
-export function getEwcNewsPostById(id) {
-  return hydrate(db.prepare('SELECT * FROM ewc_news_posts WHERE id = ?').get(id));
-}
-
-export function getPublishedEwcNewsPost(id, locale = 'en') {
-  return hydrate(
-    db.prepare("SELECT * FROM ewc_news_posts WHERE id = ? AND status = 'published'").get(id),
-    locale,
+     SET locale = $1, title = $2, summary = $3, body = $4
+     WHERE id = $5`,
+    [fallback.locale, fallback.title, fallback.summary, fallback.body, id],
   );
 }
 
-export function listEwcNewsPostsForAdmin({ gameSlug = null, status = null } = {}) {
+export async function getEwcNewsPostById(id) {
+  return hydrate(await get('SELECT * FROM ewc_news_posts WHERE id = $1', [id]));
+}
+
+export async function getPublishedEwcNewsPost(id, locale = 'en') {
+  return hydrate(await get("SELECT * FROM ewc_news_posts WHERE id = $1 AND status = 'published'", [id]), locale);
+}
+
+export async function listEwcNewsPostsForAdmin({ gameSlug = null, status = null } = {}) {
   let rows;
   if (gameSlug && status) {
-    rows = db
-      .prepare('SELECT * FROM ewc_news_posts WHERE game_slug = ? AND status = ? ORDER BY updated_at DESC, id DESC')
-      .all(gameSlug, status);
+    rows = await all('SELECT * FROM ewc_news_posts WHERE game_slug = $1 AND status = $2 ORDER BY updated_at DESC, id DESC', [
+      gameSlug,
+      status,
+    ]);
   } else if (gameSlug) {
-    rows = db
-      .prepare('SELECT * FROM ewc_news_posts WHERE game_slug = ? ORDER BY updated_at DESC, id DESC')
-      .all(gameSlug);
+    rows = await all('SELECT * FROM ewc_news_posts WHERE game_slug = $1 ORDER BY updated_at DESC, id DESC', [gameSlug]);
   } else if (status) {
-    rows = db
-      .prepare('SELECT * FROM ewc_news_posts WHERE status = ? ORDER BY updated_at DESC, id DESC')
-      .all(status);
+    rows = await all('SELECT * FROM ewc_news_posts WHERE status = $1 ORDER BY updated_at DESC, id DESC', [status]);
   } else {
-    rows = db.prepare('SELECT * FROM ewc_news_posts ORDER BY updated_at DESC, id DESC').all();
+    rows = await all('SELECT * FROM ewc_news_posts ORDER BY updated_at DESC, id DESC');
   }
-  return rows.map((row) => hydrate(row));
+  return Promise.all(rows.map((row) => hydrate(row)));
 }
 
-export function listPublishedEwcNewsPosts({ gameSlug, locale }) {
-  return db
-    .prepare(
-      `SELECT * FROM ewc_news_posts
-       WHERE game_slug = ? AND status = 'published'
-       ORDER BY published_at DESC, id DESC`,
-    )
-    .all(gameSlug)
-    .map((row) => hydrate(row, locale))
-    .filter(Boolean);
+export async function listPublishedEwcNewsPosts({ gameSlug, locale }) {
+  const rows = await all(
+    `SELECT * FROM ewc_news_posts
+     WHERE game_slug = $1 AND status = 'published'
+     ORDER BY published_at DESC, id DESC`,
+    [gameSlug],
+  );
+  return (await Promise.all(rows.map((row) => hydrate(row, locale)))).filter(Boolean);
 }
 
-export function listLatestPublishedEwcNewsPosts({ locale, limit = 4 } = {}) {
-  return db
-    .prepare(
-      `SELECT * FROM ewc_news_posts
-       WHERE status = 'published'
-       ORDER BY published_at DESC, id DESC
-       LIMIT ?`,
-    )
-    .all(Math.max(1, Math.min(20, Number(limit) || 4)))
-    .map((row) => hydrate(row, locale))
-    .filter(Boolean);
+export async function listLatestPublishedEwcNewsPosts({ locale, limit = 4 } = {}) {
+  const rows = await all(
+    `SELECT * FROM ewc_news_posts
+     WHERE status = 'published'
+     ORDER BY published_at DESC, id DESC
+     LIMIT $1`,
+    [Math.max(1, Math.min(20, Number(limit) || 4))],
+  );
+  return (await Promise.all(rows.map((row) => hydrate(row, locale)))).filter(Boolean);
 }
 
-export function createEwcNewsPost(input) {
-  const tx = db.transaction((raw) => {
-    const value = normalizeInput(raw);
+export async function createEwcNewsPost(input) {
+  const id = await transaction(async (tx) => {
+    const value = normalizeInput(input);
     const fallback = legacyTranslation(value);
-    const info = db
-      .prepare(
-        `INSERT INTO ewc_news_posts
-           (game_slug, locale, content_mode, default_locale, title, summary, body, status,
-            author_discord_id, author_name, cover_image_url, cover_placement,
-            created_at, updated_at, published_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'),
-            CASE WHEN ? = 'published' THEN datetime('now') ELSE NULL END)`,
-      )
-      .run(
+    const now = nowText();
+    const row = await tx.get(
+      `INSERT INTO ewc_news_posts
+         (game_slug, locale, content_mode, default_locale, title, summary, body, status,
+          author_discord_id, author_name, cover_image_url, cover_placement,
+          created_at, updated_at, published_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+       RETURNING id`,
+      [
         value.gameSlug,
         fallback.locale,
         value.contentMode,
@@ -249,73 +237,74 @@ export function createEwcNewsPost(input) {
         value.authorName || null,
         value.coverImageUrl || null,
         isNewsCoverPlacement(value.coverPlacement) ? value.coverPlacement : 'top',
+        now,
+        now,
+        value.status === 'published' ? now : null,
+      ],
+    );
+    await replaceTranslations(row.id, value.translations, tx);
+    await syncLegacyColumns(row.id, value, tx);
+    return row.id;
+  });
+  return getEwcNewsPostById(id);
+}
+
+export async function updateEwcNewsPost(id, input) {
+  const updatedId = await transaction(async (tx) => {
+    const value = normalizeInput(input);
+    const fallback = legacyTranslation(value);
+    const now = nowText();
+    const info = await tx.run(
+      `UPDATE ewc_news_posts
+       SET game_slug = $1, locale = $2, content_mode = $3, default_locale = $4, title = $5,
+           summary = $6, body = $7, status = $8, cover_image_url = $9, cover_placement = $10,
+           author_discord_id = COALESCE($11, author_discord_id),
+           author_name = COALESCE($12, author_name),
+           updated_at = $13,
+           published_at = COALESCE(published_at, $14)
+       WHERE id = $15`,
+      [
+        value.gameSlug,
+        fallback.locale,
+        value.contentMode,
+        value.defaultLocale,
+        fallback.title,
+        fallback.summary,
+        fallback.body,
         value.status || 'draft',
-      );
-    const id = info.lastInsertRowid;
-    replaceTranslations(id, value.translations);
-    syncLegacyColumns(id, value);
+        value.coverImageUrl || null,
+        isNewsCoverPlacement(value.coverPlacement) ? value.coverPlacement : 'top',
+        value.authorDiscordId || null,
+        value.authorName || null,
+        now,
+        value.status === 'published' ? now : null,
+        id,
+      ],
+    );
+    if (info.changes === 0) return null;
+    await replaceTranslations(id, value.translations, tx);
+    await syncLegacyColumns(id, value, tx);
     return id;
   });
-  return getEwcNewsPostById(tx(input));
-}
-
-export function updateEwcNewsPost(id, input) {
-  const tx = db.transaction((postId, raw) => {
-    const value = normalizeInput(raw);
-    const fallback = legacyTranslation(value);
-    const info = db
-      .prepare(
-        `UPDATE ewc_news_posts
-         SET game_slug = ?, locale = ?, content_mode = ?, default_locale = ?, title = ?,
-             summary = ?, body = ?, status = ?, cover_image_url = ?, cover_placement = ?,
-             author_discord_id = COALESCE(?, author_discord_id),
-             author_name = COALESCE(?, author_name),
-             updated_at = datetime('now'),
-             published_at = COALESCE(published_at, CASE WHEN ? = 'published' THEN datetime('now') ELSE NULL END)
-         WHERE id = ?`,
-      )
-      .run(
-        value.gameSlug,
-        fallback.locale,
-        value.contentMode,
-        value.defaultLocale,
-        fallback.title,
-        fallback.summary,
-        fallback.body,
-        value.status || 'draft',
-        value.coverImageUrl || null,
-        isNewsCoverPlacement(value.coverPlacement) ? value.coverPlacement : 'top',
-        value.authorDiscordId || null,
-        value.authorName || null,
-        value.status || 'draft',
-        postId,
-      );
-    if (info.changes === 0) return null;
-    replaceTranslations(postId, value.translations);
-    syncLegacyColumns(postId, value);
-    return postId;
-  });
-  const updatedId = tx(id, input);
   return updatedId === null ? null : getEwcNewsPostById(updatedId);
 }
 
-export function setEwcNewsPostStatus(id, status) {
-  const info = db
-    .prepare(
-      `UPDATE ewc_news_posts
-       SET status = ?, updated_at = datetime('now'),
-           published_at = COALESCE(published_at, CASE WHEN ? = 'published' THEN datetime('now') ELSE NULL END)
-       WHERE id = ?`,
-    )
-    .run(status, status, id);
+export async function setEwcNewsPostStatus(id, status) {
+  const now = nowText();
+  const info = await run(
+    `UPDATE ewc_news_posts
+     SET status = $1, updated_at = $2,
+         published_at = COALESCE(published_at, $3)
+     WHERE id = $4`,
+    [status, now, status === 'published' ? now : null, id],
+  );
   if (info.changes === 0) return null;
   return getEwcNewsPostById(id);
 }
 
-export function deleteEwcNewsPost(id) {
-  const tx = db.transaction((postId) => {
-    db.prepare('DELETE FROM ewc_news_post_translations WHERE post_id = ?').run(postId);
-    return db.prepare('DELETE FROM ewc_news_posts WHERE id = ?').run(postId);
+export async function deleteEwcNewsPost(id) {
+  return transaction(async (tx) => {
+    await tx.run('DELETE FROM ewc_news_post_translations WHERE post_id = $1', [id]);
+    return tx.run('DELETE FROM ewc_news_posts WHERE id = $1', [id]);
   });
-  return tx(id);
 }

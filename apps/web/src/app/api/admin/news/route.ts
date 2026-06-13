@@ -20,7 +20,7 @@ export async function GET(request: Request) {
   const status =
     statusParam === "draft" || statusParam === "published" ? (statusParam as NewsStatus) : null;
 
-  const posts = listAdminNewsPosts({ gameSlug, status });
+  const posts = await listAdminNewsPosts({ gameSlug, status });
   // Scope: regular admins only see posts for their assigned games.
   const scoped =
     access.games === "ALL" ? posts : posts.filter((p) => access.games.includes(p.gameSlug));
@@ -35,7 +35,7 @@ export async function POST(request: Request) {
   const body = await request.json().catch(() => ({}));
   const validated = validateNewsInput(body);
   if (!validated.ok) return NextResponse.json({ error: validated.error }, { status: 400 });
-  if (!getGame(validated.value.gameSlug)) {
+  if (!(await getGame(validated.value.gameSlug))) {
     return NextResponse.json({ error: "Unknown game" }, { status: 400 });
   }
   if (!canManageGame(access, validated.value.gameSlug)) {
@@ -44,7 +44,7 @@ export async function POST(request: Request) {
 
   // Author defaults to the acting admin, but the editor's Author picker may credit
   // another eligible admin (super, or roster admin scoped to this game).
-  const post = createNewsPost({
+  const post = await createNewsPost({
     ...validated.value,
     authorDiscordId: validated.value.authorDiscordId ?? access.discordUserId ?? null,
     authorName: validated.value.authorName ?? access.displayName ?? null,

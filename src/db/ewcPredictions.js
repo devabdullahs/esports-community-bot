@@ -1,4 +1,4 @@
-import { db } from './index.js';
+import { all, get, run, transaction } from './client.js';
 
 const parseJson = (value, fallback) => {
   try {
@@ -9,6 +9,14 @@ const parseJson = (value, fallback) => {
 };
 
 const stringify = (value) => JSON.stringify(value ?? null);
+
+function nowText() {
+  return new Date().toISOString().slice(0, 19).replace('T', ' ');
+}
+
+function changes(result) {
+  return result?.changes ?? result?.rowCount ?? 0;
+}
 
 function hydrateWeek(row) {
   if (!row) return null;
@@ -30,7 +38,16 @@ function hydratePrediction(row) {
   };
 }
 
-export function upsertEwcWeek({
+function hydrateSeason(row) {
+  if (!row) return null;
+  return { ...row, final: parseJson(row.final_json, []) };
+}
+
+async function runWith(client, sql, params) {
+  return client ? client.run(sql, params) : run(sql, params);
+}
+
+export async function upsertEwcWeek({
   guildId,
   season = '2026',
   weekKey,
@@ -43,10 +60,10 @@ export function upsertEwcWeek({
   games,
   createdBy,
 }) {
-  db.prepare(
+  await run(
     `INSERT INTO ewc_prediction_weeks
        (guild_id, season, week_key, label, start_at, end_at, open_at, close_at, score_after, games_json, created_by, status, created_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'open', datetime('now'))
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, 'open', $12)
      ON CONFLICT (guild_id, season, week_key) DO UPDATE SET
        label = excluded.label,
        start_at = excluded.start_at,
@@ -56,109 +73,124 @@ export function upsertEwcWeek({
        score_after = excluded.score_after,
        games_json = excluded.games_json,
        status = CASE WHEN ewc_prediction_weeks.status = 'scored' THEN 'scored' ELSE 'open' END`,
-  ).run(
-    guildId,
-    season,
-    weekKey,
-    label,
-    startAt ?? null,
-    endAt ?? null,
-    openAt ?? null,
-    closeAt ?? null,
-    scoreAfter ?? null,
-    games ? stringify(games) : null,
-    createdBy ?? null,
+    [
+      guildId,
+      season,
+      weekKey,
+      label,
+      startAt ?? null,
+      endAt ?? null,
+      openAt ?? null,
+      closeAt ?? null,
+      scoreAfter ?? null,
+      games ? stringify(games) : null,
+      createdBy ?? null,
+      nowText(),
+    ],
   );
   return getEwcWeek(guildId, season, weekKey);
 }
 
-export function getEwcWeek(guildId, season, weekKey) {
+export async function getEwcWeek(guildId, season, weekKey) {
   return hydrateWeek(
-    db
-      .prepare('SELECT * FROM ewc_prediction_weeks WHERE guild_id = ? AND season = ? AND week_key = ?')
-      .get(guildId, season, weekKey),
+    await get('SELECT * FROM ewc_prediction_weeks WHERE guild_id = $1 AND season = $2 AND week_key = $3', [
+      guildId,
+      season,
+      weekKey,
+    ]),
   );
 }
 
-export function listEwcWeeks(guildId, season = '2026') {
-  return db
-    .prepare('SELECT * FROM ewc_prediction_weeks WHERE guild_id = ? AND season = ? ORDER BY COALESCE(open_at, id), id')
-    .all(guildId, season)
-    .map(hydrateWeek);
+export async function listEwcWeeks(guildId, season = '2026') {
+  return (
+    await all(
+      'SELECT * FROM ewc_prediction_weeks WHERE guild_id = $1 AND season = $2 ORDER BY COALESCE(open_at, id), id',
+      [guildId, season],
+    )
+  ).map(hydrateWeek);
 }
 
-export function listEwcWeeksForAutomation(nowSec) {
-  return db
-    .prepare(
+export async function listEwcWeeksForAutomation(nowSec) {
+  return (
+    await all(
       `SELECT *
        FROM ewc_prediction_weeks
        WHERE status != 'scored'
          AND (
-           (baseline_json IS NULL AND COALESCE(close_at, open_at) IS NOT NULL AND COALESCE(close_at, open_at) <= ?)
-           OR (close_at IS NOT NULL AND close_at <= ?)
+           (baseline_json IS NULL AND COALESCE(close_at, open_at) IS NOT NULL AND COALESCE(close_at, open_at) <= $1)
+           OR (close_at IS NOT NULL AND close_at <= $2)
          )
        ORDER BY season, COALESCE(close_at, open_at, id), id`,
+      [nowSec, nowSec],
     )
-    .all(nowSec, nowSec)
-    .map(hydrateWeek);
+  ).map(hydrateWeek);
 }
 
-export function setEwcWeekStatus(weekId, status) {
-  db.prepare(
+export async function setEwcWeekStatus(weekId, status, client = null) {
+  await runWith(
+    client,
     `UPDATE ewc_prediction_weeks
-     SET status = ?, scored_at = CASE WHEN ? = 'scored' THEN scored_at ELSE NULL END
-     WHERE id = ?`,
-  ).run(status, status, weekId);
+     SET status = $1, scored_at = CASE WHEN $2 = 'scored' THEN scored_at ELSE NULL END
+     WHERE id = $3`,
+    [status, status, weekId],
+  );
 }
 
-export function reopenEwcWeek(weekId) {
-  db.prepare(
+export async function reopenEwcWeek(weekId) {
+  await run(
     `UPDATE ewc_prediction_weeks
      SET status = 'open', final_json = NULL, results_json = NULL, scored_at = NULL
-     WHERE id = ?`,
-  ).run(weekId);
+     WHERE id = $1`,
+    [weekId],
+  );
 }
 
-export function setEwcWeekSnapshot(weekId, type, standings) {
+export async function setEwcWeekSnapshot(weekId, type, standings) {
   const column = type === 'baseline' ? 'baseline_json' : 'final_json';
-  db.prepare(`UPDATE ewc_prediction_weeks SET ${column} = ? WHERE id = ?`).run(stringify(standings), weekId);
+  await run(`UPDATE ewc_prediction_weeks SET ${column} = $1 WHERE id = $2`, [stringify(standings), weekId]);
 }
 
-export function markEwcWeekScored(weekId, finalStandings) {
-  db.prepare(
+export async function markEwcWeekScored(weekId, finalStandings, client = null) {
+  await runWith(
+    client,
     `UPDATE ewc_prediction_weeks
-     SET status = 'scored', final_json = ?, scored_at = datetime('now')
-     WHERE id = ?`,
-  ).run(stringify(finalStandings), weekId);
+     SET status = 'scored', final_json = $1, scored_at = $2
+     WHERE id = $3`,
+    [stringify(finalStandings), nowText(), weekId],
+  );
 }
 
-export function markEwcWeekScoredWithResults(weekId, finalStandings, results) {
-  db.prepare(
+export async function markEwcWeekScoredWithResults(weekId, finalStandings, results, client = null) {
+  await runWith(
+    client,
     `UPDATE ewc_prediction_weeks
-     SET status = 'scored', final_json = ?, results_json = ?, scored_at = datetime('now')
-     WHERE id = ?`,
-  ).run(stringify(finalStandings), stringify(results), weekId);
+     SET status = 'scored', final_json = $1, results_json = $2, scored_at = $3
+     WHERE id = $4`,
+    [stringify(finalStandings), stringify(results), nowText(), weekId],
+  );
 }
 
-export function setEwcWeekResults(weekId, results) {
-  db.prepare('UPDATE ewc_prediction_weeks SET results_json = ? WHERE id = ?').run(stringify(results), weekId);
+export async function setEwcWeekResults(weekId, results) {
+  await run('UPDATE ewc_prediction_weeks SET results_json = $1 WHERE id = $2', [stringify(results), weekId]);
 }
 
-export function upsertWeeklyPrediction({ guildId, weekId, userId, picks }) {
-  db.prepare(
+export async function upsertWeeklyPrediction({ guildId, weekId, userId, picks }) {
+  const now = nowText();
+  await run(
     `INSERT INTO ewc_weekly_predictions (guild_id, week_id, user_id, picks_json, created_at, updated_at)
-     VALUES (?, ?, ?, ?, datetime('now'), datetime('now'))
+     VALUES ($1, $2, $3, $4, $5, $5)
      ON CONFLICT (guild_id, week_id, user_id) DO UPDATE SET
        picks_json = excluded.picks_json,
        score = NULL,
        details_json = NULL,
-       updated_at = datetime('now')`,
-  ).run(guildId, weekId, userId, stringify(picks));
+       updated_at = excluded.updated_at`,
+    [guildId, weekId, userId, stringify(picks), now],
+  );
   return getWeeklyPrediction(guildId, weekId, userId);
 }
 
-export function upsertWeeklyGamePick({ guildId, weekId, userId, gameKey, pick, game = null, event = null }) {
-  const existing = getWeeklyPrediction(guildId, weekId, userId);
+export async function upsertWeeklyGamePick({ guildId, weekId, userId, gameKey, pick, game = null, event = null }) {
+  const existing = await getWeeklyPrediction(guildId, weekId, userId);
   const current = Array.isArray(existing?.picks) ? existing.picks : [];
   const next = current.filter((entry) => {
     if (typeof entry === 'string') return false;
@@ -175,58 +207,56 @@ export function upsertWeeklyGamePick({ guildId, weekId, userId, gameKey, pick, g
   return upsertWeeklyPrediction({ guildId, weekId, userId, picks: next });
 }
 
-export function getWeeklyPrediction(guildId, weekId, userId) {
+export async function getWeeklyPrediction(guildId, weekId, userId) {
   return hydratePrediction(
-    db
-      .prepare('SELECT * FROM ewc_weekly_predictions WHERE guild_id = ? AND week_id = ? AND user_id = ?')
-      .get(guildId, weekId, userId),
+    await get('SELECT * FROM ewc_weekly_predictions WHERE guild_id = $1 AND week_id = $2 AND user_id = $3', [
+      guildId,
+      weekId,
+      userId,
+    ]),
   );
 }
 
-export function listWeeklyPredictions(weekId) {
-  return db.prepare('SELECT * FROM ewc_weekly_predictions WHERE week_id = ?').all(weekId).map(hydratePrediction);
+export async function listWeeklyPredictions(weekId) {
+  return (await all('SELECT * FROM ewc_weekly_predictions WHERE week_id = $1', [weekId])).map(hydratePrediction);
 }
 
-export function saveWeeklyPredictionScore(guildId, weekId, userId, score, details) {
-  db.prepare(
+export async function saveWeeklyPredictionScore(guildId, weekId, userId, score, details, client = null) {
+  await runWith(
+    client,
     `UPDATE ewc_weekly_predictions
-     SET score = ?, details_json = ?, updated_at = datetime('now')
-     WHERE guild_id = ? AND week_id = ? AND user_id = ?`,
-  ).run(score, stringify(details), guildId, weekId, userId);
+     SET score = $1, details_json = $2, updated_at = $3
+     WHERE guild_id = $4 AND week_id = $5 AND user_id = $6`,
+    [score, stringify(details), nowText(), guildId, weekId, userId],
+  );
 }
 
-export function clearWeeklyPredictionScores(weekId) {
-  return db.prepare('UPDATE ewc_weekly_predictions SET score = NULL, details_json = NULL WHERE week_id = ?').run(weekId);
+export async function clearWeeklyPredictionScores(weekId) {
+  return run('UPDATE ewc_weekly_predictions SET score = NULL, details_json = NULL WHERE week_id = $1', [weekId]);
 }
 
-export function deleteEwcWeek(weekId) {
-  // FK cascade is enabled, but explicit child deletes let callers report the
-  // deleted prediction count while keeping the operation atomic.
-  const run = db.transaction((id) => {
-    const predictions = db
-      .prepare(`DELETE FROM ewc_weekly_predictions WHERE week_id = ?`)
-      .run(id).changes;
-    const weeks = db
-      .prepare(`DELETE FROM ewc_prediction_weeks WHERE id = ?`)
-      .run(id).changes;
+export async function deleteEwcWeek(weekId, client = null) {
+  const tx = client ? async (fn) => fn(client) : transaction;
+  return tx(async (runner) => {
+    const predictions = changes(await runner.run('DELETE FROM ewc_weekly_predictions WHERE week_id = $1', [weekId]));
+    const weeks = changes(await runner.run('DELETE FROM ewc_prediction_weeks WHERE id = $1', [weekId]));
     return { weeks, predictions };
   });
-  return run(weekId);
 }
 
-export function weeklyLeaderboard(weekId, limit = 20, offset = 0) {
-  return db
-    .prepare(
+export async function weeklyLeaderboard(weekId, limit = 20, offset = 0) {
+  return (
+    await all(
       `SELECT * FROM ewc_weekly_predictions
-       WHERE week_id = ? AND score IS NOT NULL
+       WHERE week_id = $1 AND score IS NOT NULL
        ORDER BY score DESC, updated_at ASC
-       LIMIT ? OFFSET ?`,
+       LIMIT $2 OFFSET $3`,
+      [weekId, limit, offset],
     )
-    .all(weekId, limit, offset)
-    .map(hydratePrediction);
+  ).map(hydratePrediction);
 }
 
-export function upsertEwcSeason({
+export async function upsertEwcSeason({
   guildId,
   season = '2026',
   label,
@@ -237,10 +267,10 @@ export function upsertEwcSeason({
   bestWeeks,
   createdBy,
 }) {
-  db.prepare(
+  await run(
     `INSERT INTO ewc_prediction_seasons
        (guild_id, season, label, open_at, close_at, score_after, top_size, best_weeks, created_by, status, created_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'open', datetime('now'))
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'open', $10)
      ON CONFLICT (guild_id, season) DO UPDATE SET
        label = excluded.label,
        open_at = excluded.open_at,
@@ -249,223 +279,244 @@ export function upsertEwcSeason({
        top_size = excluded.top_size,
        best_weeks = excluded.best_weeks,
        status = CASE WHEN ewc_prediction_seasons.status = 'scored' THEN 'scored' ELSE 'open' END`,
-  ).run(guildId, season, label, openAt ?? null, closeAt ?? null, scoreAfter ?? null, topSize, bestWeeks ?? null, createdBy ?? null);
+    [
+      guildId,
+      season,
+      label,
+      openAt ?? null,
+      closeAt ?? null,
+      scoreAfter ?? null,
+      topSize,
+      bestWeeks ?? null,
+      createdBy ?? null,
+      nowText(),
+    ],
+  );
   return getEwcSeason(guildId, season);
 }
 
-export function getEwcSeason(guildId, season = '2026') {
-  const row = db.prepare('SELECT * FROM ewc_prediction_seasons WHERE guild_id = ? AND season = ?').get(guildId, season);
-  if (!row) return null;
-  return { ...row, final: parseJson(row.final_json, []) };
+export async function getEwcSeason(guildId, season = '2026') {
+  return hydrateSeason(await get('SELECT * FROM ewc_prediction_seasons WHERE guild_id = $1 AND season = $2', [guildId, season]));
 }
 
-export function listEwcSeasonsForAutomation(nowSec) {
-  return db
-    .prepare(
+export async function listEwcSeasonsForAutomation(nowSec) {
+  return (
+    await all(
       `SELECT *
        FROM ewc_prediction_seasons
        WHERE status != 'scored'
          AND close_at IS NOT NULL
-         AND close_at <= ?
+         AND close_at <= $1
        ORDER BY season`,
+      [nowSec],
     )
-    .all(nowSec)
-    .map((row) => ({ ...row, final: parseJson(row.final_json, []) }));
+  ).map(hydrateSeason);
 }
 
-export function setEwcSeasonStatus(guildId, season, status) {
-  db.prepare(
+export async function setEwcSeasonStatus(guildId, season, status, client = null) {
+  await runWith(
+    client,
     `UPDATE ewc_prediction_seasons
-     SET status = ?, scored_at = CASE WHEN ? = 'scored' THEN scored_at ELSE NULL END
-     WHERE guild_id = ? AND season = ?`,
-  ).run(
-    status,
-    status,
-    guildId,
-    season,
+     SET status = $1, scored_at = CASE WHEN $2 = 'scored' THEN scored_at ELSE NULL END
+     WHERE guild_id = $3 AND season = $4`,
+    [status, status, guildId, season],
   );
 }
 
-export function reopenEwcSeason(guildId, season) {
-  db.prepare(
+export async function reopenEwcSeason(guildId, season) {
+  await run(
     `UPDATE ewc_prediction_seasons
      SET status = 'open', final_json = NULL, scored_at = NULL
-     WHERE guild_id = ? AND season = ?`,
-  ).run(guildId, season);
+     WHERE guild_id = $1 AND season = $2`,
+    [guildId, season],
+  );
 }
 
-export function markEwcSeasonScored(guildId, season, finalStandings) {
-  db.prepare(
+export async function markEwcSeasonScored(guildId, season, finalStandings, client = null) {
+  await runWith(
+    client,
     `UPDATE ewc_prediction_seasons
-     SET status = 'scored', final_json = ?, scored_at = datetime('now')
-     WHERE guild_id = ? AND season = ?`,
-  ).run(stringify(finalStandings), guildId, season);
+     SET status = 'scored', final_json = $1, scored_at = $2
+     WHERE guild_id = $3 AND season = $4`,
+    [stringify(finalStandings), nowText(), guildId, season],
+  );
 }
 
-export function upsertSeasonPrediction({ guildId, season = '2026', userId, picks }) {
-  db.prepare(
+export async function upsertSeasonPrediction({ guildId, season = '2026', userId, picks }) {
+  const now = nowText();
+  await run(
     `INSERT INTO ewc_season_predictions (guild_id, season, user_id, picks_json, created_at, updated_at)
-     VALUES (?, ?, ?, ?, datetime('now'), datetime('now'))
+     VALUES ($1, $2, $3, $4, $5, $5)
      ON CONFLICT (guild_id, season, user_id) DO UPDATE SET
        picks_json = excluded.picks_json,
        score = NULL,
        details_json = NULL,
-       updated_at = datetime('now')`,
-  ).run(guildId, season, userId, stringify(picks));
+       updated_at = excluded.updated_at`,
+    [guildId, season, userId, stringify(picks), now],
+  );
   return getSeasonPrediction(guildId, season, userId);
 }
 
-export function getSeasonPrediction(guildId, season, userId) {
+export async function getSeasonPrediction(guildId, season, userId) {
   return hydratePrediction(
-    db
-      .prepare('SELECT * FROM ewc_season_predictions WHERE guild_id = ? AND season = ? AND user_id = ?')
-      .get(guildId, season, userId),
+    await get('SELECT * FROM ewc_season_predictions WHERE guild_id = $1 AND season = $2 AND user_id = $3', [
+      guildId,
+      season,
+      userId,
+    ]),
   );
 }
 
-export function listSeasonPredictions(guildId, season = '2026') {
-  return db
-    .prepare('SELECT * FROM ewc_season_predictions WHERE guild_id = ? AND season = ?')
-    .all(guildId, season)
-    .map(hydratePrediction);
+export async function listSeasonPredictions(guildId, season = '2026') {
+  return (
+    await all('SELECT * FROM ewc_season_predictions WHERE guild_id = $1 AND season = $2', [guildId, season])
+  ).map(hydratePrediction);
 }
 
-export function saveSeasonPredictionScore(guildId, season, userId, score, details) {
-  db.prepare(
+export async function saveSeasonPredictionScore(guildId, season, userId, score, details, client = null) {
+  await runWith(
+    client,
     `UPDATE ewc_season_predictions
-     SET score = ?, details_json = ?, updated_at = datetime('now')
-     WHERE guild_id = ? AND season = ? AND user_id = ?`,
-  ).run(score, stringify(details), guildId, season, userId);
+     SET score = $1, details_json = $2, updated_at = $3
+     WHERE guild_id = $4 AND season = $5 AND user_id = $6`,
+    [score, stringify(details), nowText(), guildId, season, userId],
+  );
 }
 
-export function clearSeasonPredictionScores(guildId, season = '2026') {
-  return db
-    .prepare('UPDATE ewc_season_predictions SET score = NULL, details_json = NULL WHERE guild_id = ? AND season = ?')
-    .run(guildId, season);
+export async function clearSeasonPredictionScores(guildId, season = '2026') {
+  return run('UPDATE ewc_season_predictions SET score = NULL, details_json = NULL WHERE guild_id = $1 AND season = $2', [
+    guildId,
+    season,
+  ]);
 }
 
-export function seasonLeaderboard(guildId, season = '2026', limit = 20, offset = 0) {
-  return db
-    .prepare(
+export async function seasonLeaderboard(guildId, season = '2026', limit = 20, offset = 0) {
+  return (
+    await all(
       `SELECT * FROM ewc_season_predictions
-       WHERE guild_id = ? AND season = ? AND score IS NOT NULL
+       WHERE guild_id = $1 AND season = $2 AND score IS NOT NULL
        ORDER BY score DESC, updated_at ASC
-       LIMIT ? OFFSET ?`,
+       LIMIT $3 OFFSET $4`,
+      [guildId, season, limit, offset],
     )
-    .all(guildId, season, limit, offset)
-    .map(hydratePrediction);
+  ).map(hydratePrediction);
 }
 
-export function countWeeklyScored(weekId) {
-  return db.prepare('SELECT COUNT(*) c FROM ewc_weekly_predictions WHERE week_id = ? AND score IS NOT NULL').get(weekId).c;
+export async function countWeeklyScored(weekId) {
+  const row = await get('SELECT COUNT(*) c FROM ewc_weekly_predictions WHERE week_id = $1 AND score IS NOT NULL', [weekId]);
+  return Number(row?.c || 0);
 }
 
-export function countSeasonScored(guildId, season = '2026') {
-  return db
-    .prepare('SELECT COUNT(*) c FROM ewc_season_predictions WHERE guild_id = ? AND season = ? AND score IS NOT NULL')
-    .get(guildId, season).c;
+export async function countSeasonScored(guildId, season = '2026') {
+  const row = await get(
+    'SELECT COUNT(*) c FROM ewc_season_predictions WHERE guild_id = $1 AND season = $2 AND score IS NOT NULL',
+    [guildId, season],
+  );
+  return Number(row?.c || 0);
 }
 
-export function countOverallScored(guildId, season = '2026') {
-  return db
-    .prepare(
-      `SELECT COUNT(*) c FROM (
-         SELECT user_id FROM ewc_weekly_predictions wp
-           JOIN ewc_prediction_weeks w ON w.id = wp.week_id
-           WHERE wp.guild_id = ? AND w.season = ? AND wp.score IS NOT NULL
-         UNION
-         SELECT user_id FROM ewc_season_predictions
-           WHERE guild_id = ? AND season = ? AND score IS NOT NULL
-       )`,
-    )
-    .get(guildId, season, guildId, season).c;
+export async function countOverallScored(guildId, season = '2026') {
+  const row = await get(
+    `SELECT COUNT(*) c FROM (
+       SELECT user_id FROM ewc_weekly_predictions wp
+         JOIN ewc_prediction_weeks w ON w.id = wp.week_id
+         WHERE wp.guild_id = $1 AND w.season = $2 AND wp.score IS NOT NULL
+       UNION
+       SELECT user_id FROM ewc_season_predictions
+         WHERE guild_id = $3 AND season = $4 AND score IS NOT NULL
+     ) counted`,
+    [guildId, season, guildId, season],
+  );
+  return Number(row?.c || 0);
+}
+
+async function overallBestWeekCount(guildId, season) {
+  const row = await get('SELECT best_weeks FROM ewc_prediction_seasons WHERE guild_id = $1 AND season = $2', [
+    guildId,
+    season,
+  ]);
+  return row && row.best_weeks > 0 ? row.best_weeks : 999999;
 }
 
 // Overall = each user's weekly scores + their season score. When the season has best_weeks set,
 // only each user's top-N weekly scores count (fairer: neutralizes participation + week unevenness).
-export function overallLeaderboard(guildId, season = '2026', limit = 20, offset = 0) {
-  const s = db.prepare('SELECT best_weeks FROM ewc_prediction_seasons WHERE guild_id = ? AND season = ?').get(guildId, season);
-  const k = s && s.best_weeks > 0 ? s.best_weeks : 999999; // null/0 means count every week
-  return db
-    .prepare(
-      `WITH ranked AS (
-         SELECT wp.user_id, wp.score,
-                ROW_NUMBER() OVER (PARTITION BY wp.user_id ORDER BY wp.score DESC, wp.week_id) AS rn
-         FROM ewc_weekly_predictions wp
-         JOIN ewc_prediction_weeks w ON w.id = wp.week_id
-         WHERE wp.guild_id = ? AND w.season = ? AND wp.score IS NOT NULL
-       ),
-       scores AS (
-         SELECT user_id, score FROM ranked WHERE rn <= ?
-         UNION ALL
-         SELECT user_id, score
-         FROM ewc_season_predictions
-         WHERE guild_id = ? AND season = ? AND score IS NOT NULL
-       )
-       SELECT user_id, SUM(score) AS score
-       FROM scores
-       GROUP BY user_id
-       ORDER BY score DESC, user_id ASC
-       LIMIT ? OFFSET ?`,
-    )
-    .all(guildId, season, k, guildId, season, limit, offset);
-}
-
-export function overallRankForUser(guildId, season = '2026', userId) {
-  const s = db.prepare('SELECT best_weeks FROM ewc_prediction_seasons WHERE guild_id = ? AND season = ?').get(guildId, season);
-  const k = s && s.best_weeks > 0 ? s.best_weeks : 999999;
-  return (
-    db
-      .prepare(
-        `WITH ranked AS (
-           SELECT wp.user_id, wp.score,
-                  ROW_NUMBER() OVER (PARTITION BY wp.user_id ORDER BY wp.score DESC, wp.week_id) AS rn
-           FROM ewc_weekly_predictions wp
-           JOIN ewc_prediction_weeks w ON w.id = wp.week_id
-           WHERE wp.guild_id = ? AND w.season = ? AND wp.score IS NOT NULL
-         ),
-         scores AS (
-           SELECT user_id, score FROM ranked WHERE rn <= ?
-           UNION ALL
-           SELECT user_id, score
-           FROM ewc_season_predictions
-           WHERE guild_id = ? AND season = ? AND score IS NOT NULL
-         ),
-         totals AS (
-           SELECT user_id, SUM(score) AS score
-           FROM scores
-           GROUP BY user_id
-         ),
-         ordered AS (
-           SELECT user_id, score, ROW_NUMBER() OVER (ORDER BY score DESC, user_id ASC) AS rank
-           FROM totals
-         )
-         SELECT rank, score
-         FROM ordered
-         WHERE user_id = ?`,
-      )
-      .get(guildId, season, k, guildId, season, userId) || null
+export async function overallLeaderboard(guildId, season = '2026', limit = 20, offset = 0) {
+  const k = await overallBestWeekCount(guildId, season);
+  return all(
+    `WITH ranked AS (
+       SELECT wp.user_id, wp.score,
+              ROW_NUMBER() OVER (PARTITION BY wp.user_id ORDER BY wp.score DESC, wp.week_id) AS rn
+       FROM ewc_weekly_predictions wp
+       JOIN ewc_prediction_weeks w ON w.id = wp.week_id
+       WHERE wp.guild_id = $1 AND w.season = $2 AND wp.score IS NOT NULL
+     ),
+     scores AS (
+       SELECT user_id, score FROM ranked WHERE rn <= $3
+       UNION ALL
+       SELECT user_id, score
+       FROM ewc_season_predictions
+       WHERE guild_id = $4 AND season = $5 AND score IS NOT NULL
+     )
+     SELECT user_id, SUM(score) AS score
+     FROM scores
+     GROUP BY user_id
+     ORDER BY score DESC, user_id ASC
+     LIMIT $6 OFFSET $7`,
+    [guildId, season, k, guildId, season, limit, offset],
   );
 }
 
-export function userPredictionProfile(guildId, season, userId) {
-  const weeks = db
-    .prepare(
+export async function overallRankForUser(guildId, season = '2026', userId) {
+  const k = await overallBestWeekCount(guildId, season);
+  return get(
+    `WITH ranked AS (
+       SELECT wp.user_id, wp.score,
+              ROW_NUMBER() OVER (PARTITION BY wp.user_id ORDER BY wp.score DESC, wp.week_id) AS rn
+       FROM ewc_weekly_predictions wp
+       JOIN ewc_prediction_weeks w ON w.id = wp.week_id
+       WHERE wp.guild_id = $1 AND w.season = $2 AND wp.score IS NOT NULL
+     ),
+     scores AS (
+       SELECT user_id, score FROM ranked WHERE rn <= $3
+       UNION ALL
+       SELECT user_id, score
+       FROM ewc_season_predictions
+       WHERE guild_id = $4 AND season = $5 AND score IS NOT NULL
+     ),
+     totals AS (
+       SELECT user_id, SUM(score) AS score
+       FROM scores
+       GROUP BY user_id
+     ),
+     ordered AS (
+       SELECT user_id, score, ROW_NUMBER() OVER (ORDER BY score DESC, user_id ASC) AS rank
+       FROM totals
+     )
+     SELECT rank, score
+     FROM ordered
+     WHERE user_id = $6`,
+    [guildId, season, k, guildId, season, userId],
+  );
+}
+
+export async function userPredictionProfile(guildId, season, userId) {
+  const weeks = (
+    await all(
       `SELECT w.week_key, w.label, w.status, p.*
        FROM ewc_prediction_weeks w
        LEFT JOIN ewc_weekly_predictions p
-         ON p.week_id = w.id AND p.guild_id = w.guild_id AND p.user_id = ?
-       WHERE w.guild_id = ? AND w.season = ?
+         ON p.week_id = w.id AND p.guild_id = w.guild_id AND p.user_id = $1
+       WHERE w.guild_id = $2 AND w.season = $3
        ORDER BY COALESCE(w.open_at, w.id), w.id`,
+      [userId, guildId, season],
     )
-    .all(userId, guildId, season)
-    .map((row) => ({
-      ...row,
-      picks: parseJson(row.picks_json, []),
-      details: parseJson(row.details_json, null),
-    }));
+  ).map((row) => ({
+    ...row,
+    picks: parseJson(row.picks_json, []),
+    details: parseJson(row.details_json, null),
+  }));
   return {
     weekly: weeks,
-    season: getSeasonPrediction(guildId, season, userId),
+    season: await getSeasonPrediction(guildId, season, userId),
   };
 }

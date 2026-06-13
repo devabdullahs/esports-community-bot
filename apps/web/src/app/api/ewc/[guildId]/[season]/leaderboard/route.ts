@@ -16,5 +16,5 @@ export async function GET(
   const url = new URL(request.url);
   const limit = clampInt(url.searchParams.get("limit"), { min: 1, max: 100, fallback: 50 });
   const offset = clampInt(url.searchParams.get("offset"), { min: 0, max: 100_000, fallback: 0 });
-  return NextResponse.json(getPublicEwcLeaderboard({ guildId, season, limit, offset }));
+  return NextResponse.json(await getPublicEwcLeaderboard({ guildId, season, limit, offset }));
 }

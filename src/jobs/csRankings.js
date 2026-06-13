@@ -48,7 +48,7 @@ export async function buildCsRankingsImagePayload(data) {
 }
 
 export async function updateCsRankings(client, guildId) {
-  const s = getSettings(guildId);
+  const s = await getSettings(guildId);
   if (!s.cs_rankings_channel_id) return false;
 
   const channel = await client.channels.fetch(s.cs_rankings_channel_id).catch(() => null);
@@ -76,7 +76,7 @@ export async function updateCsRankings(client, guildId) {
   }
 
   const sent = await channel.send(payload);
-  setCsRankingsMessage(guildId, sent.id);
+  await setCsRankingsMessage(guildId, sent.id);
   logger.info(`[cs-rankings] posted standings message ${sent.id} in guild ${guildId}`);
   return true;
 }
@@ -93,7 +93,7 @@ export function startCsRankings(client) {
     }
     running = true;
     try {
-      for (const guildId of getGuildsWithCsRankings()) {
+      for (const guildId of await getGuildsWithCsRankings()) {
         await updateCsRankings(client, guildId).catch((e) => logger.error(`[cs-rankings] ${guildId}: ${e.message}`));
       }
     } finally {

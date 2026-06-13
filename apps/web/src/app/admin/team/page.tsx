@@ -17,9 +17,9 @@ export default async function AdminTeamPage() {
   if (!access.session) redirect("/login?callbackURL=/admin/team");
   if (!access.isSuper) redirect("/admin");
 
-  const admins = listAdmins();
-  const games = listGames().map((g) => ({ slug: g.slug, label: localizeText(g.title, "en") }));
-  const media = listMediaChannels().map((c) => ({ slug: c.slug, label: localizeText(c.name, "en") }));
+  const admins = await listAdmins();
+  const games = (await listGames()).map((g) => ({ slug: g.slug, label: localizeText(g.title, "en") }));
+  const media = (await listMediaChannels()).map((c) => ({ slug: c.slug, label: localizeText(c.name, "en") }));
 
   return (
     <main className="mx-auto flex w-full max-w-4xl flex-1 flex-col gap-6 px-5 py-10 sm:px-8">

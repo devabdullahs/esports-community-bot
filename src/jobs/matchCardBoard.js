@@ -40,7 +40,7 @@ async function fetchMessage(client, channelId, messageId) {
 async function deleteStoredMessage(client, row, guildId, game) {
   const found = await fetchMessage(client, row.channel_id, row.message_id);
   await found?.message?.delete().catch(() => {});
-  deleteMatchCardMessage(guildId, game, row.match_id);
+  await deleteMatchCardMessage(guildId, game, row.match_id);
 }
 
 async function upsertLiveCard(client, channel, board, match, scoped, existing) {
@@ -96,7 +96,7 @@ async function upsertAllGamesStatusCard(channel, board, matches, existing) {
 }
 
 export async function updateMatchCards(client, guildId) {
-  const boards = getGameMatchCards(guildId);
+  const boards = await getGameMatchCards(guildId);
   if (!boards.length) return;
 
   const matches = await getMatchesForGuild(guildId);
@@ -108,7 +108,7 @@ export async function updateMatchCards(client, guildId) {
     const scoped = allMatchesForBoard(matches, board.game, dedicatedGames);
     const live = matchesForBoard(matches, board.game, dedicatedGames);
     const liveIds = new Set(live.map((m) => m.id));
-    const stored = getMatchCardMessages(guildId, board.game);
+    const stored = await getMatchCardMessages(guildId, board.game);
     const byMatchId = new Map(stored.map((row) => [row.match_id, row]));
 
     if (board.game === ALL_GAMES) {
@@ -120,7 +120,7 @@ export async function updateMatchCards(client, guildId) {
         await deleteStoredMessage(client, existing, guildId, board.game);
       }
       const messageId = await upsertAllGamesStatusCard(channel, { ...board, guild_id: guildId }, matches, existing);
-      setMatchCardMessage(guildId, board.game, IDLE_MATCH_ID, board.channel_id, messageId);
+      await setMatchCardMessage(guildId, board.game, IDLE_MATCH_ID, board.channel_id, messageId);
       continue;
     }
 
@@ -133,7 +133,7 @@ export async function updateMatchCards(client, guildId) {
         await deleteStoredMessage(client, existing, guildId, board.game);
       }
       const messageId = await upsertIdleCard(channel, { ...board, guild_id: guildId }, scoped, existing);
-      setMatchCardMessage(guildId, board.game, IDLE_MATCH_ID, board.channel_id, messageId);
+      await setMatchCardMessage(guildId, board.game, IDLE_MATCH_ID, board.channel_id, messageId);
       continue;
     }
 
@@ -152,7 +152,7 @@ export async function updateMatchCards(client, guildId) {
         scoped,
         byMatchId.get(match.id),
       );
-      setMatchCardMessage(guildId, board.game, match.id, board.channel_id, messageId);
+      await setMatchCardMessage(guildId, board.game, match.id, board.channel_id, messageId);
     }
   }
 }

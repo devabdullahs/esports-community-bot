@@ -16,5 +16,5 @@ export async function GET(request: Request) {
   const game = new URL(request.url).searchParams.get("game");
   if (!game) return NextResponse.json({ error: "Game is required" }, { status: 400 });
 
-  return NextResponse.json({ authors: listEligibleAuthors(game) });
+  return NextResponse.json({ authors: await listEligibleAuthors(game) });
 }

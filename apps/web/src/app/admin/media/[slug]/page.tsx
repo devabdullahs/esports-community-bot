@@ -21,7 +21,7 @@ export default async function EditMediaChannelPage({
   if (!access.allowed) redirect("/admin");
   if (!canManageMedia(access, slug)) redirect("/admin/media");
 
-  const channel = getMediaChannel(slug);
+  const channel = await getMediaChannel(slug);
   if (!channel) notFound();
   const locale = await getRequestLocale();
 

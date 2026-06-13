@@ -28,7 +28,7 @@ import {
   setEwcPredictionsMentionsLeaderboard,
 } from '../db/settings.js';
 import { updateEwcPredictionLeaderboard } from '../jobs/ewcPredictions.js';
-import { db } from '../db/index.js';
+import { transaction } from '../db/client.js';
 import { sendAuditLog } from '../lib/auditLog.js';
 import {
   defaultEwcSeasonPredictionWindow,
@@ -270,7 +270,7 @@ export async function execute(interaction) {
         await interaction.reply({ content: botChannelPermissionMessage(channel, missing), flags: MessageFlags.Ephemeral });
         return;
       }
-      setEwcPredictionsChannel(interaction.guildId, channel.id);
+      await setEwcPredictionsChannel(interaction.guildId, channel.id);
       await interaction.reply({ content: `✅ EWC prediction results will be announced in ${channel}.`, flags: MessageFlags.Ephemeral });
       await sendAuditLog(interaction.client, interaction.guildId, {
         action: 'EWC Predictions Channel Set',
@@ -289,7 +289,7 @@ export async function execute(interaction) {
         return;
       }
       await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-      setEwcPredictionsLeaderboard(interaction.guildId, { channelId: channel.id, season: seasonYear });
+      await setEwcPredictionsLeaderboard(interaction.guildId, { channelId: channel.id, season: seasonYear });
       await updateEwcPredictionLeaderboard(interaction.client, interaction.guildId);
       await interaction.editReply({
         content: `✅ EWC ${seasonYear} prediction leaderboard posted in ${channel} and will keep updating.`,
@@ -312,7 +312,7 @@ export async function execute(interaction) {
         return;
       }
       await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-      setEwcPredictionsMentionsLeaderboard(interaction.guildId, { channelId: channel.id, season: seasonYear });
+      await setEwcPredictionsMentionsLeaderboard(interaction.guildId, { channelId: channel.id, season: seasonYear });
       await updateEwcPredictionLeaderboard(interaction.client, interaction.guildId);
       await interaction.editReply({
         content: `✅ EWC ${seasonYear} admin mentions leaderboard posted in ${channel} and will keep updating.`,
@@ -336,7 +336,7 @@ export async function execute(interaction) {
       const weeks = generateEwcWeekWindows(schedule.events, { openBeforeHours, lockBeforeHours, scoreDelayHours });
       if (!weeks.length) throw new Error(`No dated EWC events were found for ${seasonYear}.`);
       for (const week of weeks) {
-        upsertEwcWeek({
+        await upsertEwcWeek({
           guildId: interaction.guildId,
           season: seasonYear,
           weekKey: week.weekKey,
@@ -375,7 +375,7 @@ export async function execute(interaction) {
       const weekKey = interaction.options.getString('week', true);
       const label = interaction.options.getString('label', true);
       const closeAt = parseOptionalDate(interaction, 'close_at');
-      const round = upsertEwcWeek({
+      const round = await upsertEwcWeek({
         guildId: interaction.guildId,
         season: seasonYear,
         weekKey,
@@ -410,11 +410,11 @@ export async function execute(interaction) {
     if (sub === 'snapshot_week') {
       const weekKey = interaction.options.getString('week', true);
       const type = interaction.options.getString('type', true);
-      const round = getEwcWeek(interaction.guildId, seasonYear, weekKey);
+      const round = await getEwcWeek(interaction.guildId, seasonYear, weekKey);
       if (!round) throw new Error(`Week \`${weekKey}\` does not exist.`);
       await interaction.deferReply({ flags: MessageFlags.Ephemeral });
       const standings = await currentStandings(seasonYear);
-      setEwcWeekSnapshot(round.id, type, standings);
+      await setEwcWeekSnapshot(round.id, type, standings);
       await interaction.editReply({
         content: `✅ Saved **${type}** snapshot for **${round.label || round.week_key}** with ${standings.length} clubs.`,
       });
@@ -430,9 +430,9 @@ export async function execute(interaction) {
 
     if (sub === 'close_week') {
       const weekKey = interaction.options.getString('week', true);
-      const round = getEwcWeek(interaction.guildId, seasonYear, weekKey);
+      const round = await getEwcWeek(interaction.guildId, seasonYear, weekKey);
       if (!round) throw new Error(`Week \`${weekKey}\` does not exist.`);
-      setEwcWeekStatus(round.id, 'closed');
+      await setEwcWeekStatus(round.id, 'closed');
       await interaction.reply({ content: `✅ Closed **${round.label || round.week_key}**.`, flags: MessageFlags.Ephemeral });
       await sendAuditLog(interaction.client, interaction.guildId, {
         action: 'EWC Prediction Week Closed',
@@ -445,10 +445,10 @@ export async function execute(interaction) {
 
     if (sub === 'reopen_week') {
       const weekKey = interaction.options.getString('week', true);
-      const round = getEwcWeek(interaction.guildId, seasonYear, weekKey);
+      const round = await getEwcWeek(interaction.guildId, seasonYear, weekKey);
       if (!round) throw new Error(`Week \`${weekKey}\` does not exist.`);
-      reopenEwcWeek(round.id);
-      clearWeeklyPredictionScores(round.id);
+      await reopenEwcWeek(round.id);
+      await clearWeeklyPredictionScores(round.id);
       await interaction.deferReply({ flags: MessageFlags.Ephemeral });
       await updateEwcPredictionLeaderboard(interaction.client, interaction.guildId);
       await interaction.editReply({
@@ -469,13 +469,13 @@ export async function execute(interaction) {
       if (!interaction.options.getBoolean('confirm', true)) {
         throw new Error('Deletion not confirmed. Re-run with `confirm: True`.');
       }
-      const round = getEwcWeek(interaction.guildId, seasonYear, weekKey);
+      const round = await getEwcWeek(interaction.guildId, seasonYear, weekKey);
       if (!round) throw new Error(`Week \`${weekKey}\` does not exist.`);
       if (round.status === 'scored') {
         throw new Error('This week is already scored. Reopen it first if you really want to delete it.');
       }
-      const picks = listWeeklyPredictions(round.id).length;
-      const result = deleteEwcWeek(round.id);
+      const picks = (await listWeeklyPredictions(round.id)).length;
+      const result = await deleteEwcWeek(round.id);
       await interaction.reply({
         content: `🗑️ Deleted **${round.label || round.week_key}** (${result.predictions} prediction(s) removed).`,
         flags: MessageFlags.Ephemeral,
@@ -492,7 +492,7 @@ export async function execute(interaction) {
 
     if (sub === 'score_week') {
       const weekKey = interaction.options.getString('week', true);
-      const round = getEwcWeek(interaction.guildId, seasonYear, weekKey);
+      const round = await getEwcWeek(interaction.guildId, seasonYear, weekKey);
       if (!round) throw new Error(`Week \`${weekKey}\` does not exist.`);
       await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
@@ -509,28 +509,27 @@ export async function execute(interaction) {
       if (!perGame && !baseline.length) throw new Error('This week has no baseline snapshot yet.');
 
       const final = perGame ? round.final || [] : round.final?.length ? round.final : await currentStandings(seasonYear).catch(() => []);
-      const predictions = listWeeklyPredictions(round.id);
+      const predictions = await listWeeklyPredictions(round.id);
       let malformed = 0;
       // Wrap all writes in a transaction so a mid-loop crash leaves scores consistent.
-      const applyScores = db.transaction(() => {
+      await transaction(async (tx) => {
         for (const prediction of predictions) {
           try {
             const result = perGame
               ? scorePerGameWeeklyPrediction(prediction.picks, round.games, results)
               : scoreWeeklyPrediction(prediction.picks, baseline, final);
-            saveWeeklyPredictionScore(interaction.guildId, round.id, prediction.user_id, result.score, result.details);
+            await saveWeeklyPredictionScore(interaction.guildId, round.id, prediction.user_id, result.score, result.details, tx);
           } catch (error) {
             malformed += 1;
-            saveWeeklyPredictionScore(interaction.guildId, round.id, prediction.user_id, 0, {
+            await saveWeeklyPredictionScore(interaction.guildId, round.id, prediction.user_id, 0, {
               error: error.message,
               picks: prediction.picks,
-            });
+            }, tx);
           }
         }
-        if (perGame) markEwcWeekScoredWithResults(round.id, final || [], results);
-        else markEwcWeekScored(round.id, final);
+        if (perGame) await markEwcWeekScoredWithResults(round.id, final || [], results, tx);
+        else await markEwcWeekScored(round.id, final, tx);
       });
-      applyScores();
       await updateEwcPredictionLeaderboard(interaction.client, interaction.guildId);
       await interaction.editReply({
         content: `✅ Scored **${round.label || round.week_key}** for ${predictions.length} prediction(s)${perGame ? ` across ${round.games.length} game(s)` : ''}.`,
@@ -558,7 +557,7 @@ export async function execute(interaction) {
       const defaultTimingLabel = defaultWindow
         ? `${manualOpenAt || manualCloseAt ? 'Default timing, overridden where provided' : 'Default timing'}: opens **${defaultWindow.openBeforeDays} days** before the first EWC competition, closes **${defaultWindow.closeBeforeHours} hours** before the first EWC competition.\n`
         : '';
-      const round = upsertEwcSeason({
+      const round = await upsertEwcSeason({
         guildId: interaction.guildId,
         season: seasonYear,
         label: interaction.options.getString('label') || `EWC ${seasonYear} Season`,
@@ -598,9 +597,9 @@ export async function execute(interaction) {
     }
 
     if (sub === 'close_season') {
-      const round = getEwcSeason(interaction.guildId, seasonYear);
+      const round = await getEwcSeason(interaction.guildId, seasonYear);
       if (!round) throw new Error(`No season round exists for ${seasonYear}.`);
-      setEwcSeasonStatus(interaction.guildId, seasonYear, 'closed');
+      await setEwcSeasonStatus(interaction.guildId, seasonYear, 'closed');
       await interaction.reply({ content: `✅ Closed EWC ${seasonYear} season predictions.`, flags: MessageFlags.Ephemeral });
       await sendAuditLog(interaction.client, interaction.guildId, {
         action: 'EWC Season Prediction Closed',
@@ -612,10 +611,10 @@ export async function execute(interaction) {
     }
 
     if (sub === 'reopen_season') {
-      const round = getEwcSeason(interaction.guildId, seasonYear);
+      const round = await getEwcSeason(interaction.guildId, seasonYear);
       if (!round) throw new Error(`No season round exists for ${seasonYear}.`);
-      reopenEwcSeason(interaction.guildId, seasonYear);
-      clearSeasonPredictionScores(interaction.guildId, seasonYear);
+      await reopenEwcSeason(interaction.guildId, seasonYear);
+      await clearSeasonPredictionScores(interaction.guildId, seasonYear);
       await interaction.deferReply({ flags: MessageFlags.Ephemeral });
       await updateEwcPredictionLeaderboard(interaction.client, interaction.guildId);
       await interaction.editReply({
@@ -632,29 +631,28 @@ export async function execute(interaction) {
     }
 
     if (sub === 'score_season') {
-      const round = getEwcSeason(interaction.guildId, seasonYear);
+      const round = await getEwcSeason(interaction.guildId, seasonYear);
       if (!round) throw new Error(`No season round exists for ${seasonYear}.`);
       await interaction.deferReply({ flags: MessageFlags.Ephemeral });
       const final = await currentStandings(seasonYear);
-      const predictions = listSeasonPredictions(interaction.guildId, seasonYear);
+      const predictions = await listSeasonPredictions(interaction.guildId, seasonYear);
       let malformed = 0;
       // Wrap all writes in a transaction so a mid-loop crash leaves scores consistent.
-      const applyScores = db.transaction(() => {
+      await transaction(async (tx) => {
         for (const prediction of predictions) {
           try {
             const result = scoreSeasonPrediction(prediction.picks, final, round.top_size);
-            saveSeasonPredictionScore(interaction.guildId, seasonYear, prediction.user_id, result.score, result.details);
+            await saveSeasonPredictionScore(interaction.guildId, seasonYear, prediction.user_id, result.score, result.details, tx);
           } catch (error) {
             malformed += 1;
-            saveSeasonPredictionScore(interaction.guildId, seasonYear, prediction.user_id, 0, {
+            await saveSeasonPredictionScore(interaction.guildId, seasonYear, prediction.user_id, 0, {
               error: error.message,
               picks: prediction.picks,
-            });
+            }, tx);
           }
         }
-        markEwcSeasonScored(interaction.guildId, seasonYear, final);
+        await markEwcSeasonScored(interaction.guildId, seasonYear, final, tx);
       });
-      applyScores();
       await updateEwcPredictionLeaderboard(interaction.client, interaction.guildId);
       await interaction.editReply({
         content: `✅ Scored EWC ${seasonYear} season predictions for ${predictions.length} member(s).`,
@@ -670,8 +668,8 @@ export async function execute(interaction) {
     }
 
     if (sub === 'list') {
-      const weeks = listEwcWeeks(interaction.guildId, seasonYear);
-      const seasonRound = getEwcSeason(interaction.guildId, seasonYear);
+      const weeks = await listEwcWeeks(interaction.guildId, seasonYear);
+      const seasonRound = await getEwcSeason(interaction.guildId, seasonYear);
       const now = Math.floor(Date.now() / 1000);
       let needsBaseline = 0;
       const lines = weeks.length

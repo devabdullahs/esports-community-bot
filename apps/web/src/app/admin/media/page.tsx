@@ -14,7 +14,7 @@ export default async function AdminMediaPage() {
   if (!access.session) redirect("/login?callbackURL=/admin/media");
   if (!access.allowed) redirect("/admin");
 
-  const channels = listMediaChannels();
+  const channels = await listMediaChannels();
   const editableSlugs =
     access.media === "ALL" ? channels.map((c) => c.slug) : access.media;
 

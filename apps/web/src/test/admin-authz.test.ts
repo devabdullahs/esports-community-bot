@@ -53,7 +53,7 @@ async function seedGame(slug: string): Promise<void> {
   const { createEwcGame } = await import("@bot/db/ewcGames.js");
   // Ignore duplicate errors if already seeded.
   try {
-    createEwcGame({
+    await createEwcGame({
       slug,
       title: { en: slug, ar: slug },
       description: { en: "", ar: "" },
@@ -68,7 +68,7 @@ async function seedGame(slug: string): Promise<void> {
 
 async function seedNewsPost(gameSlug: string): Promise<number> {
   const { createEwcNewsPost } = await import("@bot/db/ewcNewsPosts.js");
-  const post = createEwcNewsPost({
+  const post = await createEwcNewsPost({
     gameSlug,
     contentMode: "shared",
     defaultLocale: "en",

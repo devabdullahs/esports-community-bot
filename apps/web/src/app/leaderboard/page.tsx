@@ -23,7 +23,7 @@ export const dynamic = "force-dynamic";
 // operator hardcoding a guild id. Only a genuinely empty DB lands on the
 // localized empty-state below.
 export default async function LeaderboardIndexPage() {
-  const guildId = resolveDefaultGuildId();
+  const guildId = await resolveDefaultGuildId();
   const locale = await getRequestLocale();
 
   if (guildId) {

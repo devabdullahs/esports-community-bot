@@ -33,6 +33,8 @@ COPY --from=build --chown=node:node /app/node_modules ./node_modules
 COPY --from=build --chown=node:node /app/package*.json ./
 COPY --from=build --chown=node:node /app/apps/web ./apps/web
 COPY --from=build --chown=node:node /app/src ./src
+# Postgres path reads scripts/postgres/schema.sql at boot (ensurePostgresAppSchema).
+COPY --from=build --chown=node:node /app/scripts/postgres ./scripts/postgres
 
 USER node
 

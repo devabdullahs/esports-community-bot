@@ -76,7 +76,7 @@ export async function getAdminAccess(): Promise<AdminAccess> {
   }
 
   if (discordUserId) {
-    const admin = getAdmin(discordUserId);
+    const admin = await getAdmin(discordUserId);
     if (admin) {
       return {
         session,

@@ -37,7 +37,7 @@ export async function execute(interaction) {
     return;
   }
 
-  setAuditLogChannel(interaction.guildId, channel.id);
+  await setAuditLogChannel(interaction.guildId, channel.id);
 
   await interaction.reply({
     content: `✅ Audit logs will be posted in ${channel}.`,

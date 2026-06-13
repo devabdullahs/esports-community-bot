@@ -29,27 +29,27 @@ describe("listEligibleAuthors", () => {
   const savedSuper = process.env.EWC_DASHBOARD_SUPER_ADMIN_DISCORD_IDS;
   const savedLegacy = process.env.EWC_DASHBOARD_ADMIN_DISCORD_IDS;
 
-  beforeEach(() => {
+  beforeEach(async () => {
     process.env.EWC_DASHBOARD_SUPER_ADMIN_DISCORD_IDS = SUPER_ID;
     process.env.EWC_DASHBOARD_ADMIN_DISCORD_IDS = "";
-    upsertEwcAdmin({ discordId: ADMIN_Z, displayName: "Zed" });
-    setEwcAdminGameScopes(ADMIN_Z, ["valorant"]);
-    upsertEwcAdmin({ discordId: ADMIN_A, displayName: "Aaron" });
-    setEwcAdminGameScopes(ADMIN_A, ["valorant"]);
-    upsertEwcAdmin({ discordId: ADMIN_OTHER, displayName: "Other" });
-    setEwcAdminGameScopes(ADMIN_OTHER, ["cs2"]);
+    await upsertEwcAdmin({ discordId: ADMIN_Z, displayName: "Zed" });
+    await setEwcAdminGameScopes(ADMIN_Z, ["valorant"]);
+    await upsertEwcAdmin({ discordId: ADMIN_A, displayName: "Aaron" });
+    await setEwcAdminGameScopes(ADMIN_A, ["valorant"]);
+    await upsertEwcAdmin({ discordId: ADMIN_OTHER, displayName: "Other" });
+    await setEwcAdminGameScopes(ADMIN_OTHER, ["cs2"]);
   });
 
-  afterEach(() => {
+  afterEach(async () => {
     process.env.EWC_DASHBOARD_SUPER_ADMIN_DISCORD_IDS = savedSuper;
     process.env.EWC_DASHBOARD_ADMIN_DISCORD_IDS = savedLegacy;
-    deleteEwcAdmin(ADMIN_A);
-    deleteEwcAdmin(ADMIN_Z);
-    deleteEwcAdmin(ADMIN_OTHER);
+    await deleteEwcAdmin(ADMIN_A);
+    await deleteEwcAdmin(ADMIN_Z);
+    await deleteEwcAdmin(ADMIN_OTHER);
   });
 
-  test("includes the env super and game-scoped roster admins only", () => {
-    const ids = listEligibleAuthors("valorant").map((a) => a.discordId);
+  test("includes the env super and game-scoped roster admins only", async () => {
+    const ids = (await listEligibleAuthors("valorant")).map((a) => a.discordId);
     expect(ids).toContain(SUPER_ID);
     expect(ids).toContain(ADMIN_A);
     expect(ids).toContain(ADMIN_Z);
@@ -57,8 +57,8 @@ describe("listEligibleAuthors", () => {
     expect(ids).not.toContain(ADMIN_OTHER);
   });
 
-  test("orders supers first, then roster admins alphabetically by name", () => {
-    const list = listEligibleAuthors("valorant");
+  test("orders supers first, then roster admins alphabetically by name", async () => {
+    const list = await listEligibleAuthors("valorant");
     // Super comes first.
     expect(list[0]?.discordId).toBe(SUPER_ID);
     // Remaining are the roster admins sorted by name: Aaron before Zed.
@@ -66,8 +66,8 @@ describe("listEligibleAuthors", () => {
     expect(rosterNames).toEqual(["Aaron", "Zed"]);
   });
 
-  test("falls back to the discordId when a super has no roster name and no signed-in user", () => {
-    const sup = listEligibleAuthors("valorant").find((a) => a.discordId === SUPER_ID);
+  test("falls back to the discordId when a super has no roster name and no signed-in user", async () => {
+    const sup = (await listEligibleAuthors("valorant")).find((a) => a.discordId === SUPER_ID);
     expect(sup?.name).toBe(SUPER_ID);
   });
 });

@@ -14,7 +14,7 @@ export default async function AdminGamesPage() {
   if (!access.session) redirect("/login?callbackURL=/admin/games");
   if (!access.allowed) redirect("/admin");
 
-  const allGames = listGames();
+  const allGames = await listGames();
   const games =
     access.games === "ALL" ? allGames : allGames.filter((g) => access.games.includes(g.slug));
 

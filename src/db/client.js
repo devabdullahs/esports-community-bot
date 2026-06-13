@@ -47,7 +47,7 @@ function postgresSslConfig() {
 
 async function sqliteDb() {
   if (!sqliteDbPromise) {
-    sqliteDbPromise = import('./connection.js').then((mod) => mod.db);
+    sqliteDbPromise = import('./index.js').then((mod) => mod.db);
   }
   return sqliteDbPromise;
 }

@@ -57,7 +57,7 @@ export function buildClubChampionshipContainer(label, data) {
 
 // Fetch + post/edit the standings message for one guild.
 export async function updateClubChampionship(client, guildId) {
-  const s = getSettings(guildId);
+  const s = await getSettings(guildId);
   if (!s.cc_channel_id || !s.cc_page) return false;
 
   const channel = await client.channels.fetch(s.cc_channel_id).catch(() => null);
@@ -85,7 +85,7 @@ export async function updateClubChampionship(client, guildId) {
     }
   }
   const sent = await channel.send(payload);
-  setClubChampionshipMessage(guildId, sent.id);
+  await setClubChampionshipMessage(guildId, sent.id);
   logger.info(`[cc] posted standings message ${sent.id} in guild ${guildId}`);
   return true;
 }
@@ -102,7 +102,7 @@ export function startClubChampionship(client) {
     }
     running = true;
     try {
-      for (const guildId of getGuildsWithClubChampionship()) {
+      for (const guildId of await getGuildsWithClubChampionship()) {
         await updateClubChampionship(client, guildId).catch((e) => logger.error(`[cc] ${guildId}: ${e.message}`));
       }
     } finally {

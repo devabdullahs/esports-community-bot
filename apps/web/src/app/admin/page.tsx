@@ -27,10 +27,10 @@ export const dynamic = "force-dynamic";
 
 export default async function AdminPage() {
   const access = await getAdminAccess();
-  const allPosts = access.allowed ? listAdminNewsPosts() : [];
+  const allPosts = access.allowed ? await listAdminNewsPosts() : [];
   const posts =
     access.games === "ALL" ? allPosts : allPosts.filter((p) => access.games.includes(p.gameSlug));
-  const games = access.allowed ? listGames() : [];
+  const games = access.allowed ? await listGames() : [];
 
   return (
     <main className="mx-auto flex w-full max-w-6xl flex-1 flex-col gap-8 px-5 py-10 sm:px-8">

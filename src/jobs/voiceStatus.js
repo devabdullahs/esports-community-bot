@@ -36,9 +36,9 @@ export async function computeVoiceName(guildId, game = null) {
 
 // Update the combined voice channel AND every per-game voice channel for a guild.
 export async function updateVoiceChannel(client, guildId) {
-  const s = getSettings(guildId);
+  const s = await getSettings(guildId);
   await renameVoice(client, s.voice_channel_id, await computeVoiceName(guildId, null));
-  for (const v of getGameVoiceChannels(guildId)) {
+  for (const v of await getGameVoiceChannels(guildId)) {
     await renameVoice(client, v.channel_id, await computeVoiceName(guildId, v.game));
   }
 }

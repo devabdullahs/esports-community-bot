@@ -9,7 +9,8 @@ const dir = mkdtempSync(join(tmpdir(), 'ewc-cascade-'));
 process.env.DB_PATH = join(dir, 'bot.sqlite');
 process.env.LOG_LEVEL = 'error';
 
-const { closeDb, db } = await import('../src/db/index.js');
+const { closeDb } = await import('../src/db/index.js');
+const { get } = await import('../src/db/client.js');
 const { createEwcGame, deleteEwcGame } = await import('../src/db/ewcGames.js');
 const { createEwcNewsPost, getEwcNewsPostById } = await import('../src/db/ewcNewsPosts.js');
 const { upsertEwcAdmin, setEwcAdminGameScopes, getEwcAdminGameScopes } = await import('../src/db/ewcAdmins.js');
@@ -19,9 +20,9 @@ test.after(() => {
   rmSync(dir, { recursive: true, force: true });
 });
 
-test('deleteEwcGame cascades: removes posts, translations, and admin scopes without touching a second game', () => {
+test('deleteEwcGame cascades: removes posts, translations, and admin scopes without touching a second game', async () => {
   // ── Seed game under test ──────────────────────────────────────────────────
-  createEwcGame({
+  await createEwcGame({
     slug: 'cascade-game',
     title: { en: 'Cascade Game', ar: 'لعبة' },
     description: { en: 'desc', ar: 'وصف' },
@@ -31,7 +32,7 @@ test('deleteEwcGame cascades: removes posts, translations, and admin scopes with
   });
 
   // ── Seed second game that must remain untouched ───────────────────────────
-  createEwcGame({
+  await createEwcGame({
     slug: 'neighbor-game',
     title: { en: 'Neighbor', ar: 'جار' },
     description: { en: 'nd', ar: 'وصف' },
@@ -41,7 +42,7 @@ test('deleteEwcGame cascades: removes posts, translations, and admin scopes with
   });
 
   // ── Two posts for the game under test ─────────────────────────────────────
-  const post1 = createEwcNewsPost({
+  const post1 = await createEwcNewsPost({
     gameSlug: 'cascade-game',
     status: 'published',
     contentMode: 'translated',
@@ -51,7 +52,7 @@ test('deleteEwcGame cascades: removes posts, translations, and admin scopes with
       ar: { title: 'أخبار', summary: 'ملخص', body: 'جسم' },
     },
   });
-  const post2 = createEwcNewsPost({
+  const post2 = await createEwcNewsPost({
     gameSlug: 'cascade-game',
     status: 'draft',
     contentMode: 'shared',
@@ -62,7 +63,7 @@ test('deleteEwcGame cascades: removes posts, translations, and admin scopes with
   });
 
   // ── One post for the neighbor game ────────────────────────────────────────
-  const neighborPost = createEwcNewsPost({
+  const neighborPost = await createEwcNewsPost({
     gameSlug: 'neighbor-game',
     status: 'published',
     contentMode: 'shared',
@@ -73,41 +74,42 @@ test('deleteEwcGame cascades: removes posts, translations, and admin scopes with
   });
 
   // ── Admin with scope on BOTH games ───────────────────────────────────────
-  upsertEwcAdmin({ discordId: 'admin-001', displayName: 'Test Admin' });
-  setEwcAdminGameScopes('admin-001', ['cascade-game', 'neighbor-game']);
+  await upsertEwcAdmin({ discordId: 'admin-001', displayName: 'Test Admin' });
+  await setEwcAdminGameScopes('admin-001', ['cascade-game', 'neighbor-game']);
 
   // Confirm setup: translations exist for post1
-  const translationCountBefore = db
-    .prepare('SELECT COUNT(*) AS n FROM ewc_news_post_translations WHERE post_id = ?')
-    .get(post1.id).n;
+  const translationCountBefore = (
+    await get('SELECT COUNT(*) AS n FROM ewc_news_post_translations WHERE post_id = $1', [post1.id])
+  ).n;
   assert.ok(translationCountBefore >= 1, 'post1 has at least one translation before delete');
 
   // ── Delete the game ───────────────────────────────────────────────────────
-  const result = deleteEwcGame('cascade-game');
+  const result = await deleteEwcGame('cascade-game');
 
   // 1. Return value must report exactly what was deleted
   assert.deepEqual(result, { gameDeleted: 1, postsDeleted: 2 });
 
   // 2. Both posts are gone from the news table
-  assert.equal(getEwcNewsPostById(post1.id), null, 'post1 removed after cascade delete');
-  assert.equal(getEwcNewsPostById(post2.id), null, 'post2 removed after cascade delete');
+  assert.equal(await getEwcNewsPostById(post1.id), null, 'post1 removed after cascade delete');
+  assert.equal(await getEwcNewsPostById(post2.id), null, 'post2 removed after cascade delete');
 
   // 3. Translations for those posts are gone. deleteEwcGame removes them
   //    explicitly before deleting posts, so this verifies the cleanup path
   //    instead of depending on cascade side effects.
-  const translationCount = db
-    .prepare(
+  const translationCount = (
+    await get(
       `SELECT COUNT(*) AS n FROM ewc_news_post_translations
-       WHERE post_id IN (?, ?)`,
+       WHERE post_id IN ($1, $2)`,
+      [post1.id, post2.id],
     )
-    .get(post1.id, post2.id).n;
+  ).n;
   assert.equal(translationCount, 0, 'all translations for deleted posts are removed');
 
   // 4. Admin scope for the deleted game is gone, but neighbor-game scope remains
-  const scopes = getEwcAdminGameScopes('admin-001');
+  const scopes = await getEwcAdminGameScopes('admin-001');
   assert.ok(!scopes.includes('cascade-game'), 'cascade-game scope removed from admin');
   assert.ok(scopes.includes('neighbor-game'), 'neighbor-game scope preserved on admin');
 
   // 5. Neighbor game's post is still readable
-  assert.ok(getEwcNewsPostById(neighborPost.id) !== null, 'neighbor post still readable');
+  assert.ok((await getEwcNewsPostById(neighborPost.id)) !== null, 'neighbor post still readable');
 });

@@ -219,14 +219,14 @@ function chunk(items, size) {
   return rows;
 }
 
-function weeklyPickPayload(guildId, seasonYear, weekKey, userId) {
-  const round = getEwcWeek(guildId, seasonYear, weekKey);
+async function weeklyPickPayload(guildId, seasonYear, weekKey, userId) {
+  const round = await getEwcWeek(guildId, seasonYear, weekKey);
   if (!round) return { error: 'That prediction round does not exist.' };
   if (!round.games?.length) {
     return { error: 'This is an old aggregate weekly round. Ask an admin to regenerate the official EWC weeks before weekly picks open.' };
   }
 
-  const saved = getWeeklyPrediction(guildId, round.id, userId);
+  const saved = await getWeeklyPrediction(guildId, round.id, userId);
   const picks = saved?.picks || [];
 
   // Components V2: one Section per game so its button sits in line with the game,
@@ -260,8 +260,8 @@ function weeklyPickPayload(guildId, seasonYear, weekKey, userId) {
   return { components: [container] };
 }
 
-function getExistingGamePick(guildId, round, userId, gameKey) {
-  const saved = getWeeklyPrediction(guildId, round.id, userId);
+async function getExistingGamePick(guildId, round, userId, gameKey) {
+  const saved = await getWeeklyPrediction(guildId, round.id, userId);
   return (saved?.picks || []).find((pick) => pick && typeof pick === 'object' && pick.gameKey === gameKey) || null;
 }
 
@@ -288,35 +288,35 @@ const lbId = (action, type, season, week, page, ownerId) =>
   `ewc_predict:${action}:${type}:${season}:${week || '-'}:${page}:${ownerId}`;
 
 // Resolve title + total count + a page fetcher for a leaderboard type. null if the round is gone.
-function leaderboardData(guildId, type, season, week) {
+async function leaderboardData(guildId, type, season, week) {
   if (type === 'weekly') {
-    const round = getEwcWeek(guildId, season, week);
+    const round = await getEwcWeek(guildId, season, week);
     if (!round) return null;
     return {
       title: `EWC Weekly Predictions — ${round.label || round.week_key}`,
-      count: countWeeklyScored(round.id),
+      count: await countWeeklyScored(round.id),
       fetch: (limit, offset) => weeklyLeaderboard(round.id, limit, offset),
     };
   }
   if (type === 'season') {
     return {
       title: `EWC ${season} Season Predictions`,
-      count: countSeasonScored(guildId, season),
+      count: await countSeasonScored(guildId, season),
       fetch: (limit, offset) => seasonLeaderboard(guildId, season, limit, offset),
     };
   }
-  const best = getEwcSeason(guildId, season)?.best_weeks;
+  const best = (await getEwcSeason(guildId, season))?.best_weeks;
   return {
     title: `EWC ${season} Prediction Leaderboard${best ? ` · best ${best} weeks` : ''}`,
-    count: countOverallScored(guildId, season),
+    count: await countOverallScored(guildId, season),
     fetch: (limit, offset) => overallLeaderboard(guildId, season, limit, offset),
   };
 }
 
 // Build a leaderboard page: embed + (Prev / Page X/Y / Next) buttons. Buttons only appear when
 // there is more than one page. The middle button opens a "go to page" modal.
-function buildLeaderboardPage(guildId, type, season, week, page = 1, ownerId = '') {
-  const data = leaderboardData(guildId, type, season, week);
+async function buildLeaderboardPage(guildId, type, season, week, page = 1, ownerId = '') {
+  const data = await leaderboardData(guildId, type, season, week);
   if (!data) return null;
   const totalPages = Math.max(1, Math.ceil(data.count / PAGE_SIZE));
   const p = Math.min(Math.max(1, Math.floor(Number(page)) || 1), totalPages);
@@ -324,7 +324,7 @@ function buildLeaderboardPage(guildId, type, season, week, page = 1, ownerId = '
   const embed = new EmbedBuilder()
     .setColor(0xf1c40f)
     .setTitle(data.title)
-    .setDescription(leaderboardLines(data.fetch(PAGE_SIZE, offset), offset))
+    .setDescription(leaderboardLines(await data.fetch(PAGE_SIZE, offset), offset))
     .setFooter({ text: `Page ${p} / ${totalPages} · ${data.count} ranked` });
 
   const components = [];
@@ -354,7 +354,7 @@ function buildLeaderboardPage(guildId, type, season, week, page = 1, ownerId = '
 async function autocompleteWeek(interaction) {
   const q = String(interaction.options.getFocused() || '').toLowerCase();
   const seasonYear = season(interaction);
-  const weeks = listEwcWeeks(interaction.guildId, seasonYear);
+  const weeks = await listEwcWeeks(interaction.guildId, seasonYear);
   await interaction.respond(
     weeks
       .filter((week) => !q || week.week_key.toLowerCase().includes(q) || String(week.label || '').toLowerCase().includes(q))
@@ -374,7 +374,7 @@ async function autocompleteWeeklyGame(interaction) {
   const q = String(interaction.options.getFocused() || '').toLowerCase();
   const seasonYear = season(interaction);
   const weekKey = interaction.options.getString('week');
-  const round = weekKey ? getEwcWeek(interaction.guildId, seasonYear, weekKey) : null;
+  const round = weekKey ? await getEwcWeek(interaction.guildId, seasonYear, weekKey) : null;
   const games = round?.games || [];
   await interaction.respond(
     games
@@ -404,7 +404,7 @@ export async function autocomplete(interaction) {
     const seasonYear = season(interaction);
     const weekKey = interaction.options.getString('week');
     const gameKey = interaction.options.getString('game');
-    const round = weekKey ? getEwcWeek(interaction.guildId, seasonYear, weekKey) : null;
+    const round = weekKey ? await getEwcWeek(interaction.guildId, seasonYear, weekKey) : null;
     const game = gameKey ? findRoundGame(round, gameKey) : null;
     await interaction.respond(await searchEwcClubChoices(focused.value, { game: game?.game }));
     return;
@@ -437,7 +437,7 @@ async function showWeeklyPickModal(interaction, { seasonYear, weekKey, gameKey, 
     return;
   }
 
-  const round = getEwcWeek(interaction.guildId, seasonYear, weekKey);
+  const round = await getEwcWeek(interaction.guildId, seasonYear, weekKey);
   const game = findRoundGame(round, gameKey);
   if (!round || !game) {
     await interaction.reply({ content: '❌ This weekly round changed — rerun `/ewc_predict weekly`.', flags: MessageFlags.Ephemeral });
@@ -449,7 +449,7 @@ async function showWeeklyPickModal(interaction, { seasonYear, weekKey, gameKey, 
     return;
   }
 
-  const current = getExistingGamePick(interaction.guildId, round, interaction.user.id, gameKey);
+  const current = await getExistingGamePick(interaction.guildId, round, interaction.user.id, gameKey);
   const choices = await searchEwcClubChoices('', { game: game.game, strictGame: true });
   const modal = new ModalBuilder()
     .setCustomId(weeklyPickModalId(seasonYear, weekKey, gameKey, interaction.user.id))
@@ -505,7 +505,7 @@ async function handleWeeklyPickModal(interaction, { seasonYear, weekKey, gameKey
   // The modal was opened from a button on the (ephemeral) picker message, so defer as an update
   // and edit that message in place; errors surface as a separate ephemeral follow-up.
   await interaction.deferUpdate();
-  const round = getEwcWeek(interaction.guildId, seasonYear, weekKey);
+  const round = await getEwcWeek(interaction.guildId, seasonYear, weekKey);
   const game = findRoundGame(round, gameKey);
   if (!round || !game) {
     await interaction.followUp({ content: '❌ This weekly round changed — rerun `/ewc_predict weekly`.', flags: MessageFlags.Ephemeral });
@@ -531,7 +531,7 @@ async function handleWeeklyPickModal(interaction, { seasonYear, weekKey, gameKey
     return;
   }
 
-  upsertWeeklyGamePick({
+  await upsertWeeklyGamePick({
     guildId: interaction.guildId,
     weekId: round.id,
     userId: interaction.user.id,
@@ -542,7 +542,7 @@ async function handleWeeklyPickModal(interaction, { seasonYear, weekKey, gameKey
   });
 
   // Re-render the picker in place so the new pick shows in line with its game.
-  const payload = weeklyPickPayload(interaction.guildId, seasonYear, weekKey, interaction.user.id);
+  const payload = await weeklyPickPayload(interaction.guildId, seasonYear, weekKey, interaction.user.id);
   if (payload.error) {
     await interaction.followUp({ content: `❌ ${payload.error}`, flags: MessageFlags.Ephemeral });
     return;
@@ -558,10 +558,10 @@ export async function execute(interaction) {
     const weekKey = interaction.options.getString('week', true);
     const gameKey = interaction.options.getString('game');
     const pick = interaction.options.getString('team');
-    const round = getEwcWeek(interaction.guildId, seasonYear, weekKey);
+    const round = await getEwcWeek(interaction.guildId, seasonYear, weekKey);
 
     if (!gameKey && !pick) {
-      const payload = weeklyPickPayload(interaction.guildId, seasonYear, weekKey, interaction.user.id);
+      const payload = await weeklyPickPayload(interaction.guildId, seasonYear, weekKey, interaction.user.id);
       if (payload.error) {
         await interaction.reply({ content: `❌ ${payload.error}`, flags: MessageFlags.Ephemeral });
         return;
@@ -594,7 +594,7 @@ export async function execute(interaction) {
       });
       return;
     }
-    const saved = upsertWeeklyGamePick({
+    const saved = await upsertWeeklyGamePick({
       guildId: interaction.guildId,
       weekId: round.id,
       userId: interaction.user.id,
@@ -617,7 +617,7 @@ export async function execute(interaction) {
   }
 
   if (sub === 'season') {
-    const round = getEwcSeason(interaction.guildId, seasonYear);
+    const round = await getEwcSeason(interaction.guildId, seasonYear);
     const closed = roundClosedMessage(round);
     if (closed) {
       await interaction.reply({ content: `❌ ${closed}`, flags: MessageFlags.Ephemeral });
@@ -631,7 +631,7 @@ export async function execute(interaction) {
       });
       return;
     }
-    upsertSeasonPrediction({ guildId: interaction.guildId, season: seasonYear, userId: interaction.user.id, picks });
+    await upsertSeasonPrediction({ guildId: interaction.guildId, season: seasonYear, userId: interaction.user.id, picks });
     await interaction.reply({
       embeds: [
         new EmbedBuilder()
@@ -654,19 +654,19 @@ export async function execute(interaction) {
         await interaction.reply({ content: '❌ Choose a `week` for the weekly leaderboard.', flags: MessageFlags.Ephemeral });
         return;
       }
-      if (!getEwcWeek(interaction.guildId, seasonYear, week)) {
+      if (!(await getEwcWeek(interaction.guildId, seasonYear, week))) {
         await interaction.reply({ content: `❌ Week \`${week}\` does not exist.`, flags: MessageFlags.Ephemeral });
         return;
       }
     }
-    const payload = buildLeaderboardPage(interaction.guildId, type, seasonYear, week, page, interaction.user.id);
+    const payload = await buildLeaderboardPage(interaction.guildId, type, seasonYear, week, page, interaction.user.id);
     await interaction.reply({ embeds: payload.embeds, components: payload.components });
     return;
   }
 
   if (sub === 'profile') {
     const user = interaction.options.getUser('member') || interaction.user;
-    const profile = userPredictionProfile(interaction.guildId, seasonYear, user.id);
+    const profile = await userPredictionProfile(interaction.guildId, seasonYear, user.id);
     const weekly = profile.weekly
       .filter((row) => row.picks?.length || row.score != null)
       .slice(-5)
@@ -801,7 +801,7 @@ export async function handleComponent(interaction) {
   }
 
   if (action === 'lbgoto') {
-    const data = leaderboardData(interaction.guildId, type, season, week);
+    const data = await leaderboardData(interaction.guildId, type, season, week);
     const totalPages = data ? Math.max(1, Math.ceil(data.count / PAGE_SIZE)) : 1;
     const modal = new ModalBuilder()
       .setCustomId(`ewc_predict:lbmodal:${type}:${season}:${week || '-'}:${ownerId}`)
@@ -822,7 +822,7 @@ export async function handleComponent(interaction) {
   }
 
   // action === 'lb' → jump to the page baked into the button's custom_id.
-  const payload = buildLeaderboardPage(interaction.guildId, type, season, week, Number(pageRaw) || 1, ownerId);
+  const payload = await buildLeaderboardPage(interaction.guildId, type, season, week, Number(pageRaw) || 1, ownerId);
   if (!payload) {
     await interaction.deferUpdate().catch(() => {});
     return;
@@ -842,7 +842,7 @@ export async function handleModal(interaction) {
   const [, , type, season, weekRaw, ownerId] = parts;
   const week = weekRaw === '-' ? null : weekRaw;
   const requested = parseInt(interaction.fields.getTextInputValue('page'), 10);
-  const payload = buildLeaderboardPage(
+  const payload = await buildLeaderboardPage(
     interaction.guildId,
     type,
     season,

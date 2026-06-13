@@ -61,58 +61,58 @@ export type NewsPostInput = {
   coverPlacement?: NewsCoverPlacement;
 };
 
-const getById = _getById as (id: number) => NewsPost | null;
-const getPublished = _getPublished as (id: number, locale?: Locale) => NewsPost | null;
+const getById = _getById as (id: number) => Promise<NewsPost | null>;
+const getPublished = _getPublished as (id: number, locale?: Locale) => Promise<NewsPost | null>;
 const listAdmin = _listAdmin as (filter: {
   gameSlug?: string | null;
   status?: NewsStatus | null;
-}) => NewsPost[];
+}) => Promise<NewsPost[]>;
 const listPublished = _listPublished as (args: {
   gameSlug: string;
   locale: Locale;
-}) => NewsPost[];
-const listLatest = _listLatest as (args: { locale: Locale; limit?: number }) => NewsPost[];
-const create = _create as (input: NewsPostInput) => NewsPost;
-const update = _update as (id: number, input: NewsPostInput) => NewsPost | null;
-const setStatus = _setStatus as (id: number, status: NewsStatus) => NewsPost | null;
-const remove = _delete as (id: number) => { changes: number };
+}) => Promise<NewsPost[]>;
+const listLatest = _listLatest as (args: { locale: Locale; limit?: number }) => Promise<NewsPost[]>;
+const create = _create as (input: NewsPostInput) => Promise<NewsPost>;
+const update = _update as (id: number, input: NewsPostInput) => Promise<NewsPost | null>;
+const setStatus = _setStatus as (id: number, status: NewsStatus) => Promise<NewsPost | null>;
+const remove = _delete as (id: number) => Promise<{ changes: number }>;
 
-export function getNewsPost(id: number): NewsPost | null {
+export function getNewsPost(id: number): Promise<NewsPost | null> {
   return getById(id);
 }
 
-export function getPublishedNewsPost(id: number, locale?: Locale): NewsPost | null {
+export function getPublishedNewsPost(id: number, locale?: Locale): Promise<NewsPost | null> {
   return getPublished(id, locale);
 }
 
 export function listAdminNewsPosts(filter?: {
   gameSlug?: string | null;
   status?: NewsStatus | null;
-}): NewsPost[] {
+}): Promise<NewsPost[]> {
   return listAdmin(filter || {});
 }
 
-export function listPublishedNewsPosts(gameSlug: string, locale: Locale): NewsPost[] {
+export function listPublishedNewsPosts(gameSlug: string, locale: Locale): Promise<NewsPost[]> {
   return listPublished({ gameSlug, locale });
 }
 
-export function listLatestPublishedNewsPosts(locale: Locale, limit = 4): NewsPost[] {
+export function listLatestPublishedNewsPosts(locale: Locale, limit = 4): Promise<NewsPost[]> {
   return listLatest({ locale, limit });
 }
 
-export function createNewsPost(input: NewsPostInput): NewsPost {
+export function createNewsPost(input: NewsPostInput): Promise<NewsPost> {
   return create(input);
 }
 
-export function updateNewsPost(id: number, input: NewsPostInput): NewsPost | null {
+export function updateNewsPost(id: number, input: NewsPostInput): Promise<NewsPost | null> {
   return update(id, input);
 }
 
-export function setNewsPostStatus(id: number, status: NewsStatus): NewsPost | null {
+export function setNewsPostStatus(id: number, status: NewsStatus): Promise<NewsPost | null> {
   return setStatus(id, status);
 }
 
-export function deleteNewsPost(id: number): { changes: number } {
+export function deleteNewsPost(id: number): Promise<{ changes: number }> {
   return remove(id);
 }
 

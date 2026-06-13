@@ -27,7 +27,7 @@ export async function POST(
     return NextResponse.json({ error: "Invalid status" }, { status: 400 });
   }
 
-  const existing = getNewsPost(postId);
+  const existing = await getNewsPost(postId);
   if (!existing) return NextResponse.json({ error: "Not found" }, { status: 404 });
   if (!canManageGame(access, existing.gameSlug)) {
     return NextResponse.json({ error: "You are not assigned to this game" }, { status: 403 });
@@ -37,7 +37,7 @@ export async function POST(
     if (!validated.ok) return NextResponse.json({ error: validated.error }, { status: 400 });
   }
 
-  const post = setNewsPostStatus(postId, status);
+  const post = await setNewsPostStatus(postId, status);
   if (!post) return NextResponse.json({ error: "Not found" }, { status: 404 });
   revalidateTag("cms-news", "default");
   recordAdminAudit(access, "news.status", String(postId), { status });

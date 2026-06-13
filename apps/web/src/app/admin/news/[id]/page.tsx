@@ -24,11 +24,11 @@ export default async function EditNewsPostPage({
 
   const postId = parsePostId(id);
   if (postId === null) notFound();
-  const post = getNewsPost(postId);
+  const post = await getNewsPost(postId);
   if (!post) notFound();
   if (!canManageGame(access, post.gameSlug)) redirect("/admin");
 
-  const allGames = listGames();
+  const allGames = await listGames();
   const games =
     access.games === "ALL" ? allGames : allGames.filter((g) => access.games.includes(g.slug));
   const locale = await getRequestLocale();

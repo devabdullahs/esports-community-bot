@@ -117,8 +117,8 @@ export async function execute(interaction) {
 
     const selectedGame = normalizeGameSlug(interaction.options.getString('game', true));
     const game = selectedGame === ALL_GAMES ? null : selectedGame;
-    if (game) setGameVoiceChannel(interaction.guildId, game, channel.id);
-    else setChannel(interaction.guildId, 'voice_channel_id', channel.id);
+    if (game) await setGameVoiceChannel(interaction.guildId, game, channel.id);
+    else await setChannel(interaction.guildId, 'voice_channel_id', channel.id);
     const label = game ? `${gameName(game)} voice channel` : 'Live voice channel';
     await interaction.reply({
       components: [
@@ -149,7 +149,7 @@ export async function execute(interaction) {
 
     const selectedGame = normalizeGameSlug(interaction.options.getString('game', true));
     const game = selectedGame === ALL_GAMES ? ALL_GAMES : selectedGame;
-    setGameMatchCard(interaction.guildId, game, channel.id);
+    await setGameMatchCard(interaction.guildId, game, channel.id);
     const label = game === ALL_GAMES ? 'All-games match cards' : `${gameName(game)} match cards`;
     await interaction.reply({
       components: [
@@ -178,7 +178,7 @@ export async function execute(interaction) {
       return;
     }
 
-    setEwcNewsChannel(interaction.guildId, channel.id);
+    await setEwcNewsChannel(interaction.guildId, channel.id);
     await interaction.reply({
       components: [
         confirm(
@@ -211,8 +211,8 @@ export async function execute(interaction) {
 
   const selectedGame = normalizeGameSlug(interaction.options.getString('game', true));
   const game = selectedGame === ALL_GAMES ? null : selectedGame;
-  if (game) setGameLeaderboard(interaction.guildId, game, channel.id);
-  else setChannel(interaction.guildId, 'leaderboard_channel_id', channel.id);
+  if (game) await setGameLeaderboard(interaction.guildId, game, channel.id);
+  else await setChannel(interaction.guildId, 'leaderboard_channel_id', channel.id);
 
   const label = game ? `${gameName(game)} leaderboard` : 'Combined leaderboard';
   await interaction.reply({

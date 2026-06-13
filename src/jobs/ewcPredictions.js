@@ -24,7 +24,7 @@ import {
   setEwcPredictionsMentionsMessage,
   setEwcPredictionsLeaderboardMessage,
 } from '../db/settings.js';
-import { db } from '../db/index.js';
+import { transaction } from '../db/client.js';
 import { logger } from '../lib/logger.js';
 import {
   pendingEwcGameResults,
@@ -83,17 +83,17 @@ async function leaderboardRowsForImage(client, guildId, rows) {
   );
 }
 
-function leaderboardMeta(guildId, season) {
-  const rows = overallLeaderboard(guildId, season, 20, 0);
-  const weeks = listEwcWeeks(guildId, season);
+async function leaderboardMeta(guildId, season) {
+  const rows = await overallLeaderboard(guildId, season, 20, 0);
+  const weeks = await listEwcWeeks(guildId, season);
   const scoredWeeks = weeks.filter((week) => week.status === 'scored').length;
-  const seasonRound = getEwcSeason(guildId, season);
+  const seasonRound = await getEwcSeason(guildId, season);
   const bestWeeks = seasonRound?.best_weeks || null;
   const championPickVisible = Boolean(
     seasonRound && (seasonRound.status === 'closed' || seasonRound.status === 'scored' || (seasonRound.close_at && nowSec() >= seasonRound.close_at)),
   );
   const championPicks = championPickVisible
-    ? new Map(listSeasonPredictions(guildId, season).map((prediction) => [prediction.user_id, prediction.picks?.[0] || null]))
+    ? new Map((await listSeasonPredictions(guildId, season)).map((prediction) => [prediction.user_id, prediction.picks?.[0] || null]))
     : new Map();
   return {
     rows: rows.map((row) => ({
@@ -108,7 +108,7 @@ function leaderboardMeta(guildId, season) {
 }
 
 async function buildEwcPredictionLeaderboardPayload(client, guildId, season) {
-  const { rows, weeks, scoredWeeks, bestWeeks, championPickVisible } = leaderboardMeta(guildId, season);
+  const { rows, weeks, scoredWeeks, bestWeeks, championPickVisible } = await leaderboardMeta(guildId, season);
   const namedRows = await leaderboardRowsForImage(client, guildId, rows);
   const imageName = `ewc-predictions-${season}-${Date.now()}.png`;
   const attachment = new AttachmentBuilder(
@@ -137,8 +137,8 @@ async function buildEwcPredictionLeaderboardPayload(client, guildId, season) {
   return { embeds: [embed], files: [attachment] };
 }
 
-function buildEwcPredictionMentionsEmbed(guildId, season) {
-  const { rows, weeks, scoredWeeks, bestWeeks, championPickVisible } = leaderboardMeta(guildId, season);
+async function buildEwcPredictionMentionsEmbed(guildId, season) {
+  const { rows, weeks, scoredWeeks, bestWeeks, championPickVisible } = await leaderboardMeta(guildId, season);
   return new EmbedBuilder()
     .setColor(0xf1c40f)
     .setTitle(`EWC ${season} Prediction Leaderboard - Admin Mentions`)
@@ -154,7 +154,7 @@ function buildEwcPredictionMentionsEmbed(guildId, season) {
 
 export async function updateEwcPredictionLeaderboard(client, guildId) {
   if (!client) return false;
-  const s = getSettings(guildId);
+  const s = await getSettings(guildId);
   let updated = false;
 
   if (s.ewc_predictions_leaderboard_channel_id) {
@@ -171,7 +171,7 @@ export async function updateEwcPredictionLeaderboard(client, guildId) {
       }
       if (!updated) {
         const sent = await channel.send(imagePayload);
-        setEwcPredictionsLeaderboardMessage(guildId, sent.id);
+        await setEwcPredictionsLeaderboardMessage(guildId, sent.id);
         logger.info(`[ewc-predictions] posted leaderboard ${sent.id} in guild ${guildId}`);
         updated = true;
       }
@@ -183,7 +183,7 @@ export async function updateEwcPredictionLeaderboard(client, guildId) {
     if (channel?.isTextBased?.()) {
       const season = s.ewc_predictions_mentions_season || '2026';
       const payload = {
-        embeds: [buildEwcPredictionMentionsEmbed(guildId, season)],
+        embeds: [await buildEwcPredictionMentionsEmbed(guildId, season)],
         allowedMentions: { parse: [] },
       };
       let mentionUpdated = false;
@@ -196,7 +196,7 @@ export async function updateEwcPredictionLeaderboard(client, guildId) {
       }
       if (!mentionUpdated) {
         const sent = await channel.send(payload);
-        setEwcPredictionsMentionsMessage(guildId, sent.id);
+        await setEwcPredictionsMentionsMessage(guildId, sent.id);
         logger.info(`[ewc-predictions] posted mentions leaderboard ${sent.id} in guild ${guildId}`);
       }
       updated = true;
@@ -208,7 +208,7 @@ export async function updateEwcPredictionLeaderboard(client, guildId) {
 
 async function announce(client, guildId, content) {
   if (!client) return;
-  const channelId = getSettings(guildId).ewc_predictions_channel_id;
+  const channelId = (await getSettings(guildId)).ewc_predictions_channel_id;
   if (!channelId) return;
   const channel = await client.channels.fetch(channelId).catch(() => null);
   if (!channel?.isTextBased?.()) return;
@@ -256,7 +256,7 @@ async function processWeek(client, round) {
       logger.warn(`[ewc-predictions] baseline pending for ${round.guild_id}/${round.season}/${round.week_key}: standings unavailable`);
       return;
     }
-    setEwcWeekSnapshot(round.id, 'baseline', baseline);
+    await setEwcWeekSnapshot(round.id, 'baseline', baseline);
     round.baseline = baseline;
     logger.info(`[ewc-predictions] saved baseline for ${round.guild_id}/${round.season}/${round.week_key}`);
   }
@@ -264,7 +264,7 @@ async function processWeek(client, round) {
   if (!round.close_at || now < round.close_at) return;
 
   if (round.status === 'open') {
-    setEwcWeekStatus(round.id, 'closed');
+    await setEwcWeekStatus(round.id, 'closed');
     round.status = 'closed';
     logger.info(`[ewc-predictions] closed picks for ${round.guild_id}/${round.season}/${round.week_key}`);
   }
@@ -298,31 +298,30 @@ async function processWeek(client, round) {
     return;
   }
 
-  const predictions = listWeeklyPredictions(round.id);
+  const predictions = await listWeeklyPredictions(round.id);
   // Wrap all writes in a transaction so a mid-loop crash leaves scores consistent.
-  const applyScores = db.transaction(() => {
+  await transaction(async (tx) => {
     for (const prediction of predictions) {
       try {
         const result = perGame
           ? scorePerGameWeeklyPrediction(prediction.picks, round.games, results)
           : scoreWeeklyPrediction(prediction.picks, round.baseline, final);
-        saveWeeklyPredictionScore(round.guild_id, round.id, prediction.user_id, result.score, result.details);
+        await saveWeeklyPredictionScore(round.guild_id, round.id, prediction.user_id, result.score, result.details, tx);
       } catch (error) {
         logger.warn(`[ewc-predictions] skipped malformed weekly pick ${prediction.user_id}/${round.week_key}: ${error.message}`);
-        saveWeeklyPredictionScore(round.guild_id, round.id, prediction.user_id, 0, {
+        await saveWeeklyPredictionScore(round.guild_id, round.id, prediction.user_id, 0, {
           error: error.message,
           picks: prediction.picks,
-        });
+        }, tx);
       }
     }
-    if (perGame) markEwcWeekScoredWithResults(round.id, final || [], results);
-    else markEwcWeekScored(round.id, final);
+    if (perGame) await markEwcWeekScoredWithResults(round.id, final || [], results, tx);
+    else await markEwcWeekScored(round.id, final, tx);
   });
-  applyScores();
   logger.info(
     `[ewc-predictions] scored ${predictions.length} weekly prediction(s) for ${round.guild_id}/${round.season}/${round.week_key} (${perGame ? 'per-game' : 'aggregate'})`,
   );
-  const scored = listWeeklyPredictions(round.id);
+  const scored = await listWeeklyPredictions(round.id);
   await announce(
     client,
     round.guild_id,
@@ -334,7 +333,7 @@ async function processWeek(client, round) {
 
 async function processSeason(client, round) {
   if (round.status === 'open') {
-    setEwcSeasonStatus(round.guild_id, round.season, 'closed');
+    await setEwcSeasonStatus(round.guild_id, round.season, 'closed');
     logger.info(`[ewc-predictions] closed season picks for ${round.guild_id}/${round.season}`);
   }
 
@@ -350,26 +349,25 @@ async function processSeason(client, round) {
     return;
   }
 
-  const predictions = listSeasonPredictions(round.guild_id, round.season);
+  const predictions = await listSeasonPredictions(round.guild_id, round.season);
   // Wrap all writes in a transaction so a mid-loop crash leaves scores consistent.
-  const applyScores = db.transaction(() => {
+  await transaction(async (tx) => {
     for (const prediction of predictions) {
       try {
         const result = scoreSeasonPrediction(prediction.picks, final, round.top_size);
-        saveSeasonPredictionScore(round.guild_id, round.season, prediction.user_id, result.score, result.details);
+        await saveSeasonPredictionScore(round.guild_id, round.season, prediction.user_id, result.score, result.details, tx);
       } catch (error) {
         logger.warn(`[ewc-predictions] skipped malformed season pick ${prediction.user_id}/${round.season}: ${error.message}`);
-        saveSeasonPredictionScore(round.guild_id, round.season, prediction.user_id, 0, {
+        await saveSeasonPredictionScore(round.guild_id, round.season, prediction.user_id, 0, {
           error: error.message,
           picks: prediction.picks,
-        });
+        }, tx);
       }
     }
-    markEwcSeasonScored(round.guild_id, round.season, final);
+    await markEwcSeasonScored(round.guild_id, round.season, final, tx);
   });
-  applyScores();
   logger.info(`[ewc-predictions] scored ${predictions.length} season prediction(s) for ${round.guild_id}/${round.season}`);
-  const scored = listSeasonPredictions(round.guild_id, round.season);
+  const scored = await listSeasonPredictions(round.guild_id, round.season);
   await announce(
     client,
     round.guild_id,
@@ -381,8 +379,8 @@ async function processSeason(client, round) {
 
 export async function runEwcPredictionAutomation(client = null) {
   const now = nowSec();
-  const weeks = listEwcWeeksForAutomation(now);
-  const seasons = listEwcSeasonsForAutomation(now);
+  const weeks = await listEwcWeeksForAutomation(now);
+  const seasons = await listEwcSeasonsForAutomation(now);
 
   for (const round of weeks) {
     try {
@@ -400,7 +398,7 @@ export async function runEwcPredictionAutomation(client = null) {
     }
   }
 
-  for (const guildId of getGuildsWithEwcPredictionLeaderboard()) {
+  for (const guildId of await getGuildsWithEwcPredictionLeaderboard()) {
     try {
       await updateEwcPredictionLeaderboard(client, guildId);
     } catch (error) {

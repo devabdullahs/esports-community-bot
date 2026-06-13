@@ -104,7 +104,7 @@ export async function listTournamentSummaries(): Promise<TournamentSummary[]> {
   // The bot only renders match cards for active tournaments (getMatchesForGuild
   // joins on t.active = 1), so listActiveTournaments mirrors exactly what Discord
   // shows. The only gap was the guild id, now DB-derived.
-  const guildId = resolveDefaultGuildId();
+  const guildId = await resolveDefaultGuildId();
   if (!guildId) return [];
   const tournaments = await listActive(guildId);
   return Promise.all(
@@ -130,7 +130,7 @@ export async function getTournamentMatches(
   id: number,
   { limit = 50, offset = 0 }: { limit?: number; offset?: number } = {},
 ): Promise<TournamentMatches | null> {
-  const guildId = resolveDefaultGuildId();
+  const guildId = await resolveDefaultGuildId();
   if (!guildId) return null;
   const tournament = await getById(id);
   if (!tournament || tournament.guild_id !== guildId || tournament.active !== 1) return null;

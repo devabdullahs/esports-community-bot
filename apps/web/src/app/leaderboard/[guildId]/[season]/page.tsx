@@ -30,7 +30,7 @@ export default async function LeaderboardPage({
   const { guildId, season } = await params;
   const locale = await getRequestLocale();
   const text = copy[locale];
-  const leaderboard = getPublicEwcLeaderboard({ guildId, season, limit: 100 });
+  const leaderboard = await getPublicEwcLeaderboard({ guildId, season, limit: 100 });
   const topScore = leaderboard.rows[0]?.overallPoints || 0;
 
   return (

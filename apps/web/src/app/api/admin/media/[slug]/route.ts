@@ -25,7 +25,7 @@ export async function PATCH(
   const validated = validateMediaContent(body);
   if (!validated.ok) return NextResponse.json({ error: validated.error }, { status: 400 });
 
-  const updated = updateMediaChannel(slug, validated.value);
+  const updated = await updateMediaChannel(slug, validated.value);
   if (!updated) return NextResponse.json({ error: "Not found" }, { status: 404 });
   revalidateTag("cms-media", "default");
   recordAdminAudit(access, "media.update", slug);
@@ -41,7 +41,7 @@ export async function DELETE(
   if (!isSuper(access)) return NextResponse.json({ error: "Super admin only" }, { status: 403 });
 
   const { slug } = await context.params;
-  const result = deleteMediaChannel(slug);
+  const result = await deleteMediaChannel(slug);
   if (result.deleted === 0) return NextResponse.json({ error: "Not found" }, { status: 404 });
   revalidateTag("cms-media", "default");
   recordAdminAudit(access, "media.delete", slug);

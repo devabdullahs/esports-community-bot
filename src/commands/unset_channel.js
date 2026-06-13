@@ -87,13 +87,13 @@ export async function execute(interaction) {
     const shouldDelete = interaction.options.getBoolean('delete_message') ?? true;
     let deleted = false;
     if (game) {
-      const board = getGameLeaderboards(interaction.guildId).find((row) => row.game === game);
+      const board = (await getGameLeaderboards(interaction.guildId)).find((row) => row.game === game);
       if (shouldDelete && board) deleted = await deleteMessage(interaction.client, board.channel_id, board.message_id);
-      deleteGameLeaderboard(interaction.guildId, game);
+      await deleteGameLeaderboard(interaction.guildId, game);
     } else {
-      const settings = getSettings(interaction.guildId);
+      const settings = await getSettings(interaction.guildId);
       if (shouldDelete) deleted = await deleteMessage(interaction.client, settings.leaderboard_channel_id, settings.leaderboard_message_id);
-      clearCombinedLeaderboard(interaction.guildId);
+      await clearCombinedLeaderboard(interaction.guildId);
     }
 
     const label = labelFor(game, 'leaderboard');
@@ -116,12 +116,12 @@ export async function execute(interaction) {
     const key = game || ALL_GAMES;
     let deleted = 0;
     if (shouldDelete) {
-      for (const row of getMatchCardMessages(interaction.guildId, key)) {
+      for (const row of await getMatchCardMessages(interaction.guildId, key)) {
         if (await deleteMessage(interaction.client, row.channel_id, row.message_id)) deleted++;
       }
     }
-    clearMatchCardMessages(interaction.guildId, key);
-    deleteGameMatchCard(interaction.guildId, key);
+    await clearMatchCardMessages(interaction.guildId, key);
+    await deleteGameMatchCard(interaction.guildId, key);
 
     const label = labelFor(game, 'match cards');
     await interaction.reply({
@@ -139,8 +139,8 @@ export async function execute(interaction) {
   }
 
   if (sub === 'voice') {
-    if (game) deleteGameVoiceChannel(interaction.guildId, game);
-    else clearCombinedVoiceChannel(interaction.guildId);
+    if (game) await deleteGameVoiceChannel(interaction.guildId, game);
+    else await clearCombinedVoiceChannel(interaction.guildId);
 
     const label = labelFor(game, 'voice channel');
     await interaction.reply({

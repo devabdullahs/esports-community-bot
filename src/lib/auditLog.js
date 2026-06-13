@@ -18,7 +18,7 @@ function actorText(user) {
 }
 
 export async function sendAuditLog(client, guildId, { action, actor, target, details, color = 'config' }) {
-  const channelId = getSettings(guildId).audit_log_channel_id;
+  const channelId = (await getSettings(guildId)).audit_log_channel_id;
   if (!channelId) return;
 
   const channel = await client.channels.fetch(channelId).catch(() => null);

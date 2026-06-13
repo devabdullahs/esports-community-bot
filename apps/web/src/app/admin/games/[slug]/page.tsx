@@ -21,7 +21,7 @@ export default async function EditGamePage({
   if (!access.allowed) redirect("/admin");
   if (!canManageGame(access, slug)) redirect("/admin/games");
 
-  const game = getGame(slug);
+  const game = await getGame(slug);
   if (!game) notFound();
   const locale = await getRequestLocale();
 

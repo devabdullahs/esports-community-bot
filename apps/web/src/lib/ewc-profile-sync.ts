@@ -69,7 +69,7 @@ export async function getEwcMePayload({
   const activeSeason = season || link?.season || DEFAULT_SEASON;
   const stats =
     account && activeGuildId
-      ? getEwcUserProfileStats(activeGuildId, activeSeason, account.accountId)
+      ? await getEwcUserProfileStats(activeGuildId, activeSeason, account.accountId)
       : null;
 
   return {
@@ -98,12 +98,12 @@ export async function syncEwcProfileForAuthUser({
   });
 
   try {
-    const payload = getEwcRoleConnectionPayload(guildId, season, account.accountId);
+    const payload = await getEwcRoleConnectionPayload(guildId, season, account.accountId);
     if (isDevAuthUser(authUserId)) {
       await markEwcProfileLinkSynced(account.accountId);
       return {
         link: (await getEwcProfileLinkByDiscordUser(account.accountId)) || link,
-        stats: getEwcUserProfileStats(guildId, season, account.accountId),
+        stats: await getEwcUserProfileStats(guildId, season, account.accountId),
         payload,
         devBypass: true,
       };
@@ -118,7 +118,7 @@ export async function syncEwcProfileForAuthUser({
     await markEwcProfileLinkSynced(account.accountId);
     return {
       link: (await getEwcProfileLinkByDiscordUser(account.accountId)) || link,
-      stats: getEwcUserProfileStats(guildId, season, account.accountId),
+      stats: await getEwcUserProfileStats(guildId, season, account.accountId),
       payload,
     };
   } catch (error) {

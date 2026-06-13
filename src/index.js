@@ -4,7 +4,7 @@ import { Client, Collection, GatewayIntentBits } from 'discord.js';
 import { config } from './config.js';
 import { logger } from './lib/logger.js';
 import { loadModules } from './lib/loaders.js';
-import { closeDb } from './db/index.js';
+import { closeDbClient, ensurePostgresAppSchema } from './db/client.js';
 import { stopAll } from './jobs/pollingManager.js';
 import { stopClubChampionship } from './jobs/clubChampionship.js';
 import { stopCsRankings } from './jobs/csRankings.js';
@@ -22,6 +22,8 @@ const client = new Client({
   allowedMentions: { parse: [] },
 });
 client.commands = new Collection();
+
+await ensurePostgresAppSchema();
 
 // --- Load commands ---
 for (const { file, mod } of await loadModules(join(here, 'commands'))) {
@@ -49,7 +51,7 @@ for (const { file, mod } of await loadModules(join(here, 'events'))) {
 process.on('unhandledRejection', (reason) => logger.error('Unhandled rejection:', reason));
 process.on('uncaughtException', (err) => logger.error('Uncaught exception:', err));
 
-function shutdown(signal) {
+async function shutdown(signal) {
   logger.info(`Received ${signal} — shutting down.`);
   stopAll();
   stopClubChampionship();
@@ -57,11 +59,15 @@ function shutdown(signal) {
   stopEwcPredictions();
   stopNewsAnnouncer();
   client.destroy();
-  closeDb();
+  await closeDbClient().catch((err) => logger.warn(`Failed to close DB cleanly: ${err.message}`));
   process.exit(0);
 }
-process.on('SIGINT', () => shutdown('SIGINT'));
-process.on('SIGTERM', () => shutdown('SIGTERM'));
+process.on('SIGINT', () => {
+  void shutdown('SIGINT');
+});
+process.on('SIGTERM', () => {
+  void shutdown('SIGTERM');
+});
 
 if (config.discord.deployCommandsOnStart) {
   await deployCommands().catch((err) => {

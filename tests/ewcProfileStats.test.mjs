@@ -35,60 +35,60 @@ test.after(() => {
   rmSync(dir, { recursive: true, force: true });
 });
 
-function seed() {
-  upsertEwcSeason({
+async function seed() {
+  await upsertEwcSeason({
     guildId,
     season,
     label: 'EWC 2026',
     topSize: 10,
     createdBy: 'admin',
   });
-  upsertSeasonPrediction({
+  await upsertSeasonPrediction({
     guildId,
     season,
     userId: userA,
     picks: ['Team Falcons', 'T1', 'Team Vitality'],
   });
-  upsertSeasonPrediction({
+  await upsertSeasonPrediction({
     guildId,
     season,
     userId: userB,
     picks: ['Gen.G', 'G2 Esports', 'Natus Vincere'],
   });
-  saveSeasonPredictionScore(guildId, season, userA, 1000, { picks: [] });
-  saveSeasonPredictionScore(guildId, season, userB, 200, { picks: [] });
+  await saveSeasonPredictionScore(guildId, season, userA, 1000, { picks: [] });
+  await saveSeasonPredictionScore(guildId, season, userB, 200, { picks: [] });
 
-  const week1 = upsertEwcWeek({
+  const week1 = await upsertEwcWeek({
     guildId,
     season,
     weekKey: 'week-1',
     label: 'Week 1',
     createdBy: 'admin',
   });
-  upsertWeeklyPrediction({ guildId, weekId: week1.id, userId: userA, picks: ['Team Falcons', 'T1', 'Team Vitality'] });
-  upsertWeeklyPrediction({ guildId, weekId: week1.id, userId: userB, picks: ['Gen.G', 'G2 Esports', 'Natus Vincere'] });
-  saveWeeklyPredictionScore(guildId, week1.id, userA, 500, { bonus: 300 });
-  saveWeeklyPredictionScore(guildId, week1.id, userB, 200, { bonus: 0 });
-  markEwcWeekScored(week1.id, []);
+  await upsertWeeklyPrediction({ guildId, weekId: week1.id, userId: userA, picks: ['Team Falcons', 'T1', 'Team Vitality'] });
+  await upsertWeeklyPrediction({ guildId, weekId: week1.id, userId: userB, picks: ['Gen.G', 'G2 Esports', 'Natus Vincere'] });
+  await saveWeeklyPredictionScore(guildId, week1.id, userA, 500, { bonus: 300 });
+  await saveWeeklyPredictionScore(guildId, week1.id, userB, 200, { bonus: 0 });
+  await markEwcWeekScored(week1.id, []);
 
-  const week2 = upsertEwcWeek({
+  const week2 = await upsertEwcWeek({
     guildId,
     season,
     weekKey: 'week-2',
     label: 'Week 2',
     createdBy: 'admin',
   });
-  upsertWeeklyPrediction({ guildId, weekId: week2.id, userId: userA, picks: ['Team Falcons', 'T1', 'Team Vitality'] });
-  upsertWeeklyPrediction({ guildId, weekId: week2.id, userId: userB, picks: ['Gen.G', 'G2 Esports', 'Natus Vincere'] });
-  saveWeeklyPredictionScore(guildId, week2.id, userA, 100, { bonus: 0 });
-  saveWeeklyPredictionScore(guildId, week2.id, userB, 600, { bonus: 0 });
-  markEwcWeekScored(week2.id, []);
+  await upsertWeeklyPrediction({ guildId, weekId: week2.id, userId: userA, picks: ['Team Falcons', 'T1', 'Team Vitality'] });
+  await upsertWeeklyPrediction({ guildId, weekId: week2.id, userId: userB, picks: ['Gen.G', 'G2 Esports', 'Natus Vincere'] });
+  await saveWeeklyPredictionScore(guildId, week2.id, userA, 100, { bonus: 0 });
+  await saveWeeklyPredictionScore(guildId, week2.id, userB, 600, { bonus: 0 });
+  await markEwcWeekScored(week2.id, []);
 }
 
-seed();
+await seed();
 
-test('builds ranked profile stats and Discord role connection payload', () => {
-  const stats = getEwcUserProfileStats(guildId, season, userA);
+test('builds ranked profile stats and Discord role connection payload', async () => {
+  const stats = await getEwcUserProfileStats(guildId, season, userA);
   assert.equal(stats.rank, 1);
   assert.equal(stats.overallPoints, 1600);
   assert.equal(stats.weeksScored, 2);
@@ -105,8 +105,8 @@ test('builds ranked profile stats and Discord role connection payload', () => {
   assert.equal(payload.metadata.top3_sweeps, '1');
 });
 
-test('shapes public leaderboard rows', () => {
-  const leaderboard = getPublicEwcLeaderboard({ guildId, season, limit: 10 });
+test('shapes public leaderboard rows', async () => {
+  const leaderboard = await getPublicEwcLeaderboard({ guildId, season, limit: 10 });
   assert.equal(leaderboard.total, 2);
   assert.equal(leaderboard.rows[0].userId, undefined);
   assert.equal(leaderboard.rows[0].rank, 1);

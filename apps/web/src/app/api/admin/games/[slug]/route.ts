@@ -25,7 +25,7 @@ export async function PATCH(
   const validated = validateGameContent(body);
   if (!validated.ok) return NextResponse.json({ error: validated.error }, { status: 400 });
 
-  const updated = updateGame(slug, validated.value);
+  const updated = await updateGame(slug, validated.value);
   if (!updated) return NextResponse.json({ error: "Not found" }, { status: 404 });
   revalidateTag("cms-games", "default");
   recordAdminAudit(access, "game.update", slug);
@@ -41,7 +41,7 @@ export async function DELETE(
   if (!isSuper(access)) return NextResponse.json({ error: "Super admin only" }, { status: 403 });
 
   const { slug } = await context.params;
-  const result = deleteGame(slug);
+  const result = await deleteGame(slug);
   if (result.gameDeleted === 0) return NextResponse.json({ error: "Not found" }, { status: 404 });
   revalidateTag("cms-games", "default");
   revalidateTag("cms-news", "default");

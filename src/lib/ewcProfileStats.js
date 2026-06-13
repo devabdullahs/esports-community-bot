@@ -1,5 +1,4 @@
-import '../db/index.js';
-import { db } from '../db/connection.js';
+import { all, get } from '../db/client.js';
 import {
   countOverallScored,
   overallLeaderboard,
@@ -63,48 +62,52 @@ function clampLimit(limit, fallback = 50) {
   return Math.min(n, 100);
 }
 
-function leaderboardRows(guildId, season, limit = 50, offset = 0) {
+function placeholders(start, count) {
+  return Array.from({ length: count }, (_value, index) => `$${start + index}`).join(', ');
+}
+
+async function leaderboardRows(guildId, season, limit = 50, offset = 0) {
   return overallLeaderboard(guildId, season, clampLimit(limit), Math.max(0, Math.floor(Number(offset)) || 0));
 }
 
-function rankForUser(guildId, season, userId) {
-  const row = overallRankForUser(guildId, season, userId);
+async function rankForUser(guildId, season, userId) {
+  const row = await overallRankForUser(guildId, season, userId);
   if (!row) return { rank: null, score: 0 };
   return { rank: Number(row.rank), score: Number(row.score || 0) };
 }
 
-function weeklyAggregateStats(guildId, season, userId) {
-  const weeklyRows = db
-    .prepare(
-      `SELECT wp.score, wp.details_json
-       FROM ewc_weekly_predictions wp
-       JOIN ewc_prediction_weeks w ON w.id = wp.week_id
-       WHERE wp.guild_id = ?
-         AND w.season = ?
-         AND wp.user_id = ?
-         AND wp.score IS NOT NULL`,
-    )
-    .all(guildId, season, userId);
+async function weeklyAggregateStats(guildId, season, userId) {
+  const weeklyRows = await all(
+    `SELECT wp.score, wp.details_json
+     FROM ewc_weekly_predictions wp
+     JOIN ewc_prediction_weeks w ON w.id = wp.week_id
+     WHERE wp.guild_id = $1
+       AND w.season = $2
+       AND wp.user_id = $3
+       AND wp.score IS NOT NULL`,
+    [guildId, season, userId],
+  );
 
-  const weeklyWins = db
-    .prepare(
+  const weeklyWins = (
+    await get(
       `WITH winners AS (
          SELECT wp.week_id, MAX(wp.score) AS max_score
          FROM ewc_weekly_predictions wp
          JOIN ewc_prediction_weeks w2 ON w2.id = wp.week_id
-         WHERE wp.guild_id = ? AND w2.season = ? AND wp.score IS NOT NULL
+         WHERE wp.guild_id = $1 AND w2.season = $2 AND wp.score IS NOT NULL
          GROUP BY wp.week_id
        )
        SELECT COUNT(*) AS c
        FROM ewc_weekly_predictions wp
        JOIN ewc_prediction_weeks w ON w.id = wp.week_id
        JOIN winners win ON win.week_id = wp.week_id AND win.max_score = wp.score
-       WHERE wp.guild_id = ?
-          AND w.season = ?
-          AND wp.user_id = ?
+       WHERE wp.guild_id = $3
+          AND w.season = $4
+          AND wp.user_id = $5
           AND wp.score IS NOT NULL`,
+      [guildId, season, guildId, season, userId],
     )
-    .get(guildId, season, guildId, season, userId).c;
+  )?.c;
 
   return {
     weeksScored: weeklyRows.length,
@@ -118,35 +121,32 @@ function emptyWeeklyAggregate() {
   return { weeksScored: 0, weeklyWins: 0, top3Sweeps: 0 };
 }
 
-function weeklyAggregateStatsForUsers(guildId, season, userIds) {
+async function weeklyAggregateStatsForUsers(guildId, season, userIds) {
   const uniqueIds = [...new Set(userIds.filter(Boolean))];
   const stats = new Map(uniqueIds.map((userId) => [userId, emptyWeeklyAggregate()]));
   if (!uniqueIds.length) return stats;
 
-  const placeholders = uniqueIds.map(() => '?').join(', ');
-  const weeklyRows = db
-    .prepare(
-      `SELECT wp.user_id, wp.week_id, wp.score, wp.details_json
-       FROM ewc_weekly_predictions wp
-       JOIN ewc_prediction_weeks w ON w.id = wp.week_id
-       WHERE wp.guild_id = ?
-         AND w.season = ?
-         AND wp.score IS NOT NULL
-         AND wp.user_id IN (${placeholders})`,
-    )
-    .all(guildId, season, ...uniqueIds);
+  const weeklyRows = await all(
+    `SELECT wp.user_id, wp.week_id, wp.score, wp.details_json
+     FROM ewc_weekly_predictions wp
+     JOIN ewc_prediction_weeks w ON w.id = wp.week_id
+     WHERE wp.guild_id = $1
+       AND w.season = $2
+       AND wp.score IS NOT NULL
+       AND wp.user_id IN (${placeholders(3, uniqueIds.length)})`,
+    [guildId, season, ...uniqueIds],
+  );
 
-  const winningRows = db
-    .prepare(
-      `SELECT wp.week_id, MAX(wp.score) AS max_score
-       FROM ewc_weekly_predictions wp
-       JOIN ewc_prediction_weeks w ON w.id = wp.week_id
-       WHERE wp.guild_id = ?
-         AND w.season = ?
-         AND wp.score IS NOT NULL
-       GROUP BY wp.week_id`,
-    )
-    .all(guildId, season);
+  const winningRows = await all(
+    `SELECT wp.week_id, MAX(wp.score) AS max_score
+     FROM ewc_weekly_predictions wp
+     JOIN ewc_prediction_weeks w ON w.id = wp.week_id
+     WHERE wp.guild_id = $1
+       AND w.season = $2
+       AND wp.score IS NOT NULL
+     GROUP BY wp.week_id`,
+    [guildId, season],
+  );
   const winningScoreByWeek = new Map(winningRows.map((row) => [row.week_id, Number(row.max_score || 0)]));
 
   for (const row of weeklyRows) {
@@ -167,21 +167,19 @@ function seasonPickTeams(profile) {
   return profile?.season?.picks?.length ? profile.season.picks.slice(0, 3) : [];
 }
 
-function seasonPickTeamsForUsers(guildId, season, userIds) {
+async function seasonPickTeamsForUsers(guildId, season, userIds) {
   const uniqueIds = [...new Set(userIds.filter(Boolean))];
   const teams = new Map(uniqueIds.map((userId) => [userId, []]));
   if (!uniqueIds.length) return teams;
 
-  const placeholders = uniqueIds.map(() => '?').join(', ');
-  const rows = db
-    .prepare(
-      `SELECT user_id, picks_json
-       FROM ewc_season_predictions
-       WHERE guild_id = ?
-         AND season = ?
-         AND user_id IN (${placeholders})`,
-    )
-    .all(guildId, season, ...uniqueIds);
+  const rows = await all(
+    `SELECT user_id, picks_json
+     FROM ewc_season_predictions
+     WHERE guild_id = $1
+       AND season = $2
+       AND user_id IN (${placeholders(3, uniqueIds.length)})`,
+    [guildId, season, ...uniqueIds],
+  );
 
   for (const row of rows) {
     teams.set(row.user_id, parseJson(row.picks_json, []).slice(0, 3));
@@ -213,10 +211,10 @@ export function formatShowcaseUsername(stats) {
   return value.length <= MAX_SHOWCASE_USERNAME ? value : `${value.slice(0, MAX_SHOWCASE_USERNAME - 3)}...`;
 }
 
-export function getEwcUserProfileStats(guildId, season = DEFAULT_EWC_PROFILE_SEASON, userId) {
-  const rank = rankForUser(guildId, season, userId);
-  const weekly = weeklyAggregateStats(guildId, season, userId);
-  const profile = userPredictionProfile(guildId, season, userId);
+export async function getEwcUserProfileStats(guildId, season = DEFAULT_EWC_PROFILE_SEASON, userId) {
+  const rank = await rankForUser(guildId, season, userId);
+  const weekly = await weeklyAggregateStats(guildId, season, userId);
+  const profile = await userPredictionProfile(guildId, season, userId);
   const topTeams = seasonPickTeams(profile);
   const stats = {
     guildId,
@@ -239,16 +237,16 @@ export function getEwcUserProfileStats(guildId, season = DEFAULT_EWC_PROFILE_SEA
   };
 }
 
-export function getPublicEwcLeaderboard({ guildId, season = DEFAULT_EWC_PROFILE_SEASON, limit = 50, offset = 0 }) {
-  const rows = leaderboardRows(guildId, season, limit, offset);
+export async function getPublicEwcLeaderboard({ guildId, season = DEFAULT_EWC_PROFILE_SEASON, limit = 50, offset = 0 }) {
+  const rows = await leaderboardRows(guildId, season, limit, offset);
   const userIds = rows.map((row) => row.user_id);
-  const weeklyByUser = weeklyAggregateStatsForUsers(guildId, season, userIds);
-  const topTeamsByUser = seasonPickTeamsForUsers(guildId, season, userIds);
+  const weeklyByUser = await weeklyAggregateStatsForUsers(guildId, season, userIds);
+  const topTeamsByUser = await seasonPickTeamsForUsers(guildId, season, userIds);
   const start = Math.max(0, Math.floor(Number(offset)) || 0);
   return {
     guildId,
     season,
-    total: countOverallScored(guildId, season),
+    total: await countOverallScored(guildId, season),
     rows: rows.map((row, index) => {
       const userId = row.user_id;
       const weekly = weeklyByUser.get(userId) || emptyWeeklyAggregate();
@@ -279,6 +277,6 @@ export function buildDiscordRoleConnectionPayload(stats) {
   };
 }
 
-export function getEwcRoleConnectionPayload(guildId, season, userId) {
-  return buildDiscordRoleConnectionPayload(getEwcUserProfileStats(guildId, season, userId));
+export async function getEwcRoleConnectionPayload(guildId, season, userId) {
+  return buildDiscordRoleConnectionPayload(await getEwcUserProfileStats(guildId, season, userId));
 }

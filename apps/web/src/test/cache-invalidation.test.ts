@@ -62,7 +62,7 @@ function ctx(params: Record<string, string>) {
 async function seedGame(slug: string): Promise<void> {
   const { createEwcGame } = await import("@bot/db/ewcGames.js");
   try {
-    createEwcGame({
+    await createEwcGame({
       slug,
       title: { en: slug, ar: slug },
       description: { en: "", ar: "" },
@@ -78,7 +78,7 @@ async function seedGame(slug: string): Promise<void> {
 async function seedMediaChannel(slug: string): Promise<void> {
   const { createEwcMediaChannel } = await import("@bot/db/ewcMediaChannels.js");
   try {
-    createEwcMediaChannel({
+    await createEwcMediaChannel({
       slug,
       name: { en: slug, ar: slug },
       description: { en: "", ar: "" },
@@ -92,7 +92,7 @@ async function seedMediaChannel(slug: string): Promise<void> {
 
 async function seedNewsPost(gameSlug: string): Promise<number> {
   const { createEwcNewsPost } = await import("@bot/db/ewcNewsPosts.js");
-  const post = createEwcNewsPost({
+  const post = await createEwcNewsPost({
     gameSlug,
     contentMode: "shared",
     defaultLocale: "en",
@@ -163,11 +163,11 @@ describe("admin mutation routes call revalidateTag on success", () => {
     // Reorder requires ALL existing slugs exactly once.
     // Read every current slug, add our new one, reorder the full set.
     const { listEwcGames } = await import("@bot/db/ewcGames.js") as {
-      listEwcGames: () => { slug: string }[];
+      listEwcGames: () => Promise<{ slug: string }[]>;
     };
     const slug = `reorder-game-${Date.now()}`;
     await seedGame(slug);
-    const allSlugs = listEwcGames().map((g) => g.slug);
+    const allSlugs = (await listEwcGames()).map((g) => g.slug);
     const res = await gamesReorderPOST(req("POST", { slugs: allSlugs }));
     expect(res.status).toBe(200);
     expect(spyRevalidateTag).toHaveBeenCalledWith("cms-games", "default");
@@ -214,11 +214,11 @@ describe("admin mutation routes call revalidateTag on success", () => {
   test("POST /api/admin/media/reorder → revalidateTag(cms-media)", async () => {
     // Reorder requires ALL existing slugs exactly once.
     const { listEwcMediaChannels } = await import("@bot/db/ewcMediaChannels.js") as {
-      listEwcMediaChannels: () => { slug: string }[];
+      listEwcMediaChannels: () => Promise<{ slug: string }[]>;
     };
     const slug = `reorder-media-${Date.now()}`;
     await seedMediaChannel(slug);
-    const allSlugs = listEwcMediaChannels().map((c) => c.slug);
+    const allSlugs = (await listEwcMediaChannels()).map((c) => c.slug);
     const res = await mediaReorderPOST(req("POST", { slugs: allSlugs }));
     expect(res.status).toBe(200);
     expect(spyRevalidateTag).toHaveBeenCalledWith("cms-media", "default");

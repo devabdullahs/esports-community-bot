@@ -85,7 +85,7 @@ export const data = new SlashCommandBuilder()
 
 export async function execute(interaction) {
   const sub = interaction.options.getSubcommand();
-  const current = getSettings(interaction.guildId);
+  const current = await getSettings(interaction.guildId);
   const channel = interaction.options.getChannel('channel') || null;
   const region = interaction.options.getString('region') || current.cs_rankings_region || 'global';
   const format = interaction.options.getString('format') || current.cs_rankings_format || 'embed';
@@ -188,7 +188,7 @@ export async function execute(interaction) {
     return;
   }
 
-  setCsRankings(interaction.guildId, { channelId: targetChannel.id, region, format });
+  await setCsRankings(interaction.guildId, { channelId: targetChannel.id, region, format });
 
   await interaction.reply({
     content: `Setting Counter-Strike Valve rankings to **${regionLabel}** in ${targetChannel} as ${format === 'image' ? 'an image card' : 'an embed'}.`,

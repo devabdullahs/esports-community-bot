@@ -1,85 +1,85 @@
-import { db } from './index.js';
+import { all, get, run, transaction } from './client.js';
 
-export function getEwcAdminGameScopes(discordId) {
-  return db
-    .prepare('SELECT game_slug FROM ewc_admin_game_scopes WHERE discord_id = ? ORDER BY game_slug')
-    .all(discordId)
-    .map((row) => row.game_slug);
+function nowText() {
+  return new Date().toISOString().slice(0, 19).replace('T', ' ');
 }
 
-export function getEwcAdminMediaScopes(discordId) {
-  return db
-    .prepare('SELECT media_slug FROM ewc_admin_media_scopes WHERE discord_id = ? ORDER BY media_slug')
-    .all(discordId)
-    .map((row) => row.media_slug);
+export async function getEwcAdminGameScopes(discordId) {
+  return (await all('SELECT game_slug FROM ewc_admin_game_scopes WHERE discord_id = $1 ORDER BY game_slug', [discordId])).map(
+    (row) => row.game_slug,
+  );
 }
 
-function hydrate(row) {
+export async function getEwcAdminMediaScopes(discordId) {
+  return (await all('SELECT media_slug FROM ewc_admin_media_scopes WHERE discord_id = $1 ORDER BY media_slug', [discordId])).map(
+    (row) => row.media_slug,
+  );
+}
+
+async function hydrate(row) {
   if (!row) return null;
   return {
     discordId: row.discord_id,
     displayName: row.display_name,
     createdAt: row.created_at,
-    games: getEwcAdminGameScopes(row.discord_id),
-    media: getEwcAdminMediaScopes(row.discord_id),
+    games: await getEwcAdminGameScopes(row.discord_id),
+    media: await getEwcAdminMediaScopes(row.discord_id),
   };
 }
 
-export function getEwcAdmin(discordId) {
-  return hydrate(db.prepare('SELECT * FROM ewc_admins WHERE discord_id = ?').get(discordId));
+export async function getEwcAdmin(discordId) {
+  return hydrate(await get('SELECT * FROM ewc_admins WHERE discord_id = $1', [discordId]));
 }
 
-export function listEwcAdmins() {
-  return db
-    .prepare('SELECT * FROM ewc_admins ORDER BY display_name COLLATE NOCASE, discord_id')
-    .all()
-    .map(hydrate);
+export async function listEwcAdmins() {
+  const rows = await all('SELECT * FROM ewc_admins ORDER BY LOWER(display_name), discord_id');
+  return Promise.all(rows.map(hydrate));
 }
 
-export function upsertEwcAdmin({ discordId, displayName = '' }) {
-  db.prepare(
+export async function upsertEwcAdmin({ discordId, displayName = '' }) {
+  await run(
     `INSERT INTO ewc_admins (discord_id, display_name, created_at)
-     VALUES (?, ?, datetime('now'))
+     VALUES ($1, $2, $3)
      ON CONFLICT (discord_id) DO UPDATE SET display_name = excluded.display_name`,
-  ).run(discordId, displayName);
+    [discordId, displayName, nowText()],
+  );
   return getEwcAdmin(discordId);
 }
 
-export function setEwcAdminGameScopes(discordId, slugs) {
-  const del = db.prepare('DELETE FROM ewc_admin_game_scopes WHERE discord_id = ?');
-  const ins = db.prepare(
-    'INSERT OR IGNORE INTO ewc_admin_game_scopes (discord_id, game_slug) VALUES (?, ?)',
-  );
-  const tx = db.transaction((id, list) => {
-    del.run(id);
-    for (const slug of list) ins.run(id, slug);
+export async function setEwcAdminGameScopes(discordId, slugs) {
+  await transaction(async (tx) => {
+    await tx.run('DELETE FROM ewc_admin_game_scopes WHERE discord_id = $1', [discordId]);
+    for (const slug of slugs) {
+      await tx.run(
+        'INSERT INTO ewc_admin_game_scopes (discord_id, game_slug) VALUES ($1, $2) ON CONFLICT DO NOTHING',
+        [discordId, slug],
+      );
+    }
   });
-  tx(discordId, slugs);
 }
 
-export function setEwcAdminMediaScopes(discordId, slugs) {
-  const del = db.prepare('DELETE FROM ewc_admin_media_scopes WHERE discord_id = ?');
-  const ins = db.prepare(
-    'INSERT OR IGNORE INTO ewc_admin_media_scopes (discord_id, media_slug) VALUES (?, ?)',
-  );
-  const tx = db.transaction((id, list) => {
-    del.run(id);
-    for (const slug of list) ins.run(id, slug);
+export async function setEwcAdminMediaScopes(discordId, slugs) {
+  await transaction(async (tx) => {
+    await tx.run('DELETE FROM ewc_admin_media_scopes WHERE discord_id = $1', [discordId]);
+    for (const slug of slugs) {
+      await tx.run(
+        'INSERT INTO ewc_admin_media_scopes (discord_id, media_slug) VALUES ($1, $2) ON CONFLICT DO NOTHING',
+        [discordId, slug],
+      );
+    }
   });
-  tx(discordId, slugs);
 }
 
-export function deleteEwcAdmin(discordId) {
-  const tx = db.transaction((id) => {
-    db.prepare('DELETE FROM ewc_admin_game_scopes WHERE discord_id = ?').run(id);
-    db.prepare('DELETE FROM ewc_admin_media_scopes WHERE discord_id = ?').run(id);
-    const result = db.prepare('DELETE FROM ewc_admins WHERE discord_id = ?').run(id);
+export async function deleteEwcAdmin(discordId) {
+  return transaction(async (tx) => {
+    await tx.run('DELETE FROM ewc_admin_game_scopes WHERE discord_id = $1', [discordId]);
+    await tx.run('DELETE FROM ewc_admin_media_scopes WHERE discord_id = $1', [discordId]);
+    const result = await tx.run('DELETE FROM ewc_admins WHERE discord_id = $1', [discordId]);
     return { deleted: result.changes };
   });
-  return tx(discordId);
 }
 
 // Clears scope rows pointing at a now-deleted game (called from deleteEwcGame).
-export function clearGameScope(gameSlug) {
-  db.prepare('DELETE FROM ewc_admin_game_scopes WHERE game_slug = ?').run(gameSlug);
+export async function clearGameScope(gameSlug) {
+  return run('DELETE FROM ewc_admin_game_scopes WHERE game_slug = $1', [gameSlug]);
 }

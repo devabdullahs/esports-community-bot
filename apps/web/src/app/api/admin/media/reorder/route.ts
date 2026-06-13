@@ -26,7 +26,7 @@ export async function POST(request: Request) {
   const slugs: string[] = body.slugs;
 
   try {
-    const channels = reorderMediaChannels(slugs);
+    const channels = await reorderMediaChannels(slugs);
     revalidateTag("cms-media", "default");
     recordAdminAudit(access, "media.reorder", null);
     return NextResponse.json({ channels });

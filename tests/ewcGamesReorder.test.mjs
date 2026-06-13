@@ -41,42 +41,42 @@ test.after(() => {
   rmSync(dir, { recursive: true, force: true });
 });
 
-test('reorderEwcGames throws when a slug is missing from input', () => {
-  createEwcGame(GAME_A);
-  createEwcGame(GAME_B);
-  createEwcGame(GAME_C);
+test('reorderEwcGames throws when a slug is missing from input', async () => {
+  await createEwcGame(GAME_A);
+  await createEwcGame(GAME_B);
+  await createEwcGame(GAME_C);
 
   // Only two of the test slugs, missing most seeded defaults — should throw
-  assert.throws(
+  await assert.rejects(
     () => reorderEwcGames(['test-game-a', 'test-game-b']),
     /Reorder must include every existing slug exactly once/,
   );
 });
 
-test('reorderEwcGames throws on duplicate slugs in input', () => {
+test('reorderEwcGames throws on duplicate slugs in input', async () => {
   // Get all current slugs and add a duplicate
-  const allSlugs = listEwcGames().map((g) => g.slug);
+  const allSlugs = (await listEwcGames()).map((g) => g.slug);
   const withDuplicate = [allSlugs[0], allSlugs[0], ...allSlugs.slice(1, -1)];
-  assert.throws(
+  await assert.rejects(
     () => reorderEwcGames(withDuplicate),
     /Reorder must include every existing slug exactly once/,
   );
 });
 
-test('reorderEwcGames throws on unknown slug in input', () => {
-  const allSlugs = listEwcGames().map((g) => g.slug);
+test('reorderEwcGames throws on unknown slug in input', async () => {
+  const allSlugs = (await listEwcGames()).map((g) => g.slug);
   // Replace last slug with an unknown one
   const withUnknown = [...allSlugs.slice(0, -1), 'does-not-exist'];
-  assert.throws(
+  await assert.rejects(
     () => reorderEwcGames(withUnknown),
     /Reorder must include every existing slug exactly once/,
   );
 });
 
-test('reorderEwcGames succeeds with all slugs in reversed order', () => {
-  const allSlugs = listEwcGames().map((g) => g.slug);
+test('reorderEwcGames succeeds with all slugs in reversed order', async () => {
+  const allSlugs = (await listEwcGames()).map((g) => g.slug);
   const reversed = [...allSlugs].reverse();
-  const result = reorderEwcGames(reversed);
+  const result = await reorderEwcGames(reversed);
   assert.equal(result[0].slug, reversed[0]);
   assert.equal(result[result.length - 1].slug, reversed[reversed.length - 1]);
 });

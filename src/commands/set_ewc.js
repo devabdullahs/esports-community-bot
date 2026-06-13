@@ -63,7 +63,7 @@ export async function execute(interaction) {
   // externalId is "<wiki>/<page>" e.g. "esports/Esports_World_Cup/2026"
   const [wiki, ...rest] = parsed.externalId.split('/');
   const page = rest.join('/');
-  setClubChampionship(interaction.guildId, { wiki, page, channelId: channel.id, label });
+  await setClubChampionship(interaction.guildId, { wiki, page, channelId: channel.id, label });
 
   await interaction.reply({
     content: `✅ **Club Championship tracking set** in ${channel}.\n-# Page \`${wiki}/${page}\` — posting standings now and refreshing automatically.`,
