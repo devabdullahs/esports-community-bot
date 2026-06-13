@@ -193,3 +193,27 @@ Before stopping the NAS permanently:
 - Match cards update without creating duplicate Discord messages.
 - Liquipedia backoff state persists across Cranl restarts.
 - Row counts match the SQLite backup for all migrated tables.
+
+## Porting progress (live checklist)
+
+Async unified client: `src/db/client.js` (BIGINT→Number parser in place).
+Local PG test harness: container `ecb-pg-test` on :5433, schema from
+`scripts/postgres/schema.sql`, reset via `scripts/postgres/reset-test-db.sh`.
+Run a module's tests against PG with:
+`DB_DRIVER=postgres DATABASE_URL="postgres://postgres:test@localhost:5433/ecb_test" node --test tests/<file>.mjs`
+
+Module port status (✓ = on async client, verified both backends):
+- [x] ewcRateLimits, ewcAdminAuditLog, ewcProfileLinks (prior agent + BIGINT fix)
+- [x] tournaments, matches (+ all bot callers, web lib/tournaments.ts) — Slice A
+- [ ] settings (34 stmts; 14 caller files — channels/leaderboards/voice/cards)
+- [ ] ewcPredictions (38 stmts; the scoring money-path — needs db.transaction care)
+- [ ] ewcGames, ewcMediaChannels, ewcNewsPosts, ewcNewsDiscordPosts, ewcAdmins (CMS)
+- [ ] index.js schema/boot: on PG call `ensurePostgresAppSchema()`, on SQLite keep
+      CREATE TABLE; bot/web entry must `await` schema setup; `closeDb`→`closeDbClient`.
+      NOTE: ported modules no longer transitively import index.js — schema bootstrap
+      must be made explicit at app entry + in test setup.
+- [ ] End-to-end: run FULL suite against PG; create Better Auth tables in Cranl
+      (`npm run web:auth:migrate` against DATABASE_URL); smoke web auth on PG.
+
+Recommended remaining order: settings → ewcPredictions → CMS → index/boot → e2e.
+Keep `RUN_BOT=false` on Cranl until all boxes are checked.
