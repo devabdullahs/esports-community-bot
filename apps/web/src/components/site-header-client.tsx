@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  CrownIcon,
   Gamepad2Icon,
   LanguagesIcon,
   type LucideIcon,
@@ -66,6 +67,7 @@ export function SiteHeaderClient({
     { href: "/media", label: text.common.media, icon: Tv2Icon },
     { href: "/tournaments", label: text.common.tournaments, icon: TrophyIcon },
     { href: "/predictions", label: text.common.predictions, icon: TargetIcon },
+    { href: "/leaderboard", label: text.common.publicLeaderboard, icon: CrownIcon },
   ];
 
   function switchLanguage() {
