@@ -2,10 +2,12 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowLeftIcon } from "lucide-react";
 import { PostBody } from "@/components/news/post-body";
+import { PageBreadcrumb } from "@/components/page-breadcrumb";
 import { Button } from "@/components/ui/button";
 import { localizeText } from "@/lib/community-content";
 import { getGameCached } from "@/lib/games";
 import {
+  copy,
   formatDateTime,
   localizedPath,
 } from "@/lib/i18n";
@@ -45,10 +47,23 @@ export default async function NewsPostPage({
     />
   ) : null;
 
+  const common = copy[locale].common;
+
   return (
     <main
       className="mx-auto flex w-full max-w-3xl flex-1 flex-col gap-6 px-5 py-10 sm:px-8"
     >
+      <PageBreadcrumb
+        items={[
+          { label: common.home, href: localizedPath("/", locale) },
+          { label: common.games, href: localizedPath("/games", locale) },
+          {
+            label: localizeText(game.title, locale),
+            href: localizedPath(`/games/${slug}`, locale),
+          },
+          { label: post.title },
+        ]}
+      />
       <Button
         render={<Link href={localizedPath(`/games/${slug}`, locale)} />}
         nativeButton={false}

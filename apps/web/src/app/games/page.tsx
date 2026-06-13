@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { ArrowRightIcon, Gamepad2Icon, NewspaperIcon } from "lucide-react";
+import { PageBreadcrumb } from "@/components/page-breadcrumb";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -24,6 +25,7 @@ export const dynamic = "force-dynamic";
 export default async function GamesPage() {
   const locale = await getRequestLocale();
   const text = copy[locale].games;
+  const common = copy[locale].common;
   const games = await listGamesCached();
   const latestPosts = await listLatestPublishedNewsPostsCached(locale, 2);
   const gameTitle = (slug: string) => {
@@ -35,6 +37,12 @@ export default async function GamesPage() {
     <main
       className="mx-auto flex w-full max-w-6xl flex-1 flex-col gap-10 px-5 py-10 sm:px-8"
     >
+      <PageBreadcrumb
+        items={[
+          { label: common.home, href: localizedPath("/", locale) },
+          { label: common.games },
+        ]}
+      />
       <section className="flex max-w-3xl flex-col items-start gap-4">
         <Badge variant="outline">
           <Gamepad2Icon data-icon="inline-start" />

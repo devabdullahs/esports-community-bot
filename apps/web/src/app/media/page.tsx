@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { Tv2Icon } from "lucide-react";
+import { PageBreadcrumb } from "@/components/page-breadcrumb";
 import { Badge } from "@/components/ui/badge";
 import {
   Card,
@@ -9,7 +10,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { localizeText } from "@/lib/community-content";
-import { localizedPath } from "@/lib/i18n";
+import { copy, localizedPath } from "@/lib/i18n";
 import { listMediaChannelsCached } from "@/lib/media";
 import { getRequestLocale } from "@/lib/request-locale";
 import { safeUrlOrUndefined } from "@/lib/safe-url";
@@ -35,12 +36,19 @@ const COPY = {
 export default async function MediaPage() {
   const locale = await getRequestLocale();
   const t = COPY[locale];
+  const common = copy[locale].common;
   const channels = await listMediaChannelsCached();
 
   return (
     <main
       className="mx-auto flex w-full max-w-6xl flex-1 flex-col gap-8 px-5 py-10 sm:px-8"
     >
+      <PageBreadcrumb
+        items={[
+          { label: common.home, href: localizedPath("/", locale) },
+          { label: common.media },
+        ]}
+      />
       <section className="flex max-w-3xl flex-col items-start gap-4">
         <Badge variant="outline">
           <Tv2Icon data-icon="inline-start" />

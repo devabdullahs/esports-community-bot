@@ -7,6 +7,7 @@ import {
   NewspaperIcon,
   ShieldCheckIcon,
 } from "lucide-react";
+import { PageBreadcrumb } from "@/components/page-breadcrumb";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -43,6 +44,7 @@ export default async function GamePage({
 
   const locale = await getRequestLocale();
   const text = copy[locale].game;
+  const common = copy[locale].common;
   const session = await getAuthSession();
   const posts = await listPublishedNewsPostsCached(slug, locale);
 
@@ -50,6 +52,13 @@ export default async function GamePage({
     <main
       className="mx-auto flex w-full max-w-6xl flex-1 flex-col gap-8 px-5 py-10 sm:px-8"
     >
+      <PageBreadcrumb
+        items={[
+          { label: common.home, href: localizedPath("/", locale) },
+          { label: common.games, href: localizedPath("/games", locale) },
+          { label: localizeText(game.title, locale) },
+        ]}
+      />
       <Button
         render={<Link href={localizedPath("/games", locale)} />}
         nativeButton={false}

@@ -1,9 +1,10 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowLeftIcon, ExternalLinkIcon, Tv2Icon } from "lucide-react";
+import { PageBreadcrumb } from "@/components/page-breadcrumb";
 import { Button } from "@/components/ui/button";
 import { localizeText } from "@/lib/community-content";
-import { localizedPath } from "@/lib/i18n";
+import { copy, localizedPath } from "@/lib/i18n";
 import { getMediaChannelCached } from "@/lib/media";
 import { getRequestLocale } from "@/lib/request-locale";
 import { safeUrlOrUndefined } from "@/lib/safe-url";
@@ -33,11 +34,19 @@ export default async function MediaChannelPage({
   if (!channel) notFound();
 
   const logo = safeUrlOrUndefined(channel.logoUrl);
+  const common = copy[locale].common;
 
   return (
     <main
       className="mx-auto flex w-full max-w-3xl flex-1 flex-col gap-6 px-5 py-10 sm:px-8"
     >
+      <PageBreadcrumb
+        items={[
+          { label: common.home, href: localizedPath("/", locale) },
+          { label: common.media, href: localizedPath("/media", locale) },
+          { label: localizeText(channel.name, locale) },
+        ]}
+      />
       <Button
         render={<Link href={localizedPath("/media", locale)} />}
         nativeButton={false}

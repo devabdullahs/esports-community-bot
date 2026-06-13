@@ -8,6 +8,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { PageBreadcrumb } from "@/components/page-breadcrumb";
 import { LiquipediaAttribution } from "@/components/tournaments/liquipedia-attribution";
 import { copy, formatNumber, localizedPath } from "@/lib/i18n";
 import { getRequestLocale } from "@/lib/request-locale";
@@ -19,10 +20,17 @@ export const dynamic = "force-dynamic";
 export default async function TournamentsPage() {
   const locale = await getRequestLocale();
   const text = copy[locale].tournaments;
+  const common = copy[locale].common;
   const tournaments = await listTournamentSummariesCached();
 
   return (
     <main className="mx-auto flex w-full max-w-6xl flex-1 flex-col gap-10 px-5 py-10 sm:px-8">
+      <PageBreadcrumb
+        items={[
+          { label: common.home, href: localizedPath("/", locale) },
+          { label: common.tournaments },
+        ]}
+      />
       <section className="flex max-w-3xl flex-col items-start gap-4">
         <Badge variant="outline">
           <TrophyIcon data-icon="inline-start" />
