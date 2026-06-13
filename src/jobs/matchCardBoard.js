@@ -95,7 +95,23 @@ async function upsertAllGamesStatusCard(channel, board, matches, existing) {
   return sent.id;
 }
 
-export async function updateMatchCards(client, guildId) {
+// Serialize updateMatchCards per guild. The async (Postgres) DB layer yields at
+// every await, so two overlapping refreshes would each read "no card stored yet"
+// and post duplicate match cards. Queue calls per guild so each run sees the prior
+// run's writes and edits the existing card instead of re-posting.
+const guildQueues = new Map();
+
+export function updateMatchCards(client, guildId) {
+  const prev = guildQueues.get(guildId) ?? Promise.resolve();
+  const run = prev.catch(() => {}).then(() => updateMatchCardsImpl(client, guildId));
+  guildQueues.set(guildId, run);
+  run.catch(() => {}).finally(() => {
+    if (guildQueues.get(guildId) === run) guildQueues.delete(guildId);
+  });
+  return run;
+}
+
+async function updateMatchCardsImpl(client, guildId) {
   const boards = await getGameMatchCards(guildId);
   if (!boards.length) return;
 
