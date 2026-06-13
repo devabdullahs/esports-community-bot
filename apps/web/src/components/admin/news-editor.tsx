@@ -55,6 +55,7 @@ import {
 } from "@/lib/news-validation";
 import { ImageCropDialog } from "@/components/admin/image-crop-dialog";
 import { PostBody } from "@/components/news/post-body";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -235,6 +236,8 @@ export function NewsEditor({
   const coverFileRef = useRef<File | null>(null);
   // Set while the crop dialog is cropping a BODY image (vs the default cover flow).
   const bodyCropPendingRef = useRef(false);
+  // Holds the save target/action while the shared-mode discard confirm dialog is open.
+  const pendingPersistRef = useRef<{ targetStatus: NewsStatus; action: string } | null>(null);
 
   const initialDefaultLocale = post?.defaultLocale || post?.locale || "en";
   const [gameSlug, setGameSlug] = useState(post?.gameSlug || games[0]?.slug || "");
@@ -257,6 +260,11 @@ export function NewsEditor({
   const [bodyDragActive, setBodyDragActive] = useState(false);
   const [cropOpen, setCropOpen] = useState(false);
   const [cropFile, setCropFile] = useState<File | null>(null);
+  // Body image awaiting the "Crop or upload as-is?" choice (replaces window.confirm).
+  const [cropChoiceFile, setCropChoiceFile] = useState<File | null>(null);
+  // Open-state for the shared-mode discard confirm and the delete confirm dialogs.
+  const [discardConfirmOpen, setDiscardConfirmOpen] = useState(false);
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
 
   const editLocale = contentMode === "shared" ? defaultLocale : activeLocale;
   const current = translations[editLocale];
@@ -278,6 +286,7 @@ export function NewsEditor({
     zoom: t.cropZoom,
     aspect: t.cropAspect,
     free: t.cropFree,
+    freeHint: t.cropFreeHint,
     cancel: t.cropCancel,
     apply: t.cropApply,
     applying: t.cropApplying,
@@ -374,15 +383,29 @@ export function NewsEditor({
   function handleBodyFile(file: File) {
     if (!isImageFile(file)) return;
     uploadTargetRef.current = "body";
-    // Body images upload as-is, but offer an optional crop first (skip GIF/AVIF which
-    // the crop canvas cannot re-encode meaningfully).
-    if (!NON_CROPPABLE_TYPES.has(file.type) && window.confirm(t.cropBeforeUpload)) {
-      bodyCropPendingRef.current = true;
-      coverFileRef.current = null;
-      setCropFile(file);
-      setCropOpen(true);
+    // Body images upload as-is, but offer an optional crop first via a polished dialog
+    // (skip GIF/AVIF which the crop canvas cannot re-encode meaningfully).
+    if (!NON_CROPPABLE_TYPES.has(file.type)) {
+      setCropChoiceFile(file);
       return;
     }
+    void handleUpload(file);
+  }
+
+  // "Crop image" chosen in the crop-before-upload dialog → open the real crop tool.
+  function startBodyCrop(file: File) {
+    setCropChoiceFile(null);
+    bodyCropPendingRef.current = true;
+    coverFileRef.current = null;
+    uploadTargetRef.current = "body";
+    setCropFile(file);
+    setCropOpen(true);
+  }
+
+  // "Upload as-is" chosen → skip cropping and upload the original body image.
+  function uploadBodyAsIs(file: File) {
+    setCropChoiceFile(null);
+    uploadTargetRef.current = "body";
     void handleUpload(file);
   }
 
@@ -520,7 +543,7 @@ export function NewsEditor({
   const canSave = Boolean(gameSlug && !hasLimitError);
   const canPublish = canSave && !publishError;
 
-  async function persist(targetStatus: NewsStatus, action: string) {
+  function persist(targetStatus: NewsStatus, action: string) {
     setError(null);
     if (targetStatus === "published" && !canPublish) {
       setError(
@@ -531,10 +554,16 @@ export function NewsEditor({
     if (contentMode === "shared") {
       const inactiveLocale = defaultLocale === "en" ? "ar" : "en";
       if (hasContent(translations[inactiveLocale])) {
-        const confirmed = window.confirm(t.sharedDiscardConfirm);
-        if (!confirmed) return;
+        // Confirm via a polished dialog before discarding the other-language draft.
+        pendingPersistRef.current = { targetStatus, action };
+        setDiscardConfirmOpen(true);
+        return;
       }
     }
+    void persistConfirmed(targetStatus, action);
+  }
+
+  async function persistConfirmed(targetStatus: NewsStatus, action: string) {
     setBusy(action);
     try {
       const payload = {
@@ -566,9 +595,15 @@ export function NewsEditor({
     }
   }
 
-  async function remove() {
+  // Opens the delete confirm dialog; the actual delete runs from removeConfirmed.
+  function remove() {
     if (mode !== "edit" || !post) return;
-    if (!window.confirm(t.deleteConfirm)) return;
+    setDeleteConfirmOpen(true);
+  }
+
+  async function removeConfirmed() {
+    if (mode !== "edit" || !post) return;
+    setDeleteConfirmOpen(false);
     setError(null);
     setBusy("delete");
     try {
@@ -644,7 +679,14 @@ export function NewsEditor({
                   <FieldLabel>{t.game}</FieldLabel>
                   <Select value={gameSlug} onValueChange={(value) => value && setGameSlug(value)}>
                     <SelectTrigger className="w-full">
-                      <SelectValue />
+                      {/* base-ui SelectValue renders the raw value by default; a function
+                          child maps value→localized label so the trigger shows the name. */}
+                      <SelectValue>
+                        {(value) => {
+                          const selected = games.find((g) => g.slug === value);
+                          return selected ? localizeText(selected.title, locale) : value;
+                        }}
+                      </SelectValue>
                     </SelectTrigger>
                     <SelectContent>
                       <SelectGroup>
@@ -690,7 +732,9 @@ export function NewsEditor({
                     }}
                   >
                     <SelectTrigger className="w-full sm:w-64">
-                      <SelectValue />
+                      <SelectValue>
+                        {(value) => (value === "ar" ? t.arabic : t.english)}
+                      </SelectValue>
                     </SelectTrigger>
                     <SelectContent>
                       <SelectGroup>
@@ -821,7 +865,15 @@ export function NewsEditor({
                   }}
                 >
                   <SelectTrigger className="w-full sm:w-64">
-                    <SelectValue />
+                    <SelectValue>
+                      {(value) =>
+                        value === "bottom"
+                          ? t.placementBottom
+                          : value === "card-only"
+                            ? t.placementCardOnly
+                            : t.placementTop
+                      }
+                    </SelectValue>
                   </SelectTrigger>
                   <SelectContent>
                     <SelectGroup>
@@ -1106,6 +1158,73 @@ export function NewsEditor({
           setCropOpen(false);
           bodyCropPendingRef.current = false;
         }}
+      />
+
+      {/* Crop-or-upload-as-is choice for body images (replaces window.confirm). */}
+      <ConfirmDialog
+        open={cropChoiceFile !== null}
+        onOpenChange={(open) => {
+          if (!open) setCropChoiceFile(null);
+        }}
+        title={t.cropBeforeUpload}
+        description={t.cropBeforeUploadBody}
+        cancelLabel={t.confirmCancel}
+        actions={
+          cropChoiceFile
+            ? [
+                {
+                  label: t.cropBeforeUploadAsIs,
+                  variant: "outline",
+                  onClick: () => uploadBodyAsIs(cropChoiceFile),
+                },
+                {
+                  label: t.cropBeforeUploadCrop,
+                  onClick: () => startBodyCrop(cropChoiceFile),
+                },
+              ]
+            : []
+        }
+      />
+
+      {/* Shared-mode discard confirm (replaces window.confirm). */}
+      <ConfirmDialog
+        open={discardConfirmOpen}
+        onOpenChange={(open) => {
+          if (!open) {
+            setDiscardConfirmOpen(false);
+            pendingPersistRef.current = null;
+          }
+        }}
+        title={t.discardTitle}
+        description={t.sharedDiscardConfirm}
+        cancelLabel={t.confirmCancel}
+        actions={[
+          {
+            label: t.discardConfirmAction,
+            onClick: () => {
+              const pending = pendingPersistRef.current;
+              pendingPersistRef.current = null;
+              setDiscardConfirmOpen(false);
+              if (pending) void persistConfirmed(pending.targetStatus, pending.action);
+            },
+          },
+        ]}
+      />
+
+      {/* Delete confirm (replaces window.confirm). */}
+      <ConfirmDialog
+        open={deleteConfirmOpen}
+        onOpenChange={setDeleteConfirmOpen}
+        title={t.deleteTitle}
+        description={t.deleteConfirm}
+        cancelLabel={t.confirmCancel}
+        actions={[
+          {
+            label: t.deleteConfirmAction,
+            variant: "destructive",
+            onClick: () => void removeConfirmed(),
+          },
+        ]}
       />
     </div>
   );
