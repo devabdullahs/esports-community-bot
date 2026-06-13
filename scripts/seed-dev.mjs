@@ -169,7 +169,7 @@ console.log(`season + ${weekRows.length} weeks scored for ${members.length} memb
 
 // 3b) One tracked tournament + a few matches so /tournaments has data to render.
 // addTournament/upsertMatch upsert on their unique keys, so re-running is idempotent.
-const tournament = addTournament({
+const tournament = await addTournament({
   source: 'liquipedia',
   external_id: 'EWC/2026/Valorant',
   game: 'valorant',
@@ -185,7 +185,7 @@ const tMatches = [
 ];
 let matchCount = 0;
 for (const m of tMatches) {
-  try { upsertMatch({ tournament_id: tournament.id, source: 'liquipedia', ...m }); matchCount += 1; }
+  try { await upsertMatch({ tournament_id: tournament.id, source: 'liquipedia', ...m }); matchCount += 1; }
   catch (e) { console.warn('match skip:', e.message); }
 }
 console.log(`tournament seeded: ${tournament.name} (#${tournament.id}) with ${matchCount} matches`);
