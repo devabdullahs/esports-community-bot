@@ -3,6 +3,11 @@ export const NEWS_SUMMARY_MAX_LENGTH = 180;
 export const NEWS_BODY_MAX_LENGTH = 12000;
 export const NEWS_CONTENT_MODES = ['shared', 'translated'];
 export const NEWS_LOCALES = ['en', 'ar'];
+// Where the cover image renders on the public article page. 'top' is the legacy
+// behaviour (cover above the body); 'bottom' renders it after the body; 'card-only'
+// keeps it off the article entirely (cards/listings still show it).
+export const NEWS_COVER_PLACEMENTS = ['top', 'bottom', 'card-only'];
+export const DEFAULT_NEWS_COVER_PLACEMENT = 'top';
 
 export function isNewsLocale(value) {
   return value === 'en' || value === 'ar';
@@ -10,6 +15,10 @@ export function isNewsLocale(value) {
 
 export function isNewsContentMode(value) {
   return value === 'shared' || value === 'translated';
+}
+
+export function isNewsCoverPlacement(value) {
+  return value === 'top' || value === 'bottom' || value === 'card-only';
 }
 
 export function normalizeNewsTranslation(input = {}) {

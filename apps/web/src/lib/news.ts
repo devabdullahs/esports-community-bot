@@ -20,6 +20,7 @@ import { unstable_cache } from "next/cache";
 
 export type NewsStatus = "draft" | "published";
 export type NewsContentMode = "shared" | "translated";
+export type NewsCoverPlacement = "top" | "bottom" | "card-only";
 
 export type NewsTranslation = {
   locale: Locale;
@@ -41,6 +42,7 @@ export type NewsPost = {
   authorDiscordId: string | null;
   authorName: string | null;
   coverImageUrl: string | null;
+  coverPlacement: NewsCoverPlacement;
   translations: Partial<Record<Locale, NewsTranslation>>;
   createdAt: string;
   updatedAt: string;
@@ -56,6 +58,7 @@ export type NewsPostInput = {
   authorDiscordId?: string | null;
   authorName?: string | null;
   coverImageUrl?: string | null;
+  coverPlacement?: NewsCoverPlacement;
 };
 
 const getById = _getById as (id: number) => NewsPost | null;

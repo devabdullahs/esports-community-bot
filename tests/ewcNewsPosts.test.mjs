@@ -15,6 +15,7 @@ const {
   getPublishedEwcNewsPost,
   listPublishedEwcNewsPosts,
   setEwcNewsPostStatus,
+  updateEwcNewsPost,
 } = await import('../src/db/ewcNewsPosts.js');
 const {
   NEWS_SUMMARY_MAX_LENGTH,
@@ -162,6 +163,72 @@ test('setEwcNewsPostStatus on nonexistent id returns null (characterization)', (
   // The function does a raw UPDATE; if changes === 0 it returns null, not an error.
   const result = setEwcNewsPostStatus(999999, 'published');
   assert.equal(result, null);
+});
+
+test('persists and hydrates coverPlacement (roundtrip), defaulting to top', () => {
+  // Explicit non-default placement survives a create -> read roundtrip.
+  const bottom = createEwcNewsPost({
+    gameSlug: 'valorant',
+    status: 'draft',
+    contentMode: 'shared',
+    defaultLocale: 'en',
+    coverImageUrl: 'https://assets.example.test/cover.jpg',
+    coverPlacement: 'bottom',
+    translations: {
+      en: { title: 'Placed bottom', summary: '', body: 'Body.' },
+    },
+  });
+  assert.equal(bottom.coverPlacement, 'bottom');
+  assert.equal(getEwcNewsPostById(bottom.id).coverPlacement, 'bottom');
+
+  // card-only is preserved too.
+  const cardOnly = createEwcNewsPost({
+    gameSlug: 'valorant',
+    status: 'draft',
+    contentMode: 'shared',
+    defaultLocale: 'en',
+    coverPlacement: 'card-only',
+    translations: {
+      en: { title: 'Card only', summary: '', body: 'Body.' },
+    },
+  });
+  assert.equal(cardOnly.coverPlacement, 'card-only');
+
+  // Omitting coverPlacement defaults to 'top'.
+  const defaulted = createEwcNewsPost({
+    gameSlug: 'valorant',
+    status: 'draft',
+    contentMode: 'shared',
+    defaultLocale: 'en',
+    translations: {
+      en: { title: 'No placement', summary: '', body: 'Body.' },
+    },
+  });
+  assert.equal(defaulted.coverPlacement, 'top');
+
+  // Updating switches placement and the change is read back.
+  const updated = updateEwcNewsPost(bottom.id, {
+    gameSlug: 'valorant',
+    status: 'draft',
+    contentMode: 'shared',
+    defaultLocale: 'en',
+    coverPlacement: 'card-only',
+    translations: {
+      en: { title: 'Placed bottom', summary: '', body: 'Body.' },
+    },
+  });
+  assert.equal(updated.coverPlacement, 'card-only');
+  assert.equal(getEwcNewsPostById(bottom.id).coverPlacement, 'card-only');
+});
+
+test('hydrates legacy rows (NULL cover_placement) as top', () => {
+  const info = db.prepare(
+    `INSERT INTO ewc_news_posts
+      (game_slug, locale, title, summary, body, status, created_at, updated_at)
+     VALUES ('legacy-placement', 'en', 'Legacy', '', 'Body', 'draft',
+      datetime('now'), datetime('now'))`,
+  ).run();
+  assert.equal(getEwcNewsPostById(info.lastInsertRowid).coverPlacement, 'top');
 });
 
 test('falls back to legacy columns when translations are missing', () => {

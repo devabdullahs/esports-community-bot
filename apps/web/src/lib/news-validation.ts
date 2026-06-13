@@ -1,17 +1,19 @@
 import { isSafeUrl } from "@/lib/safe-url";
 import {
+  isNewsCoverPlacement,
   NEWS_BODY_MAX_LENGTH,
   NEWS_SUMMARY_MAX_LENGTH,
   NEWS_TITLE_MAX_LENGTH,
   validateNewsContentInput,
 } from "@bot/lib/ewcNewsContent.js";
-import type { NewsPostInput } from "@/lib/news";
+import type { NewsCoverPlacement, NewsPostInput } from "@/lib/news";
 
 export { NEWS_BODY_MAX_LENGTH, NEWS_SUMMARY_MAX_LENGTH, NEWS_TITLE_MAX_LENGTH };
 
 export type ValidatedNewsInput = NewsPostInput & {
   gameSlug: string;
   coverImageUrl: string | null;
+  coverPlacement: NewsCoverPlacement;
 };
 
 type NewsContentValidationResult =
@@ -47,12 +49,25 @@ export function validateNewsInput(
     coverImageUrl = rawCover.trim();
   }
 
+  // Cover placement is optional; absent/blank falls back to the default ('top').
+  // An explicit but unrecognized value is rejected so we never persist junk.
+  let coverPlacement: NewsCoverPlacement = "top";
+  const rawPlacement = body.coverPlacement;
+  if (rawPlacement !== undefined && rawPlacement !== null) {
+    if (!isNewsCoverPlacement(rawPlacement)) {
+      return { ok: false, error: "Cover placement must be top, bottom, or card-only" };
+    }
+    // The JS guard above narrows at runtime; assert the type for TS (plain-JS import).
+    coverPlacement = rawPlacement as NewsCoverPlacement;
+  }
+
   return {
     ok: true,
     value: {
       gameSlug,
       ...content.value,
       coverImageUrl,
+      coverPlacement,
     },
   };
 }

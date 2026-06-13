@@ -2,6 +2,7 @@ import { db } from './index.js';
 import {
   getTranslationForLocale,
   isNewsContentMode,
+  isNewsCoverPlacement,
   isNewsLocale,
   resolvePostForLocale,
 } from '../lib/ewcNewsContent.js';
@@ -50,6 +51,7 @@ function hydrate(row, locale) {
     authorDiscordId: row.author_discord_id,
     authorName: row.author_name,
     coverImageUrl: row.cover_image_url,
+    coverPlacement: isNewsCoverPlacement(row.cover_placement) ? row.cover_placement : 'top',
     createdAt: row.created_at,
     updatedAt: row.updated_at,
     publishedAt: row.published_at,
@@ -229,8 +231,9 @@ export function createEwcNewsPost(input) {
       .prepare(
         `INSERT INTO ewc_news_posts
            (game_slug, locale, content_mode, default_locale, title, summary, body, status,
-            author_discord_id, author_name, cover_image_url, created_at, updated_at, published_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'),
+            author_discord_id, author_name, cover_image_url, cover_placement,
+            created_at, updated_at, published_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'),
             CASE WHEN ? = 'published' THEN datetime('now') ELSE NULL END)`,
       )
       .run(
@@ -245,6 +248,7 @@ export function createEwcNewsPost(input) {
         value.authorDiscordId || null,
         value.authorName || null,
         value.coverImageUrl || null,
+        isNewsCoverPlacement(value.coverPlacement) ? value.coverPlacement : 'top',
         value.status || 'draft',
       );
     const id = info.lastInsertRowid;
@@ -263,7 +267,7 @@ export function updateEwcNewsPost(id, input) {
       .prepare(
         `UPDATE ewc_news_posts
          SET game_slug = ?, locale = ?, content_mode = ?, default_locale = ?, title = ?,
-             summary = ?, body = ?, status = ?, cover_image_url = ?,
+             summary = ?, body = ?, status = ?, cover_image_url = ?, cover_placement = ?,
              author_name = COALESCE(?, author_name),
              updated_at = datetime('now'),
              published_at = COALESCE(published_at, CASE WHEN ? = 'published' THEN datetime('now') ELSE NULL END)
@@ -279,6 +283,7 @@ export function updateEwcNewsPost(id, input) {
         fallback.body,
         value.status || 'draft',
         value.coverImageUrl || null,
+        isNewsCoverPlacement(value.coverPlacement) ? value.coverPlacement : 'top',
         value.authorName || null,
         value.status || 'draft',
         postId,

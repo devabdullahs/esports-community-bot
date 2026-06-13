@@ -343,6 +343,9 @@ ensureColumns('ewc_news_posts', [
   ['content_mode', "TEXT NOT NULL DEFAULT 'shared' CHECK (content_mode IN ('shared','translated'))"],
   ['default_locale', "TEXT NOT NULL DEFAULT 'en' CHECK (default_locale IN ('en','ar'))"],
   ['author_name', 'TEXT'],
+  // Where the cover image renders on the public article: 'top' (default, above body),
+  // 'bottom' (after the body), or 'card-only' (hidden inside the article, still shown on cards).
+  ['cover_placement', 'TEXT'],
 ]);
 // Per-game Discord news channel (nullable; falls back to the guild-level news channel).
 ensureColumns('ewc_games', [['discord_channel_id', 'TEXT']]);
