@@ -515,3 +515,64 @@ describe("news/upload authorization", () => {
     }
   });
 });
+
+// ---------------------------------------------------------------------------
+// Suite 10: news author eligibility on write (031) — submitted authors must be
+// eligible for the target game; the stored name comes from the roster, not the
+// payload (no attribution spoofing).
+// ---------------------------------------------------------------------------
+
+describe("news author eligibility on write", () => {
+  const GAME = "author-write-game";
+  const ELIGIBLE = "111111111111111111";
+  const INELIGIBLE = "999999999999999999";
+  let postId: number;
+
+  beforeAll(async () => {
+    await seedGame(GAME);
+    const { upsertEwcAdmin, setEwcAdminGameScopes } = await import("@bot/db/ewcAdmins.js");
+    await (upsertEwcAdmin as (i: unknown) => Promise<unknown>)({
+      discordId: ELIGIBLE,
+      displayName: "Roster Author",
+    });
+    await (setEwcAdminGameScopes as (id: string, games: string[]) => Promise<unknown>)(
+      ELIGIBLE,
+      [GAME],
+    );
+    postId = await seedNewsPost(GAME);
+  });
+
+  function newsBody(authors?: Array<{ discordId: string; name: string }>) {
+    return {
+      gameSlug: GAME,
+      contentMode: "shared",
+      defaultLocale: "en",
+      translations: { en: { title: "T", summary: "S", body: "B" } },
+      ...(authors ? { authors } : {}),
+    };
+  }
+
+  test("POST: submitting an ineligible author → 403", async () => {
+    mockAccess.mockResolvedValue(gamesAdmin([GAME]));
+    const res = await newsPOST(req("POST", newsBody([{ discordId: INELIGIBLE, name: "Spoofed" }])));
+    expect(res.status).toBe(403);
+  });
+
+  test("POST: eligible roster author → 200 with canonical name (payload name ignored)", async () => {
+    mockAccess.mockResolvedValue(gamesAdmin([GAME]));
+    const res = await newsPOST(req("POST", newsBody([{ discordId: ELIGIBLE, name: "Spoofed name" }])));
+    expect(res.status).toBe(200);
+    const post = (await res.json()) as { authors: Array<{ discordId: string; name: string }> };
+    expect(post.authors[0].discordId).toBe(ELIGIBLE);
+    expect(post.authors[0].name).toBe("Roster Author");
+  });
+
+  test("PATCH: submitting an ineligible author → 403", async () => {
+    mockAccess.mockResolvedValue(gamesAdmin([GAME]));
+    const res = await newsIdPATCH(
+      req("PATCH", newsBody([{ discordId: INELIGIBLE, name: "Spoofed" }])),
+      ctx({ id: String(postId) }),
+    );
+    expect(res.status).toBe(403);
+  });
+});

@@ -1,6 +1,7 @@
 import { revalidateTag } from "next/cache";
 import { NextResponse } from "next/server";
 import { canManageGame, getAdminAccess } from "@/lib/admin";
+import { resolveNewsAuthors } from "@/lib/authors";
 import { recordAdminAudit } from "@/lib/audit";
 import { getGame } from "@/lib/games";
 import { deleteNewsPost, getNewsPost, updateNewsPost } from "@/lib/news";
@@ -35,12 +36,21 @@ export async function PATCH(
     return NextResponse.json({ error: "You are not assigned to this game" }, { status: 403 });
   }
 
-  // The editor's Author picker chooses who is credited; fall back to the post's
-  // existing author when the payload omits it (COALESCE in the DB layer no-ops on null).
+  // Server-authoritative authors: submitted ids must be eligible for this game
+  // (the DB layer replaces the author list, so send the canonical set). With nothing
+  // submitted, keep the post's existing primary author.
+  const resolved = await resolveNewsAuthors({
+    gameSlug: validated.value.gameSlug,
+    authors: validated.value.authors,
+    authorDiscordId: validated.value.authorDiscordId,
+    fallbackAuthor: { discordId: existing.authorDiscordId, name: existing.authorName },
+  });
+  if (!resolved.ok) return NextResponse.json({ error: resolved.error }, { status: 403 });
   const updated = await updateNewsPost(postId, {
     ...validated.value,
-    authorDiscordId: validated.value.authorDiscordId ?? null,
-    authorName: validated.value.authorName ?? null,
+    authors: resolved.authors,
+    authorDiscordId: resolved.authors[0]?.discordId ?? null,
+    authorName: resolved.authors[0]?.name ?? null,
   });
   if (!updated) return NextResponse.json({ error: "Not found" }, { status: 404 });
   revalidateTag("cms-news", "default");

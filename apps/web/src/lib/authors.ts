@@ -112,3 +112,70 @@ export async function listEligibleAuthors(gameSlug: string): Promise<EligibleAut
     })
     .map((entry) => entry.author);
 }
+
+export type ResolveNewsAuthorsResult =
+  | { ok: true; authors: EligibleAuthor[] }
+  | { ok: false; error: string };
+
+/**
+ * Server-authoritative resolution of a news write's credited authors.
+ *
+ * Any author the client EXPLICITLY submits (authors[] or the legacy
+ * authorDiscordId) must be in `listEligibleAuthors(gameSlug)` — otherwise the
+ * write is rejected, so a scoped admin cannot spoof attribution by posting raw
+ * Discord IDs/names. The stored name + avatar always come from the eligible list,
+ * never the request body.
+ *
+ * When nothing is submitted, fall back to the supplied author (the acting admin
+ * on create, or the post's existing primary author on update). The fallback is
+ * the authenticated user's own identity / the post's prior author, so it is kept
+ * as-is — preferring the canonical eligible snapshot when one exists.
+ */
+export async function resolveNewsAuthors(input: {
+  gameSlug: string;
+  authors?: Array<{ discordId?: string | null }> | null;
+  authorDiscordId?: string | null;
+  fallbackAuthor?: { discordId?: string | null; name?: string | null };
+}): Promise<ResolveNewsAuthorsResult> {
+  const eligible = await listEligibleAuthors(input.gameSlug);
+  const byId = new Map(eligible.map((a) => [a.discordId, a]));
+
+  const submitted: string[] = [];
+  const add = (id: unknown) => {
+    const trimmed = typeof id === "string" ? id.trim() : "";
+    if (trimmed && !submitted.includes(trimmed)) submitted.push(trimmed);
+  };
+  if (Array.isArray(input.authors) && input.authors.length) {
+    for (const a of input.authors) add(a?.discordId);
+  } else if (input.authorDiscordId) {
+    add(input.authorDiscordId);
+  }
+
+  if (submitted.length) {
+    const resolved: EligibleAuthor[] = [];
+    for (const id of submitted) {
+      const author = byId.get(id);
+      if (!author) return { ok: false, error: "Selected author is not eligible for this game." };
+      resolved.push(author);
+    }
+    return { ok: true, authors: resolved };
+  }
+
+  const fallbackId = typeof input.fallbackAuthor?.discordId === "string"
+    ? input.fallbackAuthor.discordId.trim()
+    : "";
+  if (fallbackId) {
+    const canonical = byId.get(fallbackId);
+    return {
+      ok: true,
+      authors: [
+        canonical ?? {
+          discordId: fallbackId,
+          name: input.fallbackAuthor?.name?.trim() || fallbackId,
+          avatarUrl: null,
+        },
+      ],
+    };
+  }
+  return { ok: true, authors: [] };
+}

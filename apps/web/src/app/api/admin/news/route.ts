@@ -1,6 +1,7 @@
 import { revalidateTag } from "next/cache";
 import { NextResponse } from "next/server";
 import { canManageGame, getAdminAccess } from "@/lib/admin";
+import { resolveNewsAuthors } from "@/lib/authors";
 import { recordAdminAudit } from "@/lib/audit";
 import { getGame } from "@/lib/games";
 import { createNewsPost, listAdminNewsPosts, type NewsStatus } from "@/lib/news";
@@ -42,12 +43,21 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "You are not assigned to this game" }, { status: 403 });
   }
 
-  // Author defaults to the acting admin, but the editor's Author picker may credit
-  // another eligible admin (super, or roster admin scoped to this game).
+  // Server-authoritative authors: submitted ids must be eligible for this game
+  // (no spoofing); the stored name/avatar come from the eligible list. With nothing
+  // submitted, fall back to the acting admin.
+  const resolved = await resolveNewsAuthors({
+    gameSlug: validated.value.gameSlug,
+    authors: validated.value.authors,
+    authorDiscordId: validated.value.authorDiscordId,
+    fallbackAuthor: { discordId: access.discordUserId, name: access.displayName },
+  });
+  if (!resolved.ok) return NextResponse.json({ error: resolved.error }, { status: 403 });
   const post = await createNewsPost({
     ...validated.value,
-    authorDiscordId: validated.value.authorDiscordId ?? access.discordUserId ?? null,
-    authorName: validated.value.authorName ?? access.displayName ?? null,
+    authors: resolved.authors,
+    authorDiscordId: resolved.authors[0]?.discordId ?? null,
+    authorName: resolved.authors[0]?.name ?? null,
   });
   revalidateTag("cms-news", "default");
   recordAdminAudit(access, "news.create", String((post as { id: number }).id));

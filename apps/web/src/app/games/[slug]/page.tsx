@@ -28,7 +28,7 @@ import {
 import { listPublishedNewsPostsCached } from "@/lib/news";
 import { getRequestLocale } from "@/lib/request-locale";
 import { safeUrlOrUndefined } from "@/lib/safe-url";
-import { getAuthSession } from "@/lib/session";
+import { canManageGame, getAdminAccess } from "@/lib/admin";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -45,7 +45,7 @@ export default async function GamePage({
   const locale = await getRequestLocale();
   const text = copy[locale].game;
   const common = copy[locale].common;
-  const session = await getAuthSession();
+  const access = await getAdminAccess();
   const posts = await listPublishedNewsPostsCached(slug, locale);
 
   return (
@@ -83,7 +83,7 @@ export default async function GamePage({
               {localizeText(game.description, locale)}
             </p>
           </div>
-          {session ? (
+          {canManageGame(access, slug) ? (
             <Button
               render={<Link href={localizedPath("/admin", locale)} />}
               nativeButton={false}
