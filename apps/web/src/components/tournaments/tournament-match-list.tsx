@@ -16,7 +16,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { copy, formatUnixSeconds, type Locale } from "@/lib/i18n";
+import { copy, directionForLocale, formatUnixSeconds, type Locale } from "@/lib/i18n";
 import { logoProxyUrl } from "@/lib/logo-url";
 import { safeUrlOrUndefined } from "@/lib/safe-url";
 
@@ -78,6 +78,33 @@ function ScoreText({ a, b }: { a: number | null; b: number | null }) {
   return (
     <span className="tabular-nums font-semibold">
       {a} <span className="text-muted-foreground">–</span> {b}
+    </span>
+  );
+}
+
+function ResultScoreText({ a, b, fallback }: { a: number | null; b: number | null; fallback: string }) {
+  if (a == null || b == null) return <span className="text-muted-foreground">{fallback}</span>;
+  return <ScoreText a={a} b={b} />;
+}
+
+function MatchText({
+  a,
+  b,
+  locale,
+  tbd,
+  vs,
+}: {
+  a: string | null;
+  b: string | null;
+  locale: Locale;
+  tbd: string;
+  vs: string;
+}) {
+  return (
+    <span dir={directionForLocale(locale)} className="flex max-w-full items-center gap-1.5 text-start">
+      <bdi className="min-w-0 truncate">{teamLabel(a, tbd)}</bdi>
+      <span className="shrink-0 text-muted-foreground">{vs}</span>
+      <bdi className="min-w-0 truncate">{teamLabel(b, tbd)}</bdi>
     </span>
   );
 }
@@ -160,9 +187,8 @@ export function TournamentMatchList({
                   <TableCell className="text-muted-foreground tabular-nums">
                     {formatUnixSeconds(m.scheduled_at, locale) || "—"}
                   </TableCell>
-                  <TableCell dir="auto">
-                    {teamLabel(m.team_a, tbd)} <span className="text-muted-foreground">{text.vs}</span>{" "}
-                    {teamLabel(m.team_b, tbd)}
+                  <TableCell className="text-start">
+                    <MatchText a={m.team_a} b={m.team_b} locale={locale} tbd={tbd} vs={text.vs} />
                   </TableCell>
                 </TableRow>
               ))}
@@ -193,12 +219,11 @@ export function TournamentMatchList({
                   <TableCell className="text-muted-foreground tabular-nums">
                     {formatUnixSeconds(m.scheduled_at, locale) || "—"}
                   </TableCell>
-                  <TableCell dir="auto">
-                    {teamLabel(m.team_a, tbd)} <span className="text-muted-foreground">{text.vs}</span>{" "}
-                    {teamLabel(m.team_b, tbd)}
+                  <TableCell className="text-start">
+                    <MatchText a={m.team_a} b={m.team_b} locale={locale} tbd={tbd} vs={text.vs} />
                   </TableCell>
                   <TableCell className="text-end">
-                    <ScoreText a={m.score_a} b={m.score_b} />
+                    <ResultScoreText a={m.score_a} b={m.score_b} fallback={text.finished} />
                   </TableCell>
                 </TableRow>
               ))}
