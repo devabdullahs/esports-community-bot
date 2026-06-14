@@ -25,11 +25,15 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "Invalid logo URL." }, { status: 400 });
   }
 
-  const logo = await loadLogoBytes(source);
+  // The "web" channel keeps the dashboard's on-demand logo fetches off the bot's
+  // bulk-download backoff, so a fresh deploy doesn't serve fallbacks for ~20 min.
+  const logo = await loadLogoBytes(source, "web");
   if (!logo) {
+    // Keep the miss cacheable only briefly — once the upstream image is
+    // reachable again the next view should fetch and cache the real logo.
     return new NextResponse(null, {
       status: 404,
-      headers: { "Cache-Control": "public, max-age=300" },
+      headers: { "Cache-Control": "public, max-age=30" },
     });
   }
 
