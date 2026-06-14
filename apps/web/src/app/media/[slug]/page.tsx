@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowLeftIcon, ExternalLinkIcon, Tv2Icon } from "lucide-react";
@@ -8,9 +9,26 @@ import { copy, localizedPath } from "@/lib/i18n";
 import { getMediaChannelCached } from "@/lib/media";
 import { getRequestLocale } from "@/lib/request-locale";
 import { safeUrlOrUndefined } from "@/lib/safe-url";
+import { buildPageMetadata } from "@/lib/metadata";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ slug: string }>;
+}): Promise<Metadata> {
+  const { slug } = await params;
+  const [channel, locale] = await Promise.all([getMediaChannelCached(slug), getRequestLocale()]);
+  if (!channel) return {};
+  return buildPageMetadata({
+    title: localizeText(channel.name, locale),
+    description: localizeText(channel.description, locale),
+    path: localizedPath(`/media/${slug}`, locale),
+    image: channel.logoUrl,
+  });
+}
 
 const PLATFORM_LABELS: Record<string, string> = {
   x: "X (Twitter)",

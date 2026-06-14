@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import {
@@ -29,9 +30,25 @@ import { listPublishedNewsPostsCached } from "@/lib/news";
 import { getRequestLocale } from "@/lib/request-locale";
 import { safeUrlOrUndefined } from "@/lib/safe-url";
 import { canManageGame, getAdminAccess } from "@/lib/admin";
+import { buildPageMetadata } from "@/lib/metadata";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ slug: string }>;
+}): Promise<Metadata> {
+  const { slug } = await params;
+  const [game, locale] = await Promise.all([getGameCached(slug), getRequestLocale()]);
+  if (!game) return {};
+  return buildPageMetadata({
+    title: localizeText(game.title, locale),
+    description: localizeText(game.description, locale),
+    path: localizedPath(`/games/${slug}`, locale),
+  });
+}
 
 export default async function GamePage({
   params,

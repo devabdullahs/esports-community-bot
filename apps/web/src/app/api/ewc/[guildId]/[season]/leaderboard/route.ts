@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getPublicEwcLeaderboard } from "@bot/lib/ewcProfileStats.js";
+import { getPublicEwcLeaderboardCached } from "@/lib/public-ewc-leaderboard";
 import { isSnowflake, isSeason, clampInt } from "@/lib/validate";
 
 export const runtime = "nodejs";
@@ -16,5 +16,7 @@ export async function GET(
   const url = new URL(request.url);
   const limit = clampInt(url.searchParams.get("limit"), { min: 1, max: 100, fallback: 50 });
   const offset = clampInt(url.searchParams.get("offset"), { min: 0, max: 100_000, fallback: 0 });
-  return NextResponse.json(await getPublicEwcLeaderboard({ guildId, season, limit, offset }));
+  // Cached (60s) — this endpoint is public and polled, so bound repeated aggregate
+  // prediction queries. Keyed by guild/season/limit/offset.
+  return NextResponse.json(await getPublicEwcLeaderboardCached({ guildId, season, limit, offset }));
 }
