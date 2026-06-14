@@ -1,7 +1,17 @@
+import type { Metadata } from "next";
+import { buildPageMetadata } from "@/lib/metadata";
 import { getRequestLocale } from "@/lib/request-locale";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+export function generateMetadata(): Metadata {
+  return buildPageMetadata({
+    title: "Privacy Policy",
+    description:
+      "Privacy details for Esports Community Bot accounts, Discord OAuth, prediction data, cookies, and dashboard usage.",
+    path: "/privacy",
+  });
+}
 
 const LAST_UPDATED = "2026-06-14";
 

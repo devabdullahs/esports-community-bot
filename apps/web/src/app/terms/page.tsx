@@ -1,7 +1,17 @@
+import type { Metadata } from "next";
+import { buildPageMetadata } from "@/lib/metadata";
 import { getRequestLocale } from "@/lib/request-locale";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+export function generateMetadata(): Metadata {
+  return buildPageMetadata({
+    title: "Terms of Service",
+    description:
+      "Terms for using the Esports Community Bot website, Discord bot, tournament tracking, news, and prediction features.",
+    path: "/terms",
+  });
+}
 
 const LAST_UPDATED = "2026-06-12";
 

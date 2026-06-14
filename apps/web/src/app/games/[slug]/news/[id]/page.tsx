@@ -17,7 +17,7 @@ import { getPublishedNewsPostCached } from "@/lib/news";
 import { parsePostId } from "@/lib/news-validation";
 import { getRequestLocale } from "@/lib/request-locale";
 import { safeUrlOrUndefined } from "@/lib/safe-url";
-import { buildPageMetadata } from "@/lib/metadata";
+import { absoluteUrl, buildPageMetadata, SITE_NAME, siteIconUrl } from "@/lib/metadata";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -39,6 +39,10 @@ export async function generateMetadata({
     path: localizedPath(`/games/${slug}/news/${id}`, locale),
     image: post.coverImageUrl,
   });
+}
+
+function jsonLd(data: unknown) {
+  return JSON.stringify(data).replace(/</g, "\\u003c");
 }
 
 export default async function NewsPostPage({
@@ -70,11 +74,46 @@ export default async function NewsPostPage({
   ) : null;
 
   const common = copy[locale].common;
+  const gameTitle = localizeText(game.title, locale);
+  const canonicalUrl = absoluteUrl(localizedPath(`/games/${slug}/news/${id}`, locale));
+  const articleAuthors = post.authors.length
+    ? post.authors.map((author) => ({ "@type": "Person", name: author.name }))
+    : post.authorName
+      ? [{ "@type": "Person", name: post.authorName }]
+      : [{ "@type": "Organization", name: SITE_NAME }];
+  const articleStructuredData = {
+    "@context": "https://schema.org",
+    "@type": "NewsArticle",
+    mainEntityOfPage: {
+      "@type": "WebPage",
+      "@id": canonicalUrl,
+    },
+    headline: post.title,
+    description: post.summary || undefined,
+    image: cover ? [cover] : undefined,
+    datePublished: post.publishedAt || post.createdAt,
+    dateModified: post.updatedAt || post.publishedAt || post.createdAt,
+    inLanguage: locale,
+    articleSection: gameTitle,
+    author: articleAuthors,
+    publisher: {
+      "@type": "Organization",
+      name: SITE_NAME,
+      logo: {
+        "@type": "ImageObject",
+        url: siteIconUrl(),
+      },
+    },
+  };
 
   return (
     <main
       className="mx-auto flex w-full max-w-3xl flex-1 flex-col gap-6 px-5 py-10 sm:px-8"
     >
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: jsonLd(articleStructuredData) }}
+      />
       <PageBreadcrumb
         items={[
           { label: common.home, href: localizedPath("/", locale) },

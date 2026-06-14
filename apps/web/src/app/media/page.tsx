@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import { Tv2Icon } from "lucide-react";
 import { PageBreadcrumb } from "@/components/page-breadcrumb";
@@ -11,12 +12,21 @@ import {
 } from "@/components/ui/card";
 import { localizeText } from "@/lib/community-content";
 import { copy, localizedPath } from "@/lib/i18n";
+import { buildPageMetadata } from "@/lib/metadata";
 import { listMediaChannelsCached } from "@/lib/media";
 import { getRequestLocale } from "@/lib/request-locale";
 import { safeUrlOrUndefined } from "@/lib/safe-url";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+export function generateMetadata(): Metadata {
+  return buildPageMetadata({
+    title: "Esports media channels",
+    description:
+      "Browse community media partners, creators, and platform links for esports coverage.",
+    path: "/media",
+  });
+}
 
 const COPY = {
   en: {
