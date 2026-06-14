@@ -47,8 +47,9 @@ async function seed(): Promise<void> {
   tournamentId = tournament.id;
 
   const base = { tournament_id: tournamentId, source: "liquipedia" };
-  // 1 running, 2 scheduled, 5 finished
+  // 1 running, 2 scheduled, 5 finished, plus one parser duplicate that should be hidden by public reads.
   await upsertMatch({ ...base, external_id: `Match:run-${tournamentId}`, team_a: "Falcons", team_b: "T1", score_a: 1, score_b: 0, status: "running", scheduled_at: 1_900_000_000 });
+  await upsertMatch({ ...base, external_id: `Widget:run-dupe-${tournamentId}`, team_a: "T1", team_b: "Falcons", status: "scheduled", scheduled_at: 1_900_000_300 });
   await upsertMatch({ ...base, external_id: `Match:sch1-${tournamentId}`, team_a: "Vitality", team_b: "NAVI", status: "scheduled", scheduled_at: 1_900_100_000 });
   await upsertMatch({ ...base, external_id: `Match:sch2-${tournamentId}`, team_a: "G2", team_b: "FaZe", status: "scheduled", scheduled_at: 1_900_200_000 });
   for (let i = 0; i < 5; i += 1) {

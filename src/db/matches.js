@@ -81,7 +81,7 @@ export async function getMatch(source, externalId) {
 // "Team Canada" plus the upcoming-widget form "Canada", or the same game tracked on two sources.
 // Keyed by game + normalized team pair + calendar day; keeps the most authoritative row.
 // A finished result with a score beats a stale "running" widget row for the same pair/day.
-function dedupeMatches(rows) {
+export function dedupeMatches(rows) {
   const rank = (m) => {
     const hasScore = m.score_a != null && m.score_b != null;
     const status =
