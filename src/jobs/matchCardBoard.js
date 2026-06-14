@@ -1,5 +1,5 @@
 import { logger } from '../lib/logger.js';
-import { getMatchesForGuild, markStaleRunningFinished } from '../db/matches.js';
+import { getMatchesForGuild, markStaleActiveFinished } from '../db/matches.js';
 import { normalizeGameSlug, sameGame } from '../lib/games.js';
 import {
   deleteMatchCardMessage,
@@ -11,9 +11,9 @@ import { buildAllGamesStatusPayload, buildIdleMatchCardPayload, buildMatchCardPa
 
 const ALL_GAMES = 'all';
 const IDLE_MATCH_ID = 0;
-// A match still flagged 'running' this long after its start is treated as ended
-// (matches the poller's MAX_RUN_SECONDS safety net).
-const MAX_LIVE_SECONDS = 8 * 3600;
+// A match still flagged active this long after its start is treated as ended.
+// Liquipedia can leave old rows in upcoming/live widgets without final scores.
+const MAX_ACTIVE_SECONDS = 4 * 3600;
 
 function byLiveOrder(a, b) {
   return (a.scheduled_at ?? Number.MAX_SAFE_INTEGER) - (b.scheduled_at ?? Number.MAX_SAFE_INTEGER) || a.id - b.id;
@@ -118,9 +118,8 @@ async function updateMatchCardsImpl(client, guildId) {
   const boards = await getGameMatchCards(guildId);
   if (!boards.length) return;
 
-  // Clear matches stuck 'running' long past their start (the poller's safety net stops
-  // watching them without a result) so they drop off the board and the upcoming card shows.
-  await markStaleRunningFinished(MAX_LIVE_SECONDS);
+  // Clear matches stuck active long past their start so they drop off live/upcoming cards.
+  await markStaleActiveFinished(MAX_ACTIVE_SECONDS);
   const matches = await getMatchesForGuild(guildId);
   const dedicatedGames = new Set(boards.filter((b) => b.game !== ALL_GAMES).map((b) => normalizeGameSlug(b.game)));
   for (const board of boards) {

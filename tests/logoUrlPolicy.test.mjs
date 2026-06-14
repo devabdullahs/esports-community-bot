@@ -1,7 +1,13 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { normalizeImageUrl } from '../src/services/liquipedia/parsers.js';
-import { isAllowedLogoUrl } from '../src/lib/logoCache.js';
+
+process.env.LOG_LEVEL = 'error';
+process.env.DISCORD_TOKEN = 'test-token';
+process.env.DISCORD_CLIENT_ID = 'test-client-id';
+process.env.DB_PATH = ':memory:';
+
+const { normalizeImageUrl } = await import('../src/services/liquipedia/parsers.js');
+const { isAllowedLogoUrl } = await import('../src/lib/logoCache.js');
 
 test('normalizeImageUrl resolves relative + protocol-relative URLs to liquipedia.net https', () => {
   assert.equal(

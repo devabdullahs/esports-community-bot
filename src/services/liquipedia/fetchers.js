@@ -129,6 +129,17 @@ export async function fetchSchedule(tournament) {
         if (m.scoreA != null) existing.scoreA = m.scoreA;
         if (m.scoreB != null) existing.scoreB = m.scoreB;
         if (!existing.scheduledAt && m.scheduledAt) existing.scheduledAt = m.scheduledAt;
+      } else if (
+        m.status === 'finished' &&
+        existing.status !== 'finished' &&
+        existing.scoreA == null &&
+        existing.scoreB == null &&
+        m.scheduledAt
+      ) {
+        // Some widgets keep already-played matches in "Upcoming" with no score/winner.
+        // If the same pair is far past its start, retire the unresolved bracket row too.
+        existing.status = 'finished';
+        if (!existing.scheduledAt) existing.scheduledAt = m.scheduledAt;
       }
       return;
     }

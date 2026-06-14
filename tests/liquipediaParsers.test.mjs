@@ -441,6 +441,33 @@ test('parseMatchlistMatch: unplayed match has status scheduled', () => {
   assert.equal(m.winner, null);
 });
 
+test('parseMatchlistMatch: stale unscored match is finished, not upcoming', () => {
+  const pastTs = Math.floor(Date.now() / 1000) - 5 * 3600;
+  const html = `
+    <div class="brkts-matchlist-match">
+      <div class="brkts-matchlist-opponent" aria-label="Team Alpha">
+        <span class="name">Team Alpha</span>
+      </div>
+      <div class="brkts-matchlist-score">
+        <span class="brkts-matchlist-cell-content"></span>
+        <span class="brkts-matchlist-cell-content"></span>
+      </div>
+      <div class="brkts-matchlist-opponent" aria-label="Team Beta">
+        <span class="name">Team Beta</span>
+      </div>
+      <span data-timestamp="${pastTs}"></span>
+    </div>
+  `;
+  const $ = load(html);
+  const el = $('.brkts-matchlist-match')[0];
+  const m = parseMatchlistMatch($, el, 'callofduty', 'Challengers/2026');
+
+  assert.ok(m);
+  assert.equal(m.status, 'finished');
+  assert.equal(m.scoreA, null);
+  assert.equal(m.scoreB, null);
+});
+
 test('parseMatchlistMatch: both TBD returns null', () => {
   const html = `
     <div class="brkts-matchlist-match">
@@ -604,6 +631,39 @@ test('parseMatchInfo: no teams, no scores, future schedule → status scheduled'
 
   assert.ok(m);
   assert.equal(m.status, 'scheduled');
+  assert.equal(m.scoreA, null);
+  assert.equal(m.scoreB, null);
+});
+
+test('parseMatchInfo: stale unscored match is finished, not upcoming', () => {
+  const pastTs = Math.floor(Date.now() / 1000) - 5 * 3600;
+  const html = `
+    <div class="match-info">
+      <div class="match-info-header-opponent">
+        <div class="block-team">
+          <a title="OMiT">OMiT</a>
+        </div>
+      </div>
+      <div class="match-info-header-scoreholder-upper">vs</div>
+      <div class="match-info-header-opponent">
+        <div class="block-team">
+          <a title="Masked Prodigy">Masked Prodigy</a>
+        </div>
+      </div>
+      <span class="timer-object" data-timestamp="${pastTs}"></span>
+      <div class="match-info-tournament">
+        <a href="/callofduty/Call_of_Duty_Challengers/2026/Elite/4/North_America">
+          <span class="match-info-tournament-name">Call of Duty Challengers 2026 - Elite 4: NA</span>
+        </a>
+      </div>
+    </div>
+  `;
+  const $ = load(html);
+  const el = $('.match-info')[0];
+  const m = parseMatchInfo($, el, 'callofduty');
+
+  assert.ok(m);
+  assert.equal(m.status, 'finished');
   assert.equal(m.scoreA, null);
   assert.equal(m.scoreB, null);
 });

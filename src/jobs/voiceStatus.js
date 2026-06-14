@@ -1,5 +1,5 @@
 import { logger } from '../lib/logger.js';
-import { getMatchesForGuild } from '../db/matches.js';
+import { getMatchesForGuild, markStaleActiveFinished } from '../db/matches.js';
 import { getSettings, getGameVoiceChannels } from '../db/settings.js';
 import { matchLabel, gameTag, truncate } from '../lib/render.js';
 import { sameGame } from '../lib/games.js';
@@ -10,10 +10,12 @@ import { sameGame } from '../lib/games.js';
 // into a single deferred rename using the most recent desired name.
 const MIN_RENAME_GAP_MS = 6 * 60 * 1000;
 const VOICE_NAME_MAX = 100;
+const MAX_ACTIVE_SECONDS = 4 * 3600;
 
 const state = new Map(); // channelId -> { at, name, timer, pending }
 
 export async function computeVoiceName(guildId, game = null) {
+  await markStaleActiveFinished(MAX_ACTIVE_SECONDS);
   let matches = await getMatchesForGuild(guildId);
   if (game) matches = matches.filter((m) => sameGame(m.game, game));
 

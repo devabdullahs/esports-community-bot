@@ -73,6 +73,7 @@ export function deriveStatus({ winA = false, winB = false, scoreA, scoreB, bestO
   if (placeholder) return 'scheduled';
   const now = nowSec();
   if (scheduledAt && now >= scheduledAt && now - scheduledAt <= LIVE_WINDOW_S) return 'running';
+  if (scheduledAt && now > scheduledAt + LIVE_WINDOW_S) return 'finished';
   return 'scheduled';
 }
 

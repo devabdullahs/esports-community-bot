@@ -1,6 +1,6 @@
 import { ContainerBuilder, SeparatorSpacingSize, MessageFlags } from 'discord.js';
 import { logger } from '../lib/logger.js';
-import { getMatchesForGuild } from '../db/matches.js';
+import { getMatchesForGuild, markStaleActiveFinished } from '../db/matches.js';
 import {
   getSettings,
   setLeaderboardMessage,
@@ -12,6 +12,7 @@ import { gameName, sameGame } from '../lib/games.js';
 
 const nowSec = () => Math.floor(Date.now() / 1000);
 const MAX_UPCOMING = 10;
+const MAX_ACTIVE_SECONDS = 4 * 3600;
 
 // Append the required Liquipedia attribution footer (CC-BY-SA).
 function addAttribution(c) {
@@ -48,6 +49,7 @@ function balancedUpcoming(matches, limit = MAX_UPCOMING) {
 // Build the live leaderboard as a Components V2 Container. If `game` is set, only that game's
 // matches are shown (a per-game board); otherwise it's the combined "all games" board.
 export async function buildLeaderboardContainer(guildId, game = null) {
+  await markStaleActiveFinished(MAX_ACTIVE_SECONDS);
   let matches = await getMatchesForGuild(guildId);
   if (game) matches = matches.filter((m) => sameGame(m.game, game));
 
