@@ -23,9 +23,29 @@ const ALLOWED_LOGO_HOSTS = new Set(['liquipedia.net']);
 
 const queue = [];
 let activeDownloads = 0;
-let lastDownloadAt = 0;
-let blockedUntil = 0;
-let rateStateLoaded = false;
+
+// Logo downloads run on independent rate-limit "channels". The bot's bulk
+// canvas downloads can trip a long backoff on boot (resuming dozens of match
+// cards at once); without isolation that same backoff would block the website's
+// on-demand logo proxy, so every deploy left the dashboard showing fallbacks for
+// ~20 min. Each channel keeps its own in-memory + persisted backoff state and
+// shares only the on-disk image cache (keyed by URL), so a logo fetched by
+// either side serves both.
+const channels = new Map();
+
+function channelState(name) {
+  let state = channels.get(name);
+  if (!state) {
+    const statePath =
+      name === 'bot'
+        ? RATE_STATE_PATH
+        : process.env[`LOGO_RATE_STATE_PATH_${name.toUpperCase()}`] ||
+          join(/* turbopackIgnore: true */ dirname(RATE_STATE_PATH), `logo-rate-limit-${name}.json`);
+    state = { lastDownloadAt: 0, blockedUntil: 0, loaded: false, statePath };
+    channels.set(name, state);
+  }
+  return state;
+}
 
 const sleep = (ms) => new Promise((resolvePromise) => setTimeout(resolvePromise, ms));
 
@@ -77,22 +97,22 @@ export function logoCandidates(url) {
   return variants;
 }
 
-function loadRateState() {
-  if (rateStateLoaded) return;
-  rateStateLoaded = true;
+function loadRateState(state) {
+  if (state.loaded) return;
+  state.loaded = true;
   try {
-    const data = JSON.parse(readFileSync(RATE_STATE_PATH, 'utf8'));
-    lastDownloadAt = Number(data.lastDownloadAt) || 0;
-    blockedUntil = Number(data.blockedUntil) || 0;
+    const data = JSON.parse(readFileSync(state.statePath, 'utf8'));
+    state.lastDownloadAt = Number(data.lastDownloadAt) || 0;
+    state.blockedUntil = Number(data.blockedUntil) || 0;
   } catch {
     // Missing or invalid state just means this is the first run.
   }
 }
 
-function saveRateState() {
+function saveRateState(state) {
   try {
-    mkdirSync(dirname(RATE_STATE_PATH), { recursive: true });
-    writeFileSync(RATE_STATE_PATH, JSON.stringify({ lastDownloadAt, blockedUntil }, null, 2));
+    mkdirSync(dirname(state.statePath), { recursive: true });
+    writeFileSync(state.statePath, JSON.stringify({ lastDownloadAt: state.lastDownloadAt, blockedUntil: state.blockedUntil }, null, 2));
   } catch (e) {
     logger.debug(`[logo-cache] could not save rate state: ${e.message}`);
   }
@@ -133,13 +153,14 @@ async function readCached(file) {
   }
 }
 
-async function downloadLogo(url, file) {
-  loadRateState();
-  if (Date.now() < blockedUntil) throw new Error('logo downloads backing off after a rate limit');
-  const wait = lastDownloadAt + DOWNLOAD_MIN_GAP_MS - Date.now();
+async function downloadLogo(url, file, channel) {
+  const state = channelState(channel);
+  loadRateState(state);
+  if (Date.now() < state.blockedUntil) throw new Error('logo downloads backing off after a rate limit');
+  const wait = state.lastDownloadAt + DOWNLOAD_MIN_GAP_MS - Date.now();
   if (wait > 0) await sleep(wait);
-  lastDownloadAt = Date.now();
-  saveRateState();
+  state.lastDownloadAt = Date.now();
+  saveRateState(state);
 
   const { data, headers } = await http.get(url, {
     responseType: 'arraybuffer',
@@ -148,9 +169,9 @@ async function downloadLogo(url, file) {
   }).catch((err) => {
     const status = err.response?.status;
     if (status === 403 || status === 429 || status === 503) {
-      blockedUntil = Date.now() + RATE_LIMIT_BACKOFF_MS;
-      saveRateState();
-      logger.warn(`[logo-cache] rate limited (HTTP ${status}) - pausing logo downloads for ${Math.round(RATE_LIMIT_BACKOFF_MS / 60000)} min`);
+      state.blockedUntil = Date.now() + RATE_LIMIT_BACKOFF_MS;
+      saveRateState(state);
+      logger.warn(`[logo-cache:${channel}] rate limited (HTTP ${status}) - pausing logo downloads for ${Math.round(RATE_LIMIT_BACKOFF_MS / 60000)} min`);
     }
     throw err;
   });
@@ -163,27 +184,27 @@ async function downloadLogo(url, file) {
   return bytes;
 }
 
-export async function fetchLogoBytes(url) {
+export async function fetchLogoBytes(url, channel = 'bot') {
   const file = logoPath(url);
   const cached = await readCached(file);
   if (cached) return { bytes: cached, file, cached: true };
 
   const bytes = await runLimited(async () => {
     const afterQueue = await readCached(file);
-    return afterQueue || downloadLogo(url, file);
+    return afterQueue || downloadLogo(url, file, channel);
   });
   return { bytes, file, cached: false };
 }
 
-export async function refreshLogoBytes(url, file) {
-  return runLimited(() => downloadLogo(url, file));
+export async function refreshLogoBytes(url, file, channel = 'bot') {
+  return runLimited(() => downloadLogo(url, file, channel));
 }
 
-export async function loadLogoBytes(url) {
+export async function loadLogoBytes(url, channel = 'bot') {
   if (!url || !isAllowedLogoUrl(url)) return null;
   for (const candidate of logoCandidates(url)) {
     try {
-      return await fetchLogoBytes(candidate);
+      return await fetchLogoBytes(candidate, channel);
     } catch (e) {
       logger.debug(`[logo-cache] byte candidate failed (${candidate}): ${e.message}`);
     }
