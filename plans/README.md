@@ -48,7 +48,6 @@ or optimize for guild counts.
 | 016  | CMS docs: README section, R2 setup, admin env vars | P3 | S–M | — | DONE (branch `advisor/016-cms-docs` @ 01756fd, chains on 007, unmerged) |
 | 017  | Design spike: Discord news auto-posting | P3 | M | 014 recommended | DONE (branch `advisor/017-discord-news-spike` @ b38b31b — design doc `plans/design/discord-news-posting.md`, 4 open questions for operator) |
 | 018  | Web admin audit log (table + route wiring + viewer) | P3 | M | after 012/013 (same route files) | DONE (branch `advisor/018-web-admin-audit-log` @ d8d4724, chains on 015, unmerged; 16 wired sites, 107 web + 42 bot tests) |
-
 | 020  | Fix CI on GitHub (runner-context bug, triggers, dispatch, concurrency) | P1 | S | — | DONE — merged @ `77fcc7f` (GitHub-run verification still pending a push) |
 | 021  | Admin editor UX: error surfacing, discard warning, localized errors | P2 | M | — | DONE — merged (128→138 web tests) |
 | 022  | Container hardening: USER node + heartbeat HEALTHCHECK | P3 | S–M | — | SUPERSEDED — operator shipped a combined bot+web multi-stage Dockerfile with `USER node` + `start-production.js` (commit `a39350f`); plan 022's bot-only Dockerfile + heartbeat-healthcheck approach no longer fits. Re-scope a healthcheck for the combined container if wanted. |
@@ -66,7 +65,6 @@ or optimize for guild counts.
 | 034  | Add public page metadata and discovery files | P2 | M | - | TODO |
 | 035  | Server-page the public EWC leaderboard | P2 | M | 032 | TODO |
 | 036  | Add bilingual route not-found/error/loading states | P3 | M | - | TODO |
-
 Status values: TODO | IN PROGRESS | DONE | BLOCKED (reason) | REJECTED (rationale) | SUPERSEDED.
 
 ## Security deep audit (2026-06-14, main @ d19a87f)
