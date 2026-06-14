@@ -11,7 +11,10 @@ COPY apps/web/package.json ./apps/web/package.json
 RUN npm ci
 
 COPY . .
-RUN npm run web:build
+# Next's production build imports server routes in parallel. Without runtime
+# DATABASE_URL values the build falls back to SQLite, so give those transient
+# workers a disposable DB and enough busy-timeout room for import-time setup.
+RUN DB_PATH=/tmp/esports-community-build.sqlite SQLITE_BUSY_TIMEOUT_MS=60000 npm run web:build
 RUN npm prune --omit=dev
 
 FROM node:24-bookworm-slim
