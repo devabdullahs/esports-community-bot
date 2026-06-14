@@ -2,6 +2,7 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { RadioIcon } from "lucide-react";
+import { useState } from "react";
 import {
   Card,
   CardContent,
@@ -16,6 +17,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { copy, formatUnixSeconds, type Locale } from "@/lib/i18n";
+import { logoProxyUrl } from "@/lib/logo-url";
 import { safeUrlOrUndefined } from "@/lib/safe-url";
 
 type MatchStatus = "running" | "scheduled" | "finished";
@@ -50,8 +52,9 @@ function teamLabel(value: string | null, fallback: string) {
 }
 
 function Logo({ url, alt }: { url: string | null; alt: string }) {
+  const [failed, setFailed] = useState(false);
   const safe = safeUrlOrUndefined(url);
-  if (!safe) {
+  if (!safe || failed) {
     return (
       <span className="flex size-6 shrink-0 items-center justify-center rounded bg-muted text-[0.6rem] font-semibold uppercase text-muted-foreground">
         {alt.slice(0, 2)}
@@ -60,7 +63,13 @@ function Logo({ url, alt }: { url: string | null; alt: string }) {
   }
   return (
     // eslint-disable-next-line @next/next/no-img-element
-    <img src={safe} alt="" loading="lazy" className="size-6 shrink-0 rounded object-contain" />
+    <img
+      src={logoProxyUrl(safe)}
+      alt=""
+      loading="lazy"
+      className="size-6 shrink-0 rounded object-contain"
+      onError={() => setFailed(true)}
+    />
   );
 }
 

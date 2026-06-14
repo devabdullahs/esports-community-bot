@@ -7,7 +7,7 @@ process.env.DISCORD_CLIENT_ID = 'test-client-id';
 process.env.DB_PATH = ':memory:';
 
 const { normalizeImageUrl } = await import('../src/services/liquipedia/parsers.js');
-const { isAllowedLogoUrl } = await import('../src/lib/logoCache.js');
+const { isAllowedLogoUrl } = await import('../src/lib/logoSource.js');
 
 test('normalizeImageUrl resolves relative + protocol-relative URLs to liquipedia.net https', () => {
   assert.equal(

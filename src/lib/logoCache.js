@@ -1,198 +1,28 @@
-import { createHash } from 'node:crypto';
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { readFile, unlink, writeFile } from 'node:fs/promises';
-import { dirname, join, resolve } from 'node:path';
+import { unlink } from 'node:fs/promises';
 import { createCanvas, loadImage } from '@napi-rs/canvas';
-import axios from 'axios';
-import { config } from '../config.js';
 import { logger } from './logger.js';
+import {
+  fetchLogoBytes,
+  isAllowedLogoUrl,
+  logoCandidates,
+  logoSourceStats,
+  refreshLogoBytes,
+} from './logoSource.js';
 
-// Reuse one client for all logo/flag downloads (Liquipedia ToS: re-use your HTTP client). It
-// carries the same contact-bearing User-Agent as the API client and accepts gzip, so image
-// fetches identify the project exactly like the MediaWiki API calls do.
-const http = axios.create({
-  headers: { 'User-Agent': config.liquipedia.userAgent, 'Accept-Encoding': 'gzip' },
-});
-
-const CACHE_DIR = resolve(process.env.LOGO_CACHE_DIR || 'data/logo-cache');
-const MAX_CONCURRENT_DOWNLOADS = Math.max(1, Number(process.env.LOGO_CACHE_CONCURRENCY || 2));
-const DOWNLOAD_MIN_GAP_MS = Math.max(0, Number(process.env.LOGO_DOWNLOAD_MIN_GAP_MS || 2000));
 const FAILURE_TTL_MS = Math.max(60_000, Number(process.env.LOGO_FAILURE_TTL_MS || 15 * 60_000));
-const RATE_LIMIT_BACKOFF_MS = Math.max(60_000, Number(process.env.LOGO_RATE_LIMIT_BACKOFF_MS || 20 * 60_000));
-const MAX_LOGO_BYTES = Math.max(64_000, Number(process.env.LOGO_MAX_BYTES || 4 * 1024 * 1024));
-const RATE_STATE_PATH = resolve(process.env.LOGO_RATE_STATE_PATH || 'data/logo-rate-limit.json');
-
-// SSRF hardening: logo URLs are parsed from external Liquipedia HTML, so the
-// downloader only ever fetches from known Liquipedia hosts over HTTPS. If a real
-// tracked card loses logos because Liquipedia serves images from another host,
-// add that verified host here with a note on where it appears.
-const ALLOWED_LOGO_HOSTS = new Set(['liquipedia.net']);
-
-export function isAllowedLogoUrl(url) {
-  try {
-    const parsed = new URL(url);
-    if (parsed.protocol !== 'https:') return false;
-    return ALLOWED_LOGO_HOSTS.has(parsed.hostname.toLowerCase());
-  } catch {
-    return false;
-  }
-}
-
-mkdirSync(CACHE_DIR, { recursive: true });
 
 const images = new Map(); // url -> Image
 const inFlight = new Map(); // url -> Promise<Image | null>
 const failures = new Map(); // url -> retryAfterMs
-const queue = [];
-let activeDownloads = 0;
-let lastDownloadAt = 0;
-let blockedUntil = 0;
-let rateStateLoaded = false;
-
-const sleep = (ms) => new Promise((resolvePromise) => setTimeout(resolvePromise, ms));
-
-function loadRateState() {
-  if (rateStateLoaded) return;
-  rateStateLoaded = true;
-  try {
-    const data = JSON.parse(readFileSync(RATE_STATE_PATH, 'utf8'));
-    lastDownloadAt = Number(data.lastDownloadAt) || 0;
-    blockedUntil = Number(data.blockedUntil) || 0;
-  } catch {
-    // Missing or invalid state just means this is the first run.
-  }
-}
-
-function saveRateState() {
-  try {
-    mkdirSync(dirname(RATE_STATE_PATH), { recursive: true });
-    writeFileSync(RATE_STATE_PATH, JSON.stringify({ lastDownloadAt, blockedUntil }, null, 2));
-  } catch (e) {
-    logger.debug(`[logo-cache] could not save rate state: ${e.message}`);
-  }
-}
-
-function logoCandidates(url) {
-  const original = String(url).trim();
-  const variants = [];
-  const add = (candidate) => {
-    if (candidate && !variants.includes(candidate)) variants.push(candidate);
-  };
-  const fileNameOf = (candidate) => decodeURIComponent(String(candidate).split(/[?#]/)[0].split('/').pop() || '');
-  const redirectFor = (fileName) =>
-    fileName ? `https://liquipedia.net/commons/Special:Redirect/file/${encodeURIComponent(fileName)}` : null;
-  const addModeVariants = (candidate) => {
-    const fileName = fileNameOf(candidate);
-    if (/_lightmode(?=\.[a-z0-9]+$)/i.test(fileName)) {
-      const darkFile = fileName.replace(/_lightmode(?=\.[a-z0-9]+$)/i, '_darkmode');
-      const allFile = fileName.replace(/_lightmode(?=\.[a-z0-9]+$)/i, '_allmode');
-      add(redirectFor(darkFile));
-      add(redirectFor(allFile));
-      add(candidate.replace(/_lightmode(?=\.[a-z0-9]+(?:[/?#]|$))/gi, '_darkmode'));
-      add(candidate.replace(/_lightmode(?=\.[a-z0-9]+(?:[/?#]|$))/gi, '_allmode'));
-    }
-    add(candidate);
-  };
-
-  const m = original.match(
-    /^(https:\/\/liquipedia\.net\/commons\/images)\/thumb\/([^/]+\/[^/]+\/[^/]+)\/\d+px-[^/?#]+([?#].*)?$/i,
-  );
-  if (!m) {
-    addModeVariants(original);
-    return variants;
-  }
-
-  const full = `${m[1]}/${m[2]}${m[3] || ''}`;
-  addModeVariants(full);
-  addModeVariants(original);
-  return variants;
-}
-
-function logoPath(url) {
-  const key = createHash('sha256').update(url).digest('hex');
-  return join(CACHE_DIR, `${key}.img`);
-}
-
-function runLimited(fn) {
-  return new Promise((resolvePromise, reject) => {
-    queue.push({ fn, resolve: resolvePromise, reject });
-    pumpQueue();
-  });
-}
-
-function pumpQueue() {
-  while (activeDownloads < MAX_CONCURRENT_DOWNLOADS && queue.length) {
-    const job = queue.shift();
-    activeDownloads++;
-    job
-      .fn()
-      .then(job.resolve, job.reject)
-      .finally(() => {
-        activeDownloads--;
-        pumpQueue();
-      });
-  }
-}
-
-async function readCached(file) {
-  try {
-    return await readFile(file);
-  } catch (e) {
-    if (e.code !== 'ENOENT') logger.debug(`[logo-cache] read failed (${file}): ${e.message}`);
-    return null;
-  }
-}
-
-async function downloadLogo(url, file) {
-  loadRateState();
-  if (Date.now() < blockedUntil) throw new Error('logo downloads backing off after a rate limit');
-  const wait = lastDownloadAt + DOWNLOAD_MIN_GAP_MS - Date.now();
-  if (wait > 0) await sleep(wait);
-  lastDownloadAt = Date.now();
-  saveRateState();
-
-  const { data, headers } = await http.get(url, {
-    responseType: 'arraybuffer',
-    timeout: 10_000,
-    maxContentLength: MAX_LOGO_BYTES,
-  }).catch((err) => {
-    const status = err.response?.status;
-    if (status === 403 || status === 429 || status === 503) {
-      blockedUntil = Date.now() + RATE_LIMIT_BACKOFF_MS;
-      saveRateState();
-      logger.warn(`[logo-cache] rate limited (HTTP ${status}) — pausing logo downloads for ${Math.round(RATE_LIMIT_BACKOFF_MS / 60000)} min`);
-    }
-    throw err;
-  });
-  const type = String(headers?.['content-type'] || '');
-  if (type && !type.startsWith('image/')) throw new Error(`unexpected content-type ${type}`);
-
-  const bytes = Buffer.from(data);
-  if (bytes.length > MAX_LOGO_BYTES) throw new Error(`logo too large (${bytes.length} bytes)`);
-  await writeFile(file, bytes);
-  return bytes;
-}
-
-async function getLogoBytes(url) {
-  const file = logoPath(url);
-  const cached = await readCached(file);
-  if (cached) return { bytes: cached, file, cached: true };
-
-  const bytes = await runLimited(async () => {
-    const afterQueue = await readCached(file);
-    return afterQueue || downloadLogo(url, file);
-  });
-  return { bytes, file, cached: false };
-}
 
 async function loadBytesAsImage(url) {
-  const first = await getLogoBytes(url);
+  const first = await fetchLogoBytes(url);
   try {
     return await loadPreparedImage(url, first.bytes);
   } catch (e) {
     if (!first.cached) throw e;
     await unlink(first.file).catch(() => {});
-    const fresh = await runLimited(() => downloadLogo(url, first.file));
+    const fresh = await refreshLogoBytes(url, first.file);
     return loadPreparedImage(url, fresh);
   }
 }
@@ -282,11 +112,14 @@ export async function loadLogoImage(url) {
 }
 
 export function logoCacheStats() {
+  const source = logoSourceStats();
   return {
     cachedImages: images.size,
     inFlight: inFlight.size,
-    queuedDownloads: queue.length,
-    activeDownloads,
-    cacheDir: CACHE_DIR,
+    queuedDownloads: source.queuedDownloads,
+    activeDownloads: source.activeDownloads,
+    cacheDir: source.cacheDir,
   };
 }
+
+export { isAllowedLogoUrl };
