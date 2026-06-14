@@ -3,7 +3,14 @@ import { logger } from '../lib/logger.js';
 import * as liquipedia from '../services/liquipedia.js';
 import * as pandascore from '../services/pandascore.js';
 import * as startgg from '../services/startgg.js';
-import { upsertMatch, toMatchRow, getMatch, getActiveMatches, deleteTournamentPlaceholderMatches } from '../db/matches.js';
+import {
+  upsertMatch,
+  toMatchRow,
+  getMatch,
+  getActiveMatches,
+  markFinishedByExternalId,
+  deleteTournamentPlaceholderMatches,
+} from '../db/matches.js';
 import { getTournamentById } from '../db/tournaments.js';
 
 // Targeted backoff polling: a match is polled (every livePollIntervalMs) only while it is
@@ -158,9 +165,13 @@ async function pollOnce(match, tournament) {
       logger.info(`[poll] stop ${match.external_id} (finished ${polled.score_a}-${polled.score_b})`);
     }
   } else if (match.scheduled_at && nowSec() > match.scheduled_at + MAX_RUN_SECONDS) {
-    // Safety net: gone from the page and long overdue — stop without inventing a result.
+    // Safety net: gone from the page and long overdue. Mark it finished (no score) so it
+    // leaves the live match-card board instead of staying stuck 'running' forever, then
+    // refresh so the card is dropped and the upcoming-matches card takes its place.
+    await markFinishedByExternalId(match.source, match.external_id);
     clearWatcher(match.external_id);
-    logger.info(`[poll] stop ${match.external_id} (gone, max runtime)`);
+    onUpdate('update', { ...match, status: 'finished' });
+    logger.info(`[poll] stop ${match.external_id} (gone, max runtime — marked finished)`);
   }
 }
 

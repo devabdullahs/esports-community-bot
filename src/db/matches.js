@@ -132,6 +132,28 @@ export async function markFinished(id) {
   return run(`UPDATE matches SET status='finished', updated_at=$1 WHERE id = $2`, [nowText(), id]);
 }
 
+export async function markFinishedByExternalId(source, externalId) {
+  return run(`UPDATE matches SET status='finished', updated_at=$1 WHERE source = $2 AND external_id = $3`, [
+    nowText(),
+    source,
+    externalId,
+  ]);
+}
+
+// The poller's 8h safety net stops watching a match without ever marking it finished
+// (it left the live page without a posted result), so it stays 'running' forever and
+// keeps a live match card / counts as live on the web. Flip those stale 'running' rows
+// to 'finished' so the board drops them and falls back to the upcoming-matches card.
+export async function markStaleRunningFinished(staleSeconds) {
+  const cutoff = Math.floor(Date.now() / 1000) - staleSeconds;
+  const result = await run(
+    `UPDATE matches SET status='finished', updated_at=$1
+     WHERE status='running' AND scheduled_at IS NOT NULL AND scheduled_at < $2`,
+    [nowText(), cutoff],
+  );
+  return result.changes || 0;
+}
+
 export async function deleteTournamentPlaceholderMatches(tournamentId, currentExternalIds = null) {
   const rows = await all(
     'SELECT id, external_id, team_a, team_b, scheduled_at FROM matches WHERE tournament_id = $1',
