@@ -66,11 +66,12 @@ export function SiteHeaderClient({
   // tournaments, predictions, leaderboard) group under one "EWC" menu.
   const primary: Destination[] = [
     { href: "/games", label: text.common.games, icon: Gamepad2Icon },
+    { href: "/news", label: text.common.news, icon: NewspaperIcon },
     { href: "/media", label: text.common.media, icon: Tv2Icon },
     { href: "/tournaments", label: text.common.tournaments, icon: TrophyIcon },
   ];
   const ewcLinks: Destination[] = [
-    { href: "/news", label: text.common.news, icon: NewspaperIcon },
+    { href: "/news/ewc", label: text.common.ewcNews, icon: NewspaperIcon },
     { href: "/tournaments/ewc", label: text.common.ewcTournaments, icon: TrophyIcon },
     { href: "/predictions", label: text.common.predictions, icon: TargetIcon },
     { href: "/leaderboard", label: text.common.publicLeaderboard, icon: CrownIcon },
@@ -78,12 +79,14 @@ export function SiteHeaderClient({
   const ewcActive = ewcLinks.some((d) =>
     isActivePath(pathname, localizedPath(d.href, locale)),
   );
-  // Top-level "Tournaments" shouldn't light up while on the EWC-only sub-list.
-  const ewcTournamentsHref = localizedPath("/tournaments/ewc", locale);
+  // Top-level "News"/"Tournaments" shouldn't light up while on their EWC sub-lists.
   const linkActive = (href: string) => {
     const full = localizedPath(href, locale);
-    if (href === "/tournaments") {
-      return isActivePath(pathname, full) && !isActivePath(pathname, ewcTournamentsHref);
+    if (href === "/news" || href === "/tournaments") {
+      return (
+        isActivePath(pathname, full) &&
+        !isActivePath(pathname, localizedPath(`${href}/ewc`, locale))
+      );
     }
     return isActivePath(pathname, full);
   };

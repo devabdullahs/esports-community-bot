@@ -43,6 +43,7 @@ export type NewsPost = {
   authorName: string | null;
   coverImageUrl: string | null;
   coverPlacement: NewsCoverPlacement;
+  ewc: boolean;
   translations: Partial<Record<Locale, NewsTranslation>>;
   createdAt: string;
   updatedAt: string;
@@ -59,6 +60,7 @@ export type NewsPostInput = {
   authorName?: string | null;
   coverImageUrl?: string | null;
   coverPlacement?: NewsCoverPlacement;
+  ewc?: boolean;
 };
 
 const getById = _getById as (id: number) => Promise<NewsPost | null>;
@@ -71,7 +73,11 @@ const listPublished = _listPublished as (args: {
   gameSlug: string;
   locale: Locale;
 }) => Promise<NewsPost[]>;
-const listLatest = _listLatest as (args: { locale: Locale; limit?: number }) => Promise<NewsPost[]>;
+const listLatest = _listLatest as (args: {
+  locale: Locale;
+  limit?: number;
+  ewcOnly?: boolean;
+}) => Promise<NewsPost[]>;
 const create = _create as (input: NewsPostInput) => Promise<NewsPost>;
 const update = _update as (id: number, input: NewsPostInput) => Promise<NewsPost | null>;
 const setStatus = _setStatus as (id: number, status: NewsStatus) => Promise<NewsPost | null>;
@@ -96,8 +102,12 @@ export function listPublishedNewsPosts(gameSlug: string, locale: Locale): Promis
   return listPublished({ gameSlug, locale });
 }
 
-export function listLatestPublishedNewsPosts(locale: Locale, limit = 4): Promise<NewsPost[]> {
-  return listLatest({ locale, limit });
+export function listLatestPublishedNewsPosts(
+  locale: Locale,
+  limit = 4,
+  ewcOnly = false,
+): Promise<NewsPost[]> {
+  return listLatest({ locale, limit, ewcOnly });
 }
 
 export function createNewsPost(input: NewsPostInput): Promise<NewsPost> {
@@ -135,7 +145,8 @@ export const listPublishedNewsPostsCached = unstable_cache(
 );
 
 export const listLatestPublishedNewsPostsCached = unstable_cache(
-  async (locale: Locale, limit = 4) => listLatestPublishedNewsPosts(locale, limit),
+  async (locale: Locale, limit = 4, ewcOnly = false) =>
+    listLatestPublishedNewsPosts(locale, limit, ewcOnly),
   ["news-list-latest"],
   { tags: ["cms-news", "cms-games"] },
 );

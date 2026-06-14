@@ -346,6 +346,8 @@ ensureColumns('ewc_news_posts', [
   // Where the cover image renders on the public article: 'top' (default, above body),
   // 'bottom' (after the body), or 'card-only' (hidden inside the article, still shown on cards).
   ['cover_placement', 'TEXT'],
+  // Admin-set tag: 1 = part of the Esports World Cup (surfaced on the EWC news page).
+  ['ewc', 'INTEGER NOT NULL DEFAULT 0'],
 ]);
 // Per-game Discord news channel (nullable; falls back to the guild-level news channel).
 ensureColumns('ewc_games', [['discord_channel_id', 'TEXT']]);

@@ -55,6 +55,7 @@ async function hydrate(row, locale) {
     authorName: row.author_name,
     coverImageUrl: row.cover_image_url,
     coverPlacement: isNewsCoverPlacement(row.cover_placement) ? row.cover_placement : 'top',
+    ewc: Boolean(row.ewc),
     createdAt: row.created_at,
     updatedAt: row.updated_at,
     publishedAt: row.published_at,
@@ -201,13 +202,13 @@ export async function listPublishedEwcNewsPosts({ gameSlug, locale }) {
   return (await Promise.all(rows.map((row) => hydrate(row, locale)))).filter(Boolean);
 }
 
-export async function listLatestPublishedEwcNewsPosts({ locale, limit = 4 } = {}) {
+export async function listLatestPublishedEwcNewsPosts({ locale, limit = 4, ewcOnly = false } = {}) {
   const rows = await all(
     `SELECT * FROM ewc_news_posts
-     WHERE status = 'published'
+     WHERE status = 'published'${ewcOnly ? ' AND ewc = 1' : ''}
      ORDER BY published_at DESC, id DESC
      LIMIT $1`,
-    [Math.max(1, Math.min(20, Number(limit) || 4))],
+    [Math.max(1, Math.min(50, Number(limit) || 4))],
   );
   return (await Promise.all(rows.map((row) => hydrate(row, locale)))).filter(Boolean);
 }
@@ -220,9 +221,9 @@ export async function createEwcNewsPost(input) {
     const row = await tx.get(
       `INSERT INTO ewc_news_posts
          (game_slug, locale, content_mode, default_locale, title, summary, body, status,
-          author_discord_id, author_name, cover_image_url, cover_placement,
+          author_discord_id, author_name, cover_image_url, cover_placement, ewc,
           created_at, updated_at, published_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
        RETURNING id`,
       [
         value.gameSlug,
@@ -237,6 +238,7 @@ export async function createEwcNewsPost(input) {
         value.authorName || null,
         value.coverImageUrl || null,
         isNewsCoverPlacement(value.coverPlacement) ? value.coverPlacement : 'top',
+        value.ewc ? 1 : 0,
         now,
         now,
         value.status === 'published' ? now : null,
@@ -261,8 +263,9 @@ export async function updateEwcNewsPost(id, input) {
            author_discord_id = COALESCE($11, author_discord_id),
            author_name = COALESCE($12, author_name),
            updated_at = $13,
-           published_at = COALESCE(published_at, $14)
-       WHERE id = $15`,
+           published_at = COALESCE(published_at, $14),
+           ewc = $15
+       WHERE id = $16`,
       [
         value.gameSlug,
         fallback.locale,
@@ -278,6 +281,7 @@ export async function updateEwcNewsPost(id, input) {
         value.authorName || null,
         now,
         value.status === 'published' ? now : null,
+        value.ewc ? 1 : 0,
         id,
       ],
     );

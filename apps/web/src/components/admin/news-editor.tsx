@@ -254,6 +254,7 @@ export function NewsEditor({
   const [coverPlacement, setCoverPlacement] = useState<NewsCoverPlacement>(
     post?.coverPlacement || "top",
   );
+  const [ewc, setEwc] = useState<boolean>(post?.ewc ?? false);
   const [status, setStatus] = useState<NewsStatus>(post?.status || "draft");
   // Author picker: list of eligible authors for the current game (fetched), plus
   // the currently-credited author's discord id. authorName is derived from the
@@ -633,6 +634,7 @@ export function NewsEditor({
         translations: translationsToPersist,
         coverImageUrl: coverImageUrl.trim() || null,
         coverPlacement,
+        ewc,
         status: targetStatus,
         authorDiscordId: authorDiscordId || null,
         authorName: selectedAuthorName || null,
@@ -974,6 +976,29 @@ export function NewsEditor({
                     </SelectGroup>
                   </SelectContent>
                 </Select>
+              </Field>
+
+              {/* EWC tag — includes this post in the EWC news section. */}
+              <Field>
+                <FieldLabel>{t.ewcLabel}</FieldLabel>
+                <ToggleGroup
+                  value={[ewc ? "yes" : "no"]}
+                  onValueChange={(value) => {
+                    const next = value.at(-1);
+                    if (next === "yes" || next === "no") setEwc(next === "yes");
+                  }}
+                  spacing={1}
+                  variant="outline"
+                  className="w-full sm:w-64"
+                >
+                  <ToggleGroupItem value="no" className="flex-1">
+                    {t.ewcNo}
+                  </ToggleGroupItem>
+                  <ToggleGroupItem value="yes" className="flex-1">
+                    {t.ewcYes}
+                  </ToggleGroupItem>
+                </ToggleGroup>
+                <FieldDescription>{t.ewcHint}</FieldDescription>
               </Field>
 
               {/* Separate-mode locale tabs */}

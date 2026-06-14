@@ -17,6 +17,7 @@ export type ValidatedNewsInput = NewsPostInput & {
   gameSlug: string;
   coverImageUrl: string | null;
   coverPlacement: NewsCoverPlacement;
+  ewc: boolean;
   authorDiscordId: string | null;
   authorName: string | null;
 };
@@ -89,6 +90,9 @@ export function validateNewsInput(
     authorName = rawAuthorName.trim();
   }
 
+  // Admin-set EWC tag (boolean). Accepts true / 1 / "true"; anything else is false.
+  const ewc = body.ewc === true || body.ewc === 1 || body.ewc === "true";
+
   return {
     ok: true,
     value: {
@@ -96,6 +100,7 @@ export function validateNewsInput(
       ...content.value,
       coverImageUrl,
       coverPlacement,
+      ewc,
       authorDiscordId,
       authorName,
     },
