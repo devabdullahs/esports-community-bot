@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import { ArrowRightIcon, TargetIcon, TrophyIcon, UserRoundIcon } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
@@ -10,10 +11,19 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { localizedPath } from "@/lib/i18n";
+import { buildPageMetadata } from "@/lib/metadata";
 import { getRequestLocale } from "@/lib/request-locale";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+export function generateMetadata(): Metadata {
+  return buildPageMetadata({
+    title: "EWC prediction leaderboards",
+    description:
+      "Join weekly and season Esports World Cup predictions in Discord, then track ranks, points, and profiles on the community leaderboard.",
+    path: "/predictions",
+  });
+}
 
 const COPY = {
   en: {

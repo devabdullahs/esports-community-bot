@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import { ArrowRightIcon, Gamepad2Icon, NewspaperIcon } from "lucide-react";
 import { PageBreadcrumb } from "@/components/page-breadcrumb";
@@ -17,10 +18,19 @@ import {
   copy,
   localizedPath,
 } from "@/lib/i18n";
+import { buildPageMetadata } from "@/lib/metadata";
 import { getRequestLocale } from "@/lib/request-locale";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+export function generateMetadata(): Metadata {
+  return buildPageMetadata({
+    title: "Esports game pages",
+    description:
+      "Browse the esports games followed by the community, including news, coverage notes, and Discord-linked context for each title.",
+    path: "/games",
+  });
+}
 
 export default async function GamesPage() {
   const locale = await getRequestLocale();

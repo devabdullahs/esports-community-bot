@@ -8,6 +8,18 @@ import { safeUrlOrUndefined } from "@/lib/safe-url";
 // generateMetadata().
 
 export const SITE_NAME = "Esports Community";
+export const SITE_DESCRIPTION =
+  "Community esports hub for game pages, tournament coverage, news, prediction leaderboards, and Discord profile showcase.";
+export const SITE_KEYWORDS = [
+  "esports",
+  "esports community",
+  "EWC",
+  "Esports World Cup",
+  "gaming community",
+  "tournament tracking",
+  "prediction leaderboard",
+  "Discord esports bot",
+];
 
 export function absoluteUrl(path?: string): string {
   const base = dashboardPublicUrl();
@@ -44,4 +56,16 @@ export function buildPageMetadata(input: {
       ...(image ? { images: [image] } : {}),
     },
   };
+}
+
+export function googleSiteVerification() {
+  return (
+    process.env.EWC_GOOGLE_SITE_VERIFICATION ||
+    process.env.GOOGLE_SITE_VERIFICATION ||
+    ""
+  ).trim();
+}
+
+export function siteIconUrl() {
+  return absoluteUrl("/icon.svg");
 }

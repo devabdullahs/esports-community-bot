@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import {
   ArrowRightIcon,
@@ -23,10 +24,18 @@ import {
   localizedPath,
 } from "@/lib/i18n";
 import { getRequestLocale } from "@/lib/request-locale";
+import { buildPageMetadata, SITE_DESCRIPTION, SITE_NAME } from "@/lib/metadata";
 import { safeUrlOrUndefined } from "@/lib/safe-url";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+export function generateMetadata(): Metadata {
+  return buildPageMetadata({
+    title: SITE_NAME,
+    description: SITE_DESCRIPTION,
+    path: "/",
+  });
+}
 
 export default async function Home() {
   const locale = await getRequestLocale();

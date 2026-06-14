@@ -1,0 +1,355 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Google Search Setup Guide - Esports Community</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        --bg: #05070b;
+        --panel: #0d1420;
+        --panel-2: #111b2a;
+        --text: #f7fafc;
+        --muted: #9fb0c8;
+        --line: #243247;
+        --accent: #ffd21f;
+        --blue: #8eb7ff;
+        --green: #5ee2a0;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        background:
+          radial-gradient(circle at top left, rgba(255, 210, 31, 0.08), transparent 34rem),
+          radial-gradient(circle at bottom right, rgba(142, 183, 255, 0.08), transparent 30rem),
+          var(--bg);
+        color: var(--text);
+        font-family:
+          Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
+          sans-serif;
+        line-height: 1.6;
+      }
+
+      a {
+        color: var(--blue);
+      }
+
+      code {
+        border: 1px solid var(--line);
+        border-radius: 0.45rem;
+        background: #060a11;
+        padding: 0.15rem 0.35rem;
+        color: #d7e6ff;
+        font-size: 0.95em;
+      }
+
+      main {
+        width: min(980px, calc(100% - 32px));
+        margin: 0 auto;
+        padding: 48px 0 72px;
+      }
+
+      header {
+        margin-bottom: 28px;
+      }
+
+      .eyebrow {
+        display: inline-flex;
+        margin-bottom: 16px;
+        border: 1px solid rgba(255, 210, 31, 0.35);
+        border-radius: 999px;
+        background: rgba(255, 210, 31, 0.1);
+        padding: 4px 10px;
+        color: var(--accent);
+        font-size: 0.82rem;
+        font-weight: 700;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+      }
+
+      h1 {
+        max-width: 760px;
+        margin: 0;
+        font-size: clamp(2.2rem, 6vw, 4.25rem);
+        line-height: 1.05;
+        letter-spacing: -0.02em;
+      }
+
+      h2 {
+        margin: 0 0 12px;
+        font-size: 1.45rem;
+        line-height: 1.25;
+      }
+
+      h3 {
+        margin: 18px 0 8px;
+        font-size: 1.05rem;
+      }
+
+      p {
+        margin: 0 0 12px;
+        color: var(--muted);
+      }
+
+      .summary {
+        max-width: 720px;
+        margin-top: 18px;
+        font-size: 1.05rem;
+      }
+
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 14px;
+        margin: 24px 0;
+      }
+
+      .stat,
+      section {
+        border: 1px solid var(--line);
+        border-radius: 14px;
+        background: rgba(13, 20, 32, 0.88);
+        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.24);
+      }
+
+      .stat {
+        padding: 16px;
+      }
+
+      .stat strong {
+        display: block;
+        color: var(--green);
+        font-size: 0.95rem;
+      }
+
+      .stat span {
+        color: var(--muted);
+        font-size: 0.9rem;
+      }
+
+      section {
+        margin-top: 18px;
+        padding: 24px;
+      }
+
+      ol,
+      ul {
+        margin: 0;
+        padding-left: 1.25rem;
+      }
+
+      li {
+        margin: 0.55rem 0;
+        color: var(--muted);
+      }
+
+      li strong {
+        color: var(--text);
+      }
+
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        overflow: hidden;
+        border-radius: 12px;
+        margin-top: 12px;
+        background: var(--panel-2);
+      }
+
+      th,
+      td {
+        border-bottom: 1px solid var(--line);
+        padding: 12px;
+        text-align: left;
+        vertical-align: top;
+      }
+
+      th {
+        color: var(--text);
+        font-size: 0.85rem;
+      }
+
+      td {
+        color: var(--muted);
+      }
+
+      tr:last-child td {
+        border-bottom: 0;
+      }
+
+      .callout {
+        border-left: 3px solid var(--accent);
+        background: rgba(255, 210, 31, 0.08);
+      }
+
+      .checklist li::marker {
+        color: var(--green);
+      }
+
+      .footer {
+        margin-top: 28px;
+        color: var(--muted);
+        font-size: 0.9rem;
+      }
+
+      @media (max-width: 760px) {
+        .grid {
+          grid-template-columns: 1fr;
+        }
+
+        section {
+          padding: 18px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <header>
+        <span class="eyebrow">Search setup</span>
+        <h1>Make Esports Community discoverable on Google</h1>
+        <p class="summary">
+          This guide covers the owner-side steps after the site code has been prepared:
+          verify ownership, submit the sitemap, inspect important pages, and keep publishing
+          useful public content.
+        </p>
+      </header>
+
+      <div class="grid">
+        <div class="stat">
+          <strong>Code side</strong>
+          <span>Metadata, sitemap, robots, icons, and structured data are handled by the app.</span>
+        </div>
+        <div class="stat">
+          <strong>Your side</strong>
+          <span>Set the public domain, verify Search Console, and submit the sitemap.</span>
+        </div>
+        <div class="stat">
+          <strong>Timeline</strong>
+          <span>Indexing is not instant. Expect days to weeks, sometimes longer.</span>
+        </div>
+      </div>
+
+      <section>
+        <h2>1. Confirm the final public URL</h2>
+        <p>
+          Decide the one canonical domain Google should index. Use the real HTTPS public domain,
+          not a temporary CranL URL if you plan to use a custom domain later.
+        </p>
+        <table>
+          <thead>
+            <tr>
+              <th>Environment variable</th>
+              <th>Recommended value</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>EWC_DASHBOARD_PUBLIC_URL</code></td>
+              <td><code>https://your-domain.example</code></td>
+            </tr>
+            <tr>
+              <td><code>BETTER_AUTH_URL</code></td>
+              <td>Use the same public HTTPS origin as above.</td>
+            </tr>
+            <tr>
+              <td><code>EWC_GOOGLE_SITE_VERIFICATION</code></td>
+              <td>Set this after Google gives you an HTML tag verification token.</td>
+            </tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section>
+        <h2>2. Verify ownership in Google Search Console</h2>
+        <ol>
+          <li>Open <a href="https://search.google.com/search-console" target="_blank" rel="noreferrer">Google Search Console</a>.</li>
+          <li>Click <strong>Add property</strong>.</li>
+          <li>
+            Prefer <strong>Domain property</strong> if you control DNS. This verifies every
+            subdomain and protocol with one DNS TXT record.
+          </li>
+          <li>
+            If DNS is annoying, use <strong>URL prefix</strong> for the exact public URL and choose
+            <strong>HTML tag</strong>.
+          </li>
+          <li>
+            Copy only the token inside <code>content="..."</code> into
+            <code>EWC_GOOGLE_SITE_VERIFICATION</code> on CranL, then redeploy.
+          </li>
+          <li>Click <strong>Verify</strong> in Search Console.</li>
+        </ol>
+      </section>
+
+      <section>
+        <h2>3. Submit the sitemap</h2>
+        <p>After deployment, open these URLs in your browser first:</p>
+        <ul class="checklist">
+          <li><code>https://your-domain.example/robots.txt</code></li>
+          <li><code>https://your-domain.example/sitemap.xml</code></li>
+          <li><code>https://your-domain.example/icon.svg</code></li>
+        </ul>
+        <p>
+          In Search Console, go to <strong>Sitemaps</strong> and submit:
+          <code>https://your-domain.example/sitemap.xml</code>
+        </p>
+      </section>
+
+      <section>
+        <h2>4. Request indexing for the important pages</h2>
+        <p>Use the URL Inspection tool in Search Console for:</p>
+        <ul>
+          <li><code>/</code></li>
+          <li><code>/games</code></li>
+          <li><code>/news</code></li>
+          <li><code>/tournaments</code></li>
+          <li><code>/predictions</code></li>
+          <li>One strong game page, for example <code>/games/valorant</code>.</li>
+          <li>One published article page.</li>
+        </ul>
+        <p>For each page, click <strong>Test live URL</strong>, then <strong>Request indexing</strong>.</p>
+      </section>
+
+      <section class="callout">
+        <h2>5. What helps ranking most</h2>
+        <ul>
+          <li><strong>Publish real public content:</strong> news posts, game pages, and tournament pages that users actually read.</li>
+          <li><strong>Use clear titles:</strong> include game names, event names, or team names naturally.</li>
+          <li><strong>Link to the site:</strong> Discord announcements, X posts, community profiles, GitHub README, and partner pages help Google discover it.</li>
+          <li><strong>Keep pages stable:</strong> avoid changing the domain or URL structure after Google starts indexing.</li>
+          <li><strong>Avoid thin pages:</strong> empty pages can be crawled, but strong pages are more likely to be indexed and shown.</li>
+        </ul>
+      </section>
+
+      <section>
+        <h2>6. Quick checks after deployment</h2>
+        <ol>
+          <li>Search Google for <code>site:your-domain.example</code>.</li>
+          <li>Check Search Console <strong>Pages</strong> for indexing issues.</li>
+          <li>Check Search Console <strong>Sitemaps</strong> for successful sitemap fetch.</li>
+          <li>Run a rich result test for an article: <a href="https://search.google.com/test/rich-results" target="_blank" rel="noreferrer">Rich Results Test</a>.</li>
+          <li>Use PageSpeed Insights for performance and Core Web Vitals: <a href="https://pagespeed.web.dev/" target="_blank" rel="noreferrer">PageSpeed Insights</a>.</li>
+        </ol>
+      </section>
+
+      <section>
+        <h2>7. Source references</h2>
+        <ul>
+          <li><a href="https://developers.google.com/search/docs/fundamentals/seo-starter-guide" target="_blank" rel="noreferrer">Google SEO Starter Guide</a></li>
+          <li><a href="https://support.google.com/webmasters/answer/9008080" target="_blank" rel="noreferrer">Verify site ownership in Search Console</a></li>
+          <li><a href="https://developers.google.com/search/docs/crawling-indexing/sitemaps/overview" target="_blank" rel="noreferrer">Google sitemap documentation</a></li>
+          <li><a href="https://developers.google.com/search/docs/appearance/structured-data/intro-structured-data" target="_blank" rel="noreferrer">Google structured data documentation</a></li>
+        </ul>
+      </section>
+
+      <p class="footer">
+        Keep this guide with the repo. Update the domain placeholders once the final public domain is selected.
+      </p>
+    </main>
+  </body>
+</html>
