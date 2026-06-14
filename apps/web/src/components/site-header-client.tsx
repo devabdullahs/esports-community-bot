@@ -17,12 +17,15 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useState } from "react";
 import { ModeToggle } from "@/components/mode-toggle";
+import { SignOutButton } from "@/components/dashboard/sign-out-button";
 import { Button } from "@/components/ui/button";
 import {
   NavigationMenu,
+  NavigationMenuContent,
   NavigationMenuItem,
   NavigationMenuLink,
   NavigationMenuList,
+  NavigationMenuTrigger,
 } from "@/components/ui/navigation-menu";
 import {
   Sheet,
@@ -44,11 +47,10 @@ import {
 type Destination = { href: string; label: string; icon: LucideIcon };
 
 export function SiteHeaderClient({
+  hasSession,
   isAdmin,
   locale,
 }: {
-  // hasSession is provided by the server wrapper for completeness, but the
-  // header only ever needs the resolved admin gate (isAdmin).
   hasSession: boolean;
   isAdmin: boolean;
   locale: Locale;
@@ -59,16 +61,21 @@ export function SiteHeaderClient({
   const text = copy[locale];
   const nextLocale = locale === "ar" ? "en" : "ar";
 
-  // Primary destinations, shown as visible links on desktop and listed in the
-  // mobile sheet. Predictions stays in the same group (no separate dropdown).
-  const destinations: Destination[] = [
+  // General destinations stay as top-level links; the EWC-specific pages (news,
+  // tournaments, predictions, leaderboard) group under one "EWC" menu.
+  const primary: Destination[] = [
     { href: "/games", label: text.common.games, icon: Gamepad2Icon },
-    { href: "/news", label: text.common.news, icon: NewspaperIcon },
     { href: "/media", label: text.common.media, icon: Tv2Icon },
-    { href: "/tournaments", label: text.common.tournaments, icon: TrophyIcon },
+  ];
+  const ewcLinks: Destination[] = [
+    { href: "/news", label: text.common.news, icon: NewspaperIcon },
+    { href: "/tournaments", label: text.common.ewcTournaments, icon: TrophyIcon },
     { href: "/predictions", label: text.common.predictions, icon: TargetIcon },
     { href: "/leaderboard", label: text.common.publicLeaderboard, icon: CrownIcon },
   ];
+  const ewcActive = ewcLinks.some((d) =>
+    isActivePath(pathname, localizedPath(d.href, locale)),
+  );
 
   function switchLanguage() {
     document.cookie = `${LOCALE_COOKIE_NAME}=${nextLocale}; Path=/; Max-Age=${LOCALE_COOKIE_MAX_AGE}; SameSite=Lax`;
@@ -99,10 +106,10 @@ export function SiteHeaderClient({
           </span>
         </Link>
 
-        {/* Desktop (md+): primary destinations as visible top-level links. */}
+        {/* Desktop (md+): general links + an EWC dropdown grouping the EWC pages. */}
         <NavigationMenu className="ms-2 hidden md:flex">
           <NavigationMenuList className="gap-0.5">
-            {destinations.map(({ href, label, icon: Icon }) => {
+            {primary.map(({ href, label, icon: Icon }) => {
               const active = isActivePath(pathname, localizedPath(href, locale));
               return (
                 <NavigationMenuItem key={href}>
@@ -117,6 +124,31 @@ export function SiteHeaderClient({
                 </NavigationMenuItem>
               );
             })}
+            <NavigationMenuItem>
+              <NavigationMenuTrigger className={ewcActive ? "bg-muted/50" : undefined}>
+                <TrophyIcon />
+                {text.common.ewc}
+              </NavigationMenuTrigger>
+              <NavigationMenuContent>
+                <ul className="grid w-56 gap-0.5">
+                  {ewcLinks.map(({ href, label, icon: Icon }) => {
+                    const active = isActivePath(pathname, localizedPath(href, locale));
+                    return (
+                      <li key={href}>
+                        <NavigationMenuLink
+                          data-active={active || undefined}
+                          aria-current={active ? "page" : undefined}
+                          render={<Link href={localizedPath(href, locale)} />}
+                        >
+                          <Icon />
+                          {label}
+                        </NavigationMenuLink>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </NavigationMenuContent>
+            </NavigationMenuItem>
           </NavigationMenuList>
         </NavigationMenu>
 
@@ -150,6 +182,13 @@ export function SiteHeaderClient({
             <UserRoundIcon />
             <span>{text.common.myProfile}</span>
           </Button>
+          {hasSession ? (
+            <SignOutButton
+              label={text.common.signOut}
+              redirectTo={localizedPath("/", locale)}
+              className="hidden gap-1.5 px-2.5 md:inline-flex"
+            />
+          ) : null}
           <Button
             variant="ghost"
             size="sm"
@@ -181,7 +220,28 @@ export function SiteHeaderClient({
                 <SheetTitle>{text.common.brand}</SheetTitle>
               </SheetHeader>
               <nav className="flex flex-col gap-1 p-3">
-                {destinations.map(({ href, label, icon: Icon }) => {
+                {primary.map(({ href, label, icon: Icon }) => {
+                  const active = isActivePath(pathname, localizedPath(href, locale));
+                  return (
+                    <SheetClose
+                      key={href}
+                      render={
+                        <Link
+                          href={localizedPath(href, locale)}
+                          aria-current={active ? "page" : undefined}
+                        />
+                      }
+                      className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium outline-none transition-colors hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring aria-[current=page]:bg-muted aria-[current=page]:text-foreground"
+                    >
+                      <Icon className="size-4 text-muted-foreground" />
+                      {label}
+                    </SheetClose>
+                  );
+                })}
+                <p className="px-3 pb-1 pt-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  {text.common.ewc}
+                </p>
+                {ewcLinks.map(({ href, label, icon: Icon }) => {
                   const active = isActivePath(pathname, localizedPath(href, locale));
                   return (
                     <SheetClose
@@ -234,6 +294,13 @@ export function SiteHeaderClient({
                   <UserRoundIcon className="size-4 text-muted-foreground" />
                   {text.common.myProfile}
                 </SheetClose>
+                {hasSession ? (
+                  <SignOutButton
+                    label={text.common.signOut}
+                    redirectTo={localizedPath("/", locale)}
+                    className="mt-1 w-full justify-start gap-3 px-3"
+                  />
+                ) : null}
               </nav>
             </SheetContent>
           </Sheet>
