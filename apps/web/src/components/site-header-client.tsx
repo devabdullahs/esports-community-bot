@@ -5,6 +5,7 @@ import {
   Gamepad2Icon,
   LanguagesIcon,
   type LucideIcon,
+  MedalIcon,
   MenuIcon,
   NewspaperIcon,
   ShieldCheckIcon,
@@ -66,16 +67,26 @@ export function SiteHeaderClient({
   const primary: Destination[] = [
     { href: "/games", label: text.common.games, icon: Gamepad2Icon },
     { href: "/media", label: text.common.media, icon: Tv2Icon },
+    { href: "/tournaments", label: text.common.tournaments, icon: TrophyIcon },
   ];
   const ewcLinks: Destination[] = [
     { href: "/news", label: text.common.news, icon: NewspaperIcon },
-    { href: "/tournaments", label: text.common.ewcTournaments, icon: TrophyIcon },
+    { href: "/tournaments/ewc", label: text.common.ewcTournaments, icon: MedalIcon },
     { href: "/predictions", label: text.common.predictions, icon: TargetIcon },
     { href: "/leaderboard", label: text.common.publicLeaderboard, icon: CrownIcon },
   ];
   const ewcActive = ewcLinks.some((d) =>
     isActivePath(pathname, localizedPath(d.href, locale)),
   );
+  // Top-level "Tournaments" shouldn't light up while on the EWC-only sub-list.
+  const ewcTournamentsHref = localizedPath("/tournaments/ewc", locale);
+  const linkActive = (href: string) => {
+    const full = localizedPath(href, locale);
+    if (href === "/tournaments") {
+      return isActivePath(pathname, full) && !isActivePath(pathname, ewcTournamentsHref);
+    }
+    return isActivePath(pathname, full);
+  };
 
   function switchLanguage() {
     document.cookie = `${LOCALE_COOKIE_NAME}=${nextLocale}; Path=/; Max-Age=${LOCALE_COOKIE_MAX_AGE}; SameSite=Lax`;
@@ -110,7 +121,7 @@ export function SiteHeaderClient({
         <NavigationMenu className="ms-2 hidden md:flex">
           <NavigationMenuList className="gap-0.5">
             {primary.map(({ href, label, icon: Icon }) => {
-              const active = isActivePath(pathname, localizedPath(href, locale));
+              const active = linkActive(href);
               return (
                 <NavigationMenuItem key={href}>
                   <NavigationMenuLink
@@ -132,7 +143,7 @@ export function SiteHeaderClient({
               <NavigationMenuContent>
                 <ul className="grid w-56 gap-0.5">
                   {ewcLinks.map(({ href, label, icon: Icon }) => {
-                    const active = isActivePath(pathname, localizedPath(href, locale));
+                    const active = linkActive(href);
                     return (
                       <li key={href}>
                         <NavigationMenuLink
@@ -221,7 +232,7 @@ export function SiteHeaderClient({
               </SheetHeader>
               <nav className="flex flex-col gap-1 p-3">
                 {primary.map(({ href, label, icon: Icon }) => {
-                  const active = isActivePath(pathname, localizedPath(href, locale));
+                  const active = linkActive(href);
                   return (
                     <SheetClose
                       key={href}
@@ -242,7 +253,7 @@ export function SiteHeaderClient({
                   {text.common.ewc}
                 </p>
                 {ewcLinks.map(({ href, label, icon: Icon }) => {
-                  const active = isActivePath(pathname, localizedPath(href, locale));
+                  const active = linkActive(href);
                   return (
                     <SheetClose
                       key={href}

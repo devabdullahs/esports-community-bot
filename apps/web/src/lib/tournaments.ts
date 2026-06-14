@@ -41,6 +41,7 @@ export type TournamentSummary = {
   url: string | null;
   active: number;
   created_at: string;
+  ewc: boolean;
   matchCounts: MatchCounts;
 };
 
@@ -76,6 +77,19 @@ const COUNTS_SQL = `
 
 function zeroCounts(): MatchCounts {
   return { running: 0, scheduled: 0, finished: 0 };
+}
+
+// A tracked tournament belongs to the Esports World Cup when its Liquipedia page
+// lives under a .../Esports_World_Cup/... path, or its display name says so (e.g.
+// "FC Pro 26 World Championship at Esports World Cup 2026"). Distinct events such
+// as "Overwatch World Cup" or "PUBG Mobile World Cup" intentionally do NOT match.
+function isEwcTournament(t: {
+  name: string | null;
+  external_id: string;
+  url: string | null;
+}): boolean {
+  const haystack = `${t.external_id} ${t.url ?? ""} ${t.name ?? ""}`.toLowerCase();
+  return haystack.includes("esports_world_cup") || haystack.includes("esports world cup");
 }
 
 async function matchCountsFor(tournamentId: number): Promise<MatchCounts> {
@@ -116,6 +130,7 @@ export async function listTournamentSummaries(): Promise<TournamentSummary[]> {
       url: t.url,
       active: t.active,
       created_at: t.created_at,
+      ewc: isEwcTournament(t),
       matchCounts: await matchCountsFor(t.id),
     })),
   );
