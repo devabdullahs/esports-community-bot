@@ -94,6 +94,12 @@ const baseCopy = {
       previous: "Previous",
       next: "Next",
       notAvailable: "Not available",
+      notFoundTitle: "Page not found",
+      notFoundBody: "The page you're looking for doesn't exist or has moved.",
+      errorTitle: "Something went wrong",
+      errorBody: "An unexpected error occurred. Please try again.",
+      retry: "Try again",
+      loadingLabel: "Loading…",
       termsOfService: "Terms of Service",
       privacyPolicy: "Privacy Policy",
     },
@@ -364,6 +370,12 @@ const baseCopy = {
       previous: "\u0627\u0644\u0633\u0627\u0628\u0642",
       next: "\u0627\u0644\u062a\u0627\u0644\u064a",
       notAvailable: "\u063a\u064a\u0631 \u0645\u062a\u0627\u062d",
+      notFoundTitle: "\u0627\u0644\u0635\u0641\u062d\u0629 \u063a\u064a\u0631 \u0645\u0648\u062c\u0648\u062f\u0629",
+      notFoundBody: "\u0627\u0644\u0635\u0641\u062d\u0629 \u0627\u0644\u062a\u064a \u062a\u0628\u062d\u062b \u0639\u0646\u0647\u0627 \u063a\u064a\u0631 \u0645\u0648\u062c\u0648\u062f\u0629 \u0623\u0648 \u062a\u0645 \u0646\u0642\u0644\u0647\u0627.",
+      errorTitle: "\u062d\u062f\u062b \u062e\u0637\u0623 \u0645\u0627",
+      errorBody: "\u062d\u062f\u062b \u062e\u0637\u0623 \u063a\u064a\u0631 \u0645\u062a\u0648\u0642\u0639. \u062d\u0627\u0648\u0644 \u0645\u0631\u0629 \u0623\u062e\u0631\u0649.",
+      retry: "\u062d\u0627\u0648\u0644 \u0645\u0631\u0629 \u0623\u062e\u0631\u0649",
+      loadingLabel: "\u062c\u0627\u0631\u064d \u0627\u0644\u062a\u062d\u0645\u064a\u0644\u2026",
       termsOfService: "\u0634\u0631\u0648\u0637 \u0627\u0644\u062e\u062f\u0645\u0629",
       privacyPolicy: "\u0633\u064a\u0627\u0633\u0629 \u0627\u0644\u062e\u0635\u0648\u0635\u064a\u0629",
     },
@@ -611,6 +623,8 @@ export const copy = {
       title: (season: string) => "EWC " + season + " prediction leaderboard",
       description: (total: number) => formatNumber(total, "en") + " ranked member" + (total === 1 ? "" : "s") + " this season",
       page: (page: number, pages: number) => "Page " + formatNumber(page, "en") + " of " + formatNumber(pages, "en"),
+      showing: (start: number, end: number, total: number) =>
+        "Showing " + formatNumber(start, "en") + "–" + formatNumber(end, "en") + " of " + formatNumber(total, "en"),
     },
     profile: {
       ...baseCopy.en.profile,
@@ -625,6 +639,8 @@ export const copy = {
       title: (season: string) => "\u0644\u0648\u062d\u0629 \u062a\u0648\u0642\u0639\u0627\u062a EWC " + season,
       description: (total: number) => formatNumber(total, "ar") + " \u0639\u0636\u0648 \u0641\u064a \u0627\u0644\u062a\u0631\u062a\u064a\u0628 \u0647\u0630\u0627 \u0627\u0644\u0645\u0648\u0633\u0645",
       page: (page: number, pages: number) => "\u0635\u0641\u062d\u0629 " + formatNumber(page, "ar") + " \u0645\u0646 " + formatNumber(pages, "ar"),
+      showing: (start: number, end: number, total: number) =>
+        "\u0639\u0631\u0636 " + formatNumber(start, "ar") + "\u2013" + formatNumber(end, "ar") + " \u0645\u0646 " + formatNumber(total, "ar"),
     },
     profile: {
       ...baseCopy.ar.profile,

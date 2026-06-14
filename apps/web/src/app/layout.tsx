@@ -5,10 +5,15 @@ import { SiteFooter } from "@/components/site-footer";
 import { SiteHeader } from "@/components/site-header";
 import { copy, directionForLocale } from "@/lib/i18n";
 import { getRequestLocale } from "@/lib/request-locale";
+import { absoluteUrl, SITE_NAME } from "@/lib/metadata";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Esports Community",
+  metadataBase: new URL(absoluteUrl()),
+  title: {
+    default: SITE_NAME,
+    template: `%s | ${SITE_NAME}`,
+  },
   description:
     "Community esports hub for game pages, news, prediction boards, and Discord profile showcase.",
 };

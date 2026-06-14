@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowLeftIcon, ExternalLinkIcon } from "lucide-react";
@@ -9,9 +10,30 @@ import { copy, formatNumber, localizedPath } from "@/lib/i18n";
 import { getRequestLocale } from "@/lib/request-locale";
 import { safeUrlOrUndefined } from "@/lib/safe-url";
 import { getTournamentMatchesCached } from "@/lib/tournaments";
+import { buildPageMetadata } from "@/lib/metadata";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}): Promise<Metadata> {
+  const { id } = await params;
+  const tournamentId = /^\d+$/.test(id) ? Number(id) : NaN;
+  if (!Number.isSafeInteger(tournamentId) || tournamentId <= 0) return {};
+  const [data, locale] = await Promise.all([
+    getTournamentMatchesCached(tournamentId),
+    getRequestLocale(),
+  ]);
+  if (!data) return {};
+  return buildPageMetadata({
+    title: data.tournament.name || `#${id}`,
+    description: copy[locale].tournaments.description,
+    path: localizedPath(`/tournaments/${id}`, locale),
+  });
+}
 
 export default async function TournamentDetailPage({
   params,

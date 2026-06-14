@@ -60,11 +60,11 @@ or optimize for guild counts.
 | 029  | Enforce game scope on the admin author-picker API | P2 | S | - | DONE - `canManageGame` enforced on `/api/admin/authors`; `admin-authz.test.ts` adds the route to the 401/403 matrices + a scope suite (wrong game 403, correct game/super 200). |
 | 030  | Pin GitHub Actions and minimize CI token permissions | P3 | S | - | DONE - `ci.yml` gets top-level `permissions: contents: read`; every action in ci + publish pinned by full SHA (with `# vN` comments); added `.github/dependabot.yml` (github-actions, weekly). |
 | 031  | Verify news authors on write | P2 | S-M | - | DONE - POST/PATCH news routes resolve submitted authors against `listEligibleAuthors` via `resolveNewsAuthors`; ineligible ids → 403 and stored name/avatar are canonical (not the payload), fallback = acting admin (create) / existing author (update). `admin-authz.test.ts` suite 10 covers spoof-reject + canonical name (194 web tests). |
-| 032  | Cache public EWC leaderboard reads | P3 | S-M | - | TODO |
+| 032  | Cache public EWC leaderboard reads | P3 | S-M | - | DONE - `getPublicEwcLeaderboardCached` (`unstable_cache`, 60s, key guildId/season/limit/offset, clamps limit 1-100 + offset 0-100000) backs both the public leaderboard route and the server page. |
 | 033  | Scope game-page admin CTA to game admins | P2 | S | - | DONE - game page uses `getAdminAccess` + `canManageGame(access, slug)` instead of any signed-in session, so the Admin button shows only to admins who manage that game. |
-| 034  | Add public page metadata and discovery files | P2 | M | - | TODO |
-| 035  | Server-page the public EWC leaderboard | P2 | M | 032 | TODO |
-| 036  | Add bilingual route not-found/error/loading states | P3 | M | - | TODO |
+| 034  | Add public page metadata and discovery files | P2 | M | - | DONE - `lib/metadata.ts` (`absoluteUrl`, `buildPageMetadata` -> canonical + OpenGraph + Twitter); `layout.tsx` sets `metadataBase` + title template; `generateMetadata` on games/[slug], games/[slug]/news/[id], tournaments/[id], media/[slug], leaderboard pages; new `robots.ts` (allow /, disallow /admin /api/ /me /login) + `sitemap.ts` (static paths + games/media/tournaments/news from cached helpers, DB-failure tolerant). |
+| 035  | Server-page the public EWC leaderboard | P2 | M | 032 | DONE - `leaderboard/[guildId]/[season]/page.tsx` now does server pagination (PAGE_SIZE=100, `?page`, clamps over-range, topScore always from page 1, localized `showing(start,end,total)` range); server nav rendered only when `totalPages > 1`. |
+| 036  | Add bilingual route not-found/error/loading states | P3 | M | - | DONE - added `not-found.tsx` (server, getRequestLocale, 404 + Home), `error.tsx` (client, cookie-locale via lazy init, retry/reset + console.error), `loading.tsx` (server, spinner); bilingual `notFoundTitle/notFoundBody/errorTitle/errorBody/retry/loadingLabel` keys in en+ar common. |
 Status values: TODO | IN PROGRESS | DONE | BLOCKED (reason) | REJECTED (rationale) | SUPERSEDED.
 
 ## Security deep audit (2026-06-14, main @ d19a87f)

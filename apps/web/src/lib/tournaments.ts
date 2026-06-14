@@ -1,6 +1,7 @@
 import "server-only";
 
 import { all } from "@bot/db/client.js";
+import { dedupeMatches as _dedupeMatches } from "@bot/db/matches.js";
 import {
   getTournamentById as _getById,
   listActiveTournaments as _listActive,
@@ -47,6 +48,8 @@ export type TournamentSummary = {
 
 export type MatchRow = {
   id: number;
+  external_id?: string;
+  game?: string | null;
   name: string | null;
   team_a: string | null;
   team_b: string | null;
@@ -67,13 +70,7 @@ export type TournamentMatches = {
 
 const listActive = _listActive as (guildId?: string) => Promise<TournamentRow[]>;
 const getById = _getById as (id: number) => Promise<TournamentRow | undefined>;
-
-const COUNTS_SQL = `
-  SELECT status, COUNT(*) AS n
-  FROM matches
-  WHERE tournament_id = $1
-  GROUP BY status
-`;
+const dedupeMatches = _dedupeMatches as <T extends MatchRow>(rows: T[]) => T[];
 
 function zeroCounts(): MatchCounts {
   return { running: 0, scheduled: 0, finished: 0 };
@@ -92,26 +89,49 @@ function isEwcTournament(t: {
   return haystack.includes("esports_world_cup") || haystack.includes("esports world cup");
 }
 
-async function matchCountsFor(tournamentId: number): Promise<MatchCounts> {
+const MATCH_COLUMNS =
+  "id, external_id, name, team_a, team_b, logo_a, logo_b, score_a, score_b, status, scheduled_at, updated_at";
+
+// running first, then upcoming by start time, then finished most-recent first
+// — mirrors getMatchesForGuild's ordering in src/db/matches.js.
+const MATCHES_SQL = `SELECT ${MATCH_COLUMNS} FROM matches WHERE tournament_id = $1
+   ORDER BY CASE status WHEN 'running' THEN 0 WHEN 'scheduled' THEN 1 ELSE 2 END,
+            CASE WHEN status = 'finished' THEN scheduled_at END DESC,
+            scheduled_at ASC`;
+
+function publicMatch(row: MatchRow): MatchRow {
+  return {
+    id: row.id,
+    name: row.name,
+    team_a: row.team_a,
+    team_b: row.team_b,
+    logo_a: row.logo_a,
+    logo_b: row.logo_b,
+    score_a: row.score_a,
+    score_b: row.score_b,
+    status: row.status,
+    scheduled_at: row.scheduled_at,
+    updated_at: row.updated_at,
+  };
+}
+
+async function dedupedTournamentMatches(tournament: TournamentRow): Promise<MatchRow[]> {
+  const rows = ((await all(MATCHES_SQL, [tournament.id])) as MatchRow[]).map((row) => ({
+    ...row,
+    game: tournament.game,
+  }));
+  return dedupeMatches(rows);
+}
+
+function countsFromRows(rows: MatchRow[]): MatchCounts {
   const counts = zeroCounts();
-  const rows = (await all(COUNTS_SQL, [tournamentId])) as { status: string; n: number }[];
   for (const row of rows) {
     if (row.status === "running" || row.status === "scheduled" || row.status === "finished") {
-      counts[row.status] = row.n;
+      counts[row.status] += 1;
     }
   }
   return counts;
 }
-
-const MATCH_COLUMNS =
-  "id, name, team_a, team_b, logo_a, logo_b, score_a, score_b, status, scheduled_at, updated_at";
-
-// running first, then upcoming by start time, then finished most-recent first
-// — mirrors getMatchesForGuild's ordering in src/db/matches.js.
-const LIVE_SQL = `SELECT ${MATCH_COLUMNS} FROM matches WHERE tournament_id = $1 AND status = 'running' ORDER BY scheduled_at ASC`;
-const UPCOMING_SQL = `SELECT ${MATCH_COLUMNS} FROM matches WHERE tournament_id = $1 AND status = 'scheduled' ORDER BY scheduled_at ASC`;
-const FINISHED_SQL = `SELECT ${MATCH_COLUMNS} FROM matches WHERE tournament_id = $1 AND status = 'finished'
-   ORDER BY scheduled_at DESC LIMIT $2 OFFSET $3`;
 
 /** Active tournaments for the configured guild, each with per-status match counts. */
 export async function listTournamentSummaries(): Promise<TournamentSummary[]> {
@@ -131,7 +151,7 @@ export async function listTournamentSummaries(): Promise<TournamentSummary[]> {
       active: t.active,
       created_at: t.created_at,
       ewc: isEwcTournament(t),
-      matchCounts: await matchCountsFor(t.id),
+      matchCounts: countsFromRows(await dedupedTournamentMatches(t)),
     })),
   );
 }
@@ -150,10 +170,11 @@ export async function getTournamentMatches(
   const tournament = await getById(id);
   if (!tournament || tournament.guild_id !== guildId || tournament.active !== 1) return null;
 
-  const running = (await all(LIVE_SQL, [id])) as MatchRow[];
-  const scheduled = (await all(UPCOMING_SQL, [id])) as MatchRow[];
-  const finished = (await all(FINISHED_SQL, [id, limit, offset])) as MatchRow[];
-  const total = await matchCountsFor(id);
+  const rows = await dedupedTournamentMatches(tournament);
+  const running = rows.filter((m) => m.status === "running").map(publicMatch);
+  const scheduled = rows.filter((m) => m.status === "scheduled").map(publicMatch);
+  const finishedAll = rows.filter((m) => m.status === "finished").map(publicMatch);
+  const finished = finishedAll.slice(offset, offset + limit);
 
   return {
     tournament: {
@@ -164,7 +185,7 @@ export async function getTournamentMatches(
       url: tournament.url,
     },
     matches: { running, scheduled, finished },
-    total: total.running + total.scheduled + total.finished,
+    total: running.length + scheduled.length + finishedAll.length,
   };
 }
 

@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowLeftIcon } from "lucide-react";
@@ -16,9 +17,29 @@ import { getPublishedNewsPostCached } from "@/lib/news";
 import { parsePostId } from "@/lib/news-validation";
 import { getRequestLocale } from "@/lib/request-locale";
 import { safeUrlOrUndefined } from "@/lib/safe-url";
+import { buildPageMetadata } from "@/lib/metadata";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ slug: string; id: string }>;
+}): Promise<Metadata> {
+  const { slug, id } = await params;
+  const postId = parsePostId(id);
+  if (postId === null) return {};
+  const locale = await getRequestLocale();
+  const post = await getPublishedNewsPostCached(postId, locale);
+  if (!post || post.gameSlug !== slug) return {};
+  return buildPageMetadata({
+    title: post.title,
+    description: post.summary || post.body.slice(0, 200),
+    path: localizedPath(`/games/${slug}/news/${id}`, locale),
+    image: post.coverImageUrl,
+  });
+}
 
 export default async function NewsPostPage({
   params,
