@@ -7,7 +7,7 @@ import {
   NEWS_TITLE_MAX_LENGTH,
   validateNewsContentInput,
 } from "@bot/lib/ewcNewsContent.js";
-import type { NewsCoverPlacement, NewsPostInput } from "@/lib/news";
+import type { NewsAuthor, NewsCoverPlacement, NewsPostInput } from "@/lib/news";
 
 export { NEWS_BODY_MAX_LENGTH, NEWS_SUMMARY_MAX_LENGTH, NEWS_TITLE_MAX_LENGTH };
 
@@ -18,9 +18,12 @@ export type ValidatedNewsInput = NewsPostInput & {
   coverImageUrl: string | null;
   coverPlacement: NewsCoverPlacement;
   ewc: boolean;
+  authors: NewsAuthor[];
   authorDiscordId: string | null;
   authorName: string | null;
 };
+
+export const NEWS_MAX_AUTHORS = 10;
 
 type NewsContentValidationResult =
   | {
@@ -93,6 +96,29 @@ export function validateNewsInput(
   // Admin-set EWC tag (boolean). Accepts true / 1 / "true"; anything else is false.
   const ewc = body.ewc === true || body.ewc === 1 || body.ewc === "true";
 
+  // Multiple authors. Each discordId must be a snowflake; name + optional safe
+  // avatar URL are snapshotted. Deduped and capped at NEWS_MAX_AUTHORS.
+  const authors: NewsAuthor[] = [];
+  const seenAuthorIds = new Set<string>();
+  const rawAuthors = Array.isArray(body.authors) ? body.authors : [];
+  for (const item of rawAuthors) {
+    const entry = (item ?? {}) as Record<string, unknown>;
+    const discordId = typeof entry.discordId === "string" ? entry.discordId.trim() : "";
+    if (!discordId || seenAuthorIds.has(discordId)) continue;
+    if (!isSnowflake(discordId)) {
+      return { ok: false, error: "Author Discord ID must be a 17-20 digit snowflake" };
+    }
+    seenAuthorIds.add(discordId);
+    const rawName = typeof entry.name === "string" ? entry.name.trim() : "";
+    const rawAvatar = typeof entry.avatarUrl === "string" ? entry.avatarUrl.trim() : "";
+    authors.push({
+      discordId,
+      name: rawName.slice(0, NEWS_AUTHOR_NAME_MAX_LENGTH),
+      avatarUrl: rawAvatar && isSafeUrl(rawAvatar) ? rawAvatar : null,
+    });
+    if (authors.length >= NEWS_MAX_AUTHORS) break;
+  }
+
   return {
     ok: true,
     value: {
@@ -101,6 +127,7 @@ export function validateNewsInput(
       coverImageUrl,
       coverPlacement,
       ewc,
+      authors,
       authorDiscordId,
       authorName,
     },

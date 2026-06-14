@@ -229,6 +229,17 @@ CREATE TABLE IF NOT EXISTS ewc_news_post_translations (
   PRIMARY KEY (post_id, locale)
 );
 
+-- A post can credit multiple authors; name/avatar are snapshotted at save time
+-- (avatar from the author's Better Auth login, null if they never signed in).
+CREATE TABLE IF NOT EXISTS ewc_news_post_authors (
+  post_id    BIGINT NOT NULL REFERENCES ewc_news_posts(id) ON DELETE CASCADE,
+  discord_id TEXT NOT NULL,
+  name       TEXT NOT NULL DEFAULT '',
+  avatar_url TEXT,
+  sort_order INTEGER NOT NULL DEFAULT 0,
+  PRIMARY KEY (post_id, discord_id)
+);
+
 CREATE TABLE IF NOT EXISTS ewc_news_discord_posts (
   post_id    BIGINT PRIMARY KEY REFERENCES ewc_news_posts(id) ON DELETE CASCADE,
   guild_id   TEXT,

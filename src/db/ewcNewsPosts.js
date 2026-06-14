@@ -60,6 +60,7 @@ async function hydrate(row, locale) {
     updatedAt: row.updated_at,
     publishedAt: row.published_at,
     translations: await translationsForPost(row.id),
+    authors: await authorsForPost(row.id),
   };
 
   if (Object.keys(post.translations).length === 0) {
@@ -118,6 +119,7 @@ function normalizeInput(input) {
       ...input,
       contentMode,
       defaultLocale,
+      authors: normalizeAuthors(input),
       translations: {
         [defaultLocale]: { ...shared, locale: defaultLocale },
       },
@@ -128,6 +130,7 @@ function normalizeInput(input) {
     ...input,
     contentMode,
     defaultLocale,
+    authors: normalizeAuthors(input),
     translations: {
       en: translations.en || { locale: 'en', title: '', summary: '', body: '' },
       ar: translations.ar || { locale: 'ar', title: '', summary: '', body: '' },
@@ -165,6 +168,61 @@ async function syncLegacyColumns(id, input, client) {
      WHERE id = $5`,
     [fallback.locale, fallback.title, fallback.summary, fallback.body, id],
   );
+}
+
+async function authorsForPost(id) {
+  const rows = await all(
+    `SELECT discord_id, name, avatar_url
+     FROM ewc_news_post_authors
+     WHERE post_id = $1
+     ORDER BY sort_order, discord_id`,
+    [id],
+  );
+  return rows.map((row) => ({
+    discordId: row.discord_id,
+    name: row.name || '',
+    avatarUrl: row.avatar_url || null,
+  }));
+}
+
+// Dedupe + sanitize the incoming authors list. Falls back to a single author
+// built from the legacy authorDiscordId/authorName when no list is supplied.
+function normalizeAuthors(input) {
+  const list = Array.isArray(input.authors) ? input.authors : [];
+  const seen = new Set();
+  const out = [];
+  for (const author of list) {
+    const discordId = typeof author?.discordId === 'string' ? author.discordId.trim() : '';
+    if (!discordId || seen.has(discordId)) continue;
+    seen.add(discordId);
+    out.push({
+      discordId,
+      name: typeof author?.name === 'string' ? author.name : '',
+      avatarUrl: typeof author?.avatarUrl === 'string' && author.avatarUrl ? author.avatarUrl : null,
+    });
+  }
+  if (out.length === 0 && typeof input.authorDiscordId === 'string' && input.authorDiscordId.trim()) {
+    out.push({
+      discordId: input.authorDiscordId.trim(),
+      name: typeof input.authorName === 'string' ? input.authorName : '',
+      avatarUrl: null,
+    });
+  }
+  return out;
+}
+
+async function replaceAuthors(id, authors, client) {
+  await client.run('DELETE FROM ewc_news_post_authors WHERE post_id = $1', [id]);
+  let order = 0;
+  for (const author of authors) {
+    await client.run(
+      `INSERT INTO ewc_news_post_authors (post_id, discord_id, name, avatar_url, sort_order)
+       VALUES ($1, $2, $3, $4, $5)
+       ON CONFLICT (post_id, discord_id) DO UPDATE SET
+         name = excluded.name, avatar_url = excluded.avatar_url, sort_order = excluded.sort_order`,
+      [id, author.discordId, author.name, author.avatarUrl, order++],
+    );
+  }
 }
 
 export async function getEwcNewsPostById(id) {
@@ -217,6 +275,7 @@ export async function createEwcNewsPost(input) {
   const id = await transaction(async (tx) => {
     const value = normalizeInput(input);
     const fallback = legacyTranslation(value);
+    const primary = value.authors[0] || null;
     const now = nowText();
     const row = await tx.get(
       `INSERT INTO ewc_news_posts
@@ -234,8 +293,8 @@ export async function createEwcNewsPost(input) {
         fallback.summary,
         fallback.body,
         value.status || 'draft',
-        value.authorDiscordId || null,
-        value.authorName || null,
+        primary?.discordId || null,
+        primary?.name || null,
         value.coverImageUrl || null,
         isNewsCoverPlacement(value.coverPlacement) ? value.coverPlacement : 'top',
         value.ewc ? 1 : 0,
@@ -245,6 +304,7 @@ export async function createEwcNewsPost(input) {
       ],
     );
     await replaceTranslations(row.id, value.translations, tx);
+    await replaceAuthors(row.id, value.authors, tx);
     await syncLegacyColumns(row.id, value, tx);
     return row.id;
   });
@@ -255,13 +315,14 @@ export async function updateEwcNewsPost(id, input) {
   const updatedId = await transaction(async (tx) => {
     const value = normalizeInput(input);
     const fallback = legacyTranslation(value);
+    const primary = value.authors[0] || null;
     const now = nowText();
     const info = await tx.run(
       `UPDATE ewc_news_posts
        SET game_slug = $1, locale = $2, content_mode = $3, default_locale = $4, title = $5,
            summary = $6, body = $7, status = $8, cover_image_url = $9, cover_placement = $10,
-           author_discord_id = COALESCE($11, author_discord_id),
-           author_name = COALESCE($12, author_name),
+           author_discord_id = $11,
+           author_name = $12,
            updated_at = $13,
            published_at = COALESCE(published_at, $14),
            ewc = $15
@@ -277,8 +338,8 @@ export async function updateEwcNewsPost(id, input) {
         value.status || 'draft',
         value.coverImageUrl || null,
         isNewsCoverPlacement(value.coverPlacement) ? value.coverPlacement : 'top',
-        value.authorDiscordId || null,
-        value.authorName || null,
+        primary?.discordId || null,
+        primary?.name || null,
         now,
         value.status === 'published' ? now : null,
         value.ewc ? 1 : 0,
@@ -287,6 +348,7 @@ export async function updateEwcNewsPost(id, input) {
     );
     if (info.changes === 0) return null;
     await replaceTranslations(id, value.translations, tx);
+    await replaceAuthors(id, value.authors, tx);
     await syncLegacyColumns(id, value, tx);
     return id;
   });
@@ -309,6 +371,7 @@ export async function setEwcNewsPostStatus(id, status) {
 export async function deleteEwcNewsPost(id) {
   return transaction(async (tx) => {
     await tx.run('DELETE FROM ewc_news_post_translations WHERE post_id = $1', [id]);
+    await tx.run('DELETE FROM ewc_news_post_authors WHERE post_id = $1', [id]);
     return tx.run('DELETE FROM ewc_news_posts WHERE id = $1', [id]);
   });
 }

@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowLeftIcon } from "lucide-react";
+import { AuthorAvatar } from "@/components/news/author-avatar";
 import { PostBody } from "@/components/news/post-body";
 import { PageBreadcrumb } from "@/components/page-breadcrumb";
 import { Button } from "@/components/ui/button";
@@ -82,12 +83,33 @@ export default async function NewsPostPage({
           >
             {post.title}
           </h1>
-          {post.authorName || post.publishedAt ? (
-            <p className="text-sm text-muted-foreground">
-              {post.authorName ? `${locale === "ar" ? "بقلم" : "By"} ${post.authorName}` : ""}
-              {post.authorName && post.publishedAt ? " · " : ""}
-              {post.publishedAt ? formatDateTime(post.publishedAt, locale) : ""}
-            </p>
+          {post.authors.length || post.authorName || post.publishedAt ? (
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted-foreground">
+              {post.authors.length ? (
+                <span className="flex items-center gap-2">
+                  <span className="flex -space-x-2">
+                    {post.authors.map((a) => (
+                      <AuthorAvatar
+                        key={a.discordId}
+                        name={a.name}
+                        avatarUrl={a.avatarUrl}
+                        className="size-7 ring-2 ring-background"
+                      />
+                    ))}
+                  </span>
+                  <span>
+                    {locale === "ar" ? "بقلم " : "By "}
+                    {post.authors.map((a) => a.name).join(locale === "ar" ? "، " : ", ")}
+                  </span>
+                </span>
+              ) : post.authorName ? (
+                <span>{`${locale === "ar" ? "بقلم" : "By"} ${post.authorName}`}</span>
+              ) : null}
+              {(post.authors.length || post.authorName) && post.publishedAt ? (
+                <span aria-hidden>·</span>
+              ) : null}
+              {post.publishedAt ? <span>{formatDateTime(post.publishedAt, locale)}</span> : null}
+            </div>
           ) : null}
           {post.summary ? (
             <p dir="auto" className="bidi-plaintext article-copy text-base text-muted-foreground">

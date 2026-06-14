@@ -4,6 +4,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   BoldIcon,
+  CheckIcon,
   CodeIcon,
   EyeIcon,
   EyeOffIcon,
@@ -54,6 +55,7 @@ import {
   NEWS_TITLE_MAX_LENGTH,
 } from "@/lib/news-validation";
 import { ImageCropDialog } from "@/components/admin/image-crop-dialog";
+import { AuthorAvatar } from "@/components/news/author-avatar";
 import { PostBody } from "@/components/news/post-body";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -93,7 +95,7 @@ type TranslationDraft = {
   body: string;
 };
 
-type EligibleAuthor = { discordId: string; name: string };
+type EligibleAuthor = { discordId: string; name: string; avatarUrl: string | null };
 
 type TranslationMap = Record<Locale, TranslationDraft>;
 type SelectionState = { start: number; end: number };
@@ -261,7 +263,13 @@ export function NewsEditor({
   // selected option (or the post's stored name when the id isn't in the list).
   const [authors, setAuthors] = useState<EligibleAuthor[]>([]);
   const [authorsLoading, setAuthorsLoading] = useState(false);
-  const [authorDiscordId, setAuthorDiscordId] = useState<string>(post?.authorDiscordId || "");
+  const [selectedAuthorIds, setSelectedAuthorIds] = useState<string[]>(() =>
+    post?.authors?.length
+      ? post.authors.map((a) => a.discordId)
+      : post?.authorDiscordId
+        ? [post.authorDiscordId]
+        : [],
+  );
   const [mobileView, setMobileView] = useState<"edit" | "preview">("edit");
   const [busy, setBusy] = useState<null | string>(null);
   const [error, setError] = useState<string | null>(null);
@@ -359,15 +367,14 @@ export function NewsEditor({
         if (cancelled) return;
         const list = Array.isArray(data.authors) ? data.authors : [];
         setAuthors(list);
-        setAuthorDiscordId((prev) => {
-          if (prev && list.some((a) => a.discordId === prev)) return prev;
-          if (post?.authorDiscordId && list.some((a) => a.discordId === post.authorDiscordId)) {
-            return post.authorDiscordId;
-          }
+        setSelectedAuthorIds((prev) => {
+          if (prev.length) return prev;
+          if (post?.authors?.length) return post.authors.map((a) => a.discordId);
+          // New post: default to the signed-in admin when they're eligible.
           if (currentUser?.discordId && list.some((a) => a.discordId === currentUser.discordId)) {
-            return currentUser.discordId;
+            return [currentUser.discordId];
           }
-          return list[0]?.discordId || "";
+          return [];
         });
       } catch {
         if (!cancelled) setAuthors([]);
@@ -386,11 +393,25 @@ export function NewsEditor({
   // Resolve the display name for the selected author from the fetched list,
   // falling back to the post's stored author name so editing an existing post
   // never loses the credit even if that user is no longer in the eligible list.
-  const selectedAuthorName =
-    authors.find((a) => a.discordId === authorDiscordId)?.name ||
-    (authorDiscordId && authorDiscordId === post?.authorDiscordId ? post?.authorName : null) ||
-    authorDiscordId ||
-    "";
+  // Option list = fetched eligible authors plus the post's existing authors (so an
+  // already-credited author still shows even if no longer eligible). Selected ids
+  // resolve to full {name, avatar} snapshots for saving.
+  const authorOptions = useMemo(() => {
+    const map = new Map<string, EligibleAuthor>();
+    for (const a of post?.authors || []) {
+      map.set(a.discordId, { discordId: a.discordId, name: a.name, avatarUrl: a.avatarUrl });
+    }
+    for (const a of authors) map.set(a.discordId, a);
+    return [...map.values()];
+  }, [authors, post]);
+  const selectedAuthors = selectedAuthorIds
+    .map((id) => authorOptions.find((a) => a.discordId === id))
+    .filter((a): a is EligibleAuthor => Boolean(a));
+  function toggleAuthor(discordId: string) {
+    setSelectedAuthorIds((prev) =>
+      prev.includes(discordId) ? prev.filter((id) => id !== discordId) : [...prev, discordId],
+    );
+  }
 
   function switchContentMode(nextMode: NewsContentMode) {
     setContentMode(nextMode);
@@ -636,8 +657,11 @@ export function NewsEditor({
         coverPlacement,
         ewc,
         status: targetStatus,
-        authorDiscordId: authorDiscordId || null,
-        authorName: selectedAuthorName || null,
+        authors: selectedAuthors.map((a) => ({
+          discordId: a.discordId,
+          name: a.name,
+          avatarUrl: a.avatarUrl,
+        })),
       };
       const res = await fetch(
         mode === "create" ? "/api/admin/news" : `/api/admin/news/${post?.id}`,
@@ -786,33 +810,43 @@ export function NewsEditor({
                 </Field>
               </div>
 
-              {/* Author picker: eligible = super admins + roster admins scoped to this game. */}
+              {/* Authors: multi-select. Eligible = supers + roster admins for this game. */}
               <Field>
-                <FieldLabel>{t.author}</FieldLabel>
-                <Select
-                  value={authorDiscordId}
-                  onValueChange={(value) => value && setAuthorDiscordId(value)}
-                  disabled={authorsLoading || authors.length === 0}
-                >
-                  <SelectTrigger className="w-full sm:w-64">
-                    <SelectValue>
-                      {(value) => {
-                        if (authorsLoading) return t.authorLoading;
-                        const selected = authors.find((a) => a.discordId === value);
-                        return selected?.name || selectedAuthorName || t.authorEmpty;
-                      }}
-                    </SelectValue>
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectGroup>
-                      {authors.map((author) => (
-                        <SelectItem key={author.discordId} value={author.discordId}>
-                          {author.name}
-                        </SelectItem>
-                      ))}
-                    </SelectGroup>
-                  </SelectContent>
-                </Select>
+                <FieldLabel>{t.authors}</FieldLabel>
+                {authorsLoading ? (
+                  <p className="text-sm text-muted-foreground">{t.authorLoading}</p>
+                ) : authorOptions.length ? (
+                  <div className="flex flex-wrap gap-2">
+                    {authorOptions.map((author) => {
+                      const selected = selectedAuthorIds.includes(author.discordId);
+                      return (
+                        <button
+                          key={author.discordId}
+                          type="button"
+                          onClick={() => toggleAuthor(author.discordId)}
+                          aria-pressed={selected}
+                          className={cn(
+                            "flex items-center gap-2 rounded-full border px-2.5 py-1 text-sm transition-colors",
+                            selected
+                              ? "border-primary bg-primary/10 text-foreground"
+                              : "border-border text-muted-foreground hover:bg-muted",
+                          )}
+                        >
+                          <AuthorAvatar
+                            name={author.name}
+                            avatarUrl={author.avatarUrl}
+                            className="size-5"
+                          />
+                          <span className="max-w-[12rem] truncate">{author.name}</span>
+                          {selected ? <CheckIcon className="size-3.5 text-primary" /> : null}
+                        </button>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <p className="text-sm text-muted-foreground">{t.authorEmpty}</p>
+                )}
+                <FieldDescription>{t.authorsHint}</FieldDescription>
               </Field>
 
               {contentMode === "shared" ? (

@@ -6,6 +6,7 @@ import { listEwcAdmins } from "@bot/db/ewcAdmins.js";
 export type EligibleAuthor = {
   discordId: string;
   name: string;
+  avatarUrl: string | null;
 };
 
 type AdminRoster = {
@@ -35,21 +36,26 @@ function superAdminDiscordIds(): string[] {
 // Env supers have no roster row, so their display name lives only in the
 // better-auth user table (if they've ever signed in). Mirror the defensive
 // no-such-table handling used by safeAccountQuery in ewc-profile-sync.ts.
-async function lookupAuthName(discordId: string): Promise<string | null> {
+async function lookupAuthInfo(
+  discordId: string,
+): Promise<{ name: string | null; avatarUrl: string | null }> {
   try {
     const row = (await get(
-      `SELECT u.name AS name
+      `SELECT u.name AS name, u.image AS image
        FROM "account" a
        JOIN "user" u ON u.id = a."userId"
        WHERE a."accountId" = $1 AND a."providerId" = 'discord'
        ORDER BY a."updatedAt" DESC
        LIMIT 1`,
       [discordId],
-    )) as { name?: string | null } | null;
-    const name = row?.name;
-    return typeof name === "string" && name.trim() ? name : null;
+    )) as { name?: string | null; image?: string | null } | null;
+    return {
+      name: typeof row?.name === "string" && row.name.trim() ? row.name : null,
+      avatarUrl: typeof row?.image === "string" && row.image.trim() ? row.image : null,
+    };
   } catch (error) {
-    if (/no such table|does not exist/i.test(String((error as Error).message))) return null;
+    if (/no such table|does not exist/i.test(String((error as Error).message)))
+      return { name: null, avatarUrl: null };
     throw error;
   }
 }
@@ -71,16 +77,22 @@ export async function listEligibleAuthors(gameSlug: string): Promise<EligibleAut
 
   const byId = new Map<string, { author: EligibleAuthor; isSuper: boolean }>();
 
-  const nameFor = async (discordId: string): Promise<string> => {
+  const infoFor = async (
+    discordId: string,
+  ): Promise<{ name: string; avatarUrl: string | null }> => {
     const rosterRow = rosterById.get(discordId);
-    if (rosterRow?.displayName && rosterRow.displayName.trim()) return rosterRow.displayName;
-    return (await lookupAuthName(discordId)) || discordId;
+    const auth = await lookupAuthInfo(discordId);
+    const name =
+      rosterRow?.displayName && rosterRow.displayName.trim()
+        ? rosterRow.displayName
+        : auth.name || discordId;
+    return { name, avatarUrl: auth.avatarUrl };
   };
 
   // Supers first — eligible for any game.
   for (const discordId of supers) {
     if (byId.has(discordId)) continue;
-    byId.set(discordId, { author: { discordId, name: await nameFor(discordId) }, isSuper: true });
+    byId.set(discordId, { author: { discordId, ...(await infoFor(discordId)) }, isSuper: true });
   }
 
   // Roster admins scoped to this game.
@@ -88,7 +100,7 @@ export async function listEligibleAuthors(gameSlug: string): Promise<EligibleAut
     if (byId.has(admin.discordId)) continue;
     if (!admin.games.includes(gameSlug)) continue;
     byId.set(admin.discordId, {
-      author: { discordId: admin.discordId, name: await nameFor(admin.discordId) },
+      author: { discordId: admin.discordId, ...(await infoFor(admin.discordId)) },
       isSuper: superSet.has(admin.discordId),
     });
   }

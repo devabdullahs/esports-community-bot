@@ -257,6 +257,17 @@ db.exec(`
     PRIMARY KEY (post_id, locale)
   );
 
+  -- A post can credit multiple authors; name/avatar are snapshotted at save time
+  -- (avatar from the author's Better Auth login, null if they never signed in).
+  CREATE TABLE IF NOT EXISTS ewc_news_post_authors (
+    post_id    INTEGER NOT NULL REFERENCES ewc_news_posts(id) ON DELETE CASCADE,
+    discord_id TEXT NOT NULL,
+    name       TEXT NOT NULL DEFAULT '',
+    avatar_url TEXT,
+    sort_order INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (post_id, discord_id)
+  );
+
   -- Side table mapping a published news post to the Discord message that announces it.
   -- ON DELETE CASCADE so deleting a post auto-cleans this row (foreign_keys pragma is ON).
   CREATE TABLE IF NOT EXISTS ewc_news_discord_posts (

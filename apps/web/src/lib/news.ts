@@ -29,6 +29,12 @@ export type NewsTranslation = {
   body: string;
 };
 
+export type NewsAuthor = {
+  discordId: string;
+  name: string;
+  avatarUrl: string | null;
+};
+
 export type NewsPost = {
   id: number;
   gameSlug: string;
@@ -45,6 +51,7 @@ export type NewsPost = {
   coverPlacement: NewsCoverPlacement;
   ewc: boolean;
   translations: Partial<Record<Locale, NewsTranslation>>;
+  authors: NewsAuthor[];
   createdAt: string;
   updatedAt: string;
   publishedAt: string | null;
@@ -61,6 +68,7 @@ export type NewsPostInput = {
   coverImageUrl?: string | null;
   coverPlacement?: NewsCoverPlacement;
   ewc?: boolean;
+  authors?: NewsAuthor[];
 };
 
 const getById = _getById as (id: number) => Promise<NewsPost | null>;
