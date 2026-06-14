@@ -22,6 +22,22 @@ const RATE_LIMIT_BACKOFF_MS = Math.max(60_000, Number(process.env.LOGO_RATE_LIMI
 const MAX_LOGO_BYTES = Math.max(64_000, Number(process.env.LOGO_MAX_BYTES || 4 * 1024 * 1024));
 const RATE_STATE_PATH = resolve(process.env.LOGO_RATE_STATE_PATH || 'data/logo-rate-limit.json');
 
+// SSRF hardening: logo URLs are parsed from external Liquipedia HTML, so the
+// downloader only ever fetches from known Liquipedia hosts over HTTPS. If a real
+// tracked card loses logos because Liquipedia serves images from another host,
+// add that verified host here with a note on where it appears.
+const ALLOWED_LOGO_HOSTS = new Set(['liquipedia.net']);
+
+export function isAllowedLogoUrl(url) {
+  try {
+    const parsed = new URL(url);
+    if (parsed.protocol !== 'https:') return false;
+    return ALLOWED_LOGO_HOSTS.has(parsed.hostname.toLowerCase());
+  } catch {
+    return false;
+  }
+}
+
 mkdirSync(CACHE_DIR, { recursive: true });
 
 const images = new Map(); // url -> Image
@@ -233,6 +249,12 @@ async function decodeLogo(candidates) {
 
 export async function loadLogoImage(url) {
   if (!url) return null;
+  // Security boundary: refuse any URL outside the logo host allow-list before any
+  // cache lookup or network request (the parser is upstream and less trusted).
+  if (!isAllowedLogoUrl(url)) {
+    logger.debug(`[logo-cache] refused logo URL outside allow-list (${url})`);
+    return null;
+  }
   const candidates = logoCandidates(url);
   const key = candidates[0];
   const retryAfter = failures.get(key);

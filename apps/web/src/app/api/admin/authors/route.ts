@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getAdminAccess } from "@/lib/admin";
+import { canManageGame, getAdminAccess } from "@/lib/admin";
 import { listEligibleAuthors } from "@/lib/authors";
 
 export const runtime = "nodejs";
@@ -15,6 +15,11 @@ export async function GET(request: Request) {
 
   const game = new URL(request.url).searchParams.get("game");
   if (!game) return NextResponse.json({ error: "Game is required" }, { status: 400 });
+  // Game-scope the picker like the other admin news routes: a scoped admin may
+  // only enumerate eligible authors for games they manage.
+  if (!canManageGame(access, game)) {
+    return NextResponse.json({ error: "You are not assigned to this game." }, { status: 403 });
+  }
 
   return NextResponse.json({ authors: await listEligibleAuthors(game) });
 }

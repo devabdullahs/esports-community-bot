@@ -45,6 +45,12 @@ function ctx(params: Record<string, string>) {
   return { params: Promise.resolve(params) };
 }
 
+function authorsReq(game: string): Request {
+  return new Request(`http://localhost/api/admin/authors?game=${encodeURIComponent(game)}`, {
+    method: "GET",
+  });
+}
+
 // ---------------------------------------------------------------------------
 // DB seed helpers (real bot DB modules, temp SQLite file via setup.ts)
 // ---------------------------------------------------------------------------
@@ -97,6 +103,7 @@ import { POST as newsIdStatusPOST } from "@/app/api/admin/news/[id]/status/route
 import { POST as newsUploadPOST } from "@/app/api/admin/news/upload/route";
 import { GET as teamGET, POST as teamPOST } from "@/app/api/admin/team/route";
 import { PATCH as teamIdPATCH, DELETE as teamIdDELETE } from "@/app/api/admin/team/[discordId]/route";
+import { GET as authorsGET } from "@/app/api/admin/authors/route";
 
 // ---------------------------------------------------------------------------
 // Suite 1: Anonymous → 401 on every handler
@@ -130,6 +137,7 @@ describe("anonymous → 401 on all handlers", () => {
     ["team POST", () => teamPOST(req("POST", { discordId: SNOWFLAKE }))],
     ["team/[discordId] PATCH", () => teamIdPATCH(req("PATCH", {}), ctx({ discordId: SNOWFLAKE }))],
     ["team/[discordId] DELETE", () => teamIdDELETE(req("DELETE"), ctx({ discordId: SNOWFLAKE }))],
+    ["authors GET", () => authorsGET(authorsReq("valorant"))],
   ];
 
   for (const [name, invoke] of cases) {
@@ -172,6 +180,7 @@ describe("non-admin (authenticated, allowed=false) → 403 on all handlers", () 
     ["team POST", () => teamPOST(req("POST", { discordId: SNOWFLAKE }))],
     ["team/[discordId] PATCH", () => teamIdPATCH(req("PATCH", {}), ctx({ discordId: SNOWFLAKE }))],
     ["team/[discordId] DELETE", () => teamIdDELETE(req("DELETE"), ctx({ discordId: SNOWFLAKE }))],
+    ["authors GET", () => authorsGET(authorsReq("valorant"))],
   ];
 
   for (const [name, invoke] of cases) {
@@ -432,6 +441,34 @@ describe("media/[slug] PATCH scope check", () => {
       req("PATCH", { name: { en: "N", ar: "N" }, description: { en: "", ar: "" }, links: [] }),
       ctx({ slug: "scope-media-channel" }),
     );
+    expect(res.status).toBe(200);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Suite 8: authors picker scope check (canManageGame)
+// ---------------------------------------------------------------------------
+
+describe("authors picker scope check", () => {
+  beforeAll(async () => {
+    await seedGame("authors-scope-game");
+  });
+
+  test("gamesAdmin for wrong game → 403", async () => {
+    mockAccess.mockResolvedValue(gamesAdmin(["other-game"]));
+    const res = await authorsGET(authorsReq("authors-scope-game"));
+    expect(res.status).toBe(403);
+  });
+
+  test("gamesAdmin for correct game → 200", async () => {
+    mockAccess.mockResolvedValue(gamesAdmin(["authors-scope-game"]));
+    const res = await authorsGET(authorsReq("authors-scope-game"));
+    expect(res.status).toBe(200);
+  });
+
+  test("superAdmin → 200", async () => {
+    mockAccess.mockResolvedValue(superAdmin());
+    const res = await authorsGET(authorsReq("authors-scope-game"));
     expect(res.status).toBe(200);
   });
 });

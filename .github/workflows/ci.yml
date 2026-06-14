@@ -10,12 +10,17 @@ concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
+# Default to a read-only token; no job in this workflow needs write scopes.
+permissions:
+  contents: read
+
 jobs:
   bot-tests:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      # Actions are pinned by SHA; Dependabot keeps them current.
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: 24
           cache: npm
@@ -29,8 +34,8 @@ jobs:
       # are valid here — `runner` is NOT (it broke CI once already).
       DB_PATH: ${{ github.workspace }}/ci-bot.sqlite
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: 24
           cache: npm

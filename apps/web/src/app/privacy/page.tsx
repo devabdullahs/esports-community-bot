@@ -3,7 +3,7 @@ import { getRequestLocale } from "@/lib/request-locale";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-const LAST_UPDATED = "2026-06-12";
+const LAST_UPDATED = "2026-06-14";
 
 const CONTENT = {
   en: {
@@ -79,9 +79,9 @@ const CONTENT = {
       {
         heading: "8. Infrastructure and Data Processors",
         body: [
-          "All persistent data is stored in a SQLite database on operator-managed self-hosted infrastructure (a NAS device). No third-party database or analytics service holds your data.",
+          "All persistent data is stored in a managed PostgreSQL database hosted on cloud infrastructure in the MENA (Saudi Arabia) region. No third-party analytics or advertising service holds your data.",
           "Public web traffic is routed through Cloudflare, which provides TLS termination and DDoS protection. Cloudflare may process request metadata (IP addresses, headers) in accordance with its own privacy policy.",
-          "The service does not share your personal data with any other third party beyond the processors listed here (Discord and Cloudflare).",
+          "The service does not share your personal data with any other third party beyond the processors listed here (Discord, the managed database host, and Cloudflare).",
         ],
       },
       {
@@ -191,9 +191,9 @@ const CONTENT = {
       {
         heading: "٨. البنية التحتية ومعالجو البيانات",
         body: [
-          "تُخزَّن جميع البيانات الدائمة في قاعدة بيانات SQLite على بنية تحتية مُدارة ذاتياً من قِبل المشغّلين (جهاز NAS). لا تحتفظ أي خدمة قاعدة بيانات أو تحليلات خارجية ببياناتك.",
+          "تُخزَّن جميع البيانات الدائمة في قاعدة بيانات PostgreSQL مُدارة على بنية تحتية سحابية في منطقة الشرق الأوسط وشمال أفريقيا (المملكة العربية السعودية). لا تحتفظ أي خدمة تحليلات أو إعلانات خارجية ببياناتك.",
           "تمر حركة مرور الويب العامة عبر Cloudflare الذي يوفّر إنهاء TLS والحماية من هجمات DDoS. قد تعالج Cloudflare بيانات تعريف الطلبات (عناوين IP والرؤوس) وفق سياسة خصوصيتها.",
-          "لا تشارك الخدمة بياناتك الشخصية مع أي طرف ثالث آخر غير المعالجين المذكورين هنا (ديسكورد وCloudflare).",
+          "لا تشارك الخدمة بياناتك الشخصية مع أي طرف ثالث آخر غير المعالجين المذكورين هنا (ديسكورد، ومضيف قاعدة البيانات المُدارة، وCloudflare).",
         ],
       },
       {
