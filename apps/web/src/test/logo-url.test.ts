@@ -25,4 +25,18 @@ describe("GET /api/logo", () => {
     const response = await logoGET(new Request("http://localhost/api/logo?url=https%3A%2F%2Fexample.com%2Flogo.png"));
     expect(response.status).toBe(400);
   });
+
+  test("does not fetch uncached Liquipedia logos from public web views by default", async () => {
+    const previous = process.env.WEB_LOGO_PROXY_DOWNLOADS;
+    delete process.env.WEB_LOGO_PROXY_DOWNLOADS;
+    const source =
+      "https://liquipedia.net/commons/images/0/00/Esports_Community_Test_Logo_Not_Cached.png";
+    try {
+      const response = await logoGET(new Request(`http://localhost/api/logo?url=${encodeURIComponent(source)}`));
+      expect(response.status).toBe(404);
+    } finally {
+      if (previous == null) delete process.env.WEB_LOGO_PROXY_DOWNLOADS;
+      else process.env.WEB_LOGO_PROXY_DOWNLOADS = previous;
+    }
+  });
 });

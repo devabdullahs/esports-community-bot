@@ -4,7 +4,7 @@
 import axios from 'axios';
 import { config } from '../../config.js';
 import { logger } from '../../lib/logger.js';
-import { rateState, loadRateState, saveRateState } from './rateState.js';
+import { rateState, loadRateState, markRateLimited, saveRateState } from './rateState.js';
 import { cleanName, normalizePageUrl } from './parsers.js';
 
 // ---------------------------------------------------------------------------
@@ -21,7 +21,7 @@ import { cleanName, normalizePageUrl } from './parsers.js';
 // between parse requests, a multi-minute response cache (so many matches/polls share one
 // fetch), and automatic backoff if Liquipedia rate-limits us anyway.
 const PARSE_MIN_GAP_MS = Math.max(30_000, Number(process.env.LIQUIPEDIA_PARSE_MIN_GAP_MS || 30_000));
-const CACHE_TTL_MS = Math.max(60_000, Number(process.env.LIQUIPEDIA_CACHE_TTL_MS || 5 * 60_000));
+const CACHE_TTL_MS = Math.max(60_000, Number(process.env.LIQUIPEDIA_CACHE_TTL_MS || 15 * 60_000));
 const BACKOFF_MS = Math.max(60_000, Number(process.env.LIQUIPEDIA_BACKOFF_MS || 20 * 60_000));
 // Player/page lookup uses action=opensearch (NOT action=parse): it falls under the general
 // MediaWiki limit of 1 request / 2s, so it gets its own lighter throttle + cache. We only use it
@@ -47,6 +47,8 @@ const cache = new Map(); // key -> { at, data }
 const inFlight = new Map(); // key -> Promise<parse response>
 const searchCache = new Map(); // `${game}:${q}` -> { at, results }
 const searchInFlight = new Map(); // key -> Promise<results>  (dedupe identical concurrent lookups)
+let parseChain = Promise.resolve(); // serializes ALL action=parse requests (prevents sleeper bursts)
+let parseQueueDepth = 0;
 let searchChain = Promise.resolve(); // serializes ALL opensearch requests (prevents bursts)
 let searchQueueDepth = 0;
 const apiUrl = (game) => `https://liquipedia.net/${game}/api.php`;
@@ -55,7 +57,7 @@ const apiUrl = (game) => `https://liquipedia.net/${game}/api.php`;
 // Throttle
 // ---------------------------------------------------------------------------
 
-async function throttle() {
+async function throttleParse() {
   loadRateState();
   // Honor both the parse sub-limit (1/30s) and the general floor (1/2s) vs any recent search.
   const floor = Math.max(rateState.lastRequestAt + PARSE_MIN_GAP_MS, lastSearchAt + SEARCH_MIN_GAP_MS);
@@ -63,6 +65,21 @@ async function throttle() {
   if (wait > 0) await new Promise((r) => setTimeout(r, wait));
   rateState.lastRequestAt = Date.now();
   saveRateState();
+}
+
+function scheduleParse(task) {
+  parseQueueDepth++;
+  const run = parseChain.then(async () => {
+    loadRateState({ force: true });
+    if (Date.now() < rateState.blockedUntil) throw new Error('Liquipedia: backing off after a rate limit');
+    await throttleParse();
+    loadRateState({ force: true });
+    if (Date.now() < rateState.blockedUntil) throw new Error('Liquipedia: backing off after a rate limit');
+    return task();
+  });
+  parseChain = run.then(() => undefined, () => undefined); // chain link must never reject
+  run.then(() => { parseQueueDepth--; }, () => { parseQueueDepth--; });
+  return run;
 }
 
 // ---------------------------------------------------------------------------
@@ -83,8 +100,7 @@ export async function parsePage(game, page) {
     throw new Error('Liquipedia: backing off after a rate limit');
   }
 
-  const promise = (async () => {
-    await throttle();
+  const promise = scheduleParse(async () => {
     const afterWait = cache.get(key);
     if (afterWait && Date.now() - afterWait.at < CACHE_TTL_MS) return afterWait.data;
 
@@ -94,7 +110,7 @@ export async function parsePage(game, page) {
     if (data.error) throw new Error(`Liquipedia: ${data.error.info}`);
     cache.set(key, { at: Date.now(), data });
     return data;
-  })();
+  });
 
   inFlight.set(key, promise);
   try {
@@ -103,8 +119,7 @@ export async function parsePage(game, page) {
     const status = err.response?.status;
     const body = typeof err.response?.data === 'string' ? err.response.data : '';
     if (status === 403 || status === 429 || status === 503 || /rate.?limit|cloudflare|temporarily blocked/i.test(body)) {
-      rateState.blockedUntil = Date.now() + BACKOFF_MS;
-      saveRateState();
+      markRateLimited(BACKOFF_MS);
       logger.warn(`[liquipedia] rate limited (HTTP ${status ?? '?'}) — pausing requests for ${BACKOFF_MS / 60000} min`);
     }
     if (hit) return hit.data; // prefer stale data over nothing
@@ -190,8 +205,7 @@ export async function searchPages(game, query, limit = 6) {
     .catch((err) => {
       const status = err.response?.status;
       if (status === 403 || status === 429 || status === 503) {
-        rateState.blockedUntil = Date.now() + BACKOFF_MS;
-        saveRateState();
+        markRateLimited(BACKOFF_MS);
         logger.warn(`[liquipedia] search rate limited (HTTP ${status}) — pausing requests for ${BACKOFF_MS / 60000} min`);
       } else if (err.message !== 'search queue full') {
         logger.debug(`[liquipedia] search failed (${key}): ${err.message}`);

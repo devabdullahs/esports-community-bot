@@ -1,8 +1,10 @@
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { dirname, resolve } from 'node:path';
+import { dirname, join } from 'node:path';
 import { logger } from '../../lib/logger.js';
 
-const RATE_STATE_PATH = resolve(process.env.LIQUIPEDIA_RATE_STATE_PATH || 'data/liquipedia-rate-limit.json');
+const RATE_STATE_PATH =
+  process.env.LIQUIPEDIA_RATE_STATE_PATH ||
+  join(/* turbopackIgnore: true */ process.cwd(), 'data', 'liquipedia-rate-limit.json');
 
 // Mutable state object — exported by reference so client.js can read and write fields directly.
 export const rateState = {
@@ -11,8 +13,8 @@ export const rateState = {
   loaded: false,
 };
 
-export function loadRateState() {
-  if (rateState.loaded) return;
+export function loadRateState({ force = false } = {}) {
+  if (rateState.loaded && !force) return;
   rateState.loaded = true;
   try {
     const data = JSON.parse(readFileSync(RATE_STATE_PATH, 'utf8'));
@@ -33,4 +35,10 @@ export function saveRateState() {
   } catch (e) {
     logger.debug(`[liquipedia] could not save rate state: ${e.message}`);
   }
+}
+
+export function markRateLimited(durationMs) {
+  loadRateState({ force: true });
+  rateState.blockedUntil = Math.max(rateState.blockedUntil, Date.now() + durationMs);
+  saveRateState();
 }

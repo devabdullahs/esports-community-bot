@@ -25,12 +25,15 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "Invalid logo URL." }, { status: 400 });
   }
 
-  // The "web" channel keeps the dashboard's on-demand logo fetches off the bot's
-  // bulk-download backoff, so a fresh deploy doesn't serve fallbacks for ~20 min.
-  const logo = await loadLogoBytes(source, "web");
+  // Serve cached Liquipedia logos, but do not let public page views create
+  // fresh upstream downloads by default. The bot warms this cache while making
+  // match cards; set WEB_LOGO_PROXY_DOWNLOADS=true only for a controlled warmup.
+  const logo = await loadLogoBytes(source, "web", {
+    download: process.env.WEB_LOGO_PROXY_DOWNLOADS === "true",
+  });
   if (!logo) {
-    // Keep the miss cacheable only briefly — once the upstream image is
-    // reachable again the next view should fetch and cache the real logo.
+    // Keep misses cacheable only briefly. In production this usually means
+    // the bot has not warmed this logo into the shared cache yet.
     return new NextResponse(null, {
       status: 404,
       headers: { "Cache-Control": "public, max-age=30" },
