@@ -4,6 +4,11 @@ import { readFile, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import axios from 'axios';
 import { logger } from './logger.js';
+import {
+  loadRateState as loadLiquipediaRateState,
+  markRateLimited as markLiquipediaRateLimited,
+  rateState as liquipediaRateState,
+} from '../services/liquipedia/rateState.js';
 
 const http = axios.create({
   headers: {
@@ -13,8 +18,10 @@ const http = axios.create({
 });
 
 const CACHE_DIR = process.env.LOGO_CACHE_DIR || join(/* turbopackIgnore: true */ process.cwd(), 'data', 'logo-cache');
-const MAX_CONCURRENT_DOWNLOADS = Math.max(1, Number(process.env.LOGO_CACHE_CONCURRENCY || 2));
-const DOWNLOAD_MIN_GAP_MS = Math.max(0, Number(process.env.LOGO_DOWNLOAD_MIN_GAP_MS || 2000));
+// Keep logo downloads strictly serial. These are non-critical and share the
+// same upstream/IP budget as MediaWiki requests, so concurrency is not worth it.
+const MAX_CONCURRENT_DOWNLOADS = 1;
+const DOWNLOAD_MIN_GAP_MS = Math.max(10_000, Number(process.env.LOGO_DOWNLOAD_MIN_GAP_MS || 10_000));
 const RATE_LIMIT_BACKOFF_MS = Math.max(60_000, Number(process.env.LOGO_RATE_LIMIT_BACKOFF_MS || 20 * 60_000));
 const MAX_LOGO_BYTES = Math.max(64_000, Number(process.env.LOGO_MAX_BYTES || 4 * 1024 * 1024));
 const RATE_STATE_PATH = process.env.LOGO_RATE_STATE_PATH || join(/* turbopackIgnore: true */ process.cwd(), 'data', 'logo-rate-limit.json');
@@ -97,8 +104,8 @@ export function logoCandidates(url) {
   return variants;
 }
 
-function loadRateState(state) {
-  if (state.loaded) return;
+function loadRateState(state, { force = false } = {}) {
+  if (state.loaded && !force) return;
   state.loaded = true;
   try {
     const data = JSON.parse(readFileSync(state.statePath, 'utf8'));
@@ -155,12 +162,8 @@ async function readCached(file) {
 
 async function downloadLogo(url, file, channel) {
   const state = channelState(channel);
-  loadRateState(state);
-  if (Date.now() < state.blockedUntil) throw new Error('logo downloads backing off after a rate limit');
-  const wait = state.lastDownloadAt + DOWNLOAD_MIN_GAP_MS - Date.now();
-  if (wait > 0) await sleep(wait);
-  state.lastDownloadAt = Date.now();
-  saveRateState(state);
+  const globalState = channelState('global');
+  await waitForLogoSlot(state, globalState);
 
   const { data, headers } = await http.get(url, {
     responseType: 'arraybuffer',
@@ -169,8 +172,13 @@ async function downloadLogo(url, file, channel) {
   }).catch((err) => {
     const status = err.response?.status;
     if (status === 403 || status === 429 || status === 503) {
-      state.blockedUntil = Date.now() + RATE_LIMIT_BACKOFF_MS;
+      state.blockedUntil = Math.max(state.blockedUntil, Date.now() + RATE_LIMIT_BACKOFF_MS);
+      const globalState = channelState('global');
+      loadRateState(globalState, { force: true });
+      globalState.blockedUntil = Math.max(globalState.blockedUntil, state.blockedUntil);
       saveRateState(state);
+      saveRateState(globalState);
+      markLiquipediaRateLimited(RATE_LIMIT_BACKOFF_MS);
       logger.warn(`[logo-cache:${channel}] rate limited (HTTP ${status}) - pausing logo downloads for ${Math.round(RATE_LIMIT_BACKOFF_MS / 60000)} min`);
     }
     throw err;
@@ -184,10 +192,31 @@ async function downloadLogo(url, file, channel) {
   return bytes;
 }
 
-export async function fetchLogoBytes(url, channel = 'bot') {
+async function waitForLogoSlot(state, globalState) {
+  for (;;) {
+    loadRateState(state, { force: true });
+    loadRateState(globalState, { force: true });
+    loadLiquipediaRateState({ force: true });
+    const blockedUntil = Math.max(state.blockedUntil, globalState.blockedUntil, liquipediaRateState.blockedUntil);
+    if (Date.now() < blockedUntil) throw new Error('logo downloads backing off after a rate limit');
+
+    const wait = Math.max(state.lastDownloadAt, globalState.lastDownloadAt) + DOWNLOAD_MIN_GAP_MS - Date.now();
+    if (wait <= 0) break;
+    await sleep(wait);
+  }
+
+  const now = Date.now();
+  state.lastDownloadAt = now;
+  globalState.lastDownloadAt = now;
+  saveRateState(state);
+  saveRateState(globalState);
+}
+
+export async function fetchLogoBytes(url, channel = 'bot', { download = true } = {}) {
   const file = logoPath(url);
   const cached = await readCached(file);
   if (cached) return { bytes: cached, file, cached: true };
+  if (!download) return null;
 
   const bytes = await runLimited(async () => {
     const afterQueue = await readCached(file);
@@ -200,11 +229,12 @@ export async function refreshLogoBytes(url, file, channel = 'bot') {
   return runLimited(() => downloadLogo(url, file, channel));
 }
 
-export async function loadLogoBytes(url, channel = 'bot') {
+export async function loadLogoBytes(url, channel = 'bot', options = {}) {
   if (!url || !isAllowedLogoUrl(url)) return null;
   for (const candidate of logoCandidates(url)) {
     try {
-      return await fetchLogoBytes(candidate, channel);
+      const logo = await fetchLogoBytes(candidate, channel, options);
+      if (logo) return logo;
     } catch (e) {
       logger.debug(`[logo-cache] byte candidate failed (${candidate}): ${e.message}`);
     }

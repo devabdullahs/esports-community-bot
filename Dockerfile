@@ -20,6 +20,10 @@ WORKDIR /app
 ENV NODE_ENV=production \
   DB_PATH=/app/data/bot.sqlite \
   LOGO_CACHE_DIR=/app/data/logo-cache \
+  LOGO_DOWNLOAD_MIN_GAP_MS=10000 \
+  WEB_LOGO_PROXY_DOWNLOADS=false \
+  LIQUIPEDIA_CACHE_TTL_MS=900000 \
+  LIVE_POLL_INTERVAL_MS=300000 \
   LIQUIPEDIA_RATE_STATE_PATH=/app/data/liquipedia-rate-limit.json \
   LOGO_RATE_STATE_PATH=/app/data/logo-rate-limit.json
 

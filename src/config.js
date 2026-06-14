@@ -50,7 +50,7 @@ export const config = {
   scheduler: {
     timezone: get('SCHEDULER_TIMEZONE', 'UTC'), // IANA tz, e.g. "Europe/London"
     morningCron: get('MORNING_CRON', '0 8 * * *'),
-    livePollIntervalMs: Number(get('LIVE_POLL_INTERVAL_MS', 180_000)), // 3 minutes
+    livePollIntervalMs: Number(get('LIVE_POLL_INTERVAL_MS', 300_000)), // 5 minutes
     syncOnBoot: get('SYNC_ON_BOOT', 'false') === 'true',
   },
   clubChampionship: {
