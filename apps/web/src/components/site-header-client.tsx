@@ -71,7 +71,7 @@ export function SiteHeaderClient({
   ];
   const ewcLinks: Destination[] = [
     { href: "/news", label: text.common.news, icon: NewspaperIcon },
-    { href: "/tournaments/ewc", label: text.common.ewcTournaments, icon: MedalIcon },
+    { href: "/tournaments/ewc", label: text.common.ewcTournaments, icon: TrophyIcon },
     { href: "/predictions", label: text.common.predictions, icon: TargetIcon },
     { href: "/leaderboard", label: text.common.publicLeaderboard, icon: CrownIcon },
   ];
@@ -136,8 +136,10 @@ export function SiteHeaderClient({
               );
             })}
             <NavigationMenuItem>
-              <NavigationMenuTrigger className={ewcActive ? "bg-muted/50" : undefined}>
-                <TrophyIcon />
+              <NavigationMenuTrigger
+                className={`gap-1.5 ${ewcActive ? "bg-muted/50" : ""}`}
+              >
+                <MedalIcon className="size-4" />
                 {text.common.ewc}
               </NavigationMenuTrigger>
               <NavigationMenuContent>

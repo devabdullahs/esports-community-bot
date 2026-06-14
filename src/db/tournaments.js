@@ -39,3 +39,21 @@ export async function updateTournamentName(id, name) {
 export async function deactivateTournament(id, guildId) {
   return run('UPDATE tournaments SET active = 0 WHERE id = $1 AND guild_id = $2', [id, guildId]);
 }
+
+// Active tournaments that have ended: at least one match, EVERY match finished
+// (no running, scheduled, or TBD), and the last match started more than
+// `staleSeconds` ago. Used by the morning sweep to auto-untrack dead events.
+export async function listEndedTournaments(staleSeconds) {
+  const cutoff = Math.floor(Date.now() / 1000) - staleSeconds;
+  return all(
+    `SELECT t.id, t.guild_id, t.name
+     FROM tournaments t
+     JOIN matches m ON m.tournament_id = t.id
+     WHERE t.active = 1
+     GROUP BY t.id, t.guild_id, t.name
+     HAVING SUM(CASE WHEN m.status <> 'finished' THEN 1 ELSE 0 END) = 0
+        AND MAX(m.scheduled_at) IS NOT NULL
+        AND MAX(m.scheduled_at) < $1`,
+    [cutoff],
+  );
+}
