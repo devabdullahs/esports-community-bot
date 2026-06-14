@@ -1,6 +1,11 @@
 import type { MetadataRoute } from "next";
 import { absoluteUrl } from "@/lib/metadata";
 
+export const runtime = "nodejs";
+// Resolved per request so the Sitemap URL uses the runtime public host, not the
+// build-time localhost fallback (env vars are unset during the Docker build).
+export const dynamic = "force-dynamic";
+
 export default function robots(): MetadataRoute.Robots {
   return {
     rules: {
