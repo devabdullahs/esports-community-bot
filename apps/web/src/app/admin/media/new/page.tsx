@@ -3,7 +3,6 @@ import { redirect } from "next/navigation";
 import { ArrowLeftIcon } from "lucide-react";
 import { MediaEditor } from "@/components/admin/media-editor";
 import { getAdminAccess } from "@/lib/admin";
-import { listGames } from "@/lib/games";
 import { getRequestLocale } from "@/lib/request-locale";
 import { Button } from "@/components/ui/button";
 
@@ -15,7 +14,6 @@ export default async function NewMediaChannelPage() {
   if (!access.session) redirect("/login?callbackURL=/admin/media/new");
   if (!access.isSuper) redirect("/admin/media");
   const locale = await getRequestLocale();
-  const games = (await listGames()).map((g) => ({ slug: g.slug, name: g.title[locale] || g.title.en || g.slug }));
 
   return (
     <main className="mx-auto flex w-full max-w-4xl flex-1 flex-col gap-6 px-5 py-10 sm:px-8">
@@ -27,7 +25,7 @@ export default async function NewMediaChannelPage() {
         <p className="text-sm text-muted-foreground">Admin publishing</p>
         <h1 className="text-3xl font-semibold leading-tight">New media channel</h1>
       </div>
-      <MediaEditor mode="create" games={games} locale={locale} />
+      <MediaEditor mode="create" locale={locale} />
     </main>
   );
 }

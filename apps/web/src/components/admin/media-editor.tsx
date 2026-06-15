@@ -65,17 +65,13 @@ function isInvalidLinkUrl(url: string): boolean {
   return !isSafeUrl(trimmed);
 }
 
-const NO_GAME = "__none__";
-
 export function MediaEditor({
   mode,
   channel,
-  games = [],
   locale = "en",
 }: {
   mode: "create" | "edit";
   channel?: MediaChannelRecord;
-  games?: { slug: string; name: string }[];
   locale?: Locale;
 }) {
   const router = useRouter();
@@ -86,7 +82,6 @@ export function MediaEditor({
   const [logoUrl, setLogoUrl] = useState(channel?.logoUrl || "");
   const [links, setLinks] = useState<MediaLink[]>(channel?.links?.length ? channel.links : []);
   const [discordChannelId, setDiscordChannelId] = useState(channel?.discordChannelId || "");
-  const [gameSlug, setGameSlug] = useState(channel?.gameSlug || "");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -132,7 +127,6 @@ export function MediaEditor({
         logoUrl: logoUrl.trim() || null,
         links: links.filter((l) => l.url.trim()),
         discordChannelId: discordChannelId.trim() || null,
-        gameSlug: gameSlug || null,
       };
       const res = await fetch(
         mode === "create" ? "/api/admin/media" : `/api/admin/media/${channel?.slug}`,
@@ -302,29 +296,6 @@ export function MediaEditor({
                 </Button>
               </div>
               <FieldDescription>Only http(s) links are saved.</FieldDescription>
-            </Field>
-
-            <Field>
-              <FieldLabel htmlFor="media-game">Related game (optional)</FieldLabel>
-              <Select
-                value={gameSlug || NO_GAME}
-                onValueChange={(value) => setGameSlug(value && value !== NO_GAME ? value : "")}
-              >
-                <SelectTrigger id="media-game" className="w-full sm:w-72">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectGroup>
-                    <SelectItem value={NO_GAME}>No related game</SelectItem>
-                    {games.map((g) => (
-                      <SelectItem key={g.slug} value={g.slug}>
-                        {g.name}
-                      </SelectItem>
-                    ))}
-                  </SelectGroup>
-                </SelectContent>
-              </Select>
-              <FieldDescription>Tags this channel with a game and sets the announcement footer.</FieldDescription>
             </Field>
 
             <Field>
