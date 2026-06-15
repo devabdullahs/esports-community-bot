@@ -12,6 +12,7 @@ import {
   listEwcNewsPostsForAdmin as _listAdmin,
   listLatestPublishedEwcNewsPosts as _listLatest,
   listPublishedEwcNewsPosts as _listPublished,
+  listPublishedMediaPosts as _listMedia,
   setEwcNewsPostStatus as _setStatus,
   updateEwcNewsPost as _update,
 } from "@bot/db/ewcNewsPosts.js";
@@ -37,7 +38,8 @@ export type NewsAuthor = {
 
 export type NewsPost = {
   id: number;
-  gameSlug: string;
+  gameSlug: string | null;
+  mediaSlug: string | null;
   contentMode: NewsContentMode;
   defaultLocale: Locale;
   locale: Locale;
@@ -58,7 +60,8 @@ export type NewsPost = {
 };
 
 export type NewsPostInput = {
-  gameSlug: string;
+  gameSlug?: string | null;
+  mediaSlug?: string | null;
   contentMode: NewsContentMode;
   defaultLocale: Locale;
   translations: Partial<Record<Locale, Omit<NewsTranslation, "locale">>>;
@@ -75,11 +78,17 @@ const getById = _getById as (id: number) => Promise<NewsPost | null>;
 const getPublished = _getPublished as (id: number, locale?: Locale) => Promise<NewsPost | null>;
 const listAdmin = _listAdmin as (filter: {
   gameSlug?: string | null;
+  mediaSlug?: string | null;
   status?: NewsStatus | null;
 }) => Promise<NewsPost[]>;
 const listPublished = _listPublished as (args: {
   gameSlug: string;
   locale: Locale;
+}) => Promise<NewsPost[]>;
+const listMedia = _listMedia as (args: {
+  mediaSlug: string;
+  locale: Locale;
+  limit?: number;
 }) => Promise<NewsPost[]>;
 const listLatest = _listLatest as (args: {
   locale: Locale;
@@ -101,6 +110,7 @@ export function getPublishedNewsPost(id: number, locale?: Locale): Promise<NewsP
 
 export function listAdminNewsPosts(filter?: {
   gameSlug?: string | null;
+  mediaSlug?: string | null;
   status?: NewsStatus | null;
 }): Promise<NewsPost[]> {
   return listAdmin(filter || {});
@@ -108,6 +118,10 @@ export function listAdminNewsPosts(filter?: {
 
 export function listPublishedNewsPosts(gameSlug: string, locale: Locale): Promise<NewsPost[]> {
   return listPublished({ gameSlug, locale });
+}
+
+export function listPublishedMediaPosts(mediaSlug: string, locale: Locale, limit = 50): Promise<NewsPost[]> {
+  return listMedia({ mediaSlug, locale, limit });
 }
 
 export function listLatestPublishedNewsPosts(
@@ -157,4 +171,11 @@ export const listLatestPublishedNewsPostsCached = unstable_cache(
     listLatestPublishedNewsPosts(locale, limit, ewcOnly),
   ["news-list-latest"],
   { tags: ["cms-news", "cms-games"] },
+);
+
+export const listPublishedMediaPostsCached = unstable_cache(
+  async (mediaSlug: string, locale: Locale, limit = 50) =>
+    listPublishedMediaPosts(mediaSlug, locale, limit),
+  ["media-posts-list-published"],
+  { tags: ["cms-news", "cms-media"] },
 );

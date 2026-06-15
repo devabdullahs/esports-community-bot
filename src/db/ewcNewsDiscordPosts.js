@@ -11,7 +11,7 @@ function nowText() {
 // Anti-join: published posts that do not yet have a Discord row. These need an initial post.
 export async function listUnpostedPublishedNewsPosts() {
   return all(
-    `SELECT p.id AS post_id, p.game_slug AS game_slug
+    `SELECT p.id AS post_id, p.game_slug AS game_slug, p.media_slug AS media_slug
      FROM ewc_news_posts p
      LEFT JOIN ewc_news_discord_posts d ON d.post_id = p.id
      WHERE p.status = 'published' AND d.post_id IS NULL
@@ -26,7 +26,8 @@ export async function listDiscordNewsPosts() {
   return all(
     `SELECT d.post_id AS post_id, d.guild_id AS guild_id, d.channel_id AS channel_id,
             d.message_id AS message_id, d.posted_at AS posted_at,
-            p.status AS status, p.updated_at AS updated_at, p.game_slug AS game_slug
+            p.status AS status, p.updated_at AS updated_at, p.game_slug AS game_slug,
+            p.media_slug AS media_slug
      FROM ewc_news_discord_posts d
      JOIN ewc_news_posts p ON p.id = d.post_id
      ORDER BY d.post_id ASC`,

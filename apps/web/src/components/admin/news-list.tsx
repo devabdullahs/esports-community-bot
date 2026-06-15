@@ -4,9 +4,9 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { PencilIcon, PlusIcon, Trash2Icon } from "lucide-react";
+import { LocalDateTime } from "@/components/local-date-time";
 import { localizeText } from "@/lib/community-content";
 import type { GameRecord } from "@/lib/games";
-import { formatDateTime } from "@/lib/i18n";
 import type { NewsPost } from "@/lib/news";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -20,11 +20,24 @@ import {
   TableRow,
 } from "@/components/ui/table";
 
-export function NewsList({ posts, games }: { posts: NewsPost[]; games: GameRecord[] }) {
+export function NewsList({
+  posts,
+  games,
+  newPostHref = "/admin/news/new",
+}: {
+  posts: NewsPost[];
+  games: GameRecord[];
+  newPostHref?: string;
+}) {
   const router = useRouter();
-  const gameTitle = (slug: string) => {
-    const game = games.find((g) => g.slug === slug);
-    return game ? localizeText(game.title, "en") : slug;
+  // A post is owned by a game or a media channel; label whichever it is.
+  const ownerLabel = (post: NewsPost): string => {
+    if (post.mediaSlug) return post.mediaSlug;
+    if (post.gameSlug) {
+      const game = games.find((g) => g.slug === post.gameSlug);
+      return game ? localizeText(game.title, "en") : post.gameSlug;
+    }
+    return "—";
   };
   const [deletingId, setDeletingId] = useState<number | null>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
@@ -61,7 +74,7 @@ export function NewsList({ posts, games }: { posts: NewsPost[]; games: GameRecor
         <p className="text-sm text-muted-foreground">
           {posts.length} post{posts.length === 1 ? "" : "s"}
         </p>
-        <Button render={<Link href="/admin/news/new" />} nativeButton={false}>
+        <Button render={<Link href={newPostHref} />} nativeButton={false}>
           <PlusIcon data-icon="inline-start" />
           New post
         </Button>
@@ -73,7 +86,7 @@ export function NewsList({ posts, games }: { posts: NewsPost[]; games: GameRecor
             <TableHeader>
               <TableRow>
                 <TableHead>Title</TableHead>
-                <TableHead>Game</TableHead>
+                <TableHead>Owner</TableHead>
                 <TableHead>Content</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead>Updated</TableHead>
@@ -84,7 +97,16 @@ export function NewsList({ posts, games }: { posts: NewsPost[]; games: GameRecor
               {posts.map((post) => (
                 <TableRow key={post.id}>
                   <TableCell className="font-medium">{post.title}</TableCell>
-                  <TableCell className="text-muted-foreground">{gameTitle(post.gameSlug)}</TableCell>
+                  <TableCell className="text-muted-foreground">
+                    <span className="flex items-center gap-2">
+                      {post.mediaSlug ? (
+                        <Badge variant="outline" className="font-normal">
+                          Media
+                        </Badge>
+                      ) : null}
+                      {ownerLabel(post)}
+                    </span>
+                  </TableCell>
                   <TableCell className="text-muted-foreground">
                     {post.contentMode === "translated"
                       ? "English + Arabic"
@@ -96,7 +118,7 @@ export function NewsList({ posts, games }: { posts: NewsPost[]; games: GameRecor
                     </Badge>
                   </TableCell>
                   <TableCell className="text-muted-foreground">
-                    {formatDateTime(post.updatedAt, "en")}
+                    <LocalDateTime value={post.updatedAt} locale="en" />
                   </TableCell>
                   <TableCell>
                     <div className="flex justify-end gap-1">

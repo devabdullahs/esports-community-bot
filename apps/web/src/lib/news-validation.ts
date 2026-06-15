@@ -14,7 +14,8 @@ export { NEWS_BODY_MAX_LENGTH, NEWS_SUMMARY_MAX_LENGTH, NEWS_TITLE_MAX_LENGTH };
 export const NEWS_AUTHOR_NAME_MAX_LENGTH = 120;
 
 export type ValidatedNewsInput = NewsPostInput & {
-  gameSlug: string;
+  gameSlug: string | null;
+  mediaSlug: string | null;
   coverImageUrl: string | null;
   coverPlacement: NewsCoverPlacement;
   ewc: boolean;
@@ -40,8 +41,11 @@ export function validateNewsInput(
 ): { ok: true; value: ValidatedNewsInput } | { ok: false; error: string } {
   const body = (raw ?? {}) as Record<string, unknown>;
 
+  // A post is owned by EITHER a media channel (media post) OR a game (game post).
+  // For a media post, the game becomes an optional related-game tag.
+  const mediaSlug = typeof body.mediaSlug === "string" ? body.mediaSlug.trim() : "";
   const gameSlug = typeof body.gameSlug === "string" ? body.gameSlug.trim() : "";
-  if (!gameSlug) return { ok: false, error: "Game is required" };
+  if (!mediaSlug && !gameSlug) return { ok: false, error: "Game is required" };
 
   const content = validateNewsContentInput(body) as NewsContentValidationResult;
   if (!content.ok) return { ok: false, error: content.error };
@@ -122,7 +126,8 @@ export function validateNewsInput(
   return {
     ok: true,
     value: {
-      gameSlug,
+      gameSlug: gameSlug || null,
+      mediaSlug: mediaSlug || null,
       ...content.value,
       coverImageUrl,
       coverPlacement,

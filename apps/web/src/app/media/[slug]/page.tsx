@@ -4,9 +4,11 @@ import { notFound } from "next/navigation";
 import { ArrowLeftIcon, ExternalLinkIcon, Tv2Icon } from "lucide-react";
 import { PageBreadcrumb } from "@/components/page-breadcrumb";
 import { Button } from "@/components/ui/button";
+import { DateTime } from "@/components/date-time";
 import { localizeText } from "@/lib/community-content";
 import { copy, localizedPath } from "@/lib/i18n";
 import { getMediaChannelCached } from "@/lib/media";
+import { listPublishedMediaPostsCached } from "@/lib/news";
 import { getRequestLocale } from "@/lib/request-locale";
 import { safeUrlOrUndefined } from "@/lib/safe-url";
 import { buildPageMetadata } from "@/lib/metadata";
@@ -53,6 +55,7 @@ export default async function MediaChannelPage({
 
   const logo = safeUrlOrUndefined(channel.logoUrl);
   const common = copy[locale].common;
+  const posts = await listPublishedMediaPostsCached(slug, locale);
 
   return (
     <main
@@ -114,6 +117,48 @@ export default async function MediaChannelPage({
             );
           })}
         </div>
+      ) : null}
+
+      {posts.length ? (
+        <section className="flex flex-col gap-3">
+          <h2 className="text-xl font-semibold">{locale === "ar" ? "المنشورات" : "Posts"}</h2>
+          <div className="flex flex-col gap-3">
+            {posts.map((post) => {
+              const thumb = safeUrlOrUndefined(post.coverImageUrl);
+              return (
+                <Link
+                  key={post.id}
+                  href={localizedPath(`/media/${slug}/news/${post.id}`, locale)}
+                  className="group flex gap-4 rounded-lg border p-4 transition-colors hover:bg-muted/50"
+                >
+                  {thumb ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={thumb}
+                      alt=""
+                      className="hidden size-20 shrink-0 rounded-md border border-border object-cover sm:block"
+                    />
+                  ) : null}
+                  <div className="flex min-w-0 flex-col gap-1">
+                    <h3 dir="auto" className="bidi-plaintext font-semibold leading-snug">
+                      {post.title}
+                    </h3>
+                    {post.summary ? (
+                      <p dir="auto" className="bidi-plaintext line-clamp-2 text-sm text-muted-foreground">
+                        {post.summary}
+                      </p>
+                    ) : null}
+                    {post.publishedAt ? (
+                      <span className="text-xs text-muted-foreground">
+                        <DateTime value={post.publishedAt} locale={locale} />
+                      </span>
+                    ) : null}
+                  </div>
+                </Link>
+              );
+            })}
+          </div>
+        </section>
       ) : null}
     </main>
   );

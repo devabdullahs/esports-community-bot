@@ -1,14 +1,26 @@
 import { revalidateTag } from "next/cache";
 import { NextResponse } from "next/server";
-import { canManageGame, getAdminAccess } from "@/lib/admin";
+import { canManageGame, canManageMedia, getAdminAccess, type AdminAccess } from "@/lib/admin";
 import { resolveNewsAuthors } from "@/lib/authors";
 import { recordAdminAudit } from "@/lib/audit";
 import { getGame } from "@/lib/games";
+import { getMediaChannel } from "@/lib/media";
 import { deleteNewsPost, getNewsPost, updateNewsPost } from "@/lib/news";
 import { parsePostId, validateNewsInput } from "@/lib/news-validation";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+
+// A post is managed by whoever manages its owner — the media channel for media
+// posts, otherwise the game.
+function canManagePost(
+  access: AdminAccess,
+  owner: { gameSlug?: string | null; mediaSlug?: string | null },
+): boolean {
+  if (owner.mediaSlug) return canManageMedia(access, owner.mediaSlug);
+  if (owner.gameSlug) return canManageGame(access, owner.gameSlug);
+  return false;
+}
 
 export async function PATCH(
   request: Request,
@@ -28,26 +40,40 @@ export async function PATCH(
   const body = await request.json().catch(() => ({}));
   const validated = validateNewsInput(body);
   if (!validated.ok) return NextResponse.json({ error: validated.error }, { status: 400 });
-  if (!(await getGame(validated.value.gameSlug))) {
+  const v = validated.value;
+
+  // Target owner must exist (media channel, or game; a media post's related game is optional).
+  if (v.mediaSlug) {
+    if (!(await getMediaChannel(v.mediaSlug))) {
+      return NextResponse.json({ error: "Unknown media channel" }, { status: 400 });
+    }
+    if (v.gameSlug && !(await getGame(v.gameSlug))) {
+      return NextResponse.json({ error: "Unknown game" }, { status: 400 });
+    }
+  } else if (!v.gameSlug || !(await getGame(v.gameSlug))) {
     return NextResponse.json({ error: "Unknown game" }, { status: 400 });
   }
-  // Must own the post's CURRENT game (to edit it) AND the TARGET game (to move it there).
-  if (!canManageGame(access, existing.gameSlug) || !canManageGame(access, validated.value.gameSlug)) {
-    return NextResponse.json({ error: "You are not assigned to this game" }, { status: 403 });
+
+  // Must manage the post's CURRENT owner (to edit it) AND the TARGET owner (to move it there).
+  if (
+    !canManagePost(access, { gameSlug: existing.gameSlug, mediaSlug: existing.mediaSlug }) ||
+    !canManagePost(access, { gameSlug: v.gameSlug, mediaSlug: v.mediaSlug })
+  ) {
+    return NextResponse.json({ error: "You are not assigned to this post" }, { status: 403 });
   }
 
-  // Server-authoritative authors: submitted ids must be eligible for this game
-  // (the DB layer replaces the author list, so send the canonical set). With nothing
-  // submitted, keep the post's existing primary author.
+  // Server-authoritative authors: submitted ids must be eligible for the owner. With
+  // nothing submitted, keep the post's existing primary author.
   const resolved = await resolveNewsAuthors({
-    gameSlug: validated.value.gameSlug,
-    authors: validated.value.authors,
-    authorDiscordId: validated.value.authorDiscordId,
+    gameSlug: v.gameSlug,
+    mediaSlug: v.mediaSlug,
+    authors: v.authors,
+    authorDiscordId: v.authorDiscordId,
     fallbackAuthor: { discordId: existing.authorDiscordId, name: existing.authorName },
   });
   if (!resolved.ok) return NextResponse.json({ error: resolved.error }, { status: 403 });
   const updated = await updateNewsPost(postId, {
-    ...validated.value,
+    ...v,
     authors: resolved.authors,
     authorDiscordId: resolved.authors[0]?.discordId ?? null,
     authorName: resolved.authors[0]?.name ?? null,
@@ -72,8 +98,8 @@ export async function DELETE(
 
   const existing = await getNewsPost(postId);
   if (!existing) return NextResponse.json({ error: "Not found" }, { status: 404 });
-  if (!canManageGame(access, existing.gameSlug)) {
-    return NextResponse.json({ error: "You are not assigned to this game" }, { status: 403 });
+  if (!canManagePost(access, { gameSlug: existing.gameSlug, mediaSlug: existing.mediaSlug })) {
+    return NextResponse.json({ error: "You are not assigned to this post" }, { status: 403 });
   }
 
   const result = await deleteNewsPost(postId);

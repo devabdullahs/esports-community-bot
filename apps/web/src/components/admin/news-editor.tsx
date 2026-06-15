@@ -107,6 +107,8 @@ type Transform = (
 
 const EMPTY_TRANSLATION: TranslationDraft = { title: "", summary: "", body: "" };
 const ARABIC_LABEL = "العربية";
+// Sentinel for "no related game" in the media-post game picker (Select needs a value).
+const NO_GAME = "__none__";
 const LOCALE_LABELS: Record<Locale, string> = {
   en: "English",
   ar: ARABIC_LABEL,
@@ -222,17 +224,21 @@ export function NewsEditor({
   mode,
   post,
   games,
+  mediaChannel,
   locale = "en",
   currentUser = null,
 }: {
   mode: "create" | "edit";
   post?: NewsPost;
   games: GameRecord[];
+  /** When set, the post is owned by this media channel (game becomes an optional tag). */
+  mediaChannel?: { slug: string; name: string };
   locale?: Locale;
   /** The signed-in admin, used as the default author when creating a post. */
   currentUser?: { discordId: string | null; name: string | null } | null;
 }) {
   const router = useRouter();
+  const isMedia = Boolean(mediaChannel);
   const t = i18nCopy[locale].composer;
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -247,7 +253,10 @@ export function NewsEditor({
   const pendingPersistRef = useRef<{ targetStatus: NewsStatus; action: string } | null>(null);
 
   const initialDefaultLocale = post?.defaultLocale || post?.locale || "en";
-  const [gameSlug, setGameSlug] = useState(post?.gameSlug || games[0]?.slug || "");
+  // Owner game (game post) or optional related game (media post: "" = none).
+  const [gameSlug, setGameSlug] = useState(
+    post?.gameSlug || (mediaChannel ? "" : games[0]?.slug || ""),
+  );
   const [contentMode, setContentMode] = useState<NewsContentMode>(post?.contentMode || "shared");
   const [defaultLocale, setDefaultLocale] = useState<Locale>(initialDefaultLocale);
   const [activeLocale, setActiveLocale] = useState<Locale>(initialDefaultLocale);
@@ -351,18 +360,23 @@ export function NewsEditor({
     textarea.setSelectionRange(pending.start, pending.end);
   }, [current.body, editLocale]);
 
-  // Fetch eligible authors whenever the target game changes (and on mount). After
-  // loading, default the selection to the post's existing author when it is still
-  // eligible, else the signed-in admin when present, else the first option.
+  // Eligible authors are scoped to the owner: the fixed media channel for media
+  // posts, otherwise the selected game. Media mode loads once; game mode refetches
+  // when the game changes.
+  const authorScope = isMedia
+    ? `media=${encodeURIComponent(mediaChannel!.slug)}`
+    : gameSlug
+      ? `game=${encodeURIComponent(gameSlug)}`
+      : null;
   useEffect(() => {
-    if (!gameSlug) return;
+    if (!authorScope) return;
     let cancelled = false;
     // Wrapped in an async fn so the setState calls run inside promise
     // continuations (callbacks), not synchronously in the effect body.
-    async function loadAuthors(slug: string) {
+    async function loadAuthors(scope: string) {
       setAuthorsLoading(true);
       try {
-        const res = await fetch(`/api/admin/authors?game=${encodeURIComponent(slug)}`);
+        const res = await fetch(`/api/admin/authors?${scope}`);
         const data: { authors?: EligibleAuthor[] } = res.ok ? await res.json() : { authors: [] };
         if (cancelled) return;
         const list = Array.isArray(data.authors) ? data.authors : [];
@@ -382,13 +396,13 @@ export function NewsEditor({
         if (!cancelled) setAuthorsLoading(false);
       }
     }
-    void loadAuthors(gameSlug);
+    void loadAuthors(authorScope);
     return () => {
       cancelled = true;
     };
-    // post + currentUser are stable for the editor's lifetime; only the game drives refetch.
+    // post + currentUser are stable for the editor's lifetime; only the owner scope drives refetch.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [gameSlug]);
+  }, [authorScope]);
 
   // Resolve the display name for the selected author from the fetched list,
   // falling back to the post's stored author name so editing an existing post
@@ -622,7 +636,8 @@ export function NewsEditor({
         !translations.en.body.trim() ||
         !translations.ar.title.trim() ||
         !translations.ar.body.trim();
-  const canSave = Boolean(gameSlug && !hasLimitError);
+  // Game posts require a game; media posts require their channel (always present here).
+  const canSave = Boolean((isMedia || gameSlug) && !hasLimitError);
   const canPublish = canSave && !publishError;
 
   function persist(targetStatus: NewsStatus, action: string) {
@@ -649,7 +664,8 @@ export function NewsEditor({
     setBusy(action);
     try {
       const payload = {
-        gameSlug,
+        gameSlug: gameSlug || null,
+        mediaSlug: isMedia ? mediaChannel!.slug : null,
         contentMode,
         defaultLocale,
         translations: translationsToPersist,
@@ -757,35 +773,65 @@ export function NewsEditor({
       <div className="grid gap-6 lg:grid-cols-2 lg:items-start">
         <Card className={mobileView === "preview" ? "hidden lg:flex" : undefined}>
           <CardHeader>
-            <CardTitle>{mode === "create" ? t.newPost : t.editPost}</CardTitle>
+            <CardTitle>
+              {mode === "create" ? t.newPost : t.editPost}
+              {isMedia ? <span className="text-muted-foreground"> · {mediaChannel!.name}</span> : null}
+            </CardTitle>
           </CardHeader>
           <CardContent>
             <FieldGroup>
-              {/* Meta controls: game, mode, writing language */}
+              {/* Meta controls: game (or related game), mode, writing language */}
               <div className="grid gap-4 sm:grid-cols-2">
                 <Field>
-                  <FieldLabel>{t.game}</FieldLabel>
-                  <Select value={gameSlug} onValueChange={(value) => value && setGameSlug(value)}>
-                    <SelectTrigger className="w-full">
-                      {/* base-ui SelectValue renders the raw value by default; a function
-                          child maps value→localized label so the trigger shows the name. */}
-                      <SelectValue>
-                        {(value) => {
-                          const selected = games.find((g) => g.slug === value);
-                          return selected ? localizeText(selected.title, locale) : value;
-                        }}
-                      </SelectValue>
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectGroup>
-                        {games.map((item) => (
-                          <SelectItem key={item.slug} value={item.slug}>
-                            {localizeText(item.title, locale)}
-                          </SelectItem>
-                        ))}
-                      </SelectGroup>
-                    </SelectContent>
-                  </Select>
+                  <FieldLabel>{isMedia ? t.relatedGame : t.game}</FieldLabel>
+                  {isMedia ? (
+                    <Select
+                      value={gameSlug || NO_GAME}
+                      onValueChange={(value) => setGameSlug(value && value !== NO_GAME ? value : "")}
+                    >
+                      <SelectTrigger className="w-full">
+                        <SelectValue>
+                          {(value) => {
+                            if (!value || value === NO_GAME) return t.relatedGameNone;
+                            const selected = games.find((g) => g.slug === value);
+                            return selected ? localizeText(selected.title, locale) : value;
+                          }}
+                        </SelectValue>
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectGroup>
+                          <SelectItem value={NO_GAME}>{t.relatedGameNone}</SelectItem>
+                          {games.map((item) => (
+                            <SelectItem key={item.slug} value={item.slug}>
+                              {localizeText(item.title, locale)}
+                            </SelectItem>
+                          ))}
+                        </SelectGroup>
+                      </SelectContent>
+                    </Select>
+                  ) : (
+                    <Select value={gameSlug} onValueChange={(value) => value && setGameSlug(value)}>
+                      <SelectTrigger className="w-full">
+                        {/* base-ui SelectValue renders the raw value by default; a function
+                            child maps value→localized label so the trigger shows the name. */}
+                        <SelectValue>
+                          {(value) => {
+                            const selected = games.find((g) => g.slug === value);
+                            return selected ? localizeText(selected.title, locale) : value;
+                          }}
+                        </SelectValue>
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectGroup>
+                          {games.map((item) => (
+                            <SelectItem key={item.slug} value={item.slug}>
+                              {localizeText(item.title, locale)}
+                            </SelectItem>
+                          ))}
+                        </SelectGroup>
+                      </SelectContent>
+                    </Select>
+                  )}
                 </Field>
                 <Field>
                   <FieldLabel>{t.contentMode}</FieldLabel>

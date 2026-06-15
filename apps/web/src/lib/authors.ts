@@ -13,6 +13,7 @@ type AdminRoster = {
   discordId: string;
   displayName: string;
   games: string[];
+  media: string[];
 };
 
 const listAdmins = listEwcAdmins as () => Promise<AdminRoster[]>;
@@ -61,15 +62,15 @@ async function lookupAuthInfo(
 }
 
 /**
- * Discord users eligible to be credited as the author of a post for `gameSlug`:
- *  - every super admin (env-defined), and
- *  - roster admins whose assigned games include this game slug.
- *
- * Names prefer the roster displayName; env supers fall back to their signed-in
- * user name, then to the raw discordId. Deduped by discordId, supers first then
- * alphabetical by name.
+ * Discord users eligible to be credited as an author: every super admin
+ * (env-defined, eligible for anything) plus roster admins the `matches` predicate
+ * accepts (scoped to a game or a media channel). Names prefer the roster
+ * displayName; env supers fall back to their signed-in user name, then the raw
+ * discordId. Deduped by discordId, supers first then alphabetical by name.
  */
-export async function listEligibleAuthors(gameSlug: string): Promise<EligibleAuthor[]> {
+async function buildEligibleAuthors(
+  matches: (admin: AdminRoster) => boolean,
+): Promise<EligibleAuthor[]> {
   const supers = superAdminDiscordIds();
   const superSet = new Set(supers);
   const roster = await listAdmins();
@@ -89,16 +90,16 @@ export async function listEligibleAuthors(gameSlug: string): Promise<EligibleAut
     return { name, avatarUrl: auth.avatarUrl };
   };
 
-  // Supers first — eligible for any game.
+  // Supers first — eligible for anything.
   for (const discordId of supers) {
     if (byId.has(discordId)) continue;
     byId.set(discordId, { author: { discordId, ...(await infoFor(discordId)) }, isSuper: true });
   }
 
-  // Roster admins scoped to this game.
+  // Roster admins scoped to the target (game or media channel).
   for (const admin of roster) {
     if (byId.has(admin.discordId)) continue;
-    if (!admin.games.includes(gameSlug)) continue;
+    if (!matches(admin)) continue;
     byId.set(admin.discordId, {
       author: { discordId: admin.discordId, ...(await infoFor(admin.discordId)) },
       isSuper: superSet.has(admin.discordId),
@@ -111,6 +112,16 @@ export async function listEligibleAuthors(gameSlug: string): Promise<EligibleAut
       return a.author.name.localeCompare(b.author.name);
     })
     .map((entry) => entry.author);
+}
+
+// Eligible authors for a game post (supers + admins assigned to the game).
+export async function listEligibleAuthors(gameSlug: string): Promise<EligibleAuthor[]> {
+  return buildEligibleAuthors((admin) => admin.games.includes(gameSlug));
+}
+
+// Eligible authors for a media-channel post (supers + admins assigned to the channel).
+export async function listEligibleMediaAuthors(mediaSlug: string): Promise<EligibleAuthor[]> {
+  return buildEligibleAuthors((admin) => admin.media.includes(mediaSlug));
 }
 
 export type ResolveNewsAuthorsResult =
@@ -132,12 +143,16 @@ export type ResolveNewsAuthorsResult =
  * as-is — preferring the canonical eligible snapshot when one exists.
  */
 export async function resolveNewsAuthors(input: {
-  gameSlug: string;
+  gameSlug?: string | null;
+  mediaSlug?: string | null;
   authors?: Array<{ discordId?: string | null }> | null;
   authorDiscordId?: string | null;
   fallbackAuthor?: { discordId?: string | null; name?: string | null };
 }): Promise<ResolveNewsAuthorsResult> {
-  const eligible = await listEligibleAuthors(input.gameSlug);
+  // Media posts validate against the channel's admins; game posts against the game's.
+  const eligible = input.mediaSlug
+    ? await listEligibleMediaAuthors(input.mediaSlug)
+    : await listEligibleAuthors(input.gameSlug || "");
   const byId = new Map(eligible.map((a) => [a.discordId, a]));
 
   const submitted: string[] = [];
@@ -155,7 +170,7 @@ export async function resolveNewsAuthors(input: {
     const resolved: EligibleAuthor[] = [];
     for (const id of submitted) {
       const author = byId.get(id);
-      if (!author) return { ok: false, error: "Selected author is not eligible for this game." };
+      if (!author) return { ok: false, error: "Selected author is not eligible." };
       resolved.push(author);
     }
     return { ok: true, authors: resolved };

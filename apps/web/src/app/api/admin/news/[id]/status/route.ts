@@ -1,6 +1,6 @@
 import { revalidateTag } from "next/cache";
 import { NextResponse } from "next/server";
-import { canManageGame, getAdminAccess } from "@/lib/admin";
+import { canManageGame, canManageMedia, getAdminAccess } from "@/lib/admin";
 import { recordAdminAudit } from "@/lib/audit";
 import { getNewsPost, setNewsPostStatus } from "@/lib/news";
 import { parsePostId } from "@/lib/news-validation";
@@ -29,8 +29,13 @@ export async function POST(
 
   const existing = await getNewsPost(postId);
   if (!existing) return NextResponse.json({ error: "Not found" }, { status: 404 });
-  if (!canManageGame(access, existing.gameSlug)) {
-    return NextResponse.json({ error: "You are not assigned to this game" }, { status: 403 });
+  const canManage = existing.mediaSlug
+    ? canManageMedia(access, existing.mediaSlug)
+    : existing.gameSlug
+      ? canManageGame(access, existing.gameSlug)
+      : false;
+  if (!canManage) {
+    return NextResponse.json({ error: "You are not assigned to this post" }, { status: 403 });
   }
   if (status === "published") {
     const validated = validateNewsContentInput({ ...existing, status });
