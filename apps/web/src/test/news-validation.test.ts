@@ -54,3 +54,45 @@ describe("validateNewsInput — coverPlacement enum", () => {
     expect(result.ok).toBe(false);
   });
 });
+
+describe("validateNewsInput — owner (game vs media channel)", () => {
+  const noOwner = {
+    contentMode: "shared",
+    defaultLocale: "en",
+    status: "draft",
+    translations: { en: { title: "Headline", summary: "", body: "Body" } },
+  };
+
+  test("a game post keeps gameSlug and has no mediaSlug", () => {
+    const result = validateNewsInput({ ...validBase });
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.gameSlug).toBe("valorant");
+      expect(result.value.mediaSlug).toBeNull();
+    }
+  });
+
+  test("a media post sets mediaSlug and may omit the game", () => {
+    const result = validateNewsInput({ ...noOwner, mediaSlug: "echo-mena" });
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.mediaSlug).toBe("echo-mena");
+      expect(result.value.gameSlug).toBeNull();
+    }
+  });
+
+  test("a media post may carry an optional related game", () => {
+    const result = validateNewsInput({ ...noOwner, mediaSlug: "echo-mena", gameSlug: "valorant" });
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.mediaSlug).toBe("echo-mena");
+      expect(result.value.gameSlug).toBe("valorant");
+    }
+  });
+
+  test("no owner at all → error", () => {
+    const result = validateNewsInput({ ...noOwner });
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error).toMatch(/Game is required/);
+  });
+});

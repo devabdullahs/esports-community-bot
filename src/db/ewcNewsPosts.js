@@ -47,7 +47,8 @@ async function hydrate(row, locale) {
   if (!row) return null;
   const post = {
     id: row.id,
-    gameSlug: row.game_slug,
+    gameSlug: row.game_slug || null,
+    mediaSlug: row.media_slug || null,
     contentMode: row.content_mode || 'shared',
     defaultLocale: row.default_locale || row.locale || 'en',
     status: row.status,
@@ -233,40 +234,62 @@ export async function getPublishedEwcNewsPost(id, locale = 'en') {
   return hydrate(await get("SELECT * FROM ewc_news_posts WHERE id = $1 AND status = 'published'", [id]), locale);
 }
 
-export async function listEwcNewsPostsForAdmin({ gameSlug = null, status = null } = {}) {
-  let rows;
-  if (gameSlug && status) {
-    rows = await all('SELECT * FROM ewc_news_posts WHERE game_slug = $1 AND status = $2 ORDER BY updated_at DESC, id DESC', [
-      gameSlug,
-      status,
-    ]);
-  } else if (gameSlug) {
-    rows = await all('SELECT * FROM ewc_news_posts WHERE game_slug = $1 ORDER BY updated_at DESC, id DESC', [gameSlug]);
-  } else if (status) {
-    rows = await all('SELECT * FROM ewc_news_posts WHERE status = $1 ORDER BY updated_at DESC, id DESC', [status]);
-  } else {
-    rows = await all('SELECT * FROM ewc_news_posts ORDER BY updated_at DESC, id DESC');
+// Admin list. Filter by game (game-owned posts only), by media channel (its posts),
+// or neither (all, for supers). game_slug filters exclude media posts so the game
+// admin view stays game-only.
+export async function listEwcNewsPostsForAdmin({ gameSlug = null, mediaSlug = null, status = null } = {}) {
+  const where = [];
+  const params = [];
+  if (gameSlug) {
+    params.push(gameSlug);
+    where.push(`game_slug = $${params.length}`, 'media_slug IS NULL');
   }
+  if (mediaSlug) {
+    params.push(mediaSlug);
+    where.push(`media_slug = $${params.length}`);
+  }
+  if (status) {
+    params.push(status);
+    where.push(`status = $${params.length}`);
+  }
+  const sql = `SELECT * FROM ewc_news_posts${
+    where.length ? ` WHERE ${where.join(' AND ')}` : ''
+  } ORDER BY updated_at DESC, id DESC`;
+  const rows = await all(sql, params);
   return Promise.all(rows.map((row) => hydrate(row)));
 }
 
+// Public game news: only game-owned posts (media posts live on the media page).
 export async function listPublishedEwcNewsPosts({ gameSlug, locale }) {
   const rows = await all(
     `SELECT * FROM ewc_news_posts
-     WHERE game_slug = $1 AND status = 'published'
+     WHERE game_slug = $1 AND media_slug IS NULL AND status = 'published'
      ORDER BY published_at DESC, id DESC`,
     [gameSlug],
   );
   return (await Promise.all(rows.map((row) => hydrate(row, locale)))).filter(Boolean);
 }
 
+// Global/EWC news feeds: game-owned posts only (media posts are media-page-only).
 export async function listLatestPublishedEwcNewsPosts({ locale, limit = 4, ewcOnly = false } = {}) {
   const rows = await all(
     `SELECT * FROM ewc_news_posts
-     WHERE status = 'published'${ewcOnly ? ' AND ewc = 1' : ''}
+     WHERE status = 'published' AND media_slug IS NULL${ewcOnly ? ' AND ewc = 1' : ''}
      ORDER BY published_at DESC, id DESC
      LIMIT $1`,
     [Math.max(1, Math.min(50, Number(limit) || 4))],
+  );
+  return (await Promise.all(rows.map((row) => hydrate(row, locale)))).filter(Boolean);
+}
+
+// Public media-channel posts: published posts owned by one media channel.
+export async function listPublishedMediaPosts({ mediaSlug, locale, limit = 50 } = {}) {
+  const rows = await all(
+    `SELECT * FROM ewc_news_posts
+     WHERE media_slug = $1 AND status = 'published'
+     ORDER BY published_at DESC, id DESC
+     LIMIT $2`,
+    [mediaSlug, Math.max(1, Math.min(100, Number(limit) || 50))],
   );
   return (await Promise.all(rows.map((row) => hydrate(row, locale)))).filter(Boolean);
 }
@@ -281,11 +304,11 @@ export async function createEwcNewsPost(input) {
       `INSERT INTO ewc_news_posts
          (game_slug, locale, content_mode, default_locale, title, summary, body, status,
           author_discord_id, author_name, cover_image_url, cover_placement, ewc,
-          created_at, updated_at, published_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
+          created_at, updated_at, published_at, media_slug)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
        RETURNING id`,
       [
-        value.gameSlug,
+        value.gameSlug || null,
         fallback.locale,
         value.contentMode,
         value.defaultLocale,
@@ -301,6 +324,7 @@ export async function createEwcNewsPost(input) {
         now,
         now,
         value.status === 'published' ? now : null,
+        value.mediaSlug || null,
       ],
     );
     await replaceTranslations(row.id, value.translations, tx);
@@ -325,10 +349,11 @@ export async function updateEwcNewsPost(id, input) {
            author_name = $12,
            updated_at = $13,
            published_at = COALESCE(published_at, $14),
-           ewc = $15
-       WHERE id = $16`,
+           ewc = $15,
+           media_slug = $16
+       WHERE id = $17`,
       [
-        value.gameSlug,
+        value.gameSlug || null,
         fallback.locale,
         value.contentMode,
         value.defaultLocale,
@@ -343,6 +368,7 @@ export async function updateEwcNewsPost(id, input) {
         now,
         value.status === 'published' ? now : null,
         value.ewc ? 1 : 0,
+        value.mediaSlug || null,
         id,
       ],
     );

@@ -15,12 +15,12 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { DateTime } from "@/components/date-time";
 import { localizeText } from "@/lib/community-content";
 import { listGamesCached } from "@/lib/games";
 import { listLatestPublishedNewsPostsCached } from "@/lib/news";
 import {
   copy,
-  formatDateTime,
   localizedPath,
 } from "@/lib/i18n";
 import { getRequestLocale } from "@/lib/request-locale";
@@ -175,7 +175,7 @@ export default async function Home() {
                       <CardHeader>
                         <Badge variant="secondary" className="mb-2 w-fit">
                           <NewspaperIcon data-icon="inline-start" />
-                          {gameTitleOf(post.gameSlug)}
+                          {gameTitleOf(post.gameSlug ?? "")}
                         </Badge>
                         <CardTitle dir="auto">{post.title}</CardTitle>
                         {post.summary ? (
@@ -185,7 +185,7 @@ export default async function Home() {
                         ) : null}
                         {post.publishedAt ? (
                           <p className="mt-1 text-xs text-muted-foreground">
-                            {formatDateTime(post.publishedAt, locale)}
+                            <DateTime value={post.publishedAt} locale={locale} />
                           </p>
                         ) : null}
                       </CardHeader>

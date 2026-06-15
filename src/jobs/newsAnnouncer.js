@@ -1,6 +1,7 @@
 import { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } from 'discord.js';
 import { config } from '../config.js';
 import { getEwcGame } from '../db/ewcGames.js';
+import { getEwcMediaChannel } from '../db/ewcMediaChannels.js';
 import { getEwcNewsPostById } from '../db/ewcNewsPosts.js';
 import { getSettings } from '../db/settings.js';
 import {
@@ -41,7 +42,12 @@ function isSafeHttpUrl(value) {
 function readMoreUrl(post) {
   const publicUrl = config.dashboard.publicUrl;
   if (!publicUrl) return null;
-  const url = `${publicUrl.replace(/\/$/, '')}/games/${post.gameSlug}/news/${post.id}`;
+  const base = publicUrl.replace(/\/$/, '');
+  // Media posts live under the media channel; game posts under the game.
+  const path = post.mediaSlug
+    ? `/media/${post.mediaSlug}/news/${post.id}`
+    : `/games/${post.gameSlug}/news/${post.id}`;
+  const url = `${base}${path}`;
   return isSafeHttpUrl(url) ? url : null;
 }
 
@@ -104,11 +110,20 @@ async function guildDefaultNewsChannel(client) {
   return { guildId: guild.id, channelId: (await getSettings(guild.id)).ewc_news_channel_id || null };
 }
 
-async function resolveChannel(client, gameSlug) {
-  const game = await getEwcGame(gameSlug);
-  const gameChannelId = game?.discordChannelId || null;
+async function resolveChannel(client, { gameSlug, mediaSlug }) {
   const fallback = await guildDefaultNewsChannel(client);
-  const channelId = resolveNewsChannelId({ gameChannelId, guildNewsChannelId: fallback.channelId });
+  let channelId;
+  if (mediaSlug) {
+    // Media posts announce only to their channel's configured Discord channel.
+    const media = await getEwcMediaChannel(mediaSlug);
+    channelId = media?.discordChannelId || null;
+  } else {
+    const game = await getEwcGame(gameSlug);
+    channelId = resolveNewsChannelId({
+      gameChannelId: game?.discordChannelId || null,
+      guildNewsChannelId: fallback.channelId,
+    });
+  }
   if (!channelId) return null;
   const channel = await client.channels.fetch(channelId).catch(() => null);
   if (!channel?.isTextBased?.()) return null;
@@ -118,15 +133,16 @@ async function resolveChannel(client, gameSlug) {
 }
 
 async function postNewPublished(client) {
-  for (const { post_id: postId, game_slug: gameSlug } of await listUnpostedPublishedNewsPosts()) {
+  for (const { post_id: postId, game_slug: gameSlug, media_slug: mediaSlug } of await listUnpostedPublishedNewsPosts()) {
     try {
-      const resolved = await resolveChannel(client, gameSlug);
+      const resolved = await resolveChannel(client, { gameSlug, mediaSlug });
       if (!resolved) {
-        logger.debug(`[news] no channel resolved for post ${postId} (${gameSlug}); skipping`);
+        logger.debug(`[news] no channel resolved for post ${postId} (${mediaSlug || gameSlug}); skipping`);
         continue;
       }
       const post = await getEwcNewsPostById(postId);
       if (!post) continue;
+      // Footer uses the related game when present (media posts may omit it).
       const game = await getEwcGame(gameSlug);
       const sent = await resolved.channel.send(buildNewsPayload(post, game));
       await recordDiscordNewsPost(postId, {

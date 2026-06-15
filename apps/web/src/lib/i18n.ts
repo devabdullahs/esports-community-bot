@@ -34,9 +34,29 @@ export function directionForLocale(locale: Locale) { return locale === "ar" ? "r
 export function numberLocale(locale: Locale) { return locale === "ar" ? "ar-SA" : "en-US"; }
 export function formatNumber(value: number, locale: Locale) { return new Intl.NumberFormat(numberLocale(locale)).format(value); }
 
-export function formatDateTime(value: string, locale: Locale) {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return value;
+export type DateTimeValue = string | number | Date;
+
+const DATE_WITHOUT_ZONE_RE = /^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}(?::\d{2}(?:\.\d{1,6})?)?$/;
+
+export function parseDateTime(value: DateTimeValue) {
+  if (value instanceof Date) return value;
+  if (typeof value === "number") return new Date(value);
+  const trimmed = value.trim();
+  // Database timestamps are stored as UTC text without a timezone suffix.
+  const normalized = DATE_WITHOUT_ZONE_RE.test(trimmed)
+    ? `${trimmed.replace(" ", "T")}Z`
+    : trimmed;
+  return new Date(normalized);
+}
+
+export function dateTimeIso(value: DateTimeValue) {
+  const date = parseDateTime(value);
+  return Number.isNaN(date.getTime()) ? undefined : date.toISOString();
+}
+
+export function formatDateTime(value: DateTimeValue, locale: Locale) {
+  const date = parseDateTime(value);
+  if (Number.isNaN(date.getTime())) return String(value);
   return new Intl.DateTimeFormat(numberLocale(locale), { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }).format(date);
 }
 
@@ -69,9 +89,12 @@ const baseCopy = {
       menu: "Menu",
       games: "Games",
       browse: "Browse",
+      account: "Account",
       news: "News",
       media: "Media",
       tournaments: "Tournaments",
+      discord: "Discord",
+      joinDiscord: "Join Discord",
       predictions: "Predictions",
       admin: "Admin",
       myProfile: "My profile",
@@ -269,6 +292,8 @@ const baseCopy = {
       unpublish: "Unpublish",
       delete: "Delete",
       game: "Game",
+      relatedGame: "Related game",
+      relatedGameNone: "No related game",
       contentMode: "Content language mode",
       shared: "Shared",
       separate: "Separate",
@@ -348,9 +373,12 @@ const baseCopy = {
       menu: "\u0627\u0644\u0642\u0627\u0626\u0645\u0629",
       games: "\u0627\u0644\u0623\u0644\u0639\u0627\u0628",
       browse: "\u062a\u0635\u0641\u0651\u062d",
+      account: "\u0627\u0644\u062d\u0633\u0627\u0628",
       news: "\u0627\u0644\u0623\u062e\u0628\u0627\u0631",
       media: "\u0627\u0644\u0625\u0639\u0644\u0627\u0645",
       tournaments: "\u0627\u0644\u0628\u0637\u0648\u0644\u0627\u062a",
+      discord: "\u062f\u064a\u0633\u0643\u0648\u0631\u062f",
+      joinDiscord: "\u0627\u0646\u0636\u0645 \u0625\u0644\u0649 \u062f\u064a\u0633\u0643\u0648\u0631\u062f",
       predictions: "\u0627\u0644\u062a\u0648\u0642\u0639\u0627\u062a",
       admin: "\u0627\u0644\u0625\u062f\u0627\u0631\u0629",
       myProfile: "\u0645\u0644\u0641\u064a",
@@ -548,6 +576,8 @@ const baseCopy = {
       unpublish: "\u0625\u0644\u063a\u0627\u0621 \u0627\u0644\u0646\u0634\u0631",
       delete: "\u062d\u0630\u0641",
       game: "\u0627\u0644\u0644\u0639\u0628\u0629",
+      relatedGame: "\u0644\u0639\u0628\u0629 \u0630\u0627\u062a \u0635\u0644\u0629",
+      relatedGameNone: "\u0628\u062f\u0648\u0646 \u0644\u0639\u0628\u0629",
       contentMode: "\u0648\u0636\u0639 \u0644\u063a\u0629 \u0627\u0644\u0645\u062d\u062a\u0648\u0649",
       shared: "\u0645\u0634\u062a\u0631\u0643",
       separate: "\u0645\u0646\u0641\u0635\u0644",

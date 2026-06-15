@@ -131,7 +131,7 @@ export default async function GamesPage() {
                   <Card size="sm" className="h-full ring-1 ring-transparent transition-all group-hover:-translate-y-0.5 group-hover:border-primary/30 group-hover:shadow-md group-hover:ring-primary/40">
                     <CardHeader>
                       <Badge variant="secondary" className="mb-2 w-fit">
-                        {gameTitle(post.gameSlug)}
+                        {gameTitle(post.gameSlug ?? "")}
                       </Badge>
                       <CardTitle dir="auto">{post.title}</CardTitle>
                       {post.summary ? (

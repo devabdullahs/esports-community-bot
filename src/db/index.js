@@ -225,7 +225,10 @@ db.exec(`
 
   CREATE TABLE IF NOT EXISTS ewc_news_posts (
     id                INTEGER PRIMARY KEY AUTOINCREMENT,
-    game_slug         TEXT NOT NULL,
+    -- A post is owned by EITHER a game (game_slug) OR a media channel (media_slug).
+    -- game_slug is nullable so media posts can omit it (or use it as an optional tag).
+    game_slug         TEXT,
+    media_slug        TEXT,
     locale            TEXT NOT NULL DEFAULT 'en' CHECK (locale IN ('en','ar')),
     content_mode      TEXT NOT NULL DEFAULT 'shared' CHECK (content_mode IN ('shared','translated')),
     default_locale    TEXT NOT NULL DEFAULT 'en' CHECK (default_locale IN ('en','ar')),
@@ -243,6 +246,8 @@ db.exec(`
 
   CREATE INDEX IF NOT EXISTS idx_ewc_news_posts_game_status
     ON ewc_news_posts(game_slug, status, published_at DESC);
+  CREATE INDEX IF NOT EXISTS idx_ewc_news_posts_media_status
+    ON ewc_news_posts(media_slug, status, published_at DESC);
   CREATE INDEX IF NOT EXISTS idx_ewc_news_posts_status_updated
     ON ewc_news_posts(status, updated_at DESC);
 
@@ -371,6 +376,9 @@ ensureColumns('ewc_news_posts', [
   ['cover_placement', 'TEXT'],
   // Admin-set tag: 1 = part of the Esports World Cup (surfaced on the EWC news page).
   ['ewc', 'INTEGER NOT NULL DEFAULT 0'],
+  // Media-channel ownership: when set, the post belongs to a media channel (game_slug
+  // becomes an optional related-game tag). NULL = a normal game post.
+  ['media_slug', 'TEXT'],
 ]);
 // Per-game Discord news channel (nullable; falls back to the guild-level news channel).
 ensureColumns('ewc_games', [['discord_channel_id', 'TEXT']]);

@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { NewspaperIcon } from "lucide-react";
+import { DateTime } from "@/components/date-time";
 import { PageBreadcrumb } from "@/components/page-breadcrumb";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -10,7 +11,7 @@ import {
 } from "@/components/ui/card";
 import { localizeText } from "@/lib/community-content";
 import { listGamesCached } from "@/lib/games";
-import { copy, formatDateTime, localizedPath, type Locale } from "@/lib/i18n";
+import { copy, localizedPath, type Locale } from "@/lib/i18n";
 import { listLatestPublishedNewsPostsCached } from "@/lib/news";
 import { safeUrlOrUndefined } from "@/lib/safe-url";
 
@@ -93,7 +94,7 @@ export async function NewsHubView({
                   <CardHeader>
                     <div className="mb-2 flex flex-wrap items-center gap-1.5">
                       <Badge variant="secondary" className="w-fit">
-                        {gameTitleOf(post.gameSlug)}
+                        {gameTitleOf(post.gameSlug ?? "")}
                       </Badge>
                       {!ewcOnly && post.ewc ? (
                         <Badge className="w-fit border-primary/35 bg-primary/10 text-primary">
@@ -109,7 +110,7 @@ export async function NewsHubView({
                     ) : null}
                     {post.publishedAt ? (
                       <p className="mt-1 text-xs text-muted-foreground">
-                        {formatDateTime(post.publishedAt, locale)}
+                        <DateTime value={post.publishedAt} locale={locale} />
                       </p>
                     ) : null}
                   </CardHeader>

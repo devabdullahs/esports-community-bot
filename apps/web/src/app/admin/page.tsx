@@ -9,7 +9,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { NewsList } from "@/components/admin/news-list";
-import { getAdminAccess } from "@/lib/admin";
+import { canManageGame, canManageMedia, getAdminAccess } from "@/lib/admin";
 import { listGames } from "@/lib/games";
 import { listAdminNewsPosts } from "@/lib/news";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -28,8 +28,14 @@ export const dynamic = "force-dynamic";
 export default async function AdminPage() {
   const access = await getAdminAccess();
   const allPosts = access.allowed ? await listAdminNewsPosts() : [];
-  const posts =
-    access.games === "ALL" ? allPosts : allPosts.filter((p) => access.games.includes(p.gameSlug));
+  // Show a post if the admin manages its owner (game or media channel).
+  const posts = allPosts.filter((p) =>
+    p.mediaSlug
+      ? canManageMedia(access, p.mediaSlug)
+      : p.gameSlug
+        ? canManageGame(access, p.gameSlug)
+        : false,
+  );
   const games = access.allowed ? await listGames() : [];
 
   return (
