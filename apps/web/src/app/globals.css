@@ -6,14 +6,6 @@
 
 @font-face {
   font-family: "Thmanyah Sans";
-  src: url("https://assets.moonbot.info/thmanyahsans/woff2/thmanyahsans-Light.woff2") format("woff2");
-  font-style: normal;
-  font-weight: 300;
-  font-display: swap;
-}
-
-@font-face {
-  font-family: "Thmanyah Sans";
   src: url("https://assets.moonbot.info/thmanyahsans/woff2/thmanyahsans-Regular.woff2") format("woff2");
   font-style: normal;
   font-weight: 400;
@@ -33,14 +25,6 @@
   src: url("https://assets.moonbot.info/thmanyahsans/woff2/thmanyahsans-Bold.woff2") format("woff2");
   font-style: normal;
   font-weight: 700;
-  font-display: swap;
-}
-
-@font-face {
-  font-family: "Thmanyah Sans";
-  src: url("https://assets.moonbot.info/thmanyahsans/woff2/thmanyahsans-Black.woff2") format("woff2");
-  font-style: normal;
-  font-weight: 900;
   font-display: swap;
 }
 
@@ -239,7 +223,7 @@
   h1 {
     font-size: var(--type-heading-1);
     line-height: 1.145;
-    font-weight: 900;
+    font-weight: 700;
   }
   h2 {
     font-size: var(--type-heading-2);
@@ -312,7 +296,7 @@
   .post-body h2,
   .post-body h3 {
     font-family: var(--font-heading-family);
-    font-weight: 800;
+    font-weight: 700;
     margin-top: 1.6rem;
   }
   .post-body h1 {
