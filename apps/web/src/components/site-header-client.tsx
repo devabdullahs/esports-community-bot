@@ -17,6 +17,7 @@ import {
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useState } from "react";
+import { DiscordIcon } from "@/components/discord-icon";
 import { ModeToggle } from "@/components/mode-toggle";
 import { SignOutButton } from "@/components/dashboard/sign-out-button";
 import { Button } from "@/components/ui/button";
@@ -32,10 +33,13 @@ import {
   Sheet,
   SheetClose,
   SheetContent,
+  SheetDescription,
   SheetHeader,
   SheetTitle,
   SheetTrigger,
 } from "@/components/ui/sheet";
+import { Separator } from "@/components/ui/separator";
+import { DISCORD_INVITE_URL } from "@/lib/community-links";
 import { isActivePath } from "@/lib/nav";
 import {
   LOCALE_COOKIE_MAX_AGE,
@@ -46,6 +50,33 @@ import {
 } from "@/lib/i18n";
 
 type Destination = { href: string; label: string; icon: LucideIcon };
+
+function MobileNavLink({
+  destination,
+  locale,
+  active,
+}: {
+  destination: Destination;
+  locale: Locale;
+  active: boolean;
+}) {
+  const { href, label, icon: Icon } = destination;
+
+  return (
+    <SheetClose
+      render={
+        <Link
+          href={localizedPath(href, locale)}
+          aria-current={active ? "page" : undefined}
+        />
+      }
+      className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium outline-none transition-colors hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring aria-[current=page]:bg-muted aria-[current=page]:text-foreground"
+    >
+      <Icon className="size-4 text-muted-foreground" />
+      <span className="min-w-0 truncate">{label}</span>
+    </SheetClose>
+  );
+}
 
 export function SiteHeaderClient({
   hasSession,
@@ -170,6 +201,23 @@ export function SiteHeaderClient({
 
         <nav className="ms-auto flex shrink-0 items-center gap-1 sm:gap-2">
           {/* Desktop-only right cluster links. */}
+          <Button
+            render={
+              <a
+                href={DISCORD_INVITE_URL}
+                target="_blank"
+                rel="noopener noreferrer"
+              />
+            }
+            nativeButton={false}
+            variant="outline"
+            size="sm"
+            className="hidden gap-1.5 px-2.5 md:inline-flex"
+            aria-label={text.common.joinDiscord}
+          >
+            <DiscordIcon data-icon="inline-start" />
+            <span>{text.common.discord}</span>
+          </Button>
           {isAdmin ? (
             <Button
               render={<Link href={localizedPath("/admin", locale)} />}
@@ -231,51 +279,58 @@ export function SiteHeaderClient({
             >
               <MenuIcon />
             </SheetTrigger>
-            <SheetContent side={sheetSide} className="w-72 gap-0">
+            <SheetContent
+              side={sheetSide}
+              className="w-80 max-w-[calc(100vw-2rem)] gap-0 overflow-y-auto"
+            >
               <SheetHeader className="border-b">
                 <SheetTitle>{text.common.brand}</SheetTitle>
+                <SheetDescription>{text.footer.note}</SheetDescription>
               </SheetHeader>
-              <nav className="flex flex-col gap-1 p-3">
-                {primary.map(({ href, label, icon: Icon }) => {
-                  const active = linkActive(href);
-                  return (
-                    <SheetClose
-                      key={href}
-                      render={
-                        <Link
-                          href={localizedPath(href, locale)}
-                          aria-current={active ? "page" : undefined}
-                        />
-                      }
-                      className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium outline-none transition-colors hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring aria-[current=page]:bg-muted aria-[current=page]:text-foreground"
-                    >
-                      <Icon className="size-4 text-muted-foreground" />
-                      {label}
-                    </SheetClose>
-                  );
-                })}
+              <Button
+                render={
+                  <a
+                    href={DISCORD_INVITE_URL}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    onClick={() => setMobileOpen(false)}
+                  />
+                }
+                nativeButton={false}
+                variant="outline"
+                className="m-3 mb-2 justify-start"
+                aria-label={text.common.joinDiscord}
+              >
+                <DiscordIcon data-icon="inline-start" />
+                {text.common.joinDiscord}
+              </Button>
+              <nav className="flex flex-col gap-1 px-3 pb-3">
+                <p className="px-3 pb-1 pt-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  {text.common.browse}
+                </p>
+                {primary.map((destination) => (
+                  <MobileNavLink
+                    key={destination.href}
+                    destination={destination}
+                    locale={locale}
+                    active={linkActive(destination.href)}
+                  />
+                ))}
                 <p className="px-3 pb-1 pt-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                   {text.common.ewc}
                 </p>
-                {ewcLinks.map(({ href, label, icon: Icon }) => {
-                  const active = linkActive(href);
-                  return (
-                    <SheetClose
-                      key={href}
-                      render={
-                        <Link
-                          href={localizedPath(href, locale)}
-                          aria-current={active ? "page" : undefined}
-                        />
-                      }
-                      className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium outline-none transition-colors hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring aria-[current=page]:bg-muted aria-[current=page]:text-foreground"
-                    >
-                      <Icon className="size-4 text-muted-foreground" />
-                      {label}
-                    </SheetClose>
-                  );
-                })}
-                <div className="my-1 border-t" />
+                {ewcLinks.map((destination) => (
+                  <MobileNavLink
+                    key={destination.href}
+                    destination={destination}
+                    locale={locale}
+                    active={linkActive(destination.href)}
+                  />
+                ))}
+                <Separator className="my-2" />
+                <p className="px-3 pb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  {text.common.account}
+                </p>
                 {isAdmin ? (
                   <SheetClose
                     render={
@@ -291,7 +346,7 @@ export function SiteHeaderClient({
                     className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium outline-none transition-colors hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring aria-[current=page]:bg-muted aria-[current=page]:text-foreground"
                   >
                     <ShieldCheckIcon className="size-4 text-muted-foreground" />
-                    {text.common.admin}
+                    <span className="min-w-0 truncate">{text.common.admin}</span>
                   </SheetClose>
                 ) : null}
                 <SheetClose
@@ -308,7 +363,7 @@ export function SiteHeaderClient({
                   className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium outline-none transition-colors hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring aria-[current=page]:bg-muted aria-[current=page]:text-foreground"
                 >
                   <UserRoundIcon className="size-4 text-muted-foreground" />
-                  {text.common.myProfile}
+                  <span className="min-w-0 truncate">{text.common.myProfile}</span>
                 </SheetClose>
                 {hasSession ? (
                   <SignOutButton

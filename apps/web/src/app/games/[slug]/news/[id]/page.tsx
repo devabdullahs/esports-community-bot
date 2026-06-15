@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowLeftIcon } from "lucide-react";
+import { DateTime } from "@/components/date-time";
 import { AuthorAvatar } from "@/components/news/author-avatar";
 import { PostBody } from "@/components/news/post-body";
 import { PageBreadcrumb } from "@/components/page-breadcrumb";
@@ -10,7 +11,6 @@ import { localizeText } from "@/lib/community-content";
 import { getGameCached } from "@/lib/games";
 import {
   copy,
-  formatDateTime,
   localizedPath,
 } from "@/lib/i18n";
 import { getPublishedNewsPostCached } from "@/lib/news";
@@ -168,7 +168,7 @@ export default async function NewsPostPage({
               {(post.authors.length || post.authorName) && post.publishedAt ? (
                 <span aria-hidden>·</span>
               ) : null}
-              {post.publishedAt ? <span>{formatDateTime(post.publishedAt, locale)}</span> : null}
+              {post.publishedAt ? <DateTime value={post.publishedAt} locale={locale} /> : null}
             </div>
           ) : null}
           {post.summary ? (

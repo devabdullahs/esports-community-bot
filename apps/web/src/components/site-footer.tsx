@@ -1,5 +1,8 @@
 import Link from "next/link";
 import { TrophyIcon } from "lucide-react";
+import { DiscordIcon } from "@/components/discord-icon";
+import { Button } from "@/components/ui/button";
+import { DISCORD_INVITE_URL } from "@/lib/community-links";
 import { copy, localizedPath } from "@/lib/i18n";
 import { getRequestLocale } from "@/lib/request-locale";
 
@@ -27,6 +30,22 @@ export async function SiteFooter() {
             <div className="flex flex-col gap-1">
               <p className="text-sm font-semibold text-foreground">{text.common.brand}</p>
               <p className="max-w-xs text-sm text-muted-foreground">{text.footer.note}</p>
+              <Button
+                render={
+                  <a
+                    href={DISCORD_INVITE_URL}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  />
+                }
+                nativeButton={false}
+                variant="outline"
+                size="sm"
+                className="mt-2 w-fit"
+              >
+                <DiscordIcon data-icon="inline-start" />
+                {text.common.joinDiscord}
+              </Button>
             </div>
           </div>
           <nav className="flex flex-wrap gap-x-6 gap-y-2">

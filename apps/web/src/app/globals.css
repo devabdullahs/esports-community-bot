@@ -44,92 +44,30 @@
   font-display: swap;
 }
 
-@font-face {
-  font-family: "Thmanyah Serif Display";
-  src: url("https://assets.moonbot.info/thmanyahserifdisplay/woff2/thmanyahserifdisplay-Light.woff2") format("woff2");
-  font-style: normal;
-  font-weight: 300;
-  font-display: swap;
-}
-
-@font-face {
-  font-family: "Thmanyah Serif Display";
-  src: url("https://assets.moonbot.info/thmanyahserifdisplay/woff2/thmanyahserifdisplay-Regular.woff2") format("woff2");
-  font-style: normal;
-  font-weight: 400;
-  font-display: swap;
-}
-
-@font-face {
-  font-family: "Thmanyah Serif Display";
-  src: url("https://assets.moonbot.info/thmanyahserifdisplay/woff2/thmanyahserifdisplay-Medium.woff2") format("woff2");
-  font-style: normal;
-  font-weight: 500;
-  font-display: swap;
-}
-
-@font-face {
-  font-family: "Thmanyah Serif Display";
-  src: url("https://assets.moonbot.info/thmanyahserifdisplay/woff2/thmanyahserifdisplay-Bold.woff2") format("woff2");
-  font-style: normal;
-  font-weight: 700;
-  font-display: swap;
-}
-
-@font-face {
-  font-family: "Thmanyah Serif Display";
-  src: url("https://assets.moonbot.info/thmanyahserifdisplay/woff2/thmanyahserifdisplay-Black.woff2") format("woff2");
-  font-style: normal;
-  font-weight: 900;
-  font-display: swap;
-}
-
-@font-face {
-  font-family: "Thmanyah Serif Text";
-  src: url("https://assets.moonbot.info/thmanyahseriftext/woff2/thmanyahseriftext-Light.woff2") format("woff2");
-  font-style: normal;
-  font-weight: 300;
-  font-display: swap;
-}
-
-@font-face {
-  font-family: "Thmanyah Serif Text";
-  src: url("https://assets.moonbot.info/thmanyahseriftext/woff2/thmanyahseriftext-Regular.woff2") format("woff2");
-  font-style: normal;
-  font-weight: 400;
-  font-display: swap;
-}
-
-@font-face {
-  font-family: "Thmanyah Serif Text";
-  src: url("https://assets.moonbot.info/thmanyahseriftext/woff2/thmanyahseriftext-Medium.woff2") format("woff2");
-  font-style: normal;
-  font-weight: 500;
-  font-display: swap;
-}
-
-@font-face {
-  font-family: "Thmanyah Serif Text";
-  src: url("https://assets.moonbot.info/thmanyahseriftext/woff2/thmanyahseriftext-Bold.woff2") format("woff2");
-  font-style: normal;
-  font-weight: 700;
-  font-display: swap;
-}
-
-@font-face {
-  font-family: "Thmanyah Serif Text";
-  src: url("https://assets.moonbot.info/thmanyahseriftext/woff2/thmanyahseriftext-Black.woff2") format("woff2");
-  font-style: normal;
-  font-weight: 900;
-  font-display: swap;
-}
-
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --font-sans: var(--font-system-sans);
   --font-mono: var(--font-system-mono);
   --font-heading: var(--font-heading-family);
+  --text-xs: 0.75rem;
+  --text-xs--line-height: 1rem;
+  --text-sm: 0.875rem;
+  --text-sm--line-height: 1.375rem;
+  --text-base: var(--type-body);
+  --text-base--line-height: 1.625rem;
+  --text-lg: 1.125rem;
+  --text-lg--line-height: 1.8125rem;
+  --text-xl: var(--type-step-1);
+  --text-xl--line-height: 2rem;
+  --text-2xl: var(--type-heading-2);
+  --text-2xl--line-height: 2.3125rem;
+  --text-3xl: var(--type-step-3);
+  --text-3xl--line-height: 2.5rem;
+  --text-4xl: var(--type-heading-1);
+  --text-4xl--line-height: 3rem;
+  --text-5xl: var(--type-display);
+  --text-5xl--line-height: 3.75rem;
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -170,12 +108,19 @@
 
 :root {
   --font-system-sans: "Thmanyah Sans", system-ui, "Segoe UI", Tahoma, sans-serif;
-  --font-heading-family: "Thmanyah Serif Display", "Thmanyah Sans", system-ui,
-    "Segoe UI", Tahoma, sans-serif;
-  --font-article-family: "Thmanyah Serif Text", "Thmanyah Sans", system-ui,
-    "Segoe UI", Tahoma, sans-serif;
-  --font-system-mono: "SFMono-Regular", Consolas, "Liberation Mono", Menlo,
-    monospace;
+  --font-heading-family: var(--font-system-sans);
+  --font-article-family: var(--font-system-sans);
+  --font-system-mono: var(--font-system-sans);
+  --type-ratio: 1.61803398875;
+  --type-body: 1rem;
+  --type-list: 0.875rem;
+  --type-callout: 0.875rem;
+  --type-step-1: 1.272rem;
+  --type-heading-2: calc(var(--type-body) * var(--type-ratio));
+  --type-step-3: 2rem;
+  --type-heading-1: calc(var(--type-heading-2) * var(--type-ratio));
+  --type-display: calc(var(--type-body) * var(--type-ratio) * 2);
+  --type-leading: 1.625;
   --background: oklch(0.99 0.003 258);
   --foreground: oklch(0.22 0.02 262);
   --card: oklch(1 0 0);
@@ -254,6 +199,8 @@
   }
   body {
     @apply bg-background text-foreground;
+    font-size: var(--type-body);
+    line-height: var(--type-leading);
     overflow-x: hidden;
     text-rendering: optimizeLegibility;
     -webkit-font-smoothing: antialiased;
@@ -287,6 +234,27 @@
   h3,
   h4 {
     font-family: var(--font-heading-family);
+    letter-spacing: 0;
+  }
+  h1 {
+    font-size: var(--type-heading-1);
+    line-height: 1.145;
+    font-weight: 900;
+  }
+  h2 {
+    font-size: var(--type-heading-2);
+    line-height: 1.28;
+    font-weight: 700;
+  }
+  h3 {
+    font-size: var(--type-step-1);
+    line-height: 1.35;
+    font-weight: 700;
+  }
+  h4 {
+    font-size: var(--type-body);
+    line-height: 1.45;
+    font-weight: 700;
   }
   h1,
   h2,
@@ -308,6 +276,8 @@
   }
   .article-copy {
     font-family: var(--font-article-family);
+    font-size: var(--type-body);
+    line-height: var(--type-leading);
   }
   textarea.article-copy {
     font-family: var(--font-article-family);
@@ -332,7 +302,8 @@
   }
   /* Rendered markdown (shared by the admin preview and the public post pages). */
   .post-body {
-    line-height: 1.75;
+    font-size: var(--type-body);
+    line-height: var(--type-leading);
   }
   .post-body > * + * {
     margin-top: 0.9rem;
@@ -341,21 +312,25 @@
   .post-body h2,
   .post-body h3 {
     font-family: var(--font-heading-family);
-    font-weight: 600;
-    line-height: 1.25;
+    font-weight: 800;
     margin-top: 1.6rem;
   }
   .post-body h1 {
-    font-size: 1.6rem;
+    font-size: var(--type-heading-1);
+    line-height: 1.145;
   }
   .post-body h2 {
-    font-size: 1.35rem;
+    font-size: var(--type-heading-2);
+    line-height: 1.28;
   }
   .post-body h3 {
-    font-size: 1.15rem;
+    font-size: var(--type-step-1);
+    line-height: 1.35;
   }
   .post-body ul,
   .post-body ol {
+    font-size: var(--type-list);
+    line-height: 1.55;
     padding-inline-start: 1.5rem;
   }
   .post-body ul {
@@ -379,7 +354,8 @@
     border-inline-start: 3px solid var(--primary);
     padding-inline-start: 1rem;
     color: var(--muted-foreground);
-    font-style: italic;
+    font-size: var(--type-callout);
+    font-weight: 700;
   }
   .post-body img {
     border-radius: var(--radius);

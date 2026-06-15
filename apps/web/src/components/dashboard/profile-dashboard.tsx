@@ -17,6 +17,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { LocalDateTime } from "@/components/local-date-time";
 import {
   Card,
   CardAction,
@@ -30,7 +31,6 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   copy,
-  formatDateTime,
   formatNumber,
   localizedPath,
   type Locale,
@@ -256,7 +256,7 @@ export function ProfileDashboard({
                   <Badge variant="secondary">{text.top3Sweep(stats.top3Sweeps)}</Badge>
                   {data.link?.lastSyncedAt ? (
                     <Badge variant="outline" title={data.link.lastSyncedAt}>
-                      {text.synced} {formatDateTime(data.link.lastSyncedAt, locale)}
+                      {text.synced} <LocalDateTime value={data.link.lastSyncedAt} locale={locale} />
                     </Badge>
                   ) : null}
                 </CardContent>
