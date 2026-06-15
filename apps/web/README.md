@@ -1,113 +1,209 @@
-# Community Dashboard (`apps/web`)
+# Esports Community Web Dashboard
 
-Next.js App Router community hub — bilingual (EN/AR with full RTL): public game
-pages, news, a media directory, EWC prediction leaderboards, member profiles
-with Discord showcase sync, and a role-gated `/admin` CMS (news, games, media,
-team roster, audit log).
+Next.js App Router dashboard for the Esports Community server. It is the public
+site and staff CMS that sits beside the Discord bot.
+
+The dashboard supports English and Arabic, including RTL layout for Arabic pages.
+It shares the same database layer as the bot and can run against SQLite locally
+or PostgreSQL in production.
+
+## Features
+
+- Public landing page for the community
+- Game pages with tournaments, live matches, upcoming matches, and recent results
+- News pages with bilingual content
+- Media directory
+- EWC prediction leaderboard and profile pages
+- Discord login through Better Auth
+- Discord Application Role Connection metadata sync
+- Admin CMS for games, media, news, and staff scopes
+- Audit log for staff actions
+- Cloudflare R2 uploads for news cover images
+
+## Local Development
+
+Install dependencies from the repository root:
 
 ```bash
-npm run web:auth:migrate
+npm install
+```
+
+Use a disposable SQLite database for local preview:
+
+```bash
+DB_PATH="./data/dev-dashboard.sqlite" npm run seed:dev
 npm run web:dev
 ```
 
-The app shares `DB_PATH` with the Discord bot and exposes internal sync endpoints protected by
-`EWC_DASHBOARD_INTERNAL_SECRET`.
+The seed command creates sample games, news posts, media entries, prediction
+leaderboard rows, and a local dev user.
 
-## Sample data
+For local auth-free preview, set:
 
-To browse the dashboard locally with realistic content (games, bilingual news, prediction
-leaderboard, and a pre-linked dev user):
+```env
+EWC_DASHBOARD_DEV_AUTH_BYPASS=true
+EWC_DASHBOARD_DEV_DISCORD_USER_ID=100000000000000001
+```
 
-1. Set `DB_PATH` in `apps/web/.env.local` to a **disposable** SQLite file, e.g.:
-   ```
-   DB_PATH=./data/dev-dashboard.sqlite
-   ```
-2. Run the seed script with the same path:
-   ```bash
-   DB_PATH="./data/dev-dashboard.sqlite" npm run seed:dev
-   ```
-3. Start the dev server (`npm run web:dev`). Games, news, leaderboard, and `/me`
-   all render with sample content — the dev-bypass user (`EWC_DASHBOARD_DEV_AUTH_BYPASS`)
-   is pre-linked to the seeded guild and season.
+Do not enable the auth bypass on any network-reachable deployment.
 
-## Admin roster
+## Database
 
-Set `EWC_DASHBOARD_SUPER_ADMIN_DISCORD_IDS` to a comma-separated list of Discord user IDs
-that should have full admin access. Sign in with Discord at `/login`, then visit `/admin` to
-manage news and media content. Super admins can add and configure scoped staff (per-game and
-per-media-channel access) at `/admin/team`.
+The web app imports the shared bot database modules through workspace aliases.
 
-The legacy variable `EWC_DASHBOARD_ADMIN_DISCORD_IDS` is still honored and grants the same
-super-admin level — prefer `EWC_DASHBOARD_SUPER_ADMIN_DISCORD_IDS` for new deployments.
+Development options:
 
-## Image uploads (Cloudflare R2)
+- SQLite: set `DB_PATH`.
+- PostgreSQL: set `DATABASE_URL` and `DB_DRIVER=postgres`.
 
-Cover images for news posts are uploaded to Cloudflare R2 (S3-compatible object storage).
-R2 is optional — skip this section if you want admins to paste image URLs instead.
+Production on CranL uses PostgreSQL:
 
-1. Create an R2 bucket in the [Cloudflare dashboard](https://dash.cloudflare.com/).
-2. Enable public access on the bucket (or connect a custom domain).
-3. Create an R2 API token scoped to that bucket with **Object Read & Write** permissions.
-4. Set the following env vars:
+```env
+DB_DRIVER=postgres
+DATABASE_URL=postgresql://...
+PGSSLMODE=disable
+```
 
-   ```
-   R2_ACCOUNT_ID=<your-cloudflare-account-id>
-   R2_ACCESS_KEY_ID=<r2-token-access-key-id>
-   R2_SECRET_ACCESS_KEY=<r2-token-secret-access-key>
-   R2_BUCKET=<bucket-name>
-   R2_PUBLIC_BASE_URL=https://<your-bucket-public-domain>
-   ```
+Use `PGSSLMODE=require` only for endpoints that support SSL.
 
-5. `R2_PUBLIC_BASE_URL` should be the bucket's public or custom domain (no trailing slash).
+## Authentication
 
-Allowed upload formats: PNG, JPEG, WebP, GIF, AVIF (SVG is excluded — it can carry scripts).
-Maximum file size: 8 MB. Uploads are stored under `news/YYYY-MM-DD/<uuid>.<ext>`. Until all
-five vars are set, the upload endpoint returns 503 and admins can paste image URLs instead.
+Better Auth handles Discord OAuth sessions. Required production variables:
 
-## Security & data handling
+```env
+BETTER_AUTH_SECRET=
+BETTER_AUTH_URL=https://esportscommunity.net
+DISCORD_CLIENT_ID=
+DISCORD_CLIENT_SECRET=
+```
 
-### Storage
+Discord Developer Portal settings:
 
-All persistent state lives in a single SQLite file at `DB_PATH` (production default `/app/data/bot.sqlite`, bind-mounted from the NAS volume via `compose.ugreen.yml`). The database contains:
+- OAuth redirect URL: `https://esportscommunity.net/api/auth/callback/discord`
+- Linked Roles Verification URL: `https://esportscommunity.net/me`
 
-- **better-auth tables** — `user` (includes email address), `session` (includes IP address and user-agent), `account` (Discord OAuth access/refresh tokens encrypted at rest; `encryptOAuthTokens: true` is set in `src/lib/auth.ts`).
-- **`ewc_profile_links`** — maps better-auth user IDs to Discord user IDs for the prediction profile sync.
-- **Admin scope tables** — managed via `@bot/db/ewcAdmins.js`; store per-Discord-ID game and media-channel assignments.
+The bot calls internal dashboard routes with:
 
-News upload media is stored in Cloudflare R2-compatible object storage. The upload route writes objects under a `news/` key prefix. Required credentials: `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET`, `R2_PUBLIC_BASE_URL`. Until these are set the upload endpoint returns a 503 and admins can paste image URLs instead.
+```env
+EWC_DASHBOARD_INTERNAL_URL=
+EWC_DASHBOARD_INTERNAL_SECRET=
+```
 
-### Trust boundaries
+Internal routes fail closed if the secret is missing or wrong.
 
-| Surface | Auth mechanism | Failure |
-|---|---|---|
-| Public routes (`/`, `/leaderboard/*`, etc.) | None required | — |
-| `/api/me/*` | better-auth session cookie | 401 |
-| `/api/internal/*` (bot sync) | `x-ewc-internal-secret` header matched against `EWC_DASHBOARD_INTERNAL_SECRET`; fail-closed (missing secret rejects all callers) | 401 |
-| `/api/admin/*` | Per-route `getAdminAccess()` check | 401 no session / 403 not allowed |
-| `/admin` pages | Layout guard in `src/app/admin/layout.tsx` | anonymous → redirect `/login`; authenticated non-staff → 404 (does not advertise the admin area) |
+## Admin Access
 
-**Super admins** are declared in `EWC_DASHBOARD_SUPER_ADMIN_DISCORD_IDS` (comma-separated Discord user IDs). The legacy variable `EWC_DASHBOARD_ADMIN_DISCORD_IDS` is also accepted and grants the same super-admin level for back-compat. **Scoped admins** are managed in-app and stored in the database via `@bot/db/ewcAdmins.js`.
+Super admins are configured with:
 
-> **Warning:** The local development auth bypass (`EWC_DASHBOARD_DEV_AUTH_BYPASS`) acts as a super admin. It is disabled in production builds via a `NODE_ENV` gate in `src/lib/dev-auth.ts`. Never set `EWC_DASHBOARD_DEV_AUTH_BYPASS` on any host reachable over a network.
+```env
+EWC_DASHBOARD_SUPER_ADMIN_DISCORD_IDS=123,456
+```
 
-### Operational
+The legacy `EWC_DASHBOARD_ADMIN_DISCORD_IDS` variable is still accepted and
+grants the same super-admin level. Scoped admins are managed in the dashboard and
+stored in the database.
 
-- **HTTPS required in production.** Session cookies are set with `useSecureCookies: true` when `NODE_ENV === "production"` (see `src/lib/auth.ts`). Run behind a TLS-terminating reverse proxy.
-- **Keep `.env` and `.env.docker` out of off-NAS backups** — they contain `BETTER_AUTH_SECRET` and Discord OAuth credentials.
-- **Secret generation:** `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"`
-- **Rotating `BETTER_AUTH_SECRET`** invalidates all active sessions and all stored encrypted OAuth tokens simultaneously. Plan for users needing to re-authenticate.
+Admin areas:
 
-### Content Security Policy
+- `/admin` - CMS overview
+- `/admin/news` - news posts
+- `/admin/games` - game records
+- `/admin/media` - media directory
+- `/admin/team` - staff scopes
+- `/admin/audit` - audit log
 
-A `Content-Security-Policy` header is enforced in **production only** (`NODE_ENV=production`). It is intentionally absent in dev mode so that Next.js HMR (WebSockets, eval) continues to work.
+Authenticated users without admin access receive a hidden/not-found style
+response for admin pages.
 
-Key directives and rationale:
+## R2 Uploads
 
-- **`img-src 'self' data: blob: https:`** — news cover images are admin-pasted `https://` URLs (validated by `safe-url.ts`); a blanket `https:` is deliberate and required here.
-- **`font-src 'self' https://assets.moonbot.info [r2Host]`** — the Thmanyah font families are loaded via `@font-face` from `assets.moonbot.info`. If `R2_PUBLIC_BASE_URL` is set, its origin is derived at build/start time and appended automatically. **Changing `R2_PUBLIC_BASE_URL` requires a container restart** for the new origin to take effect in the header.
-- **`script-src 'self' 'unsafe-inline'`** — Next.js App Router emits inline hydration scripts. Tightening this to a nonce-based policy requires middleware plumbing and is tracked as the next hardening step (deferred follow-up).
-- **`frame-ancestors 'none'`** — supersedes `X-Frame-Options: DENY` for supporting browsers.
+Cloudflare R2 is optional. When configured, admins can upload news cover images.
 
-### Non-goals
+```env
+R2_ACCOUNT_ID=
+R2_ACCESS_KEY_ID=
+R2_SECRET_ACCESS_KEY=
+R2_BUCKET=
+R2_PUBLIC_BASE_URL=https://assets.esportscommunity.net
+```
 
-- **No disk-level database encryption.** The NAS volume is the physical trust boundary; whole-disk or file-level encryption at rest is out of scope for this project.
+Allowed formats:
+
+- PNG
+- JPEG
+- WebP
+- GIF
+- AVIF
+
+SVG uploads are intentionally blocked because SVG can carry scripts. Maximum
+upload size is 8 MB.
+
+## Fonts
+
+The site uses only Thmanyah Sans:
+
+- Regular
+- Medium
+- Bold
+
+The font base URL is controlled by:
+
+```env
+THMANYAH_FONT_BASE_URL=https://assets.moonbot.info
+```
+
+The app expects the font files under:
+
+```text
+thmanyahsans/woff2/
+```
+
+Do not use the Thmanyah display or serif font families in this dashboard.
+
+## Security Headers
+
+Production responses include a Content Security Policy. The policy allows:
+
+- Same-origin application scripts and styles
+- Cloudflare Insights if it is injected by Cloudflare
+- HTTPS images for admin-provided media
+- The configured R2 asset origin
+- The configured Thmanyah font origin
+
+Development mode does not use the production CSP so Next.js hot reload can work.
+
+Private and dynamic routes should not be cached at the edge:
+
+- `/api/*`
+- `/admin*`
+- `/login*`
+- `/me*`
+
+Static Next.js assets and icons can be cached aggressively through Cloudflare.
+
+## Public Data Behavior
+
+The dashboard reads from the bot database. Live pages update when the server data
+changes and the page is refreshed or revalidated by Next.js. Client-side local
+time formatting is used where user timezone matters.
+
+## Commands
+
+Run from the repository root:
+
+```bash
+npm run web:dev
+npm run web:build
+npm run web:start
+npm --workspace @esports-community-bot/web run lint
+npm --workspace @esports-community-bot/web run test
+```
+
+## Notes
+
+- Keep `.env`, `.env.local`, and `.env.docker` out of git.
+- Rotating `BETTER_AUTH_SECRET` invalidates active sessions and encrypted OAuth
+  token data.
+- Use HTTPS in production so secure cookies work correctly.
+- Restart the web service after changing CSP-related origins such as
+  `R2_PUBLIC_BASE_URL` or `THMANYAH_FONT_BASE_URL`.
