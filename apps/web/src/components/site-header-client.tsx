@@ -1,9 +1,11 @@
 "use client";
 
 import {
+  ChevronDownIcon,
   CrownIcon,
   Gamepad2Icon,
   LanguagesIcon,
+  LogOutIcon,
   type LucideIcon,
   MedalIcon,
   MenuIcon,
@@ -20,7 +22,15 @@ import { useState } from "react";
 import { DiscordIcon } from "@/components/discord-icon";
 import { ModeToggle } from "@/components/mode-toggle";
 import { SignOutButton } from "@/components/dashboard/sign-out-button";
+import { signOut } from "@/lib/auth-client";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import {
   NavigationMenu,
   NavigationMenuContent,
@@ -90,8 +100,19 @@ export function SiteHeaderClient({
   const router = useRouter();
   const pathname = usePathname();
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [signingOut, setSigningOut] = useState(false);
   const text = copy[locale];
   const nextLocale = locale === "ar" ? "en" : "ar";
+
+  async function handleSignOut() {
+    setSigningOut(true);
+    try {
+      await signOut();
+    } finally {
+      router.push(localizedPath("/", locale));
+      router.refresh();
+    }
+  }
 
   // General destinations stay as top-level links; the EWC-specific pages (news,
   // tournaments, predictions, leaderboard) group under one "EWC" menu.
@@ -200,59 +221,62 @@ export function SiteHeaderClient({
         </NavigationMenu>
 
         <nav className="ms-auto flex shrink-0 items-center gap-1 sm:gap-2">
-          {/* Desktop-only right cluster links. */}
-          <Button
-            render={
-              <a
-                href={DISCORD_INVITE_URL}
-                target="_blank"
-                rel="noopener noreferrer"
-              />
-            }
-            nativeButton={false}
-            variant="outline"
-            size="sm"
-            className="hidden gap-1.5 px-2.5 md:inline-flex"
-            aria-label={text.common.joinDiscord}
-          >
-            <DiscordIcon data-icon="inline-start" />
-            <span>{text.common.discord}</span>
-          </Button>
-          {isAdmin ? (
-            <Button
-              render={<Link href={localizedPath("/admin", locale)} />}
-              nativeButton={false}
-              variant="ghost"
-              size="sm"
-              data-active={isActivePath(pathname, localizedPath("/admin", locale)) || undefined}
-              aria-current={isActivePath(pathname, localizedPath("/admin", locale)) ? "page" : undefined}
-              className="hidden gap-1.5 px-2.5 aria-[current=page]:bg-muted md:inline-flex"
-              aria-label={text.common.admin}
+          {/* Desktop account menu: Discord, Admin, profile, and sign out under one trigger. */}
+          <DropdownMenu>
+            <DropdownMenuTrigger
+              render={
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="hidden gap-1.5 px-2.5 md:inline-flex"
+                  aria-label={text.common.account}
+                />
+              }
             >
-              <ShieldCheckIcon />
-              <span>{text.common.admin}</span>
-            </Button>
-          ) : null}
-          <Button
-            render={<Link href={localizedPath("/me", locale)} />}
-            nativeButton={false}
-            variant="outline"
-            size="sm"
-            data-active={isActivePath(pathname, localizedPath("/me", locale)) || undefined}
-            aria-current={isActivePath(pathname, localizedPath("/me", locale)) ? "page" : undefined}
-            className="hidden gap-1.5 px-2.5 md:inline-flex"
-            aria-label={text.common.myProfile}
-          >
-            <UserRoundIcon />
-            <span>{text.common.myProfile}</span>
-          </Button>
-          {hasSession ? (
-            <SignOutButton
-              label={text.common.signOut}
-              redirectTo={localizedPath("/", locale)}
-              className="hidden gap-1.5 px-2.5 md:inline-flex"
-            />
-          ) : null}
+              <UserRoundIcon />
+              <span>{text.common.account}</span>
+              <ChevronDownIcon className="size-3.5 text-muted-foreground" />
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-52">
+              <DropdownMenuItem
+                render={<Link href={localizedPath("/me", locale)} />}
+                data-active={isActivePath(pathname, localizedPath("/me", locale)) || undefined}
+              >
+                <UserRoundIcon />
+                {text.common.myProfile}
+              </DropdownMenuItem>
+              {isAdmin ? (
+                <DropdownMenuItem
+                  render={<Link href={localizedPath("/admin", locale)} />}
+                  data-active={isActivePath(pathname, localizedPath("/admin", locale)) || undefined}
+                >
+                  <ShieldCheckIcon />
+                  {text.common.admin}
+                </DropdownMenuItem>
+              ) : null}
+              <DropdownMenuItem
+                render={
+                  <a href={DISCORD_INVITE_URL} target="_blank" rel="noopener noreferrer" />
+                }
+              >
+                <DiscordIcon />
+                {text.common.discord}
+              </DropdownMenuItem>
+              {hasSession ? (
+                <>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem
+                    variant="destructive"
+                    onClick={handleSignOut}
+                    disabled={signingOut}
+                  >
+                    <LogOutIcon />
+                    {text.common.signOut}
+                  </DropdownMenuItem>
+                </>
+              ) : null}
+            </DropdownMenuContent>
+          </DropdownMenu>
           <Button
             variant="ghost"
             size="sm"
