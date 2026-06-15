@@ -12,6 +12,13 @@ import {
   touchDiscordNewsPost,
 } from '../db/ewcNewsDiscordPosts.js';
 import { getTranslationForLocale } from '../lib/ewcNewsContent.js';
+import {
+  clampText,
+  prepareBodyForDiscord,
+  DISCORD_AUTHOR_CAP,
+  DISCORD_FOOTER_CAP,
+  DISCORD_TITLE_CAP,
+} from '../lib/discordContent.js';
 import { logger } from '../lib/logger.js';
 
 // Auto-posts published news to Discord. Lifecycle per design doc, with ONE documented v1
@@ -20,10 +27,6 @@ import { logger } from '../lib/logger.js';
 // clean up the orphaned Discord message for hard-deleted posts in v1 (the message stays).
 // Unpublish (status -> draft) keeps the post+row alive, so that path DOES delete the message.
 // Acceptable for v1; a future version could soft-capture message ids before deletion.
-
-// Discord embed caps; our content caps (title 90, summary 180) fit comfortably inside these.
-const TITLE_CAP = 256;
-const DESCRIPTION_CAP = 4096;
 
 function isSafeHttpUrl(value) {
   if (typeof value !== 'string' || !value) return false;
@@ -35,38 +38,62 @@ function isSafeHttpUrl(value) {
   }
 }
 
-function clamp(value, max) {
-  const text = typeof value === 'string' ? value : '';
-  return text.length > max ? text.slice(0, max) : text;
+function readMoreUrl(post) {
+  const publicUrl = config.dashboard.publicUrl;
+  if (!publicUrl) return null;
+  const url = `${publicUrl.replace(/\/$/, '')}/games/${post.gameSlug}/news/${post.id}`;
+  return isSafeHttpUrl(url) ? url : null;
 }
 
 // AR primary, EN fallback (community is Arabic-first). getTranslationForLocale already
-// falls back: requested -> defaultLocale -> en -> ar -> null.
-function buildNewsPayload(post) {
+// falls back: requested -> defaultLocale -> en -> ar -> null. The embed now carries the
+// full article body (capped to Discord's 4096) instead of the short summary, plus the
+// byline (avatar + every author), the game, and a publish timestamp so readers get the
+// whole post in Discord without opening the site.
+function buildNewsPayload(post, game = null) {
   const translation = getTranslationForLocale(post, 'ar') || getTranslationForLocale(post, 'en');
-  const title = clamp(translation?.title || post.title || 'News update', TITLE_CAP);
-  const summary = clamp(translation?.summary || post.summary || '', DESCRIPTION_CAP);
+  const title = clampText(translation?.title || post.title || 'News update', DISCORD_TITLE_CAP);
+  const body = prepareBodyForDiscord(translation?.body || '');
+  const summary = clampText(translation?.summary || post.summary || '', 600);
+  // Prefer the body; fall back to the summary for posts that only have a lead.
+  const description = body || summary;
+  const url = readMoreUrl(post);
 
   const embed = new EmbedBuilder().setColor(0x5865f2).setTitle(title);
-  if (summary) embed.setDescription(summary);
+  if (url) embed.setURL(url);
+  if (description) embed.setDescription(description);
   if (isSafeHttpUrl(post.coverImageUrl)) embed.setImage(post.coverImageUrl);
-  if (post.authorName) embed.setAuthor({ name: clamp(post.authorName, 256) });
 
-  const payload = { embeds: [embed], allowedMentions: { parse: [] } };
-
-  // "Read more" link button only when a public dashboard URL is configured.
-  const publicUrl = config.dashboard.publicUrl;
-  if (publicUrl) {
-    const base = publicUrl.replace(/\/$/, '');
-    const url = `${base}/games/${post.gameSlug}/news/${post.id}`;
-    if (isSafeHttpUrl(url)) {
-      const row = new ActionRowBuilder().addComponents(
-        new ButtonBuilder().setStyle(ButtonStyle.Link).setLabel('Read more').setURL(url),
-      );
-      payload.components = [row];
-    }
+  // Byline: list every author, use the first available avatar as the icon.
+  const authors = Array.isArray(post.authors) ? post.authors.filter((a) => a?.name) : [];
+  const bylineName = authors.length
+    ? authors.map((a) => a.name).join(', ')
+    : post.authorName || null;
+  if (bylineName) {
+    const iconURL = authors.find((a) => isSafeHttpUrl(a.avatarUrl))?.avatarUrl;
+    embed.setAuthor({ name: clampText(bylineName, DISCORD_AUTHOR_CAP), ...(iconURL ? { iconURL } : {}) });
   }
 
+  // Footer: the game name (AR-first) so readers see context at a glance.
+  const gameName = game?.title?.ar || game?.title?.en || null;
+  if (gameName) embed.setFooter({ text: clampText(gameName, DISCORD_FOOTER_CAP) });
+
+  const publishedMs =
+    typeof post.publishedAt === 'number'
+      ? post.publishedAt * 1000
+      : post.publishedAt
+        ? Date.parse(`${post.publishedAt}Z`.replace(/Z+$/, 'Z'))
+        : NaN;
+  if (Number.isFinite(publishedMs)) embed.setTimestamp(publishedMs);
+
+  const payload = { embeds: [embed], allowedMentions: { parse: [] } };
+  if (url) {
+    payload.components = [
+      new ActionRowBuilder().addComponents(
+        new ButtonBuilder().setStyle(ButtonStyle.Link).setLabel('Read more').setURL(url),
+      ),
+    ];
+  }
   return payload;
 }
 
@@ -100,7 +127,8 @@ async function postNewPublished(client) {
       }
       const post = await getEwcNewsPostById(postId);
       if (!post) continue;
-      const sent = await resolved.channel.send(buildNewsPayload(post));
+      const game = await getEwcGame(gameSlug);
+      const sent = await resolved.channel.send(buildNewsPayload(post, game));
       await recordDiscordNewsPost(postId, {
         guildId: resolved.guildId,
         channelId: resolved.channel.id,
@@ -142,7 +170,8 @@ async function syncExisting(client) {
         }
         const post = await getEwcNewsPostById(row.post_id);
         if (!post) continue;
-        await message.edit(buildNewsPayload(post));
+        const game = await getEwcGame(row.game_slug);
+        await message.edit(buildNewsPayload(post, game));
         await touchDiscordNewsPost(row.post_id);
         logger.info(`[news] edited Discord message for news ${row.post_id}`);
       }

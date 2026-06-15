@@ -1,5 +1,6 @@
 import { isSafeUrl } from "@/lib/safe-url";
 import { normalizeSlug } from "@/lib/game-validation";
+import { isSnowflake } from "@/lib/validate";
 import type { Locale } from "@/lib/i18n";
 
 export { normalizeSlug };
@@ -51,6 +52,8 @@ export type ValidatedMediaContent = {
   description: LocalizedText;
   logoUrl: string | null;
   links: MediaLink[];
+  discordChannelId: string | null;
+  gameSlug: string | null;
 };
 
 export type MediaValidationCode =
@@ -59,7 +62,8 @@ export type MediaValidationCode =
   | "description-too-long"
   | "logo-url-too-long"
   | "logo-url-invalid"
-  | "link-url-invalid";
+  | "link-url-invalid"
+  | "discord-channel-invalid";
 
 export function validateMediaContent(
   raw: unknown,
@@ -98,5 +102,24 @@ export function validateMediaContent(
 
   const links = parseMediaLinks(body.links);
 
-  return { ok: true, value: { name, description, logoUrl, links } };
+  // Optional Discord channel to auto-announce this entry to. Empty -> opt-out.
+  let discordChannelId: string | null = null;
+  const rawChannel = body.discordChannelId;
+  if (typeof rawChannel === "string" && rawChannel.trim() !== "") {
+    const trimmed = rawChannel.trim();
+    if (!isSnowflake(trimmed)) {
+      return { ok: false, error: "Discord channel ID must be a valid channel ID", code: "discord-channel-invalid" };
+    }
+    discordChannelId = trimmed;
+  }
+
+  // Optional related game (display tag). Normalized to a slug; the route verifies
+  // it points at a real game before saving.
+  let gameSlug: string | null = null;
+  const rawGame = body.gameSlug;
+  if (typeof rawGame === "string" && rawGame.trim() !== "") {
+    gameSlug = normalizeSlug(rawGame) || null;
+  }
+
+  return { ok: true, value: { name, description, logoUrl, links, discordChannelId, gameSlug } };
 }

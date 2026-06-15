@@ -264,18 +264,34 @@ CREATE TABLE IF NOT EXISTS ewc_games (
 CREATE INDEX IF NOT EXISTS idx_ewc_games_sort ON ewc_games(sort_order, slug);
 
 CREATE TABLE IF NOT EXISTS ewc_media_channels (
-  slug             TEXT PRIMARY KEY,
-  name_json        TEXT NOT NULL,
-  description_json TEXT NOT NULL,
-  logo_url         TEXT,
-  links_json       TEXT NOT NULL DEFAULT '[]',
-  sort_order       INTEGER NOT NULL DEFAULT 0,
-  created_at       TEXT NOT NULL DEFAULT (to_char(now() AT TIME ZONE 'UTC', 'YYYY-MM-DD HH24:MI:SS')),
-  updated_at       TEXT NOT NULL DEFAULT (to_char(now() AT TIME ZONE 'UTC', 'YYYY-MM-DD HH24:MI:SS'))
+  slug               TEXT PRIMARY KEY,
+  name_json          TEXT NOT NULL,
+  description_json   TEXT NOT NULL,
+  logo_url           TEXT,
+  links_json         TEXT NOT NULL DEFAULT '[]',
+  discord_channel_id TEXT,
+  game_slug          TEXT,
+  sort_order         INTEGER NOT NULL DEFAULT 0,
+  created_at         TEXT NOT NULL DEFAULT (to_char(now() AT TIME ZONE 'UTC', 'YYYY-MM-DD HH24:MI:SS')),
+  updated_at         TEXT NOT NULL DEFAULT (to_char(now() AT TIME ZONE 'UTC', 'YYYY-MM-DD HH24:MI:SS'))
 );
+
+-- Migration: media auto-post target + related game on pre-existing installs.
+ALTER TABLE ewc_media_channels ADD COLUMN IF NOT EXISTS discord_channel_id TEXT;
+ALTER TABLE ewc_media_channels ADD COLUMN IF NOT EXISTS game_slug TEXT;
 
 CREATE INDEX IF NOT EXISTS idx_ewc_media_channels_sort
   ON ewc_media_channels(sort_order, slug);
+
+-- Side table mapping a media channel to the Discord message that announces it.
+-- One row per channel (single-guild); cleaned up explicitly in deleteEwcMediaChannel.
+CREATE TABLE IF NOT EXISTS ewc_media_discord_posts (
+  slug       TEXT PRIMARY KEY,
+  guild_id   TEXT,
+  channel_id TEXT,
+  message_id TEXT,
+  posted_at  TEXT NOT NULL DEFAULT (to_char(now() AT TIME ZONE 'UTC', 'YYYY-MM-DD HH24:MI:SS'))
+);
 
 CREATE TABLE IF NOT EXISTS ewc_rate_limits (
   key           TEXT PRIMARY KEY,
