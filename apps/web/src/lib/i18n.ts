@@ -254,6 +254,9 @@ const baseCopy = {
     composer: {
       newPost: "New post",
       editPost: "Edit post",
+      titleLabel: "Title",
+      summaryLabel: "Summary",
+      bodyLabel: "Article",
       titlePlaceholder: "Add a title",
       summaryPlaceholder: "Add a short summary",
       bodyPlaceholder: "Start writing",
@@ -530,6 +533,9 @@ const baseCopy = {
     composer: {
       newPost: "\u0645\u0646\u0634\u0648\u0631 \u062c\u062f\u064a\u062f",
       editPost: "\u062a\u0639\u062f\u064a\u0644 \u0627\u0644\u0645\u0646\u0634\u0648\u0631",
+      titleLabel: "\u0627\u0644\u0639\u0646\u0648\u0627\u0646",
+      summaryLabel: "\u0627\u0644\u0645\u0644\u062e\u0635",
+      bodyLabel: "\u0627\u0644\u0645\u0642\u0627\u0644",
       titlePlaceholder: "\u0623\u0636\u0641 \u0639\u0646\u0648\u0627\u0646\u064b\u0627",
       summaryPlaceholder: "\u0623\u0636\u0641 \u0645\u0644\u062e\u0635\u064b\u0627 \u0642\u0635\u064a\u0631\u064b\u0627",
       bodyPlaceholder: "\u0627\u0628\u062f\u0623 \u0627\u0644\u0643\u062a\u0627\u0628\u0629",

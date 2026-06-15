@@ -1047,8 +1047,9 @@ export function NewsEditor({
                 </Tabs>
               ) : null}
 
-              {/* Borderless big title */}
+              {/* Title */}
               <Field data-invalid={current.title.length > NEWS_TITLE_MAX_LENGTH}>
+                <FieldLabel htmlFor="news-title">{t.titleLabel}</FieldLabel>
                 <Input
                   id="news-title"
                   value={current.title}
@@ -1057,7 +1058,7 @@ export function NewsEditor({
                   dir="auto"
                   onChange={(event) => updateTranslation(editLocale, { title: event.target.value })}
                   placeholder={t.titlePlaceholder}
-                  className="bidi-plaintext h-auto border-0 bg-transparent px-0 py-1 text-3xl font-semibold shadow-none focus-visible:ring-0 sm:text-4xl"
+                  className="bidi-plaintext h-auto py-2 text-xl font-semibold"
                 />
                 <div className="flex justify-end">
                   <span className="text-xs text-muted-foreground">
@@ -1066,8 +1067,9 @@ export function NewsEditor({
                 </div>
               </Field>
 
-              {/* Summary as muted subtitle */}
+              {/* Summary */}
               <Field data-invalid={current.summary.length > NEWS_SUMMARY_MAX_LENGTH}>
+                <FieldLabel htmlFor="news-summary">{t.summaryLabel}</FieldLabel>
                 <Textarea
                   id="news-summary"
                   value={current.summary}
@@ -1076,7 +1078,7 @@ export function NewsEditor({
                   dir="auto"
                   onChange={(event) => updateTranslation(editLocale, { summary: event.target.value })}
                   placeholder={t.summaryPlaceholder}
-                  className="bidi-plaintext min-h-0 resize-none border-0 bg-transparent px-0 py-1 text-base text-muted-foreground shadow-none focus-visible:ring-0"
+                  className="bidi-plaintext resize-none"
                   rows={2}
                 />
                 <div className="flex justify-end">
@@ -1086,8 +1088,9 @@ export function NewsEditor({
                 </div>
               </Field>
 
-              {/* Slim toolbar row */}
+              {/* Article body: label, toolbar, then the writing area */}
               <Field data-invalid={current.body.length > NEWS_BODY_MAX_LENGTH}>
+                <FieldLabel htmlFor="news-body">{t.bodyLabel}</FieldLabel>
                 <div className="flex flex-wrap items-center gap-1 rounded-md border border-border bg-muted/40 p-1">
                   <ToggleGroup
                     multiple
@@ -1176,8 +1179,8 @@ export function NewsEditor({
                   aria-invalid={current.body.length > NEWS_BODY_MAX_LENGTH}
                   dir="auto"
                   className={cn(
-                    "bidi-plaintext article-copy min-h-[50vh] resize-y border-0 bg-transparent px-0 text-base leading-7 shadow-none focus-visible:ring-0",
-                    bodyDragActive && "rounded-md bg-primary/5 ring-2 ring-primary",
+                    "bidi-plaintext article-copy min-h-[50vh] resize-y text-base leading-7",
+                    bodyDragActive && "bg-primary/5 ring-2 ring-primary",
                   )}
                   placeholder={t.bodyPlaceholder}
                   onChange={(event) => updateTranslation(editLocale, { body: event.target.value })}
