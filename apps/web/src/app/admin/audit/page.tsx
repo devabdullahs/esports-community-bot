@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { ArrowLeftIcon } from "lucide-react";
 import { getAdminAccess } from "@/lib/admin";
 import { listAuditLog } from "@/lib/audit";
+import { DateTime } from "@/components/date-time";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -61,7 +62,7 @@ export default async function AdminAuditPage() {
                   {entries.map((entry) => (
                     <tr key={entry.id} className="border-b last:border-0">
                       <td className="py-2 pr-4 tabular-nums text-muted-foreground">
-                        {entry.createdAt}
+                        <DateTime value={entry.createdAt} locale="en" />
                       </td>
                       <td className="py-2 pr-4">
                         <span className="font-medium">{entry.actorName ?? "—"}</span>

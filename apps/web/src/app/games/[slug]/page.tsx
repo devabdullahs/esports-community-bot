@@ -18,12 +18,12 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { DateTime } from "@/components/date-time";
 import { Separator } from "@/components/ui/separator";
 import { localizeText } from "@/lib/community-content";
 import { getGameCached } from "@/lib/games";
 import {
   copy,
-  formatDateTime,
   localizedPath,
 } from "@/lib/i18n";
 import { listPublishedNewsPostsCached } from "@/lib/news";
@@ -154,7 +154,7 @@ export default async function GamePage({
                     <CardHeader>
                       <Badge variant="secondary" className="mb-2 w-fit">
                         <NewspaperIcon data-icon="inline-start" />
-                        {post.publishedAt ? formatDateTime(post.publishedAt, locale) : text.published}
+                        {post.publishedAt ? <DateTime value={post.publishedAt} locale={locale} /> : text.published}
                       </Badge>
                       <CardTitle dir="auto">{post.title}</CardTitle>
                       {post.summary ? (

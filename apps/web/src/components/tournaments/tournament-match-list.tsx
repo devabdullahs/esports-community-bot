@@ -16,7 +16,8 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { copy, directionForLocale, formatUnixSeconds, type Locale } from "@/lib/i18n";
+import { LocalDateTime } from "@/components/local-date-time";
+import { copy, directionForLocale, type Locale } from "@/lib/i18n";
 import { logoProxyUrl } from "@/lib/logo-url";
 import { safeUrlOrUndefined } from "@/lib/safe-url";
 
@@ -85,6 +86,11 @@ function ScoreText({ a, b }: { a: number | null; b: number | null }) {
 function ResultScoreText({ a, b, fallback }: { a: number | null; b: number | null; fallback: string }) {
   if (a == null || b == null) return <span className="text-muted-foreground">{fallback}</span>;
   return <ScoreText a={a} b={b} />;
+}
+
+function MatchTime({ value, locale }: { value: number | null; locale: Locale }) {
+  if (value == null || !Number.isFinite(value)) return <span>—</span>;
+  return <LocalDateTime value={new Date(value * 1000).toISOString()} locale={locale} />;
 }
 
 function MatchText({
@@ -185,7 +191,7 @@ export function TournamentMatchList({
               {scheduled.map((m) => (
                 <TableRow key={m.id}>
                   <TableCell className="text-muted-foreground tabular-nums">
-                    {formatUnixSeconds(m.scheduled_at, locale) || "—"}
+                    <MatchTime value={m.scheduled_at} locale={locale} />
                   </TableCell>
                   <TableCell className="text-start">
                     <MatchText a={m.team_a} b={m.team_b} locale={locale} tbd={tbd} vs={text.vs} />
@@ -217,7 +223,7 @@ export function TournamentMatchList({
               {finished.map((m) => (
                 <TableRow key={m.id}>
                   <TableCell className="text-muted-foreground tabular-nums">
-                    {formatUnixSeconds(m.scheduled_at, locale) || "—"}
+                    <MatchTime value={m.scheduled_at} locale={locale} />
                   </TableCell>
                   <TableCell className="text-start">
                     <MatchText a={m.team_a} b={m.team_b} locale={locale} tbd={tbd} vs={text.vs} />
