@@ -3,6 +3,7 @@ import { notFound, redirect } from "next/navigation";
 import { ArrowLeftIcon } from "lucide-react";
 import { MediaEditor } from "@/components/admin/media-editor";
 import { canManageMedia, getAdminAccess } from "@/lib/admin";
+import { listGames } from "@/lib/games";
 import { getMediaChannel } from "@/lib/media";
 import { getRequestLocale } from "@/lib/request-locale";
 import { Button } from "@/components/ui/button";
@@ -24,6 +25,7 @@ export default async function EditMediaChannelPage({
   const channel = await getMediaChannel(slug);
   if (!channel) notFound();
   const locale = await getRequestLocale();
+  const games = (await listGames()).map((g) => ({ slug: g.slug, name: g.title[locale] || g.title.en || g.slug }));
 
   return (
     <main className="mx-auto flex w-full max-w-4xl flex-1 flex-col gap-6 px-5 py-10 sm:px-8">
@@ -35,7 +37,7 @@ export default async function EditMediaChannelPage({
         <p className="text-sm text-muted-foreground">Admin publishing</p>
         <h1 className="text-3xl font-semibold leading-tight">Edit media channel</h1>
       </div>
-      <MediaEditor mode="edit" channel={channel} locale={locale} />
+      <MediaEditor mode="edit" channel={channel} games={games} locale={locale} />
     </main>
   );
 }

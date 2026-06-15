@@ -21,10 +21,18 @@ function hydrate(row) {
     description: parseJson(row.description_json, { en: '', ar: '' }),
     logoUrl: row.logo_url,
     links: parseJson(row.links_json, []),
+    discordChannelId: row.discord_channel_id || null,
+    gameSlug: row.game_slug || null,
     sortOrder: row.sort_order,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
+}
+
+// Normalize an optional id/slug field to a trimmed string or null.
+function optText(value) {
+  const text = typeof value === 'string' ? value.trim() : '';
+  return text || null;
 }
 
 let seeded = false;
@@ -71,19 +79,30 @@ async function nextSortOrder() {
   return (row?.m == null ? -1 : row.m) + 1;
 }
 
-export async function createEwcMediaChannel({ slug, name, description, logoUrl = null, links = [] }) {
+export async function createEwcMediaChannel({
+  slug,
+  name,
+  description,
+  logoUrl = null,
+  links = [],
+  discordChannelId = null,
+  gameSlug = null,
+}) {
   await ensureSeeded();
   const now = nowText();
   await run(
     `INSERT INTO ewc_media_channels
-       (slug, name_json, description_json, logo_url, links_json, sort_order, created_at, updated_at)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+       (slug, name_json, description_json, logo_url, links_json, discord_channel_id, game_slug,
+        sort_order, created_at, updated_at)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
     [
       slug,
       JSON.stringify(name),
       JSON.stringify(description),
       logoUrl,
       JSON.stringify(links),
+      optText(discordChannelId),
+      optText(gameSlug),
       await nextSortOrder(),
       now,
       now,
@@ -92,22 +111,39 @@ export async function createEwcMediaChannel({ slug, name, description, logoUrl =
   return getEwcMediaChannel(slug);
 }
 
-export async function updateEwcMediaChannel(slug, { name, description, logoUrl = null, links = [] }) {
+export async function updateEwcMediaChannel(slug, {
+  name,
+  description,
+  logoUrl = null,
+  links = [],
+  discordChannelId = null,
+  gameSlug = null,
+}) {
   const info = await run(
     `UPDATE ewc_media_channels
      SET name_json = $1, description_json = $2, logo_url = $3, links_json = $4,
-         updated_at = $5
-     WHERE slug = $6`,
-    [JSON.stringify(name), JSON.stringify(description), logoUrl, JSON.stringify(links), nowText(), slug],
+         discord_channel_id = $5, game_slug = $6, updated_at = $7
+     WHERE slug = $8`,
+    [
+      JSON.stringify(name),
+      JSON.stringify(description),
+      logoUrl,
+      JSON.stringify(links),
+      optText(discordChannelId),
+      optText(gameSlug),
+      nowText(),
+      slug,
+    ],
   );
   if (info.changes === 0) return null;
   return getEwcMediaChannel(slug);
 }
 
-// Deleting a channel also clears any admin scope rows that referenced it.
+// Deleting a channel also clears any admin scope rows and its Discord-post link.
 export async function deleteEwcMediaChannel(slug) {
   return transaction(async (tx) => {
     await tx.run('DELETE FROM ewc_admin_media_scopes WHERE media_slug = $1', [slug]);
+    await tx.run('DELETE FROM ewc_media_discord_posts WHERE slug = $1', [slug]);
     const result = await tx.run('DELETE FROM ewc_media_channels WHERE slug = $1', [slug]);
     return { deleted: result.changes };
   });

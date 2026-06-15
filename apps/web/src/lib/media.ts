@@ -30,6 +30,8 @@ export type MediaChannelRecord = {
   description: LocalizedText;
   logoUrl: string | null;
   links: MediaLink[];
+  discordChannelId: string | null;
+  gameSlug: string | null;
   sortOrder: number;
 };
 
@@ -39,6 +41,8 @@ export type MediaChannelInput = {
   description: LocalizedText;
   logoUrl: string | null;
   links: MediaLink[];
+  discordChannelId: string | null;
+  gameSlug: string | null;
 };
 
 const list = _list as () => Promise<MediaChannelRecord[]>;

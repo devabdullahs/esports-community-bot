@@ -305,6 +305,18 @@ db.exec(`
   );
   CREATE INDEX IF NOT EXISTS idx_ewc_media_channels_sort ON ewc_media_channels(sort_order, slug);
 
+  -- Side table mapping a media channel to the Discord message that announces it.
+  -- One row per channel (single-guild). No REFERENCES clause: media channels are
+  -- removed via an explicit transactional cleanup (deleteEwcMediaChannel), mirroring
+  -- the other scope tables, so we delete the row there too.
+  CREATE TABLE IF NOT EXISTS ewc_media_discord_posts (
+    slug       TEXT PRIMARY KEY,
+    guild_id   TEXT,
+    channel_id TEXT,
+    message_id TEXT,
+    posted_at  TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+
   CREATE TABLE IF NOT EXISTS ewc_rate_limits (
     key           TEXT PRIMARY KEY,
     window_start  INTEGER NOT NULL,
@@ -362,6 +374,12 @@ ensureColumns('ewc_news_posts', [
 ]);
 // Per-game Discord news channel (nullable; falls back to the guild-level news channel).
 ensureColumns('ewc_games', [['discord_channel_id', 'TEXT']]);
+// Media channels: optional Discord channel to auto-announce the entry to, and an
+// optional related game (display tag; also used to resolve a fallback channel).
+ensureColumns('ewc_media_channels', [
+  ['discord_channel_id', 'TEXT'],
+  ['game_slug', 'TEXT'],
+]);
 
 db.exec(`
   UPDATE ewc_news_posts
