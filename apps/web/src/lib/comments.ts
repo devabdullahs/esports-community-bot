@@ -128,7 +128,6 @@ export function moderationFor(body: string): {
 export type PublicComment = {
   id: number;
   authorName: string;
-  discordUserId: string;
   body: string;
   status: "visible" | "pending" | "deleted";
   createdAt: string;
@@ -144,7 +143,6 @@ function placeholder(c: CommentRecord): PublicComment {
   return {
     id: Number(c.id),
     authorName: "",
-    discordUserId: "",
     body: "",
     status: "deleted",
     createdAt: c.createdAt,
@@ -167,7 +165,6 @@ function toPublic(
   return {
     id: Number(c.id),
     authorName: isDeleted ? "" : c.authorName,
-    discordUserId: c.discordUserId,
     body: isDeleted ? "" : c.body,
     status: c.status as "visible" | "pending" | "deleted",
     createdAt: c.createdAt,
@@ -282,6 +279,14 @@ export async function moderateComment(
     reason: reason ?? null,
   });
   return updated;
+}
+
+// Sweep link-only pending comments whose timer has elapsed so the moderation
+// queue and counts reflect them as visible instead of stale pending. This is the
+// same sweep the public post view runs; exposed here so routes don't reach into
+// the bot DB directly.
+export async function autoApproveDueCommentsForModeration(): Promise<void> {
+  await autoApproveDue().catch(() => {});
 }
 
 export function listModerationComments(

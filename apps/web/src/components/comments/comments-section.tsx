@@ -25,7 +25,6 @@ import { cn } from "@/lib/utils";
 type ApiComment = {
   id: number;
   authorName: string;
-  discordUserId: string;
   body: string;
   status: "visible" | "pending" | "deleted";
   createdAt: string;

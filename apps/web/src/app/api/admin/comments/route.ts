@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getAdminAccess } from "@/lib/admin";
-import { commentStatusCounts, listModerationComments } from "@/lib/comments";
+import { autoApproveDueCommentsForModeration, commentStatusCounts, listModerationComments } from "@/lib/comments";
 import { parseStatusFilter } from "@/lib/comment-validation";
 import { getNewsPost } from "@/lib/news";
 
@@ -17,6 +17,9 @@ export async function GET(request: Request) {
   const filterParam = params.get("status");
   const filter = filterParam === "flagged" ? { flagged: true } : { status: parseStatusFilter(filterParam) };
 
+  // Flip due link-only pending comments to visible first, so the queue and counts
+  // don't show stale pending entries that should already be approved.
+  await autoApproveDueCommentsForModeration();
   const [comments, counts] = await Promise.all([listModerationComments(filter), commentStatusCounts()]);
 
   // Resolve post titles once per unique post (small page size).

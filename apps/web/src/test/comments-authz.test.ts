@@ -17,12 +17,14 @@ vi.mock("@/lib/admin", async (importOriginal) => {
   return { ...actual, getAdminAccess: vi.fn() };
 });
 
-import { requireVerifiedMember } from "@/lib/community";
+import { requireVerifiedMember, getCommunityMember } from "@/lib/community";
 import { getAdminAccess } from "@/lib/admin";
-import { POST as postComment } from "@/app/api/news/[postId]/comments/route";
+import { POST as postComment, GET as getComments } from "@/app/api/news/[postId]/comments/route";
+import { GET as adminComments } from "@/app/api/admin/comments/route";
 import { POST as moderate } from "@/app/api/admin/comments/[id]/moderate/route";
 
 const mockMember = vi.mocked(requireVerifiedMember);
+const mockGetMember = vi.mocked(getCommunityMember);
 const mockAdmin = vi.mocked(getAdminAccess);
 
 function verified(discordUserId: string) {
@@ -118,5 +120,40 @@ describe("POST /api/admin/comments/:id/moderate — moderator gate", () => {
     expect(res.status).toBe(200);
     const json = await res.json();
     expect(json.comment.status).toBe("hidden");
+  });
+});
+
+describe("comment privacy + admin auto-approval (Codex review)", () => {
+  test("public comments JSON does not leak discordUserId", async () => {
+    mockGetMember.mockResolvedValue({ session: null, member: null });
+    const { createComment } = await import("@bot/db/postComments.js");
+    await createComment({ postId, authUserId: "a", discordUserId: "private-snowflake", body: "a public comment" });
+
+    const res = await getComments(
+      new Request(`http://localhost/api/news/${postId}/comments`),
+      ctx({ postId: String(postId) }),
+    );
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    expect(json.comments.length).toBeGreaterThan(0);
+    const raw = JSON.stringify(json.comments);
+    expect(raw).not.toContain("discordUserId");
+    expect(raw).not.toContain("private-snowflake");
+  });
+
+  test("admin queue sweeps due link-only pending comments before listing", async () => {
+    mockAdmin.mockResolvedValue(superAdmin());
+    const { createComment, getComment } = await import("@bot/db/postComments.js");
+    const past = Math.floor(Date.now() / 1000) - 60;
+    const due = (await createComment({
+      postId, authUserId: "a", discordUserId: "d", body: "see https://site.example",
+      status: "pending", flagReason: { links: ["site.example"] }, autoApproveAt: past,
+    })) as { comment: { id: number } };
+    expect((await getComment(due.comment.id)).status).toBe("pending");
+
+    const res = await adminComments(new Request("http://localhost/api/admin/comments?status=pending"));
+    expect(res.status).toBe(200);
+    // The route ran the auto-approval sweep first, so the due comment is now visible.
+    expect((await getComment(due.comment.id)).status).toBe("visible");
   });
 });
