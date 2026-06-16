@@ -3,6 +3,7 @@ import {
   ClipboardListIcon,
   Gamepad2Icon,
   type LucideIcon,
+  MessagesSquareIcon,
   ShieldIcon,
   Tv2Icon,
   UsersIcon,
@@ -111,6 +112,12 @@ export default async function AdminPage() {
             icon={Tv2Icon}
             title="Media channels"
             description="Edit the media channels you manage."
+          />
+          <ManageLink
+            href="/admin/comments"
+            icon={MessagesSquareIcon}
+            title="Comments"
+            description="Review flagged and pending community comments."
           />
           {access.isSuper ? (
             <ManageLink

@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowLeftIcon } from "lucide-react";
+import { CommentsSection } from "@/components/comments/comments-section";
 import { DateTime } from "@/components/date-time";
 import { AuthorAvatar } from "@/components/news/author-avatar";
 import { PostBody } from "@/components/news/post-body";
@@ -184,6 +185,8 @@ export default async function NewsPostPage({
 
         {placement === "bottom" ? coverImage : null}
       </article>
+
+      <CommentsSection postId={Number(post.id)} locale={locale} />
     </main>
   );
 }
