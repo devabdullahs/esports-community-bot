@@ -30,6 +30,8 @@ const securityHeaders = [
   { key: "X-Frame-Options", value: "DENY" },
   { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
   { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=()" },
+  // RFC 8288 discovery: point agents at the API catalog (RFC 9727).
+  { key: "Link", value: '</.well-known/api-catalog>; rel="api-catalog"' },
   ...(isProd ? [{ key: "Content-Security-Policy", value: csp }] : []),
 ];
 

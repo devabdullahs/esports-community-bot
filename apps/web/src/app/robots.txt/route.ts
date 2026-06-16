@@ -1,0 +1,33 @@
+import { absoluteUrl } from "@/lib/metadata";
+
+export const runtime = "nodejs";
+// Generated per request so the Sitemap URL uses the runtime public host (env vars
+// are unset during the Docker build). Served as a route handler (not the metadata
+// robots.ts) so we can emit the AIPREF Content-Signal directive, which the
+// MetadataRoute.Robots schema does not support.
+export const dynamic = "force-dynamic";
+
+export function GET() {
+  const body = [
+    "User-agent: *",
+    // AIPREF content signals (contentsignals.org): allow search indexing and AI
+    // answers/citations, but opt out of using this content to train AI models.
+    "Content-Signal: search=yes, ai-train=no, ai-input=yes",
+    "Allow: /",
+    // Admin surface, API routes, and per-user/auth pages are not for crawlers.
+    "Disallow: /admin",
+    "Disallow: /api/",
+    "Disallow: /me",
+    "Disallow: /login",
+    "",
+    `Sitemap: ${absoluteUrl("/sitemap.xml")}`,
+    "",
+  ].join("\n");
+
+  return new Response(body, {
+    headers: {
+      "Content-Type": "text/plain; charset=utf-8",
+      "Cache-Control": "public, max-age=3600",
+    },
+  });
+}
