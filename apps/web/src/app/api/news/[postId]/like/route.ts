@@ -34,6 +34,7 @@ export async function DELETE(request: Request, context: { params: Promise<{ post
   if (postId === null) return NextResponse.json({ error: "Invalid post id" }, { status: 400 });
   const gate = await gateAndLimit(request);
   if ("response" in gate) return gate.response;
+  if (!(await getPublishedNewsPostCached(postId))) return NextResponse.json({ error: "Post not found" }, { status: 404 });
 
   await removePostLike(postId, gate.member.discordUserId);
   return NextResponse.json(await getPostLikeSummary(postId, gate.member.discordUserId));

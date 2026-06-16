@@ -68,7 +68,7 @@ export async function createComment({
     let rootId = null;
     if (parentCommentId) {
       const parent = await tx.get(
-        'SELECT id, post_id, root_comment_id, status FROM post_comments WHERE id = $1',
+        'SELECT id, post_id, root_comment_id, status, discord_user_id FROM post_comments WHERE id = $1',
         [parentCommentId],
       );
       if (!parent || Number(parent.post_id) !== Number(postId)) {
@@ -76,6 +76,21 @@ export async function createComment({
       }
       // One level: attach under the parent's root (or the parent itself if it is a root).
       rootId = parent.root_comment_id ?? parent.id;
+      const root =
+        Number(rootId) === Number(parent.id)
+          ? parent
+          : await tx.get('SELECT id, status, discord_user_id FROM post_comments WHERE id = $1', [rootId]);
+      if (!root) return { error: 'parent-not-found' };
+      // A reply may only land in an interactable thread: both the immediate parent
+      // AND the thread root must be visible, OR pending and owned by the replier
+      // (replying inside your own pending thread). This blocks replies to deleted,
+      // hidden, rejected, or someone else's pending comments.
+      const interactable = (node) =>
+        node.status === 'visible' ||
+        (node.status === 'pending' && node.discord_user_id === discordUserId);
+      if (!interactable(parent) || !interactable(root)) {
+        return { error: 'parent-not-interactable' };
+      }
       parentId = rootId;
     }
     const now = nowText();

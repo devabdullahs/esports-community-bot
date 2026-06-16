@@ -64,7 +64,16 @@ export async function POST(request: Request, context: { params: Promise<{ postId
   const body = await request.json().catch(() => ({}));
   const validated = validateCommentBody(body?.body);
   if (!validated.ok) return NextResponse.json({ error: validated.error }, { status: 400 });
-  const parentCommentId = body?.parentCommentId != null ? parseId(String(body.parentCommentId)) : null;
+
+  // A present-but-invalid parentCommentId is a client error — never silently fall
+  // back to creating a root comment.
+  let parentCommentId: number | null = null;
+  if (body?.parentCommentId != null) {
+    parentCommentId = parseId(String(body.parentCommentId));
+    if (parentCommentId === null) {
+      return NextResponse.json({ error: "Invalid reply target." }, { status: 400 });
+    }
+  }
 
   const result = await createPostComment({
     postId,
@@ -75,7 +84,8 @@ export async function POST(request: Request, context: { params: Promise<{ postId
     body: validated.body,
   });
   if ("error" in result) {
-    return NextResponse.json({ error: "Reply target not found." }, { status: 400 });
+    // Keep the public message generic for both missing and non-interactable parents.
+    return NextResponse.json({ error: "You can't reply to this comment." }, { status: 400 });
   }
   return NextResponse.json(
     { comment: { id: Number(result.comment.id), status: result.comment.status } },

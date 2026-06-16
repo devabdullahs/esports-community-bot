@@ -141,3 +141,51 @@ test('moderation status transitions clear/keep timers correctly', async () => {
   assert.equal(approved.status, 'visible');
   assert.equal(approved.autoApproveAt, null, 'approve clears the auto-approve timer');
 });
+
+// --- reply interactability (PR #23) ----------------------------------------
+
+async function rootWithStatus(status, discordUserId = 'owner') {
+  const root = (await createComment({ postId, authUserId: `auth-${discordUserId}`, discordUserId, body: 'root' })).comment;
+  if (status !== 'visible') await setCommentStatus(root.id, status, { deletedBy: discordUserId });
+  return root;
+}
+
+test('reply to a deleted parent is rejected', async () => {
+  const root = await rootWithStatus('deleted');
+  const r = await createComment({ postId, parentCommentId: root.id, authUserId: 'a', discordUserId: 'replier', body: 'x' });
+  assert.equal(r.error, 'parent-not-interactable');
+});
+
+test('reply to a hidden parent is rejected', async () => {
+  const root = await rootWithStatus('hidden');
+  const r = await createComment({ postId, parentCommentId: root.id, authUserId: 'a', discordUserId: 'replier', body: 'x' });
+  assert.equal(r.error, 'parent-not-interactable');
+});
+
+test('reply to a rejected parent is rejected', async () => {
+  const root = await rootWithStatus('rejected');
+  const r = await createComment({ postId, parentCommentId: root.id, authUserId: 'a', discordUserId: 'replier', body: 'x' });
+  assert.equal(r.error, 'parent-not-interactable');
+});
+
+test("reply to someone else's pending parent is rejected", async () => {
+  const root = (await createComment({ postId, authUserId: 'a-owner', discordUserId: 'owner-p', body: 'pending root', status: 'pending' })).comment;
+  const r = await createComment({ postId, parentCommentId: root.id, authUserId: 'a', discordUserId: 'someone-else', body: 'x' });
+  assert.equal(r.error, 'parent-not-interactable');
+});
+
+test('reply to your OWN pending parent is allowed (own pending thread)', async () => {
+  const mine = (await createComment({ postId, authUserId: 'a-self', discordUserId: 'self-p', body: 'my pending root', status: 'pending' })).comment;
+  const r = await createComment({ postId, parentCommentId: mine.id, authUserId: 'a-self', discordUserId: 'self-p', body: 'reply to my own' });
+  assert.ok(r.comment, 'reply created');
+  assert.equal(Number(r.comment.rootCommentId), Number(mine.id));
+});
+
+test('reply-to-reply still attaches to the visible root', async () => {
+  const root = (await createComment({ postId, authUserId: 'a1', discordUserId: 'r1', body: 'root v' })).comment;
+  const reply = (await createComment({ postId, parentCommentId: root.id, authUserId: 'a2', discordUserId: 'r2', body: 'reply' })).comment;
+  const nested = await createComment({ postId, parentCommentId: reply.id, authUserId: 'a3', discordUserId: 'r3', body: 'nested' });
+  assert.ok(nested.comment);
+  assert.equal(Number(nested.comment.rootCommentId), Number(root.id));
+  assert.equal(Number(nested.comment.parentCommentId), Number(root.id));
+});

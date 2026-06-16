@@ -143,7 +143,11 @@ export function CommentsSection({ postId, locale }: { postId: number; locale: Lo
     });
   }
 
-  const total = data?.comments.length ?? 0;
+  // Total real comments across the whole tree (roots + replies), excluding the
+  // "[removed]" placeholders shown to keep deleted threads from collapsing.
+  const countComments = (list: ApiComment[]): number =>
+    list.reduce((n, c) => n + (c.isDeleted ? 0 : 1) + countComments(c.replies), 0);
+  const total = data ? countComments(data.comments) : 0;
 
   return (
     <section className="flex flex-col gap-5 border-t pt-8" dir={locale === "ar" ? "rtl" : "ltr"}>
