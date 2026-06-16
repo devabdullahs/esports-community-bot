@@ -1,0 +1,46 @@
+import { NextResponse } from "next/server";
+import { getAdminAccess } from "@/lib/admin";
+import { commentStatusCounts, listModerationComments } from "@/lib/comments";
+import { parseStatusFilter } from "@/lib/comment-validation";
+import { getNewsPost } from "@/lib/news";
+
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+
+// Moderation queue. Any allowed admin is a moderator and may act on ANY comment.
+export async function GET(request: Request) {
+  const access = await getAdminAccess();
+  if (!access.session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!access.allowed) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+
+  const params = new URL(request.url).searchParams;
+  const filterParam = params.get("status");
+  const filter = filterParam === "flagged" ? { flagged: true } : { status: parseStatusFilter(filterParam) };
+
+  const [comments, counts] = await Promise.all([listModerationComments(filter), commentStatusCounts()]);
+
+  // Resolve post titles once per unique post (small page size).
+  const titles = new Map<number, string>();
+  for (const postId of new Set(comments.map((c) => Number(c.postId)))) {
+    const post = await getNewsPost(postId);
+    if (post) titles.set(postId, post.title);
+  }
+
+  return NextResponse.json({
+    counts,
+    comments: comments.map((c) => ({
+      id: Number(c.id),
+      postId: Number(c.postId),
+      postTitle: titles.get(Number(c.postId)) ?? null,
+      parentCommentId: c.parentCommentId == null ? null : Number(c.parentCommentId),
+      authorName: c.authorName,
+      discordUserId: c.discordUserId,
+      body: c.body,
+      status: c.status,
+      flagReason: c.flagReason,
+      createdAt: c.createdAt,
+      editedAt: c.editedAt,
+      deletedBy: c.deletedBy,
+    })),
+  });
+}

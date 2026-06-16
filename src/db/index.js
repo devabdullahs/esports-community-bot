@@ -328,6 +328,58 @@ db.exec(`
     amount        INTEGER NOT NULL
   );
 
+  -- Community comments on news posts. One-level threads: a reply's parent/root
+  -- both point at the ROOT comment (replies to replies are re-targeted to the
+  -- root in createComment). Soft delete (status='deleted') keeps reply threads
+  -- intact; a hard-deleted POST cascades its comments away.
+  CREATE TABLE IF NOT EXISTS post_comments (
+    id                INTEGER PRIMARY KEY AUTOINCREMENT,
+    post_id           INTEGER NOT NULL REFERENCES ewc_news_posts(id) ON DELETE CASCADE,
+    parent_comment_id INTEGER REFERENCES post_comments(id) ON DELETE SET NULL,
+    root_comment_id   INTEGER REFERENCES post_comments(id) ON DELETE SET NULL,
+    auth_user_id      TEXT NOT NULL,
+    discord_user_id   TEXT NOT NULL,
+    author_name       TEXT NOT NULL DEFAULT '',
+    body              TEXT NOT NULL,
+    status            TEXT NOT NULL DEFAULT 'visible'
+                      CHECK (status IN ('visible','pending','hidden','rejected','deleted')),
+    flag_reason_json  TEXT,
+    auto_approve_at   INTEGER,
+    created_at        TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at        TEXT NOT NULL DEFAULT (datetime('now')),
+    edited_at         TEXT,
+    deleted_at        TEXT,
+    deleted_by        TEXT
+  );
+  CREATE INDEX IF NOT EXISTS idx_post_comments_post ON post_comments(post_id, status, created_at);
+  CREATE INDEX IF NOT EXISTS idx_post_comments_root ON post_comments(root_comment_id, created_at);
+  CREATE INDEX IF NOT EXISTS idx_post_comments_autoapprove ON post_comments(status, auto_approve_at);
+
+  CREATE TABLE IF NOT EXISTS post_likes (
+    post_id         INTEGER NOT NULL REFERENCES ewc_news_posts(id) ON DELETE CASCADE,
+    discord_user_id TEXT NOT NULL,
+    created_at      TEXT NOT NULL DEFAULT (datetime('now')),
+    PRIMARY KEY (post_id, discord_user_id)
+  );
+
+  CREATE TABLE IF NOT EXISTS comment_likes (
+    comment_id      INTEGER NOT NULL REFERENCES post_comments(id) ON DELETE CASCADE,
+    discord_user_id TEXT NOT NULL,
+    created_at      TEXT NOT NULL DEFAULT (datetime('now')),
+    PRIMARY KEY (comment_id, discord_user_id)
+  );
+
+  CREATE TABLE IF NOT EXISTS comment_moderation_actions (
+    id                   INTEGER PRIMARY KEY AUTOINCREMENT,
+    comment_id           INTEGER NOT NULL,
+    moderator_discord_id TEXT NOT NULL,
+    moderator_name       TEXT,
+    action               TEXT NOT NULL,
+    reason               TEXT,
+    created_at           TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+  CREATE INDEX IF NOT EXISTS idx_comment_mod_actions ON comment_moderation_actions(comment_id, created_at);
+
   CREATE TABLE IF NOT EXISTS ewc_admins (
     discord_id   TEXT PRIMARY KEY,
     display_name TEXT NOT NULL DEFAULT '',
