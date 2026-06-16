@@ -30,6 +30,7 @@ function hydrate(row) {
     authUserId: row.auth_user_id,
     discordUserId: row.discord_user_id,
     authorName: row.author_name || '',
+    authorAvatarUrl: row.author_avatar_url || null,
     body: row.body,
     status: row.status,
     flagReason: parseJson(row.flag_reason_json, null),
@@ -58,6 +59,7 @@ export async function createComment({
   authUserId,
   discordUserId,
   authorName = '',
+  authorAvatarUrl = null,
   body,
   status = 'visible',
   flagReason = null,
@@ -97,8 +99,8 @@ export async function createComment({
     const inserted = await tx.get(
       `INSERT INTO post_comments
          (post_id, parent_comment_id, root_comment_id, auth_user_id, discord_user_id,
-          author_name, body, status, flag_reason_json, auto_approve_at, created_at, updated_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $11)
+          author_name, author_avatar_url, body, status, flag_reason_json, auto_approve_at, created_at, updated_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $12)
        RETURNING id`,
       [
         postId,
@@ -107,6 +109,7 @@ export async function createComment({
         authUserId,
         discordUserId,
         authorName,
+        authorAvatarUrl,
         body,
         status,
         flagReason ? JSON.stringify(flagReason) : null,

@@ -15,6 +15,7 @@ export type CommunityMember = {
   authUserId: string;
   discordUserId: string;
   displayName: string | null;
+  avatarUrl: string | null;
   inGuild: boolean;
   isVerified: boolean;
 };
@@ -77,6 +78,7 @@ export async function getCommunityMember(): Promise<{
         authUserId: session.user.id,
         discordUserId: devDiscordUserId(),
         displayName: session.user.name ?? null,
+        avatarUrl: session.user.image ?? null,
         inGuild: true,
         isVerified: true,
       },
@@ -98,6 +100,7 @@ export async function getCommunityMember(): Promise<{
       authUserId: session.user.id,
       discordUserId,
       displayName: session.user.name ?? null,
+      avatarUrl: session.user.image ?? null,
       inGuild,
       isVerified,
     },

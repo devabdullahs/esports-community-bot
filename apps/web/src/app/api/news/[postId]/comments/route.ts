@@ -36,6 +36,7 @@ export async function GET(_request: Request, context: { params: Promise<{ postId
       inGuild: Boolean(member?.inGuild),
       discordUserId: viewerDiscordId,
       displayName: member?.displayName ?? null,
+      avatarUrl: member?.avatarUrl ?? null,
     },
   });
 }
@@ -81,6 +82,7 @@ export async function POST(request: Request, context: { params: Promise<{ postId
     authUserId: member.authUserId,
     discordUserId: member.discordUserId,
     authorName: member.displayName ?? "",
+    authorAvatarUrl: member.avatarUrl,
     body: validated.body,
   });
   if ("error" in result) {

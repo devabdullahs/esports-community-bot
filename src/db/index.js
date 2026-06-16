@@ -340,6 +340,7 @@ db.exec(`
     auth_user_id      TEXT NOT NULL,
     discord_user_id   TEXT NOT NULL,
     author_name       TEXT NOT NULL DEFAULT '',
+    author_avatar_url TEXT,
     body              TEXT NOT NULL,
     status            TEXT NOT NULL DEFAULT 'visible'
                       CHECK (status IN ('visible','pending','hidden','rejected','deleted')),
@@ -419,6 +420,7 @@ ensureColumns('ewc_prediction_weeks', [
   ['results_json', 'TEXT'],
 ]);
 ensureColumns('ewc_prediction_seasons', [['score_after', 'INTEGER'], ['best_weeks', 'INTEGER']]);
+ensureColumns('post_comments', [['author_avatar_url', 'TEXT']]);
 ensureColumns('ewc_news_posts', [
   ['content_mode', "TEXT NOT NULL DEFAULT 'shared' CHECK (content_mode IN ('shared','translated'))"],
   ['default_locale', "TEXT NOT NULL DEFAULT 'en' CHECK (default_locale IN ('en','ar'))"],

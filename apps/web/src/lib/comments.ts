@@ -24,6 +24,7 @@ import {
 } from "@bot/db/commentLikes.js";
 import { recordCommentModeration as _recordMod } from "@bot/db/commentModerationActions.js";
 import { analyzeCommentText as _analyze } from "@bot/lib/commentModeration.js";
+import { authDatabase, isPostgresAuthDatabase } from "@/lib/auth-database";
 import type { CommentStatus } from "@/lib/comment-validation";
 
 export type CommentRecord = {
@@ -34,6 +35,7 @@ export type CommentRecord = {
   authUserId: string;
   discordUserId: string;
   authorName: string;
+  authorAvatarUrl: string | null;
   body: string;
   status: CommentStatus;
   flagReason: Record<string, unknown> | null;
@@ -51,6 +53,7 @@ type CreateInput = {
   authUserId: string;
   discordUserId: string;
   authorName?: string;
+  authorAvatarUrl?: string | null;
   body: string;
   status: CommentStatus;
   flagReason?: Record<string, unknown> | null;
@@ -88,6 +91,34 @@ const recordModeration = _recordMod as (i: {
 const analyze = _analyze as (
   body: string,
 ) => { profanity: string[]; hasProfanity: boolean; links: string[]; externalLinks: string[]; hasExternalLinks: boolean };
+
+type AuthUserAvatarRow = { id: string; image: string | null };
+type PgAuthDatabase = { query: (sql: string, params: unknown[]) => Promise<{ rows: AuthUserAvatarRow[] }> };
+type SqliteAuthDatabase = { prepare: (sql: string) => { all: (...params: string[]) => AuthUserAvatarRow[] } };
+
+async function fillMissingAuthorAvatars(rows: CommentRecord[]): Promise<CommentRecord[]> {
+  const ids = Array.from(
+    new Set(rows.filter((c) => !c.authorAvatarUrl && c.authUserId).map((c) => c.authUserId)),
+  );
+  if (!ids.length) return rows;
+
+  try {
+    const authRows = isPostgresAuthDatabase()
+      ? (await (authDatabase as PgAuthDatabase).query(
+          'SELECT id, image FROM "user" WHERE id = ANY($1)',
+          [ids],
+        )).rows
+      : ((authDatabase as SqliteAuthDatabase)
+          .prepare(`SELECT id, image FROM "user" WHERE id IN (${ids.map(() => "?").join(", ")})`)
+          .all(...ids));
+    const avatars = new Map(authRows.filter((u) => u.image).map((u) => [u.id, u.image!]));
+    if (!avatars.size) return rows;
+    return rows.map((c) => (c.authorAvatarUrl ? c : { ...c, authorAvatarUrl: avatars.get(c.authUserId) ?? null }));
+  } catch (error) {
+    if (/no such table|does not exist/i.test(String((error as Error).message))) return rows;
+    throw error;
+  }
+}
 
 function autoApproveHours(): number {
   const n = Number(process.env.COMMENT_AUTO_APPROVE_LINK_HOURS);
@@ -128,6 +159,7 @@ export function moderationFor(body: string): {
 export type PublicComment = {
   id: number;
   authorName: string;
+  authorAvatarUrl: string | null;
   body: string;
   status: "visible" | "pending" | "deleted";
   createdAt: string;
@@ -143,6 +175,7 @@ function placeholder(c: CommentRecord): PublicComment {
   return {
     id: Number(c.id),
     authorName: "",
+    authorAvatarUrl: null,
     body: "",
     status: "deleted",
     createdAt: c.createdAt,
@@ -165,6 +198,7 @@ function toPublic(
   return {
     id: Number(c.id),
     authorName: isDeleted ? "" : c.authorName,
+    authorAvatarUrl: isDeleted ? null : c.authorAvatarUrl,
     body: isDeleted ? "" : c.body,
     status: c.status as "visible" | "pending" | "deleted",
     createdAt: c.createdAt,
@@ -196,7 +230,7 @@ export async function getPostCommentsView(
   viewer: string | null,
 ): Promise<PublicComment[]> {
   await autoApproveDue().catch(() => {});
-  const rows = await listForPost(postId);
+  const rows = await fillMissingAuthorAvatars(await listForPost(postId));
   const ids = rows.map((c) => Number(c.id));
   const [counts, viewerLikes] = await Promise.all([
     (_commentLikeCounts as (ids: number[]) => Promise<Record<number, number>>)(ids),
@@ -294,7 +328,7 @@ export function listModerationComments(
   limit = 100,
   offset = 0,
 ): Promise<CommentRecord[]> {
-  return listMod({ status: filter.status ?? null, flagged: filter.flagged ?? false, limit, offset });
+  return listMod({ status: filter.status ?? null, flagged: filter.flagged ?? false, limit, offset }).then(fillMissingAuthorAvatars);
 }
 
 export function commentStatusCounts(): Promise<Record<string, number>> {
