@@ -37,6 +37,7 @@ export async function GET(request: Request) {
       postTitle: titles.get(Number(c.postId)) ?? null,
       parentCommentId: c.parentCommentId == null ? null : Number(c.parentCommentId),
       authorName: c.authorName,
+      authorAvatarUrl: c.authorAvatarUrl,
       discordUserId: c.discordUserId,
       body: c.body,
       status: c.status,

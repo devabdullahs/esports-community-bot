@@ -15,6 +15,7 @@ import { DateTime } from "@/components/date-time";
 import { AuthorAvatar } from "@/components/news/author-avatar";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { DISCORD_INVITE_URL } from "@/lib/community-links";
 import { commentsCopy } from "@/lib/comments-i18n";
@@ -25,6 +26,7 @@ import { cn } from "@/lib/utils";
 type ApiComment = {
   id: number;
   authorName: string;
+  authorAvatarUrl: string | null;
   body: string;
   status: "visible" | "pending" | "deleted";
   createdAt: string;
@@ -45,6 +47,7 @@ type ApiData = {
     inGuild: boolean;
     discordUserId: string | null;
     displayName: string | null;
+    avatarUrl: string | null;
   };
 };
 
@@ -65,6 +68,8 @@ export function CommentsSection({ postId, locale }: { postId: number; locale: Lo
   const [data, setData] = useState<ApiData | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [actionNotice, setActionNotice] = useState<string | null>(null);
+  const [deleteTargetId, setDeleteTargetId] = useState<number | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -85,6 +90,7 @@ export function CommentsSection({ postId, locale }: { postId: number; locale: Lo
 
   async function run(fn: () => Promise<void>) {
     setActionError(null);
+    setActionNotice(null);
     try {
       await fn();
     } catch (e) {
@@ -135,10 +141,11 @@ export function CommentsSection({ postId, locale }: { postId: number; locale: Lo
     });
   }
   async function remove(id: number) {
-    if (!window.confirm(t.removeConfirm)) return;
+    setDeleteTargetId(null);
     await run(async () => {
       await api(`/api/comments/${id}`, "DELETE");
       await load();
+      setActionNotice(t.removeSuccess);
     });
   }
 
@@ -149,6 +156,7 @@ export function CommentsSection({ postId, locale }: { postId: number; locale: Lo
   const total = data ? countComments(data.comments) : 0;
 
   return (
+    <>
     <section className="flex flex-col gap-5 border-t pt-8" dir={locale === "ar" ? "rtl" : "ltr"}>
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h2 className="flex items-center gap-2 text-xl font-semibold">
@@ -180,6 +188,11 @@ export function CommentsSection({ postId, locale }: { postId: number; locale: Lo
       {actionError ? (
         <Alert variant="destructive">
           <AlertDescription>{actionError}</AlertDescription>
+        </Alert>
+      ) : null}
+      {actionNotice ? (
+        <Alert>
+          <AlertDescription>{actionNotice}</AlertDescription>
         </Alert>
       ) : null}
 
@@ -227,12 +240,31 @@ export function CommentsSection({ postId, locale }: { postId: number; locale: Lo
               onLike={toggleCommentLike}
               onReply={(body) => submit(body, c.id)}
               onEdit={saveEdit}
-              onDelete={remove}
+              onDelete={setDeleteTargetId}
             />
           </li>
         ))}
       </ul>
     </section>
+    <ConfirmDialog
+      open={deleteTargetId !== null}
+      onOpenChange={(open) => {
+        if (!open) setDeleteTargetId(null);
+      }}
+      title={t.removeConfirm}
+      description={t.removeDialogDescription}
+      cancelLabel={t.cancel}
+      actions={[
+        {
+          label: t.remove,
+          variant: "destructive",
+          onClick: () => {
+            if (deleteTargetId !== null) void remove(deleteTargetId);
+          },
+        },
+      ]}
+    />
+    </>
   );
 }
 
@@ -355,7 +387,7 @@ function CommentNode({
   return (
     <div className="flex flex-col gap-2">
       <div className="flex items-start gap-3">
-        <AuthorAvatar name={comment.authorName} avatarUrl={null} className="mt-0.5 size-8 shrink-0" />
+        <AuthorAvatar name={comment.authorName} avatarUrl={comment.authorAvatarUrl} className="mt-0.5 size-8 shrink-0" />
         <div className="flex min-w-0 flex-1 flex-col gap-1">
           <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-sm">
             <span className="font-semibold">{comment.authorName || "—"}</span>

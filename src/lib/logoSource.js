@@ -4,11 +4,6 @@ import { readFile, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import axios from 'axios';
 import { logger } from './logger.js';
-import {
-  loadRateState as loadLiquipediaRateState,
-  markRateLimited as markLiquipediaRateLimited,
-  rateState as liquipediaRateState,
-} from '../services/liquipedia/rateState.js';
 
 const http = axios.create({
   headers: {
@@ -39,6 +34,27 @@ let activeDownloads = 0;
 // shares only the on-disk image cache (keyed by URL), so a logo fetched by
 // either side serves both.
 const channels = new Map();
+let liquipediaRateStatePromise = null;
+
+async function liquipediaRateHelpers() {
+  liquipediaRateStatePromise ||= import('../services/liquipedia/rateState.js').catch((e) => {
+    logger.debug(`[logo-cache] liquipedia rate state unavailable: ${e.message}`);
+    return null;
+  });
+  return liquipediaRateStatePromise;
+}
+
+async function liquipediaBlockedUntil() {
+  const helpers = await liquipediaRateHelpers();
+  if (!helpers) return 0;
+  helpers.loadRateState({ force: true });
+  return Number(helpers.rateState?.blockedUntil) || 0;
+}
+
+async function markLiquipediaBackoff(durationMs) {
+  const helpers = await liquipediaRateHelpers();
+  helpers?.markRateLimited(durationMs);
+}
 
 function channelState(name) {
   let state = channels.get(name);
@@ -169,7 +185,7 @@ async function downloadLogo(url, file, channel) {
     responseType: 'arraybuffer',
     timeout: 10_000,
     maxContentLength: MAX_LOGO_BYTES,
-  }).catch((err) => {
+  }).catch(async (err) => {
     const status = err.response?.status;
     if (status === 403 || status === 429 || status === 503) {
       state.blockedUntil = Math.max(state.blockedUntil, Date.now() + RATE_LIMIT_BACKOFF_MS);
@@ -178,7 +194,7 @@ async function downloadLogo(url, file, channel) {
       globalState.blockedUntil = Math.max(globalState.blockedUntil, state.blockedUntil);
       saveRateState(state);
       saveRateState(globalState);
-      markLiquipediaRateLimited(RATE_LIMIT_BACKOFF_MS);
+      await markLiquipediaBackoff(RATE_LIMIT_BACKOFF_MS);
       logger.warn(`[logo-cache:${channel}] rate limited (HTTP ${status}) - pausing logo downloads for ${Math.round(RATE_LIMIT_BACKOFF_MS / 60000)} min`);
     }
     throw err;
@@ -196,8 +212,7 @@ async function waitForLogoSlot(state, globalState) {
   for (;;) {
     loadRateState(state, { force: true });
     loadRateState(globalState, { force: true });
-    loadLiquipediaRateState({ force: true });
-    const blockedUntil = Math.max(state.blockedUntil, globalState.blockedUntil, liquipediaRateState.blockedUntil);
+    const blockedUntil = Math.max(state.blockedUntil, globalState.blockedUntil, await liquipediaBlockedUntil());
     if (Date.now() < blockedUntil) throw new Error('logo downloads backing off after a rate limit');
 
     const wait = Math.max(state.lastDownloadAt, globalState.lastDownloadAt) + DOWNLOAD_MIN_GAP_MS - Date.now();

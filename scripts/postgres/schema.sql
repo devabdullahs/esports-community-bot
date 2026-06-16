@@ -317,6 +317,7 @@ CREATE TABLE IF NOT EXISTS post_comments (
   auth_user_id      TEXT NOT NULL,
   discord_user_id   TEXT NOT NULL,
   author_name       TEXT NOT NULL DEFAULT '',
+  author_avatar_url TEXT,
   body              TEXT NOT NULL,
   status            TEXT NOT NULL DEFAULT 'visible'
                     CHECK (status IN ('visible','pending','hidden','rejected','deleted')),
@@ -328,6 +329,7 @@ CREATE TABLE IF NOT EXISTS post_comments (
   deleted_at        TEXT,
   deleted_by        TEXT
 );
+ALTER TABLE post_comments ADD COLUMN IF NOT EXISTS author_avatar_url TEXT;
 CREATE INDEX IF NOT EXISTS idx_post_comments_post ON post_comments(post_id, status, created_at);
 CREATE INDEX IF NOT EXISTS idx_post_comments_root ON post_comments(root_comment_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_post_comments_autoapprove ON post_comments(status, auto_approve_at);

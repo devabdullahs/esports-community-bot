@@ -45,9 +45,17 @@ test.after(() => {
 });
 
 test('root comment + one-level reply; reply-to-reply attaches to the root', async () => {
-  const root = (await createComment({ postId, authUserId: 'u1', discordUserId: 'd1', authorName: 'A', body: 'root' })).comment;
+  const root = (await createComment({
+    postId,
+    authUserId: 'u1',
+    discordUserId: 'd1',
+    authorName: 'A',
+    authorAvatarUrl: 'https://cdn.discordapp.com/avatars/d1/avatar.png?size=128',
+    body: 'root',
+  })).comment;
   assert.equal(root.parentCommentId, null);
   assert.equal(root.rootCommentId, null);
+  assert.equal(root.authorAvatarUrl, 'https://cdn.discordapp.com/avatars/d1/avatar.png?size=128');
 
   const reply = (await createComment({ postId, parentCommentId: root.id, authUserId: 'u2', discordUserId: 'd2', body: 'reply' })).comment;
   assert.equal(Number(reply.parentCommentId), Number(root.id));

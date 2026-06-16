@@ -3,9 +3,11 @@
 import { useCallback, useEffect, useState } from "react";
 import { CheckIcon, EyeOffIcon, Loader2Icon, RotateCcwIcon, Trash2Icon, XIcon } from "lucide-react";
 import { LocalDateTime } from "@/components/local-date-time";
+import { AuthorAvatar } from "@/components/news/author-avatar";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 
 type ModComment = {
   id: number;
@@ -13,6 +15,7 @@ type ModComment = {
   postTitle: string | null;
   parentCommentId: number | null;
   authorName: string;
+  authorAvatarUrl: string | null;
   discordUserId: string;
   body: string;
   status: "visible" | "pending" | "hidden" | "rejected" | "deleted";
@@ -41,6 +44,13 @@ const ACTION_META: Record<string, { label: string; icon: typeof CheckIcon; varia
   restore: { label: "Restore", icon: RotateCcwIcon, variant: "outline" },
   delete: { label: "Delete", icon: Trash2Icon, variant: "destructive" },
 };
+const ACTION_DONE: Record<string, string> = {
+  approve: "Comment approved successfully.",
+  reject: "Comment rejected successfully.",
+  hide: "Comment hidden successfully.",
+  restore: "Comment restored successfully.",
+  delete: "Comment deleted successfully.",
+};
 
 export function CommentModeration() {
   const [filter, setFilter] = useState<Filter>("pending");
@@ -48,7 +58,9 @@ export function CommentModeration() {
   const [counts, setCounts] = useState<Record<string, number>>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<number | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<ModComment | null>(null);
 
   const load = useCallback(async (f: Filter) => {
     setLoading(true);
@@ -75,6 +87,7 @@ export function CommentModeration() {
   async function moderate(id: number, action: string) {
     setBusyId(id);
     setError(null);
+    setNotice(null);
     try {
       const res = await fetch(`/api/admin/comments/${id}/moderate`, {
         method: "POST",
@@ -84,6 +97,7 @@ export function CommentModeration() {
       const json = await res.json();
       if (!res.ok) throw new Error(json.error || `Failed (${res.status})`);
       await load(filter);
+      setNotice(ACTION_DONE[action] || "Comment updated successfully.");
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -108,6 +122,12 @@ export function CommentModeration() {
           <AlertDescription>{error}</AlertDescription>
         </Alert>
       ) : null}
+      {notice ? (
+        <Alert>
+          <AlertTitle>Done</AlertTitle>
+          <AlertDescription>{notice}</AlertDescription>
+        </Alert>
+      ) : null}
 
       {loading ? (
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
@@ -122,6 +142,7 @@ export function CommentModeration() {
           {comments.map((c) => (
             <li key={c.id} className="flex flex-col gap-2 rounded-lg border p-4">
               <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm">
+                <AuthorAvatar name={c.authorName} avatarUrl={c.authorAvatarUrl} className="size-7" />
                 <span className="font-medium">{c.authorName || "—"}</span>
                 <span className="text-xs text-muted-foreground">({c.discordUserId})</span>
                 <span aria-hidden>·</span>
@@ -163,7 +184,10 @@ export function CommentModeration() {
                       size="sm"
                       variant={meta.variant ?? "default"}
                       disabled={busyId === c.id}
-                      onClick={() => moderate(c.id, action)}
+                      onClick={() => {
+                        if (action === "delete") setDeleteTarget(c);
+                        else void moderate(c.id, action);
+                      }}
                     >
                       <meta.icon data-icon="inline-start" />
                       {meta.label}
@@ -175,6 +199,26 @@ export function CommentModeration() {
           ))}
         </ul>
       )}
+      <ConfirmDialog
+        open={deleteTarget !== null}
+        onOpenChange={(open) => {
+          if (!open) setDeleteTarget(null);
+        }}
+        title="Delete this comment?"
+        description="This removes the comment from public threads while keeping the moderation history."
+        cancelLabel="Cancel"
+        actions={[
+          {
+            label: "Delete",
+            variant: "destructive",
+            onClick: () => {
+              const target = deleteTarget;
+              setDeleteTarget(null);
+              if (target) void moderate(target.id, "delete");
+            },
+          },
+        ]}
+      />
     </div>
   );
 }

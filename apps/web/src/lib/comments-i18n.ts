@@ -24,6 +24,8 @@ export type CommentsCopy = {
   saving: string;
   remove: string;
   removeConfirm: string;
+  removeDialogDescription: string;
+  removeSuccess: string;
   pending: string;
   pendingHint: string;
   removed: string;
@@ -56,6 +58,8 @@ export const commentsCopy: Record<Locale, CommentsCopy> = {
     saving: "Saving…",
     remove: "Delete",
     removeConfirm: "Delete this comment?",
+    removeDialogDescription: "This removes the comment from the public thread. Replies stay visible.",
+    removeSuccess: "Comment deleted successfully.",
     pending: "Pending review",
     pendingHint: "Only you can see this until a moderator approves it.",
     removed: "This comment was removed.",
@@ -86,6 +90,8 @@ export const commentsCopy: Record<Locale, CommentsCopy> = {
     saving: "جارٍ الحفظ…",
     remove: "حذف",
     removeConfirm: "هل تريد حذف هذا التعليق؟",
+    removeDialogDescription: "سيتم إزالة التعليق من النقاش العام، وستبقى الردود ظاهرة.",
+    removeSuccess: "تم حذف التعليق بنجاح.",
     pending: "قيد المراجعة",
     pendingHint: "لا يراه غيرك حتى يوافق عليه المشرف.",
     removed: "تم حذف هذا التعليق.",

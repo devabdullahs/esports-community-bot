@@ -17,7 +17,7 @@ export function loadRateState({ force = false } = {}) {
   if (rateState.loaded && !force) return;
   rateState.loaded = true;
   try {
-    const data = JSON.parse(readFileSync(RATE_STATE_PATH, 'utf8'));
+    const data = JSON.parse(readFileSync(/* turbopackIgnore: true */ RATE_STATE_PATH, 'utf8'));
     rateState.lastRequestAt = Number(data.lastRequestAt) || 0;
     rateState.blockedUntil = Number(data.blockedUntil) || 0;
   } catch {
@@ -27,9 +27,9 @@ export function loadRateState({ force = false } = {}) {
 
 export function saveRateState() {
   try {
-    mkdirSync(dirname(RATE_STATE_PATH), { recursive: true });
+    mkdirSync(/* turbopackIgnore: true */ dirname(RATE_STATE_PATH), { recursive: true });
     writeFileSync(
-      RATE_STATE_PATH,
+      /* turbopackIgnore: true */ RATE_STATE_PATH,
       JSON.stringify({ lastRequestAt: rateState.lastRequestAt, blockedUntil: rateState.blockedUntil }, null, 2),
     );
   } catch (e) {
