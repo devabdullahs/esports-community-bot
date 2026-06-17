@@ -189,6 +189,40 @@ test('reply to your OWN pending parent is allowed (own pending thread)', async (
   assert.equal(Number(r.comment.rootCommentId), Number(mine.id));
 });
 
+test('listCommentsForPost(postId, cap): respects the limit and includes replies for returned roots', async () => {
+  // Create a fresh post so counts are predictable.
+  const capPost = await createEwcNewsPost({
+    gameSlug: 'cs2',
+    status: 'published',
+    contentMode: 'shared',
+    defaultLocale: 'en',
+    translations: { en: { title: 'Cap', summary: 'S', body: 'B' } },
+  });
+  const capPostId = capPost.id;
+
+  // Create 3 root comments and attach a reply to the first.
+  const r1 = (await createComment({ postId: capPostId, authUserId: 'cap-u1', discordUserId: 'cap-d1', body: 'root1' })).comment;
+  const r2 = (await createComment({ postId: capPostId, authUserId: 'cap-u2', discordUserId: 'cap-d2', body: 'root2' })).comment;
+  const r3 = (await createComment({ postId: capPostId, authUserId: 'cap-u3', discordUserId: 'cap-d3', body: 'root3' })).comment;
+  const reply = (await createComment({ postId: capPostId, parentCommentId: r1.id, authUserId: 'cap-u4', discordUserId: 'cap-d4', body: 'reply-to-r1' })).comment;
+
+  // With cap=2: only the 2 most recent roots (r3, r2) and their replies.
+  const capped = await listCommentsForPost(capPostId, 2);
+  const cappedRootIds = new Set(capped.filter((c) => c.rootCommentId == null).map((c) => Number(c.id)));
+  assert.equal(cappedRootIds.size, 2, 'exactly 2 roots returned');
+  assert.ok(!cappedRootIds.has(Number(r1.id)), 'oldest root (r1) is excluded');
+  assert.ok(cappedRootIds.has(Number(r2.id)), 'r2 included');
+  assert.ok(cappedRootIds.has(Number(r3.id)), 'r3 included');
+  // The reply is for r1 (excluded root), so it must NOT appear.
+  assert.ok(!capped.some((c) => Number(c.id) === Number(reply.id)), 'reply for excluded root not present');
+
+  // With no cap (default 100): all 3 roots and the reply are returned.
+  const all3 = await listCommentsForPost(capPostId);
+  const all3RootIds = new Set(all3.filter((c) => c.rootCommentId == null).map((c) => Number(c.id)));
+  assert.equal(all3RootIds.size, 3, 'default returns all 3 roots');
+  assert.ok(all3.some((c) => Number(c.id) === Number(reply.id)), 'reply present when root is included');
+});
+
 test('reply-to-reply still attaches to the visible root', async () => {
   const root = (await createComment({ postId, authUserId: 'a1', discordUserId: 'r1', body: 'root v' })).comment;
   const reply = (await createComment({ postId, parentCommentId: root.id, authUserId: 'a2', discordUserId: 'r2', body: 'reply' })).comment;
