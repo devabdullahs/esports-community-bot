@@ -86,6 +86,32 @@ export function CommentsSection({ postId, locale }: { postId: number; locale: Lo
     void load();
   }, [load]);
 
+  // Silent background refresh (no spinner, no error alert) for near-live updates:
+  // reuses the same bounded, per-IP-rate-limited public GET, so other users'
+  // likes/new comments appear without a manual reload. Composer/edit/reply state
+  // is component-local and survives the re-render (React reconciles by comment id).
+  const refresh = useCallback(async () => {
+    try {
+      setData(await api(`/api/news/${postId}/comments`, "GET"));
+    } catch {
+      // Ignore transient background-refresh failures; the next tick retries.
+    }
+  }, [postId]);
+
+  useEffect(() => {
+    const POLL_MS = 15_000;
+    const tick = () => {
+      if (document.visibilityState === "visible") void refresh();
+    };
+    const timer = setInterval(tick, POLL_MS);
+    // Catch up immediately when the tab regains focus.
+    document.addEventListener("visibilitychange", tick);
+    return () => {
+      clearInterval(timer);
+      document.removeEventListener("visibilitychange", tick);
+    };
+  }, [refresh]);
+
   const verified = data?.viewer.verified ?? false;
 
   async function run(fn: () => Promise<void>) {
