@@ -6,7 +6,9 @@ import { useState } from "react";
 import { PencilIcon, PlusIcon, Trash2Icon } from "lucide-react";
 import { LocalDateTime } from "@/components/local-date-time";
 import { localizeText } from "@/lib/community-content";
+import { getAdminCopy } from "@/lib/admin-copy";
 import type { GameRecord } from "@/lib/games";
+import type { Locale } from "@/lib/i18n";
 import type { NewsPost } from "@/lib/news";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -23,19 +25,23 @@ import {
 export function NewsList({
   posts,
   games,
+  locale,
   newPostHref = "/admin/news/new",
 }: {
   posts: NewsPost[];
   games: GameRecord[];
+  locale: Locale;
   newPostHref?: string;
 }) {
   const router = useRouter();
+  const t = getAdminCopy(locale);
   // A post is owned by a game or a media channel; label whichever it is.
   const ownerLabel = (post: NewsPost): string => {
+    if (!post.mediaSlug && !post.gameSlug) return t.common.empty;
     if (post.mediaSlug) return post.mediaSlug;
     if (post.gameSlug) {
       const game = games.find((g) => g.slug === post.gameSlug);
-      return game ? localizeText(game.title, "en") : post.gameSlug;
+      return game ? localizeText(game.title, locale) : post.gameSlug;
     }
     return "—";
   };
@@ -43,20 +49,20 @@ export function NewsList({
   const [deleteError, setDeleteError] = useState<string | null>(null);
 
   async function remove(id: number) {
-    if (!window.confirm("Delete this post? This cannot be undone.")) return;
+    if (!window.confirm(t.newsList.deleteConfirm)) return;
     setDeletingId(id);
     setDeleteError(null);
     try {
       const res = await fetch(`/api/admin/news/${id}`, { method: "DELETE" });
       if (!res.ok) {
         const body = await res.json().catch(() => null);
-        setDeleteError(body?.error || `Delete failed (${res.status})`);
+        setDeleteError(body?.error || t.common.deleteFailed(res.status));
         return;
       }
       setDeleteError(null);
       router.refresh();
     } catch {
-      setDeleteError("Network error — try again.");
+      setDeleteError(t.common.networkError);
     } finally {
       setDeletingId(null);
     }
@@ -66,17 +72,17 @@ export function NewsList({
     <div className="flex flex-col gap-4">
       {deleteError ? (
         <Alert variant="destructive">
-          <AlertTitle>Could not delete</AlertTitle>
+          <AlertTitle>{t.common.couldNotDelete}</AlertTitle>
           <AlertDescription>{deleteError}</AlertDescription>
         </Alert>
       ) : null}
       <div className="flex items-center justify-between gap-3">
         <p className="text-sm text-muted-foreground">
-          {posts.length} post{posts.length === 1 ? "" : "s"}
+          {t.newsList.postsCount(posts.length)}
         </p>
         <Button render={<Link href={newPostHref} />} nativeButton={false}>
           <PlusIcon data-icon="inline-start" />
-          New post
+          {t.newsList.newPost}
         </Button>
       </div>
 
@@ -85,12 +91,12 @@ export function NewsList({
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Title</TableHead>
-                <TableHead>Owner</TableHead>
-                <TableHead>Content</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>Updated</TableHead>
-                <TableHead className="text-right">Actions</TableHead>
+                <TableHead>{t.newsList.headers.title}</TableHead>
+                <TableHead>{t.newsList.headers.owner}</TableHead>
+                <TableHead>{t.newsList.headers.content}</TableHead>
+                <TableHead>{t.newsList.headers.status}</TableHead>
+                <TableHead>{t.newsList.headers.updated}</TableHead>
+                <TableHead className="text-end">{t.newsList.headers.actions}</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -101,7 +107,7 @@ export function NewsList({
                     <span className="flex items-center gap-2">
                       {post.mediaSlug ? (
                         <Badge variant="outline" className="font-normal">
-                          Media
+                          {t.newsList.mediaBadge}
                         </Badge>
                       ) : null}
                       {ownerLabel(post)}
@@ -109,16 +115,16 @@ export function NewsList({
                   </TableCell>
                   <TableCell className="text-muted-foreground">
                     {post.contentMode === "translated"
-                      ? "English + Arabic"
-                      : `Shared ${post.defaultLocale.toUpperCase()}`}
+                      ? t.newsList.translatedContent
+                      : t.newsList.sharedContent(post.defaultLocale)}
                   </TableCell>
                   <TableCell>
                     <Badge variant={post.status === "published" ? "default" : "secondary"}>
-                      {post.status === "published" ? "Published" : "Draft"}
+                      {post.status === "published" ? t.newsList.published : t.newsList.draft}
                     </Badge>
                   </TableCell>
                   <TableCell className="text-muted-foreground">
-                    <LocalDateTime value={post.updatedAt} locale="en" />
+                    <LocalDateTime value={post.updatedAt} locale={locale} />
                   </TableCell>
                   <TableCell>
                     <div className="flex justify-end gap-1">
@@ -127,16 +133,16 @@ export function NewsList({
                         nativeButton={false}
                         variant="ghost"
                         size="icon-sm"
-                        title="Edit"
-                        aria-label="Edit"
+                        title={t.common.edit}
+                        aria-label={t.common.edit}
                       >
                         <PencilIcon />
                       </Button>
                       <Button
                         variant="ghost"
                         size="icon-sm"
-                        title="Delete"
-                        aria-label="Delete"
+                        title={t.common.delete}
+                        aria-label={t.common.delete}
                         className="text-destructive"
                         disabled={deletingId === post.id}
                         onClick={() => remove(post.id)}
@@ -153,7 +159,7 @@ export function NewsList({
       ) : (
         <div className="rounded-md border border-dashed p-8 text-center">
           <p className="text-sm text-muted-foreground">
-            No posts yet. Create your first community update.
+            {t.newsList.empty}
           </p>
         </div>
       )}

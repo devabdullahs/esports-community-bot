@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { Loader2Icon, PlusIcon, SaveIcon, Trash2Icon, UploadIcon } from "lucide-react";
 import { normalizeSlug, MEDIA_URL_MAX_LENGTH } from "@/lib/media-validation";
+import { getAdminCopy } from "@/lib/admin-copy";
 import type { LocalizedText, MediaChannelRecord, MediaLink, MediaPlatform } from "@/lib/media";
 import { copy, type Locale } from "@/lib/i18n";
 import { isSafeUrl } from "@/lib/safe-url";
@@ -75,6 +76,7 @@ export function MediaEditor({
   locale?: Locale;
 }) {
   const router = useRouter();
+  const t = getAdminCopy(locale);
   const [slug, setSlug] = useState(channel?.slug || "");
   const [slugTouched, setSlugTouched] = useState(mode === "edit");
   const [name, setName] = useState<LocalizedText>(channel?.name || empty());
@@ -103,7 +105,7 @@ export function MediaEditor({
       const res = await fetch("/api/admin/news/upload", { method: "POST", body: data });
       const json = await res.json().catch(() => ({}));
       if (!res.ok) {
-        setError(json.error || "Upload failed");
+        setError(json.error || t.editor.uploadFailed);
         return;
       }
       setLogoUrl(json.url);
@@ -137,7 +139,7 @@ export function MediaEditor({
         },
       );
       const result = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(result.error || "Save failed");
+      if (!res.ok) throw new Error(result.error || t.common.couldNotSave);
       router.push("/admin/media");
       router.refresh();
     } catch (e) {
@@ -150,19 +152,19 @@ export function MediaEditor({
     <div className="flex flex-col gap-6">
       {error ? (
         <Alert variant="destructive">
-          <AlertTitle>Could not save</AlertTitle>
+          <AlertTitle>{t.common.couldNotSave}</AlertTitle>
           <AlertDescription>{error}</AlertDescription>
         </Alert>
       ) : null}
 
       <Card>
         <CardHeader>
-          <CardTitle>{mode === "create" ? "New media channel" : "Edit media channel"}</CardTitle>
+          <CardTitle>{mode === "create" ? t.media.newTitle : t.media.editTitle}</CardTitle>
         </CardHeader>
         <CardContent>
           <FieldGroup>
             <Field>
-              <FieldLabel htmlFor="media-slug">URL slug</FieldLabel>
+              <FieldLabel htmlFor="media-slug">{t.editor.urlSlug}</FieldLabel>
               <Input
                 id="media-slug"
                 value={slug}
@@ -174,22 +176,22 @@ export function MediaEditor({
                 placeholder="echo-mena"
               />
               <FieldDescription>
-                {mode === "edit" ? "The slug is fixed once created." : `Public URL: /media/${slug || "your-slug"}`}
+                {mode === "edit" ? t.editor.fixedSlug : t.editor.mediaPublicUrl(slug)}
               </FieldDescription>
             </Field>
 
             <BiField
-              label="Name"
+              label={t.editor.nameLabel}
               value={name}
               onChange={(next) => {
                 setName(next);
                 if (mode === "create" && !slugTouched) setSlug(normalizeSlug(next.en));
               }}
             />
-            <BiField label="Description" value={description} onChange={setDescription} multiline />
+            <BiField label={t.editor.descriptionLabel} value={description} onChange={setDescription} multiline />
 
             <Field>
-              <FieldLabel htmlFor="media-logo">Logo image (optional)</FieldLabel>
+              <FieldLabel htmlFor="media-logo">{t.editor.logoImage}</FieldLabel>
               <div className="flex gap-2">
                 <Input
                   id="media-logo"
@@ -220,13 +222,13 @@ export function MediaEditor({
                   ) : (
                     <UploadIcon data-icon="inline-start" />
                   )}
-                  Upload
+                  {t.editor.upload}
                 </Button>
               </div>
             </Field>
 
             <Field>
-              <FieldLabel>Social & platform links</FieldLabel>
+              <FieldLabel>{t.editor.socialLinks}</FieldLabel>
               <div className="flex flex-col gap-2">
                 {links.map((link, index) => {
                   const urlInvalid = isInvalidLinkUrl(link.url);
@@ -269,8 +271,8 @@ export function MediaEditor({
                           variant="ghost"
                           size="icon-sm"
                           className="text-destructive"
-                          title="Remove link"
-                          aria-label="Remove link"
+                          title={t.editor.removeLink}
+                          aria-label={t.editor.removeLink}
                           onClick={() => setLinks((prev) => prev.filter((_, i) => i !== index))}
                         >
                           <Trash2Icon />
@@ -292,14 +294,14 @@ export function MediaEditor({
                   onClick={() => setLinks((prev) => [...prev, { platform: "x", url: "" }])}
                 >
                   <PlusIcon data-icon="inline-start" />
-                  Add link
+                  {t.editor.addLink}
                 </Button>
               </div>
-              <FieldDescription>Only http(s) links are saved.</FieldDescription>
+              <FieldDescription>{t.editor.linksDescription}</FieldDescription>
             </Field>
 
             <Field>
-              <FieldLabel htmlFor="media-discord">Discord channel ID (optional)</FieldLabel>
+              <FieldLabel htmlFor="media-discord">{t.editor.discordChannelOptional}</FieldLabel>
               <Input
                 id="media-discord"
                 value={discordChannelId}
@@ -311,11 +313,10 @@ export function MediaEditor({
                 onChange={(e) => setDiscordChannelId(e.target.value)}
               />
               {channelIdInvalid ? (
-                <p className="text-xs text-destructive">Enter a valid Discord channel ID (17–20 digits).</p>
+                <p className="text-xs text-destructive">{t.editor.invalidDiscordChannel}</p>
               ) : null}
               <FieldDescription>
-                Set this to auto-post the channel to Discord (announced on create, edited on changes).
-                Leave empty to keep it off Discord.
+                {t.editor.mediaDiscordDescription}
               </FieldDescription>
             </Field>
           </FieldGroup>
@@ -325,7 +326,7 @@ export function MediaEditor({
       <div className="flex flex-wrap items-center gap-2">
         <Button onClick={save} disabled={!canSave || busy}>
           <SaveIcon data-icon="inline-start" />
-          {mode === "create" ? "Create channel" : "Save changes"}
+          {mode === "create" ? t.editor.createChannel : t.common.saveChanges}
         </Button>
       </div>
     </div>

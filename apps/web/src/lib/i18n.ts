@@ -34,6 +34,40 @@ export function directionForLocale(locale: Locale) { return locale === "ar" ? "r
 export function numberLocale(locale: Locale) { return locale === "ar" ? "ar-SA" : "en-US"; }
 export function formatNumber(value: number, locale: Locale) { return new Intl.NumberFormat(numberLocale(locale)).format(value); }
 
+export const LOCALE_ROUTE_HEADER = "x-ec-locale";
+
+function splitHref(value: string) {
+  const hashIndex = value.indexOf("#");
+  const queryIndex = value.indexOf("?");
+  const suffixIndex =
+    hashIndex === -1 ? queryIndex : queryIndex === -1 ? hashIndex : Math.min(hashIndex, queryIndex);
+  if (suffixIndex === -1) return { pathname: value, suffix: "" };
+  return { pathname: value.slice(0, suffixIndex), suffix: value.slice(suffixIndex) };
+}
+
+export function stripLocalePrefix(pathname: string) {
+  const path = pathname.startsWith("/") ? pathname : `/${pathname}`;
+  if (path === "/ar") return "/";
+  if (path.startsWith("/ar/")) return path.slice(3) || "/";
+  return path || "/";
+}
+
+export function localeFromPathname(pathname: string): Locale | null {
+  return pathname === "/ar" || pathname.startsWith("/ar/") ? "ar" : null;
+}
+
+function isPathUnder(pathname: string, prefix: string) {
+  return pathname === prefix || pathname.startsWith(`${prefix}/`);
+}
+
+export function isLocaleRoutedPath(pathname: string) {
+  const { pathname: rawPathname } = splitHref(pathname);
+  const cleanPath = stripLocalePrefix(rawPathname);
+  return !["/admin", "/api", "/login", "/me"].some((prefix) =>
+    isPathUnder(cleanPath, prefix),
+  );
+}
+
 export type DateTimeValue = string | number | Date;
 
 const DATE_WITHOUT_ZONE_RE = /^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}(?::\d{2}(?:\.\d{1,6})?)?$/;
@@ -68,16 +102,20 @@ export function formatUnixSeconds(value: number | null | undefined, locale: Loca
 }
 
 export function localizedPath(pathname: string, locale: Locale) {
-  void locale;
-  return pathname;
+  const { pathname: rawPathname, suffix } = splitHref(pathname);
+  const cleanPath = stripLocalePrefix(rawPathname);
+  if (locale === "ar" && isLocaleRoutedPath(cleanPath)) {
+    return cleanPath === "/" ? `/ar${suffix}` : `/ar${cleanPath}${suffix}`;
+  }
+  return `${cleanPath}${suffix}`;
 }
 
 export function localizedHref(pathname: string, searchParams: { toString(): string } | null | undefined, locale: Locale) {
-  void locale;
-  const params = new URLSearchParams(searchParams?.toString());
+  const { pathname: rawPathname, suffix } = splitHref(pathname);
+  const params = new URLSearchParams(searchParams?.toString() || suffix.replace(/^\?/, ""));
   params.delete("lang");
   const query = params.toString();
-  return query ? pathname + "?" + query : pathname;
+  return localizedPath(query ? `${rawPathname}?${query}` : rawPathname, locale);
 }
 
 const baseCopy = {

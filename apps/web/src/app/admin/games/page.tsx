@@ -3,7 +3,9 @@ import { redirect } from "next/navigation";
 import { ArrowLeftIcon } from "lucide-react";
 import { GamesList } from "@/components/admin/games-list";
 import { getAdminAccess } from "@/lib/admin";
+import { getAdminCopy } from "@/lib/admin-copy";
 import { listGames } from "@/lib/games";
+import { getRequestLocale } from "@/lib/request-locale";
 import { Button } from "@/components/ui/button";
 
 export const runtime = "nodejs";
@@ -13,6 +15,8 @@ export default async function AdminGamesPage() {
   const access = await getAdminAccess();
   if (!access.session) redirect("/login?callbackURL=/admin/games");
   if (!access.allowed) redirect("/admin");
+  const locale = await getRequestLocale();
+  const t = getAdminCopy(locale);
 
   const allGames = await listGames();
   const games =
@@ -27,17 +31,16 @@ export default async function AdminGamesPage() {
         className="w-fit"
       >
         <ArrowLeftIcon data-icon="inline-start" />
-        Back to admin
+        {t.common.backToAdmin}
       </Button>
       <div>
-        <p className="text-sm text-muted-foreground">Admin publishing</p>
-        <h1 className="text-3xl font-semibold leading-tight">Game pages</h1>
+        <p className="text-sm text-muted-foreground">{t.common.adminPublishing}</p>
+        <h1 className="text-3xl font-semibold leading-tight">{t.games.title}</h1>
         <p className="mt-2 text-sm text-muted-foreground">
-          Add, edit, reorder, or remove the games shown on the public site. Deleting a
-          game also removes its news posts.
+          {t.games.description}
         </p>
       </div>
-      <GamesList games={games} canManageGames={access.isSuper} />
+      <GamesList games={games} canManageGames={access.isSuper} locale={locale} />
     </main>
   );
 }

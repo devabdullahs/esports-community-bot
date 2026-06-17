@@ -11,19 +11,24 @@ import {
   Trash2Icon,
 } from "lucide-react";
 import { localizeText } from "@/lib/community-content";
+import { getAdminCopy } from "@/lib/admin-copy";
 import type { GameRecord } from "@/lib/games";
+import type { Locale } from "@/lib/i18n";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 
 export function GamesList({
   games,
+  locale,
   canManageGames = true,
 }: {
   games: GameRecord[];
+  locale: Locale;
   canManageGames?: boolean;
 }) {
   const router = useRouter();
+  const t = getAdminCopy(locale);
   const [items, setItems] = useState<GameRecord[]>(games);
   const [busy, setBusy] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
@@ -54,7 +59,7 @@ export function GamesList({
   async function remove(slug: string, title: string) {
     if (
       !window.confirm(
-        `Delete "${title}"? This also deletes its news posts and cannot be undone.`,
+        t.games.deleteConfirm(title),
       )
     )
       return;
@@ -64,14 +69,14 @@ export function GamesList({
       const res = await fetch(`/api/admin/games/${slug}`, { method: "DELETE" });
       if (!res.ok) {
         const body = await res.json().catch(() => null);
-        setDeleteError(body?.error || `Delete failed (${res.status})`);
+        setDeleteError(body?.error || t.common.deleteFailed(res.status));
         return;
       }
       setDeleteError(null);
       setItems((prev) => prev.filter((g) => g.slug !== slug));
       router.refresh();
     } catch {
-      setDeleteError("Network error — try again.");
+      setDeleteError(t.common.networkError);
     } finally {
       setBusy(false);
     }
@@ -81,18 +86,18 @@ export function GamesList({
     <div className="flex flex-col gap-4">
       {deleteError ? (
         <Alert variant="destructive">
-          <AlertTitle>Could not delete</AlertTitle>
+          <AlertTitle>{t.common.couldNotDelete}</AlertTitle>
           <AlertDescription>{deleteError}</AlertDescription>
         </Alert>
       ) : null}
       <div className="flex items-center justify-between gap-3">
         <p className="text-sm text-muted-foreground">
-          {items.length} game{items.length === 1 ? "" : "s"}
+          {t.games.count(items.length)}
         </p>
         {canManageGames ? (
           <Button render={<Link href="/admin/games/new" />} nativeButton={false}>
             <PlusIcon data-icon="inline-start" />
-            New game
+            {t.games.newAction}
           </Button>
         ) : null}
       </div>
@@ -108,8 +113,8 @@ export function GamesList({
                     size="icon-xs"
                     disabled={busy || index === 0}
                     onClick={() => move(index, -1)}
-                    title="Move up"
-                    aria-label="Move up"
+                    title={t.games.moveUp}
+                    aria-label={t.games.moveUp}
                   >
                     <ArrowUpIcon />
                   </Button>
@@ -118,8 +123,8 @@ export function GamesList({
                     size="icon-xs"
                     disabled={busy || index === items.length - 1}
                     onClick={() => move(index, 1)}
-                    title="Move down"
-                    aria-label="Move down"
+                    title={t.games.moveDown}
+                    aria-label={t.games.moveDown}
                   >
                     <ArrowDownIcon />
                   </Button>
@@ -127,9 +132,9 @@ export function GamesList({
               ) : null}
               <div className="flex flex-1 flex-col gap-0.5">
                 <div className="flex flex-wrap items-center gap-2">
-                  <span className="font-medium">{localizeText(game.title, "en")}</span>
-                  {localizeText(game.status, "en") ? (
-                    <Badge variant="secondary">{localizeText(game.status, "en")}</Badge>
+                  <span className="font-medium">{localizeText(game.title, locale)}</span>
+                  {localizeText(game.status, locale) ? (
+                    <Badge variant="secondary">{localizeText(game.status, locale)}</Badge>
                   ) : null}
                 </div>
                 <span className="font-mono text-xs text-muted-foreground">/games/{game.slug}</span>
@@ -140,8 +145,8 @@ export function GamesList({
                   nativeButton={false}
                   variant="ghost"
                   size="icon-sm"
-                  title="Edit"
-                  aria-label="Edit"
+                  title={t.common.edit}
+                  aria-label={t.common.edit}
                 >
                   <PencilIcon />
                 </Button>
@@ -151,9 +156,9 @@ export function GamesList({
                     size="icon-sm"
                     className="text-destructive"
                     disabled={busy}
-                    onClick={() => remove(game.slug, localizeText(game.title, "en"))}
-                    title="Delete"
-                    aria-label="Delete"
+                    onClick={() => remove(game.slug, localizeText(game.title, locale))}
+                    title={t.common.delete}
+                    aria-label={t.common.delete}
                   >
                     <Trash2Icon />
                   </Button>
@@ -164,7 +169,7 @@ export function GamesList({
         </div>
       ) : (
         <div className="rounded-md border border-dashed p-8 text-center">
-          <p className="text-sm text-muted-foreground">No games yet. Add your first game.</p>
+          <p className="text-sm text-muted-foreground">{t.games.empty}</p>
         </div>
       )}
     </div>

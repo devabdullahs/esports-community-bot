@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { PlusIcon, SaveIcon, Trash2Icon } from "lucide-react";
 import { normalizeSlug, validateGameContent } from "@/lib/game-validation";
+import { getAdminCopy } from "@/lib/admin-copy";
 import type { GameRecord, LocalizedText } from "@/lib/games";
 import { copy, type Locale } from "@/lib/i18n";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -62,6 +63,7 @@ export function GameEditor({
   locale?: Locale;
 }) {
   const router = useRouter();
+  const t = getAdminCopy(locale);
   const [slug, setSlug] = useState(game?.slug || "");
   const [slugTouched, setSlugTouched] = useState(mode === "edit");
   const [title, setTitle] = useState<LocalizedText>(game?.title || empty());
@@ -105,7 +107,7 @@ export function GameEditor({
         },
       );
       const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data.error || "Save failed");
+      if (!res.ok) throw new Error(data.error || t.common.couldNotSave);
       router.push("/admin/games");
       router.refresh();
     } catch (e) {
@@ -118,19 +120,19 @@ export function GameEditor({
     <div className="flex flex-col gap-6">
       {error ? (
         <Alert variant="destructive">
-          <AlertTitle>Could not save</AlertTitle>
+          <AlertTitle>{t.common.couldNotSave}</AlertTitle>
           <AlertDescription>{error}</AlertDescription>
         </Alert>
       ) : null}
 
       <Card>
         <CardHeader>
-          <CardTitle>{mode === "create" ? "New game" : "Edit game"}</CardTitle>
+          <CardTitle>{mode === "create" ? t.games.newTitle : t.games.editTitle}</CardTitle>
         </CardHeader>
         <CardContent>
           <FieldGroup>
             <Field>
-              <FieldLabel htmlFor="game-slug">URL slug</FieldLabel>
+              <FieldLabel htmlFor="game-slug">{t.editor.urlSlug}</FieldLabel>
               <Input
                 id="game-slug"
                 value={slug}
@@ -143,31 +145,31 @@ export function GameEditor({
               />
               <FieldDescription>
                 {mode === "edit"
-                  ? "The slug is fixed once created (it's the public URL)."
-                  : `Public URL: /games/${slug || "your-slug"}`}
+                  ? t.editor.fixedGameSlug
+                  : t.editor.gamePublicUrl(slug)}
               </FieldDescription>
             </Field>
 
             <BiField
-              label="Title"
+              label={t.editor.titleLabel}
               value={title}
               onChange={(next) => {
                 setTitle(next);
                 if (mode === "create" && !slugTouched) setSlug(normalizeSlug(next.en));
               }}
-              description="Shown as the game name (required in both languages)."
+              description={t.editor.titleDescription}
             />
             <BiField
-              label="Status badge"
+              label={t.editor.statusBadge}
               value={status}
               onChange={setStatus}
-              description='The small badge, e.g. "Coverage ready".'
+              description={t.editor.statusDescription}
             />
-            <BiField label="Description" value={description} onChange={setDescription} multiline />
-            <BiField label="Owner" value={owner} onChange={setOwner} />
+            <BiField label={t.editor.descriptionLabel} value={description} onChange={setDescription} multiline />
+            <BiField label={t.editor.ownerLabel} value={owner} onChange={setOwner} />
 
             <Field>
-              <FieldLabel htmlFor="game-discord-channel">Discord news channel ID</FieldLabel>
+              <FieldLabel htmlFor="game-discord-channel">{t.editor.discordNewsChannel}</FieldLabel>
               <Input
                 id="game-discord-channel"
                 value={discordChannelId}
@@ -177,20 +179,19 @@ export function GameEditor({
                 onChange={(e) => setDiscordChannelId(e.target.value)}
               />
               <FieldDescription>
-                Optional. Published news for this game auto-posts here. Leave blank to use the
-                server&apos;s default news channel.
+                {t.editor.discordNewsDescription}
               </FieldDescription>
             </Field>
 
             <Field>
-              <FieldLabel>Focus tags</FieldLabel>
+              <FieldLabel>{t.editor.focusTags}</FieldLabel>
               <div className="flex flex-col gap-2">
                 {focus.map((tag, index) => (
                   <div key={index} className="flex items-center gap-2">
                     <Input
                       value={tag.en}
                       dir="ltr"
-                      placeholder="English tag"
+                      placeholder={t.editor.englishTag}
                       className="flex-1"
                       onChange={(e) =>
                         setFocus((prev) =>
@@ -201,7 +202,7 @@ export function GameEditor({
                     <Input
                       value={tag.ar}
                       dir="rtl"
-                      placeholder={`${ARABIC_LABEL} tag`}
+                      placeholder={t.editor.arabicTag}
                       className="flex-1"
                       onChange={(e) =>
                         setFocus((prev) =>
@@ -214,8 +215,8 @@ export function GameEditor({
                       variant="ghost"
                       size="icon-sm"
                       className="text-destructive"
-                      title="Remove tag"
-                      aria-label="Remove tag"
+                      title={t.editor.removeTag}
+                      aria-label={t.editor.removeTag}
                       onClick={() => setFocus((prev) => prev.filter((_, i) => i !== index))}
                     >
                       <Trash2Icon />
@@ -230,10 +231,10 @@ export function GameEditor({
                   onClick={() => setFocus((prev) => [...prev, empty()])}
                 >
                   <PlusIcon data-icon="inline-start" />
-                  Add tag
+                  {t.editor.addTag}
                 </Button>
               </div>
-              <FieldDescription>Short topics shown on the game page.</FieldDescription>
+              <FieldDescription>{t.editor.focusDescription}</FieldDescription>
             </Field>
           </FieldGroup>
         </CardContent>
@@ -242,7 +243,7 @@ export function GameEditor({
       <div className="flex flex-wrap items-center gap-2">
         <Button onClick={save} disabled={!canSave || busy}>
           <SaveIcon data-icon="inline-start" />
-          {mode === "create" ? "Create game" : "Save changes"}
+          {mode === "create" ? t.editor.createGame : t.common.saveChanges}
         </Button>
       </div>
     </div>

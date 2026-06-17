@@ -24,16 +24,18 @@ import {
   localizedPath,
 } from "@/lib/i18n";
 import { getRequestLocale } from "@/lib/request-locale";
-import { buildPageMetadata, SITE_DESCRIPTION, SITE_NAME } from "@/lib/metadata";
+import { buildPageMetadata, siteDescription, siteName } from "@/lib/metadata";
 import { safeUrlOrUndefined } from "@/lib/safe-url";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-export function generateMetadata(): Metadata {
+export async function generateMetadata(): Promise<Metadata> {
+  const locale = await getRequestLocale();
   return buildPageMetadata({
-    title: SITE_NAME,
-    description: SITE_DESCRIPTION,
-    path: "/",
+    title: siteName(locale),
+    description: siteDescription(locale),
+    path: localizedPath("/", locale),
+    locale,
   });
 }
 

@@ -3,6 +3,7 @@ import { notFound, redirect } from "next/navigation";
 import { ArrowLeftIcon } from "lucide-react";
 import { NewsEditor } from "@/components/admin/news-editor";
 import { canManageGame, canManageMedia, getAdminAccess } from "@/lib/admin";
+import { getAdminCopy } from "@/lib/admin-copy";
 import { localizeText } from "@/lib/community-content";
 import { listGames } from "@/lib/games";
 import { getMediaChannel } from "@/lib/media";
@@ -30,6 +31,7 @@ export default async function EditNewsPostPage({
   if (!post) notFound();
 
   const locale = await getRequestLocale();
+  const t = getAdminCopy(locale);
   const allGames = await listGames();
   const currentUser = { discordId: access.discordUserId, name: access.displayName };
 
@@ -47,11 +49,11 @@ export default async function EditNewsPostPage({
           className="w-fit"
         >
           <ArrowLeftIcon data-icon="inline-start" />
-          Back to channel
+          {t.common.backToChannel}
         </Button>
         <div>
-          <p className="text-sm text-muted-foreground">Channel publishing</p>
-          <h1 className="text-3xl font-semibold leading-tight">Edit post</h1>
+          <p className="text-sm text-muted-foreground">{t.common.channelPublishing}</p>
+          <h1 className="text-3xl font-semibold leading-tight">{t.newsList.editPost}</h1>
         </div>
         <NewsEditor
           mode="edit"
@@ -79,11 +81,11 @@ export default async function EditNewsPostPage({
         className="w-fit"
       >
         <ArrowLeftIcon data-icon="inline-start" />
-        Back to admin
+        {t.common.backToAdmin}
       </Button>
       <div>
-        <p className="text-sm text-muted-foreground">Admin publishing</p>
-        <h1 className="text-3xl font-semibold leading-tight">Edit post</h1>
+        <p className="text-sm text-muted-foreground">{t.common.adminPublishing}</p>
+        <h1 className="text-3xl font-semibold leading-tight">{t.newsList.editPost}</h1>
       </div>
       <NewsEditor
         mode="edit"

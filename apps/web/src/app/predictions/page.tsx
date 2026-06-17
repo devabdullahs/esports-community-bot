@@ -16,15 +16,6 @@ import { getRequestLocale } from "@/lib/request-locale";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-export function generateMetadata(): Metadata {
-  return buildPageMetadata({
-    title: "EWC prediction leaderboards",
-    description:
-      "Join weekly and season Esports World Cup predictions in Discord, then track ranks, points, and profiles on the community leaderboard.",
-    path: "/predictions",
-  });
-}
-
 const COPY = {
   en: {
     eyebrow: "Predictions",
@@ -51,6 +42,17 @@ const COPY = {
     openLeaderboard: "افتح لوحة الصدارة",
   },
 } as const;
+
+export async function generateMetadata(): Promise<Metadata> {
+  const locale = await getRequestLocale();
+  const text = COPY[locale];
+  return buildPageMetadata({
+    title: text.title,
+    description: text.description,
+    path: localizedPath("/predictions", locale),
+    locale,
+  });
+}
 
 export default async function PredictionsPage() {
   const locale = await getRequestLocale();

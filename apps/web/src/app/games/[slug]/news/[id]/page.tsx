@@ -18,7 +18,7 @@ import { getPublishedNewsPostCached } from "@/lib/news";
 import { parsePostId } from "@/lib/news-validation";
 import { getRequestLocale } from "@/lib/request-locale";
 import { safeUrlOrUndefined } from "@/lib/safe-url";
-import { absoluteUrl, buildPageMetadata, SITE_NAME, siteIconUrl } from "@/lib/metadata";
+import { absoluteUrl, buildPageMetadata, siteIconUrl, siteName } from "@/lib/metadata";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -39,6 +39,7 @@ export async function generateMetadata({
     description: post.summary || post.body.slice(0, 200),
     path: localizedPath(`/games/${slug}/news/${id}`, locale),
     image: post.coverImageUrl,
+    locale,
   });
 }
 
@@ -77,11 +78,12 @@ export default async function NewsPostPage({
   const common = copy[locale].common;
   const gameTitle = localizeText(game.title, locale);
   const canonicalUrl = absoluteUrl(localizedPath(`/games/${slug}/news/${id}`, locale));
+  const publisherName = siteName(locale);
   const articleAuthors = post.authors.length
     ? post.authors.map((author) => ({ "@type": "Person", name: author.name }))
     : post.authorName
       ? [{ "@type": "Person", name: post.authorName }]
-      : [{ "@type": "Organization", name: SITE_NAME }];
+      : [{ "@type": "Organization", name: publisherName }];
   const articleStructuredData = {
     "@context": "https://schema.org",
     "@type": "NewsArticle",
@@ -99,7 +101,7 @@ export default async function NewsPostPage({
     author: articleAuthors,
     publisher: {
       "@type": "Organization",
-      name: SITE_NAME,
+      name: publisherName,
       logo: {
         "@type": "ImageObject",
         url: siteIconUrl(),

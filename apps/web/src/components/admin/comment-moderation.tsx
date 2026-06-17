@@ -4,6 +4,8 @@ import { useCallback, useEffect, useState } from "react";
 import { CheckIcon, EyeOffIcon, Loader2Icon, RotateCcwIcon, Trash2Icon, XIcon } from "lucide-react";
 import { LocalDateTime } from "@/components/local-date-time";
 import { AuthorAvatar } from "@/components/news/author-avatar";
+import { getAdminCopy } from "@/lib/admin-copy";
+import type { Locale } from "@/lib/i18n";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -27,9 +29,10 @@ type ModComment = {
 
 const FILTERS = ["pending", "flagged", "visible", "hidden", "rejected", "deleted"] as const;
 type Filter = (typeof FILTERS)[number];
+type ModerationAction = "approve" | "reject" | "hide" | "restore" | "delete";
 
 // Actions offered per current status.
-const ACTIONS: Record<string, Array<"approve" | "reject" | "hide" | "restore" | "delete">> = {
+const ACTIONS: Record<string, ModerationAction[]> = {
   pending: ["approve", "reject", "hide", "delete"],
   visible: ["hide", "delete"],
   hidden: ["restore", "reject", "delete"],
@@ -37,22 +40,16 @@ const ACTIONS: Record<string, Array<"approve" | "reject" | "hide" | "restore" | 
   deleted: ["restore"],
 };
 
-const ACTION_META: Record<string, { label: string; icon: typeof CheckIcon; variant?: "outline" | "destructive" | "ghost" }> = {
-  approve: { label: "Approve", icon: CheckIcon },
-  reject: { label: "Reject", icon: XIcon, variant: "outline" },
-  hide: { label: "Hide", icon: EyeOffIcon, variant: "outline" },
-  restore: { label: "Restore", icon: RotateCcwIcon, variant: "outline" },
-  delete: { label: "Delete", icon: Trash2Icon, variant: "destructive" },
-};
-const ACTION_DONE: Record<string, string> = {
-  approve: "Comment approved successfully.",
-  reject: "Comment rejected successfully.",
-  hide: "Comment hidden successfully.",
-  restore: "Comment restored successfully.",
-  delete: "Comment deleted successfully.",
+const ACTION_META: Record<ModerationAction, { icon: typeof CheckIcon; variant?: "outline" | "destructive" | "ghost" }> = {
+  approve: { icon: CheckIcon },
+  reject: { icon: XIcon, variant: "outline" },
+  hide: { icon: EyeOffIcon, variant: "outline" },
+  restore: { icon: RotateCcwIcon, variant: "outline" },
+  delete: { icon: Trash2Icon, variant: "destructive" },
 };
 
-export function CommentModeration() {
+export function CommentModeration({ locale }: { locale: Locale }) {
+  const t = getAdminCopy(locale);
   const [filter, setFilter] = useState<Filter>("pending");
   const [comments, setComments] = useState<ModComment[]>([]);
   const [counts, setCounts] = useState<Record<string, number>>({});
@@ -84,7 +81,7 @@ export function CommentModeration() {
     void load(filter);
   }, [filter, load]);
 
-  async function moderate(id: number, action: string) {
+  async function moderate(id: number, action: ModerationAction) {
     setBusyId(id);
     setError(null);
     setNotice(null);
@@ -97,7 +94,7 @@ export function CommentModeration() {
       const json = await res.json();
       if (!res.ok) throw new Error(json.error || `Failed (${res.status})`);
       await load(filter);
-      setNotice(ACTION_DONE[action] || "Comment updated successfully.");
+      setNotice(t.comments.done[action] || t.comments.done.fallback);
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -109,8 +106,8 @@ export function CommentModeration() {
     <div className="flex flex-col gap-4">
       <div className="flex flex-wrap gap-1.5">
         {FILTERS.map((f) => (
-          <Button key={f} variant={f === filter ? "default" : "outline"} size="sm" onClick={() => setFilter(f)} className="capitalize">
-            {f}
+          <Button key={f} variant={f === filter ? "default" : "outline"} size="sm" onClick={() => setFilter(f)}>
+            {t.comments.filters[f]}
             {counts[f] != null ? <span className="ms-1 tabular-nums opacity-70">{counts[f]}</span> : null}
           </Button>
         ))}
@@ -118,24 +115,24 @@ export function CommentModeration() {
 
       {error ? (
         <Alert variant="destructive">
-          <AlertTitle>Action failed</AlertTitle>
+          <AlertTitle>{t.common.actionFailed}</AlertTitle>
           <AlertDescription>{error}</AlertDescription>
         </Alert>
       ) : null}
       {notice ? (
         <Alert>
-          <AlertTitle>Done</AlertTitle>
+          <AlertTitle>{t.common.done}</AlertTitle>
           <AlertDescription>{notice}</AlertDescription>
         </Alert>
       ) : null}
 
       {loading ? (
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
-          <Loader2Icon className="size-4 animate-spin" /> Loading…
+          <Loader2Icon className="size-4 animate-spin" /> {t.common.loading}
         </div>
       ) : comments.length === 0 ? (
         <p className="rounded-md border border-dashed p-8 text-center text-sm text-muted-foreground">
-          No comments in “{filter}”.
+          {t.comments.noComments(t.comments.filters[filter])}
         </p>
       ) : (
         <ul className="flex flex-col gap-3">
@@ -143,20 +140,20 @@ export function CommentModeration() {
             <li key={c.id} className="flex flex-col gap-2 rounded-lg border p-4">
               <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm">
                 <AuthorAvatar name={c.authorName} avatarUrl={c.authorAvatarUrl} className="size-7" />
-                <span className="font-medium">{c.authorName || "—"}</span>
+                <span className="font-medium">{c.authorName || t.comments.authorFallback}</span>
                 <span className="text-xs text-muted-foreground">({c.discordUserId})</span>
                 <span aria-hidden>·</span>
                 <span className="text-xs text-muted-foreground">
-                  <LocalDateTime value={c.createdAt} locale="en" />
+                  <LocalDateTime value={c.createdAt} locale={locale} />
                 </span>
-                <Badge variant="outline" className="capitalize">{c.status}</Badge>
-                {c.parentCommentId ? <Badge variant="secondary">reply</Badge> : null}
+                <Badge variant="outline">{t.comments.filters[c.status]}</Badge>
+                {c.parentCommentId ? <Badge variant="secondary">{t.comments.reply}</Badge> : null}
               </div>
 
               <div className="text-xs text-muted-foreground">
-                on{" "}
+                {t.comments.onPost}{" "}
                 <a href={`/admin/news/${c.postId}`} className="underline-offset-2 hover:underline">
-                  {c.postTitle || `post #${c.postId}`}
+                  {c.postTitle || t.comments.postFallback(c.postId)}
                 </a>
               </div>
 
@@ -167,10 +164,14 @@ export function CommentModeration() {
               {c.flagReason ? (
                 <div className="flex flex-wrap gap-1.5 text-xs">
                   {c.flagReason.profanity?.length ? (
-                    <Badge variant="destructive">profanity: {c.flagReason.profanity.join(", ")}</Badge>
+                    <Badge variant="destructive">
+                      {t.comments.profanity}: {c.flagReason.profanity.join(", ")}
+                    </Badge>
                   ) : null}
                   {c.flagReason.links?.length ? (
-                    <Badge variant="outline">links: {c.flagReason.links.join(", ")}</Badge>
+                    <Badge variant="outline">
+                      {t.comments.links}: {c.flagReason.links.join(", ")}
+                    </Badge>
                   ) : null}
                 </div>
               ) : null}
@@ -190,7 +191,7 @@ export function CommentModeration() {
                       }}
                     >
                       <meta.icon data-icon="inline-start" />
-                      {meta.label}
+                      {t.comments.actions[action]}
                     </Button>
                   );
                 })}
@@ -204,12 +205,12 @@ export function CommentModeration() {
         onOpenChange={(open) => {
           if (!open) setDeleteTarget(null);
         }}
-        title="Delete this comment?"
-        description="This removes the comment from public threads while keeping the moderation history."
-        cancelLabel="Cancel"
+        title={t.comments.deleteTitle}
+        description={t.comments.deleteDescription}
+        cancelLabel={t.common.cancel}
         actions={[
           {
-            label: "Delete",
+            label: t.common.delete,
             variant: "destructive",
             onClick: () => {
               const target = deleteTarget;
