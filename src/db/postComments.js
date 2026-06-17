@@ -121,16 +121,32 @@ export async function createComment({
   });
 }
 
-// Comments shown on the public post page: visible, the viewer's own pending, and
-// deleted (the service keeps a deleted root only when it still has replies).
-export async function listCommentsForPost(postId) {
-  const rows = await all(
+// Comments shown on the public post page: the latest `limit` root threads
+// (default 100, hard max 200) plus all their replies.
+// Deleted roots are included so the service can keep a placeholder for threads
+// that still have live replies.
+export async function listCommentsForPost(postId, limit = 100) {
+  const cap = Math.max(1, Math.min(200, Number(limit) || 100));
+  // Fetch the most recent N root comments first.
+  const roots = await all(
     `SELECT * FROM post_comments
-     WHERE post_id = $1 AND status IN ('visible','pending','deleted')
-     ORDER BY created_at ASC, id ASC`,
-    [postId],
+     WHERE post_id = $1 AND root_comment_id IS NULL AND status IN ('visible','pending','deleted')
+     ORDER BY created_at DESC, id DESC
+     LIMIT $2`,
+    [postId, cap],
   );
-  return rows.map(hydrate);
+  if (roots.length === 0) return [];
+  // Fetch all replies for those roots.
+  const rootIds = roots.map((r) => r.id);
+  const placeholders = rootIds.map((_, i) => `$${i + 2}`).join(',');
+  const replies = await all(
+    `SELECT * FROM post_comments
+     WHERE post_id = $1 AND root_comment_id IN (${placeholders}) AND status IN ('visible','pending','deleted')
+     ORDER BY created_at ASC, id ASC`,
+    [postId, ...rootIds],
+  );
+  // Return roots oldest-first within the returned window, then replies.
+  return [...roots.reverse(), ...replies].map(hydrate);
 }
 
 // Edit an author's own comment. The caller re-runs moderation and passes the

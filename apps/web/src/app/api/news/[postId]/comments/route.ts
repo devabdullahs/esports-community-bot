@@ -13,9 +13,14 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 // GET is public: anyone can read the visible comment thread + post-like count.
-export async function GET(_request: Request, context: { params: Promise<{ postId: string }> }) {
+export async function GET(request: Request, context: { params: Promise<{ postId: string }> }) {
   const postId = parseId((await context.params).postId);
   if (postId === null) return NextResponse.json({ error: "Invalid post id" }, { status: 400 });
+
+  // Light per-IP cap to prevent unauthenticated hammering.
+  const ipLimited = await rateLimitOr429({ key: `comment:read:ip:${clientIp(request)}`, limit: 120, windowSec: 60 });
+  if (ipLimited) return ipLimited;
+
   if (!(await getPublishedNewsPostCached(postId))) {
     return NextResponse.json({ error: "Post not found" }, { status: 404 });
   }

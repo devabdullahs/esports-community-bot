@@ -62,7 +62,7 @@ type CreateInput = {
 
 const createComment = _create as (i: CreateInput) => Promise<{ comment: CommentRecord } | { error: string }>;
 const getComment = _get as (id: number) => Promise<CommentRecord | null>;
-const listForPost = _list as (postId: number) => Promise<CommentRecord[]>;
+const listForPost = _list as (postId: number, limit?: number) => Promise<CommentRecord[]>;
 const editComment = _edit as (
   id: number,
   patch: { body: string; status: CommentStatus; flagReason?: Record<string, unknown> | null; autoApproveAt?: number | null },
@@ -154,6 +154,11 @@ export function moderationFor(body: string): {
   return { status: "visible", flagReason: null, autoApproveAt: null };
 }
 
+// Throttle the lazy auto-approval sweep on the public read path to at most once
+// per minute per server instance. The admin path calls autoApproveDue directly
+// via autoApproveDueCommentsForModeration() and is unaffected.
+let lastReadSweepAt = 0;
+
 // --- public (post-page) view ------------------------------------------------
 
 export type PublicComment = {
@@ -229,8 +234,11 @@ export async function getPostCommentsView(
   postId: number,
   viewer: string | null,
 ): Promise<PublicComment[]> {
-  await autoApproveDue().catch(() => {});
-  const rows = await fillMissingAuthorAvatars(await listForPost(postId));
+  if (Date.now() - lastReadSweepAt > 60_000) {
+    lastReadSweepAt = Date.now();
+    await autoApproveDue().catch(() => {});
+  }
+  const rows = await fillMissingAuthorAvatars(await listForPost(postId, 100));
   const ids = rows.map((c) => Number(c.id));
   const [counts, viewerLikes] = await Promise.all([
     (_commentLikeCounts as (ids: number[]) => Promise<Record<number, number>>)(ids),
