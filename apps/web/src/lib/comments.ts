@@ -90,7 +90,16 @@ const recordModeration = _recordMod as (i: {
 
 const analyze = _analyze as (
   body: string,
-) => { profanity: string[]; hasProfanity: boolean; links: string[]; externalLinks: string[]; hasExternalLinks: boolean };
+) => {
+  profanity: string[];
+  hasProfanity: boolean;
+  reviewTerms: string[];
+  hasReviewTerms: boolean;
+  links: string[];
+  externalLinks: string[];
+  hasExternalLinks: boolean;
+  needsReview: boolean;
+};
 
 type AuthUserAvatarRow = { id: string; image: string | null };
 type PgAuthDatabase = { query: (sql: string, params: unknown[]) => Promise<{ rows: AuthUserAvatarRow[] }> };
@@ -126,10 +135,12 @@ function autoApproveHours(): number {
 }
 
 /**
- * Decide a new/edited comment's status from its text:
- *  - profanity/slur  -> pending, never auto-approve (moderator must review).
- *  - external link    -> pending, auto-approve after COMMENT_AUTO_APPROVE_LINK_HOURS.
- *  - otherwise        -> visible.
+ * Decide a new/edited comment's status from its text. Severity-ordered:
+ *  - hard profanity/slur -> pending, NEVER auto-approve (moderator must act).
+ *  - review term OR external link -> pending, auto-approve after
+ *    COMMENT_AUTO_APPROVE_LINK_HOURS if no moderator acts (softer tier: a human
+ *    should glance, but it isn't held indefinitely like hard profanity).
+ *  - otherwise -> visible immediately.
  */
 export function moderationFor(body: string): {
   status: CommentStatus;
@@ -144,10 +155,13 @@ export function moderationFor(body: string): {
       autoApproveAt: null,
     };
   }
-  if (a.hasExternalLinks) {
+  if (a.hasReviewTerms || a.hasExternalLinks) {
     return {
       status: "pending",
-      flagReason: { links: a.externalLinks },
+      flagReason: {
+        ...(a.hasReviewTerms ? { reviewTerms: a.reviewTerms } : {}),
+        ...(a.hasExternalLinks ? { links: a.externalLinks } : {}),
+      },
       autoApproveAt: Math.floor(Date.now() / 1000) + Math.round(autoApproveHours() * 3600),
     };
   }
