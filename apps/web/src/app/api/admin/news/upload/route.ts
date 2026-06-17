@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { NextResponse } from "next/server";
 import { getAdminAccess } from "@/lib/admin";
 import { recordAdminAudit } from "@/lib/audit";
+import { sameOriginOr403 } from "@/lib/community";
 import { rateLimitOr429 } from "@/lib/rate-limit";
 import { isR2Configured, uploadToR2 } from "@/lib/r2";
 
@@ -75,6 +76,9 @@ export function matchesMagicBytes(bytes: Uint8Array, mimeType: string): boolean 
 }
 
 export async function POST(request: Request) {
+  const origin = sameOriginOr403(request);
+  if (origin) return origin;
+
   const access = await getAdminAccess();
   const { session, allowed } = access;
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });

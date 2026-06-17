@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { canManageGame, canManageMedia, getAdminAccess } from "@/lib/admin";
 import { resolveNewsAuthors } from "@/lib/authors";
 import { recordAdminAudit } from "@/lib/audit";
+import { sameOriginOr403 } from "@/lib/community";
 import { getGame } from "@/lib/games";
 import { getMediaChannel } from "@/lib/media";
 import { createNewsPost, listAdminNewsPosts, type NewsStatus } from "@/lib/news";
@@ -36,6 +37,9 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
+  const origin = sameOriginOr403(request);
+  if (origin) return origin;
+
   const access = await getAdminAccess();
   if (!access.session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   if (!access.allowed) return NextResponse.json({ error: "Forbidden" }, { status: 403 });

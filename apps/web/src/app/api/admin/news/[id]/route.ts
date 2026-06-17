@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { canManageGame, canManageMedia, getAdminAccess, type AdminAccess } from "@/lib/admin";
 import { resolveNewsAuthors } from "@/lib/authors";
 import { recordAdminAudit } from "@/lib/audit";
+import { sameOriginOr403 } from "@/lib/community";
 import { getGame } from "@/lib/games";
 import { getMediaChannel } from "@/lib/media";
 import { deleteNewsPost, getNewsPost, updateNewsPost } from "@/lib/news";
@@ -26,6 +27,9 @@ export async function PATCH(
   request: Request,
   context: { params: Promise<{ id: string }> },
 ) {
+  const origin = sameOriginOr403(request);
+  if (origin) return origin;
+
   const access = await getAdminAccess();
   if (!access.session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   if (!access.allowed) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
@@ -85,9 +89,12 @@ export async function PATCH(
 }
 
 export async function DELETE(
-  _request: Request,
+  request: Request,
   context: { params: Promise<{ id: string }> },
 ) {
+  const origin = sameOriginOr403(request);
+  if (origin) return origin;
+
   const access = await getAdminAccess();
   if (!access.session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   if (!access.allowed) return NextResponse.json({ error: "Forbidden" }, { status: 403 });

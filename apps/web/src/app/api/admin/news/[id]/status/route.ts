@@ -2,6 +2,7 @@ import { revalidateTag } from "next/cache";
 import { NextResponse } from "next/server";
 import { canManageGame, canManageMedia, getAdminAccess } from "@/lib/admin";
 import { recordAdminAudit } from "@/lib/audit";
+import { sameOriginOr403 } from "@/lib/community";
 import { getNewsPost, setNewsPostStatus } from "@/lib/news";
 import { parsePostId } from "@/lib/news-validation";
 import { validateNewsContentInput } from "@bot/lib/ewcNewsContent.js";
@@ -13,6 +14,9 @@ export async function POST(
   request: Request,
   context: { params: Promise<{ id: string }> },
 ) {
+  const origin = sameOriginOr403(request);
+  if (origin) return origin;
+
   const access = await getAdminAccess();
   if (!access.session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   if (!access.allowed) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
