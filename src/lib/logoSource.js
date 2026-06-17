@@ -84,6 +84,15 @@ export function isAllowedLogoUrl(url) {
   }
 }
 
+// Re-apply the https + allowed-host policy to each redirect hop so a redirect
+// from an allowed host cannot escape the allowlist to an internal/external
+// address (SSRF). Mirrors isAllowedLogoUrl but works on axios redirect options.
+export function isAllowedLogoRedirect(options) {
+  const protocol = String(options?.protocol || '').toLowerCase();
+  const hostname = String(options?.hostname || '').toLowerCase();
+  return protocol === 'https:' && ALLOWED_LOGO_HOSTS.has(hostname);
+}
+
 export function logoCandidates(url) {
   const original = String(url).trim();
   const variants = [];
@@ -185,6 +194,12 @@ async function downloadLogo(url, file, channel) {
     responseType: 'arraybuffer',
     timeout: 10_000,
     maxContentLength: MAX_LOGO_BYTES,
+    maxRedirects: 3,
+    beforeRedirect: (options) => {
+      if (!isAllowedLogoRedirect(options)) {
+        throw new Error('logo redirect to a disallowed host blocked');
+      }
+    },
   }).catch(async (err) => {
     const status = err.response?.status;
     if (status === 403 || status === 429 || status === 503) {

@@ -7,7 +7,7 @@ process.env.DISCORD_CLIENT_ID = 'test-client-id';
 process.env.DB_PATH = ':memory:';
 
 const { normalizeImageUrl } = await import('../src/services/liquipedia/parsers.js');
-const { isAllowedLogoUrl } = await import('../src/lib/logoSource.js');
+const { isAllowedLogoRedirect, isAllowedLogoUrl } = await import('../src/lib/logoSource.js');
 
 test('normalizeImageUrl resolves relative + protocol-relative URLs to liquipedia.net https', () => {
   assert.equal(
@@ -39,4 +39,12 @@ test('isAllowedLogoUrl admits only https liquipedia.net', () => {
   assert.equal(isAllowedLogoUrl('not-a-url'), false);
   assert.equal(isAllowedLogoUrl(''), false);
   assert.equal(isAllowedLogoUrl(null), false);
+});
+
+test('isAllowedLogoRedirect admits only https liquipedia.net redirect hops', () => {
+  assert.equal(isAllowedLogoRedirect({ protocol: 'https:', hostname: 'liquipedia.net' }), true);
+  assert.equal(isAllowedLogoRedirect({ protocol: 'https:', hostname: '169.254.169.254' }), false);
+  assert.equal(isAllowedLogoRedirect({ protocol: 'http:', hostname: 'liquipedia.net' }), false);
+  assert.equal(isAllowedLogoRedirect({ protocol: 'https:', hostname: 'evil.example' }), false);
+  assert.equal(isAllowedLogoRedirect({}), false);
 });
