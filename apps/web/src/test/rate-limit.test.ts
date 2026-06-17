@@ -79,7 +79,7 @@ describe("sync route rate limit (3 per 5 min)", () => {
   function syncReq() {
     return new Request("http://localhost/api/me/ewc/sync", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", Origin: "http://localhost", Host: "localhost" },
       body: JSON.stringify({ guildId: GUILD_ID, season: SEASON }),
     });
   }
@@ -118,7 +118,10 @@ describe("unlink route rate limit (2 per 10 min)", () => {
   });
 
   function unlinkReq() {
-    return new Request("http://localhost/api/me/ewc/unlink", { method: "POST" });
+    return new Request("http://localhost/api/me/ewc/unlink", {
+      method: "POST",
+      headers: { Origin: "http://localhost", Host: "localhost" },
+    });
   }
 
   test("call 1 → 200", async () => {

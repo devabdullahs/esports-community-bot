@@ -2,6 +2,7 @@ import { revalidateTag } from "next/cache";
 import { NextResponse } from "next/server";
 import { canManageGame, getAdminAccess, isSuper } from "@/lib/admin";
 import { recordAdminAudit } from "@/lib/audit";
+import { sameOriginOr403 } from "@/lib/community";
 import { deleteGame, updateGame } from "@/lib/games";
 import { validateGameContent } from "@/lib/game-validation";
 
@@ -12,6 +13,9 @@ export async function PATCH(
   request: Request,
   context: { params: Promise<{ slug: string }> },
 ) {
+  const origin = sameOriginOr403(request);
+  if (origin) return origin;
+
   const access = await getAdminAccess();
   if (!access.session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   if (!access.allowed) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
@@ -33,9 +37,12 @@ export async function PATCH(
 }
 
 export async function DELETE(
-  _request: Request,
+  request: Request,
   context: { params: Promise<{ slug: string }> },
 ) {
+  const origin = sameOriginOr403(request);
+  if (origin) return origin;
+
   const access = await getAdminAccess();
   if (!access.session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   if (!isSuper(access)) return NextResponse.json({ error: "Super admin only" }, { status: 403 });

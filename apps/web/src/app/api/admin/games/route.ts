@@ -2,6 +2,7 @@ import { revalidateTag } from "next/cache";
 import { NextResponse } from "next/server";
 import { getAdminAccess, isSuper } from "@/lib/admin";
 import { recordAdminAudit } from "@/lib/audit";
+import { sameOriginOr403 } from "@/lib/community";
 import { createGame, getGame, listGames } from "@/lib/games";
 import { normalizeSlug, validateGameContent } from "@/lib/game-validation";
 
@@ -16,6 +17,9 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
+  const origin = sameOriginOr403(request);
+  if (origin) return origin;
+
   const access = await getAdminAccess();
   if (!access.session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   if (!isSuper(access)) return NextResponse.json({ error: "Super admin only" }, { status: 403 });

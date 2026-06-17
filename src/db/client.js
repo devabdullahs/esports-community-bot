@@ -38,10 +38,21 @@ function sqliteParams(sql, params = []) {
   };
 }
 
-function postgresSslConfig() {
-  const mode = String(process.env.PGSSLMODE || '').toLowerCase();
-  if (mode === 'disable') return false;
-  if (mode === 'require' || mode === 'no-verify') return { rejectUnauthorized: false };
+// Resolve node-pg `ssl` config from a libpq-style mode. EXISTING modes are
+// unchanged: 'disable' = no TLS; 'require'/'no-verify' = encrypt but do not
+// verify the server certificate; unset/unknown = undefined (node-pg falls back
+// to the connection string's sslmode or no TLS — documented in .env.example).
+// 'verify-ca'/'verify-full' = encrypt AND verify the certificate, optionally
+// pinned to a CA file (PGSSLROOTCERT). Exported so the mapping is unit-testable.
+export function resolvePgSslConfig(mode, { rootCertPath } = {}) {
+  const m = String(mode || '').toLowerCase();
+  if (m === 'disable') return false;
+  if (m === 'require' || m === 'no-verify') return { rejectUnauthorized: false };
+  if (m === 'verify-ca' || m === 'verify-full') {
+    const ssl = { rejectUnauthorized: true };
+    if (rootCertPath) ssl.ca = readFileSync(rootCertPath, 'utf8');
+    return ssl;
+  }
   return undefined;
 }
 
@@ -56,9 +67,14 @@ function postgresPool() {
   if (!process.env.DATABASE_URL) throw new Error('DATABASE_URL is required when DB_DRIVER=postgres.');
   const existing = globalThis[pgPoolKey];
   if (existing) return existing;
+  if (!process.env.PGSSLMODE && !/sslmode=/i.test(process.env.DATABASE_URL || '')) {
+    console.warn(
+      '[db] Postgres connection has no PGSSLMODE and no sslmode in DATABASE_URL — TLS may be disabled. Set PGSSLMODE=verify-full (recommended) or require.',
+    );
+  }
   const pool = new Pool({
     connectionString: process.env.DATABASE_URL,
-    ssl: postgresSslConfig(),
+    ssl: resolvePgSslConfig(process.env.PGSSLMODE, { rootCertPath: process.env.PGSSLROOTCERT }),
   });
   globalThis[pgPoolKey] = pool;
   return pool;

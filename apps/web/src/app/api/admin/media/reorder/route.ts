@@ -2,12 +2,16 @@ import { revalidateTag } from "next/cache";
 import { NextResponse } from "next/server";
 import { getAdminAccess, isSuper } from "@/lib/admin";
 import { recordAdminAudit } from "@/lib/audit";
+import { sameOriginOr403 } from "@/lib/community";
 import { reorderMediaChannels } from "@/lib/media";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function POST(request: Request) {
+  const origin = sameOriginOr403(request);
+  if (origin) return origin;
+
   const access = await getAdminAccess();
   if (!access.session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   if (!isSuper(access)) return NextResponse.json({ error: "Super admin only" }, { status: 403 });
@@ -31,6 +35,7 @@ export async function POST(request: Request) {
     recordAdminAudit(access, "media.reorder", null);
     return NextResponse.json({ channels });
   } catch (err) {
-    return NextResponse.json({ error: (err as Error).message }, { status: 400 });
+    console.error("media reorder failed", err);
+    return NextResponse.json({ error: "Reorder failed — please try again." }, { status: 400 });
   }
 }

@@ -38,7 +38,7 @@ describe("audit trail: route mutations write audit rows", () => {
     const res = await gamesPOST(
       new Request("http://localhost/api/admin/games", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", Origin: "http://localhost", Host: "localhost" },
         body: JSON.stringify(body),
       }),
     );

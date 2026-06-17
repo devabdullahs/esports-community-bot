@@ -31,14 +31,19 @@ const mockAccess = vi.mocked(getAdminAccess);
 // ---------------------------------------------------------------------------
 
 function req(method = "GET", body?: unknown): Request {
+  const headers: Record<string, string> = {
+    Origin: "http://localhost",
+    Host: "localhost",
+  };
   if (body !== undefined) {
+    headers["Content-Type"] = "application/json";
     return new Request("http://localhost/api/admin/test", {
       method,
-      headers: { "Content-Type": "application/json" },
+      headers,
       body: JSON.stringify(body),
     });
   }
-  return new Request("http://localhost/api/admin/test", { method });
+  return new Request("http://localhost/api/admin/test", { method, headers });
 }
 
 function ctx(params: Record<string, string>) {
@@ -104,6 +109,53 @@ import { POST as newsUploadPOST } from "@/app/api/admin/news/upload/route";
 import { GET as teamGET, POST as teamPOST } from "@/app/api/admin/team/route";
 import { PATCH as teamIdPATCH, DELETE as teamIdDELETE } from "@/app/api/admin/team/[discordId]/route";
 import { GET as authorsGET } from "@/app/api/admin/authors/route";
+
+// ---------------------------------------------------------------------------
+// Suite 0: CSRF same-origin guard
+// ---------------------------------------------------------------------------
+
+describe("admin mutation CSRF guard", () => {
+  test("cross-origin mutation is rejected before auth", async () => {
+    mockAccess.mockClear();
+    const res = await gamesPOST(
+      new Request("http://localhost/api/admin/test", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Origin: "https://evil.example",
+          Host: "localhost",
+        },
+        body: "{}",
+      }),
+    );
+    expect(res.status).toBe(403);
+    expect(mockAccess).not.toHaveBeenCalled();
+  });
+
+  test("missing Origin is rejected", async () => {
+    mockAccess.mockClear();
+    const res = await gamesPOST(
+      new Request("http://localhost/api/admin/test", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Host: "localhost",
+        },
+        body: "{}",
+      }),
+    );
+    expect(res.status).toBe(403);
+    expect(mockAccess).not.toHaveBeenCalled();
+  });
+
+  test("same-origin mutation falls through to auth", async () => {
+    mockAccess.mockResolvedValue(anonymous());
+    mockAccess.mockClear();
+    const res = await gamesPOST(req("POST", {}));
+    expect(res.status).toBe(401);
+    expect(mockAccess).toHaveBeenCalledTimes(1);
+  });
+});
 
 // ---------------------------------------------------------------------------
 // Suite 1: Anonymous → 401 on every handler

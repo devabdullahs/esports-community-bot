@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getAdminAccess, isSuper } from "@/lib/admin";
 import { recordAdminAudit } from "@/lib/audit";
+import { sameOriginOr403 } from "@/lib/community";
 import {
   deleteAdmin,
   getAdmin,
@@ -25,6 +26,9 @@ export async function PATCH(
   request: Request,
   context: { params: Promise<{ discordId: string }> },
 ) {
+  const origin = sameOriginOr403(request);
+  if (origin) return origin;
+
   const access = await getAdminAccess();
   if (!access.session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   if (!isSuper(access)) return NextResponse.json({ error: "Super admin only" }, { status: 403 });
@@ -52,9 +56,12 @@ export async function PATCH(
 }
 
 export async function DELETE(
-  _request: Request,
+  request: Request,
   context: { params: Promise<{ discordId: string }> },
 ) {
+  const origin = sameOriginOr403(request);
+  if (origin) return origin;
+
   const access = await getAdminAccess();
   if (!access.session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   if (!isSuper(access)) return NextResponse.json({ error: "Super admin only" }, { status: 403 });
