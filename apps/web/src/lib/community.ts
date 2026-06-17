@@ -130,14 +130,13 @@ export async function requireVerifiedMember(): Promise<RequireMemberResult> {
   return { member };
 }
 
-// Best-effort client IP for IP-aware rate-limit keys (behind Cloudflare).
+// Client IP for IP-aware rate-limit keys. Trust ONLY cf-connecting-ip (set by
+// Cloudflare, not forgeable by the client). x-forwarded-for / x-real-ip are
+// client-supplied and must not seed rate-limit keys, or the per-IP backstop is
+// trivially evaded. When absent (non-Cloudflare access) all such requests share
+// one bucket — fine, because the primary limit is per authenticated user.
 export function clientIp(request: Request): string {
-  return (
-    request.headers.get("cf-connecting-ip") ||
-    request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
-    request.headers.get("x-real-ip") ||
-    "unknown"
-  );
+  return request.headers.get("cf-connecting-ip")?.trim() || "unknown";
 }
 
 // Same-origin guard for state-changing requests: a browser sends Origin on
