@@ -41,14 +41,19 @@ import { POST as newsIdStatusPOST } from "@/app/api/admin/news/[id]/status/route
 // ---------------------------------------------------------------------------
 
 function req(method = "POST", body?: unknown): Request {
+  const headers: Record<string, string> = {
+    Origin: "http://localhost",
+    Host: "localhost",
+  };
   if (body !== undefined) {
+    headers["Content-Type"] = "application/json";
     return new Request("http://localhost/api/admin/test", {
       method,
-      headers: { "Content-Type": "application/json" },
+      headers,
       body: JSON.stringify(body),
     });
   }
-  return new Request("http://localhost/api/admin/test", { method });
+  return new Request("http://localhost/api/admin/test", { method, headers });
 }
 
 function ctx(params: Record<string, string>) {
