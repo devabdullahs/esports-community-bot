@@ -6,6 +6,7 @@ import { CommentsSection } from "@/components/comments/comments-section";
 import { DateTime } from "@/components/date-time";
 import { AuthorAvatar } from "@/components/news/author-avatar";
 import { PostBody } from "@/components/news/post-body";
+import { PostShare } from "@/components/news/post-share";
 import { PageBreadcrumb } from "@/components/page-breadcrumb";
 import { Button } from "@/components/ui/button";
 import { localizeText } from "@/lib/community-content";
@@ -166,6 +167,8 @@ export default async function MediaNewsPostPage({
 
         {placement === "bottom" ? coverImage : null}
       </article>
+
+      <PostShare url={canonicalUrl} title={post.title} locale={locale} />
 
       <CommentsSection postId={Number(post.id)} locale={locale} />
     </main>
