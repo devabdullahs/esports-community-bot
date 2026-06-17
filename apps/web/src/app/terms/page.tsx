@@ -1,15 +1,31 @@
 import type { Metadata } from "next";
+import { localizedPath, type Locale } from "@/lib/i18n";
 import { buildPageMetadata } from "@/lib/metadata";
 import { getRequestLocale } from "@/lib/request-locale";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-export function generateMetadata(): Metadata {
-  return buildPageMetadata({
+const META: Record<Locale, { title: string; description: string }> = {
+  en: {
     title: "Terms of Service",
     description:
       "Terms for using the Esports Community Bot website, Discord bot, tournament tracking, news, and prediction features.",
-    path: "/terms",
+  },
+  ar: {
+    title: "شروط الخدمة",
+    description:
+      "شروط استخدام موقع وبوت مجتمع الرياضات الإلكترونية، تتبع البطولات، الأخبار، وميزات التوقعات.",
+  },
+};
+
+export async function generateMetadata(): Promise<Metadata> {
+  const locale = await getRequestLocale();
+  const meta = META[locale];
+  return buildPageMetadata({
+    title: meta.title,
+    description: meta.description,
+    path: localizedPath("/terms", locale),
+    locale,
   });
 }
 

@@ -11,8 +11,10 @@ import {
 import Link from "next/link";
 import { NewsList } from "@/components/admin/news-list";
 import { canManageGame, canManageMedia, getAdminAccess } from "@/lib/admin";
+import { getAdminCopy } from "@/lib/admin-copy";
 import { listGames } from "@/lib/games";
 import { listAdminNewsPosts } from "@/lib/news";
+import { getRequestLocale } from "@/lib/request-locale";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import {
@@ -28,6 +30,8 @@ export const dynamic = "force-dynamic";
 
 export default async function AdminPage() {
   const access = await getAdminAccess();
+  const locale = await getRequestLocale();
+  const t = getAdminCopy(locale);
   const allPosts = access.allowed ? await listAdminNewsPosts() : [];
   // Show a post if the admin manages its owner (game or media channel).
   const posts = allPosts.filter((p) =>
@@ -42,13 +46,12 @@ export default async function AdminPage() {
   return (
     <main className="mx-auto flex w-full max-w-6xl flex-1 flex-col gap-8 px-5 py-10 sm:px-8">
       <section className="flex max-w-3xl flex-col gap-3">
-        <p className="text-sm text-muted-foreground">Private workspace</p>
+        <p className="text-sm text-muted-foreground">{t.dashboard.eyebrow}</p>
         <h1 className="text-3xl font-semibold leading-tight sm:text-4xl">
-          Admin publishing
+          {t.dashboard.title}
         </h1>
         <p className="text-sm leading-6 text-muted-foreground">
-          A focused staff experience for drafting game news, checking the
-          public preview, and preparing updates before they go to the community.
+          {t.dashboard.description}
         </p>
       </section>
 
@@ -57,9 +60,9 @@ export default async function AdminPage() {
           <div className="flex items-center gap-3">
             <ShieldIcon data-icon="inline-start" />
             <div>
-              <CardTitle>Access</CardTitle>
+              <CardTitle>{t.dashboard.accessTitle}</CardTitle>
               <CardDescription>
-                Staff controls are private and hidden from public navigation.
+                {t.dashboard.accessDescription}
               </CardDescription>
             </div>
           </div>
@@ -67,32 +70,30 @@ export default async function AdminPage() {
         <CardContent>
           {access.allowed ? (
             <Alert>
-              <AlertTitle>Admin tools enabled</AlertTitle>
+              <AlertTitle>{t.dashboard.toolsTitle}</AlertTitle>
               <AlertDescription>
-                Create, edit, publish, and delete posts below. Published posts
-                appear on the matching game page. Discord publishing can connect next.
+                {t.dashboard.toolsDescription}
               </AlertDescription>
             </Alert>
           ) : !access.session ? (
             <Alert>
-              <AlertTitle>Sign in required</AlertTitle>
+              <AlertTitle>{t.dashboard.signInTitle}</AlertTitle>
               <AlertDescription className="flex flex-col gap-3">
-                Staff tools are not shown to public users. Sign in with Discord
-                to access admin workflows.
+                {t.dashboard.signInDescription}
                 <Button
                   render={<Link href="/login?callbackURL=/admin" />}
                   nativeButton={false}
                   className="w-fit"
                 >
-                  Sign in
+                  {t.dashboard.signInAction}
                 </Button>
               </AlertDescription>
             </Alert>
           ) : (
             <Alert>
-              <AlertTitle>Admin access is not active</AlertTitle>
+              <AlertTitle>{t.dashboard.inactiveTitle}</AlertTitle>
               <AlertDescription>
-                Add Discord user IDs to `EWC_DASHBOARD_ADMIN_DISCORD_IDS` before enabling dashboard management tools.
+                {t.dashboard.inactiveDescription}
               </AlertDescription>
             </Alert>
           )}
@@ -104,35 +105,35 @@ export default async function AdminPage() {
           <ManageLink
             href="/admin/games"
             icon={Gamepad2Icon}
-            title="Game pages"
-            description="Edit the games you manage."
+            title={t.dashboard.links.gamesTitle}
+            description={t.dashboard.links.gamesDescription}
           />
           <ManageLink
             href="/admin/media"
             icon={Tv2Icon}
-            title="Media channels"
-            description="Edit the media channels you manage."
+            title={t.dashboard.links.mediaTitle}
+            description={t.dashboard.links.mediaDescription}
           />
           <ManageLink
             href="/admin/comments"
             icon={MessagesSquareIcon}
-            title="Comments"
-            description="Review flagged and pending community comments."
+            title={t.dashboard.links.commentsTitle}
+            description={t.dashboard.links.commentsDescription}
           />
           {access.isSuper ? (
             <ManageLink
               href="/admin/team"
               icon={UsersIcon}
-              title="Admin team"
-              description="Add admins and assign their games & channels."
+              title={t.dashboard.links.teamTitle}
+              description={t.dashboard.links.teamDescription}
             />
           ) : null}
           {access.isSuper ? (
             <ManageLink
               href="/admin/audit"
               icon={ClipboardListIcon}
-              title="Audit log"
-              description="View recent dashboard mutations by all admins."
+              title={t.dashboard.links.auditTitle}
+              description={t.dashboard.links.auditDescription}
             />
           ) : null}
         </section>
@@ -141,12 +142,12 @@ export default async function AdminPage() {
       {access.allowed ? (
         <section className="flex flex-col gap-4">
           <div>
-            <h2 className="text-xl font-semibold">News &amp; posts</h2>
+            <h2 className="text-xl font-semibold">{t.dashboard.newsTitle}</h2>
             <p className="text-sm text-muted-foreground">
-              Draft, edit, publish, and remove the updates shown on game pages.
+              {t.dashboard.newsDescription}
             </p>
           </div>
-          <NewsList posts={posts} games={games} />
+          <NewsList posts={posts} games={games} locale={locale} />
         </section>
       ) : null}
     </main>

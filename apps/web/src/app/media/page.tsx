@@ -19,12 +19,14 @@ import { safeUrlOrUndefined } from "@/lib/safe-url";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-export function generateMetadata(): Metadata {
+export async function generateMetadata(): Promise<Metadata> {
+  const locale = await getRequestLocale();
+  const text = COPY[locale];
   return buildPageMetadata({
-    title: "Esports media channels",
-    description:
-      "Browse community media partners, creators, and platform links for esports coverage.",
-    path: "/media",
+    title: text.title,
+    description: text.description,
+    path: localizedPath("/media", locale),
+    locale,
   });
 }
 

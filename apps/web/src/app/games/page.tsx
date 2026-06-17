@@ -23,12 +23,14 @@ import { getRequestLocale } from "@/lib/request-locale";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-export function generateMetadata(): Metadata {
+export async function generateMetadata(): Promise<Metadata> {
+  const locale = await getRequestLocale();
+  const text = copy[locale].games;
   return buildPageMetadata({
-    title: "Esports game pages",
-    description:
-      "Browse the esports games followed by the community, including news, coverage notes, and Discord-linked context for each title.",
-    path: "/games",
+    title: text.title,
+    description: text.description,
+    path: localizedPath("/games", locale),
+    locale,
   });
 }
 

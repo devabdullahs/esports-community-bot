@@ -145,6 +145,9 @@ export function SiteHeaderClient({
 
   function switchLanguage() {
     document.cookie = `${LOCALE_COOKIE_NAME}=${nextLocale}; Path=/; Max-Age=${LOCALE_COOKIE_MAX_AGE}; SameSite=Lax`;
+    const currentPath =
+      `${window.location.pathname}${window.location.search}${window.location.hash}` || "/";
+    router.push(localizedPath(currentPath, nextLocale));
     router.refresh();
   }
 

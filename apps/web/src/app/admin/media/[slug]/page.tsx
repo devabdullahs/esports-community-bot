@@ -4,6 +4,7 @@ import { ArrowLeftIcon } from "lucide-react";
 import { MediaEditor } from "@/components/admin/media-editor";
 import { NewsList } from "@/components/admin/news-list";
 import { canManageMedia, getAdminAccess } from "@/lib/admin";
+import { getAdminCopy } from "@/lib/admin-copy";
 import { listGames } from "@/lib/games";
 import { getMediaChannel } from "@/lib/media";
 import { listAdminNewsPosts } from "@/lib/news";
@@ -27,6 +28,7 @@ export default async function EditMediaChannelPage({
   const channel = await getMediaChannel(slug);
   if (!channel) notFound();
   const locale = await getRequestLocale();
+  const t = getAdminCopy(locale);
   const [posts, games] = await Promise.all([
     listAdminNewsPosts({ mediaSlug: slug }),
     listGames(),
@@ -36,23 +38,22 @@ export default async function EditMediaChannelPage({
     <main className="mx-auto flex w-full max-w-4xl flex-1 flex-col gap-6 px-5 py-10 sm:px-8">
       <Button render={<Link href="/admin/media" />} nativeButton={false} variant="ghost" className="w-fit">
         <ArrowLeftIcon data-icon="inline-start" />
-        Back to channels
+        {t.common.backToChannels}
       </Button>
       <div>
-        <p className="text-sm text-muted-foreground">Admin publishing</p>
-        <h1 className="text-3xl font-semibold leading-tight">Edit media channel</h1>
+        <p className="text-sm text-muted-foreground">{t.common.adminPublishing}</p>
+        <h1 className="text-3xl font-semibold leading-tight">{t.media.editTitle}</h1>
       </div>
       <MediaEditor mode="edit" channel={channel} locale={locale} />
 
       <section className="flex flex-col gap-4">
         <div>
-          <h2 className="text-xl font-semibold">Posts</h2>
+          <h2 className="text-xl font-semibold">{t.media.postsTitle}</h2>
           <p className="text-sm text-muted-foreground">
-            Articles published by this channel. They appear on the channel&apos;s public page and post
-            to its Discord channel when published.
+            {t.media.channelPostsDescription}
           </p>
         </div>
-        <NewsList posts={posts} games={games} newPostHref={`/admin/news/new?media=${slug}`} />
+        <NewsList posts={posts} games={games} locale={locale} newPostHref={`/admin/news/new?media=${slug}`} />
       </section>
     </main>
   );

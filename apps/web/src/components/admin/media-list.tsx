@@ -11,6 +11,8 @@ import {
   Trash2Icon,
 } from "lucide-react";
 import { localizeText } from "@/lib/community-content";
+import { getAdminCopy } from "@/lib/admin-copy";
+import type { Locale } from "@/lib/i18n";
 import type { MediaChannelRecord } from "@/lib/media";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -20,12 +22,15 @@ export function MediaList({
   channels,
   isSuper,
   editableSlugs,
+  locale,
 }: {
   channels: MediaChannelRecord[];
   isSuper: boolean;
   editableSlugs: string[];
+  locale: Locale;
 }) {
   const router = useRouter();
+  const t = getAdminCopy(locale);
   const [items, setItems] = useState<MediaChannelRecord[]>(channels);
   const [busy, setBusy] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
@@ -55,21 +60,21 @@ export function MediaList({
   }
 
   async function remove(slug: string, name: string) {
-    if (!window.confirm(`Delete "${name}"? This cannot be undone.`)) return;
+    if (!window.confirm(t.media.deleteConfirm(name))) return;
     setDeleteError(null);
     setBusy(true);
     try {
       const res = await fetch(`/api/admin/media/${slug}`, { method: "DELETE" });
       if (!res.ok) {
         const body = await res.json().catch(() => null);
-        setDeleteError(body?.error || `Delete failed (${res.status})`);
+        setDeleteError(body?.error || t.common.deleteFailed(res.status));
         return;
       }
       setDeleteError(null);
       setItems((prev) => prev.filter((c) => c.slug !== slug));
       router.refresh();
     } catch {
-      setDeleteError("Network error — try again.");
+      setDeleteError(t.common.networkError);
     } finally {
       setBusy(false);
     }
@@ -79,18 +84,18 @@ export function MediaList({
     <div className="flex flex-col gap-4">
       {deleteError ? (
         <Alert variant="destructive">
-          <AlertTitle>Could not delete</AlertTitle>
+          <AlertTitle>{t.common.couldNotDelete}</AlertTitle>
           <AlertDescription>{deleteError}</AlertDescription>
         </Alert>
       ) : null}
       <div className="flex items-center justify-between gap-3">
         <p className="text-sm text-muted-foreground">
-          {items.length} channel{items.length === 1 ? "" : "s"}
+          {t.media.count(items.length)}
         </p>
         {isSuper ? (
           <Button render={<Link href="/admin/media/new" />} nativeButton={false}>
             <PlusIcon data-icon="inline-start" />
-            New channel
+            {t.media.newAction}
           </Button>
         ) : null}
       </div>
@@ -106,8 +111,8 @@ export function MediaList({
                     size="icon-xs"
                     disabled={busy || index === 0}
                     onClick={() => move(index, -1)}
-                    title="Move up"
-                    aria-label="Move up"
+                    title={t.media.moveUp}
+                    aria-label={t.media.moveUp}
                   >
                     <ArrowUpIcon />
                   </Button>
@@ -116,8 +121,8 @@ export function MediaList({
                     size="icon-xs"
                     disabled={busy || index === items.length - 1}
                     onClick={() => move(index, 1)}
-                    title="Move down"
-                    aria-label="Move down"
+                    title={t.media.moveDown}
+                    aria-label={t.media.moveDown}
                   >
                     <ArrowDownIcon />
                   </Button>
@@ -125,9 +130,9 @@ export function MediaList({
               ) : null}
               <div className="flex flex-1 flex-col gap-0.5">
                 <div className="flex flex-wrap items-center gap-2">
-                  <span className="font-medium">{localizeText(channel.name, "en")}</span>
+                  <span className="font-medium">{localizeText(channel.name, locale)}</span>
                   <Badge variant="secondary">
-                    {channel.links.length} link{channel.links.length === 1 ? "" : "s"}
+                    {t.media.linkCount(channel.links.length)}
                   </Badge>
                 </div>
                 <span className="font-mono text-xs text-muted-foreground">/media/{channel.slug}</span>
@@ -139,8 +144,8 @@ export function MediaList({
                     nativeButton={false}
                     variant="ghost"
                     size="icon-sm"
-                    title="Edit"
-                    aria-label="Edit"
+                    title={t.common.edit}
+                    aria-label={t.common.edit}
                   >
                     <PencilIcon />
                   </Button>
@@ -151,9 +156,9 @@ export function MediaList({
                     size="icon-sm"
                     className="text-destructive"
                     disabled={busy}
-                    onClick={() => remove(channel.slug, localizeText(channel.name, "en"))}
-                    title="Delete"
-                    aria-label="Delete"
+                    onClick={() => remove(channel.slug, localizeText(channel.name, locale))}
+                    title={t.common.delete}
+                    aria-label={t.common.delete}
                   >
                     <Trash2Icon />
                   </Button>
@@ -164,7 +169,7 @@ export function MediaList({
         </div>
       ) : (
         <div className="rounded-md border border-dashed p-8 text-center">
-          <p className="text-sm text-muted-foreground">No media channels yet.</p>
+          <p className="text-sm text-muted-foreground">{t.media.empty}</p>
         </div>
       )}
     </div>

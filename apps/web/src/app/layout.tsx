@@ -7,44 +7,53 @@ import { copy, directionForLocale } from "@/lib/i18n";
 import { getRequestLocale } from "@/lib/request-locale";
 import {
   absoluteUrl,
+  alternateLanguages,
   googleSiteVerification,
-  SITE_DESCRIPTION,
-  SITE_KEYWORDS,
   SITE_NAME,
+  SITE_NAME_AR,
+  siteDescription,
   siteIconUrl,
+  siteKeywords,
+  siteName,
 } from "@/lib/metadata";
 import "./globals.css";
 
-export function generateMetadata(): Metadata {
+export async function generateMetadata(): Promise<Metadata> {
+  const locale = await getRequestLocale();
+  const name = siteName(locale);
+  const description = siteDescription(locale);
   const verification = googleSiteVerification();
   return {
     metadataBase: new URL(absoluteUrl()),
-    applicationName: SITE_NAME,
+    applicationName: name,
     title: {
-      default: SITE_NAME,
-      template: `%s | ${SITE_NAME}`,
+      default: name,
+      template: `%s | ${name}`,
     },
-    description: SITE_DESCRIPTION,
-    keywords: SITE_KEYWORDS,
+    description,
+    keywords: siteKeywords(locale),
     category: "esports",
-    creator: SITE_NAME,
-    publisher: SITE_NAME,
+    creator: name,
+    publisher: name,
+    alternates: {
+      languages: alternateLanguages("/"),
+    },
     icons: {
       icon: "/icon.svg",
       apple: "/apple-icon.png",
     },
     openGraph: {
       type: "website",
-      siteName: SITE_NAME,
-      title: SITE_NAME,
-      description: SITE_DESCRIPTION,
+      siteName: name,
+      title: name,
+      description,
       url: absoluteUrl(),
-      images: [{ url: siteIconUrl(), alt: SITE_NAME }],
+      images: [{ url: siteIconUrl(), alt: name }],
     },
     twitter: {
       card: "summary",
-      title: SITE_NAME,
-      description: SITE_DESCRIPTION,
+      title: name,
+      description,
       images: [siteIconUrl()],
     },
     robots: {
@@ -62,25 +71,28 @@ export function generateMetadata(): Metadata {
   };
 }
 
-function siteStructuredData() {
+function siteStructuredData(locale: "en" | "ar") {
   const url = absoluteUrl();
   const organizationId = `${url}/#organization`;
+  const name = siteName(locale);
+  const description = siteDescription(locale);
   return {
     "@context": "https://schema.org",
     "@graph": [
       {
         "@type": "Organization",
         "@id": organizationId,
-        name: SITE_NAME,
+        name,
+        alternateName: [SITE_NAME, SITE_NAME_AR],
         url,
         logo: siteIconUrl(),
       },
       {
         "@type": "WebSite",
         "@id": `${url}/#website`,
-        name: SITE_NAME,
+        name,
         url,
-        description: SITE_DESCRIPTION,
+        description,
         inLanguage: ["en", "ar"],
         publisher: { "@id": organizationId },
       },
@@ -103,7 +115,7 @@ export default async function RootLayout({
       <body className="min-h-full" suppressHydrationWarning>
         <script
           type="application/ld+json"
-          dangerouslySetInnerHTML={{ __html: jsonLd(siteStructuredData()) }}
+          dangerouslySetInnerHTML={{ __html: jsonLd(siteStructuredData(locale)) }}
         />
         <a
           href="#main-content"
