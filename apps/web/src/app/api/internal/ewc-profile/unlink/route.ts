@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { isInternalRequestAuthorized } from "@/lib/internal-auth";
 import { unlinkEwcProfileForDiscordUser } from "@/lib/ewc-profile-sync";
+import { rateLimitOr429 } from "@/lib/rate-limit";
 import { isSnowflake } from "@/lib/validate";
 
 export const runtime = "nodejs";
@@ -17,5 +18,8 @@ export async function POST(request: Request) {
       { status: 400 },
     );
   }
+  const limited = await rateLimitOr429({ key: `ewc-internal-unlink:${body.discordUserId}`, limit: 10, windowSec: 60 });
+  if (limited) return limited;
+
   return NextResponse.json(await unlinkEwcProfileForDiscordUser(body.discordUserId));
 }

@@ -35,6 +35,7 @@ export async function POST(request: Request) {
     recordAdminAudit(access, "game.reorder", null);
     return NextResponse.json({ games });
   } catch (err) {
-    return NextResponse.json({ error: (err as Error).message }, { status: 400 });
+    console.error("game reorder failed", err);
+    return NextResponse.json({ error: "Reorder failed — please try again." }, { status: 400 });
   }
 }

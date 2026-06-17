@@ -35,6 +35,7 @@ export async function POST(request: Request) {
     recordAdminAudit(access, "media.reorder", null);
     return NextResponse.json({ channels });
   } catch (err) {
-    return NextResponse.json({ error: (err as Error).message }, { status: 400 });
+    console.error("media reorder failed", err);
+    return NextResponse.json({ error: "Reorder failed — please try again." }, { status: 400 });
   }
 }
