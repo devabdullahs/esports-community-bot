@@ -68,6 +68,7 @@ describe("GET /api/ewc/[guildId]/[season]/leaderboard", () => {
     expect(body.guildId).toBe(GUILD_ID);
     expect(body.season).toBe(SEASON);
     expect(body.total).toBe(4);
+    expect(body.topScore).toBe(900);
     expect(body.rows.map((row: { displayName: string }) => row.displayName)).toEqual([
       "Member 0301",
       "Member 0201",
@@ -85,6 +86,7 @@ describe("GET /api/ewc/[guildId]/[season]/leaderboard", () => {
   test("paginates rows while keeping the total count", async () => {
     const firstPage = await (await GET(req("?limit=2"), ctx())).json();
     expect(firstPage.total).toBe(4);
+    expect(firstPage.topScore).toBe(900);
     expect(firstPage.rows.map((row: { displayName: string }) => row.displayName)).toEqual([
       "Member 0301",
       "Member 0201",
@@ -92,6 +94,7 @@ describe("GET /api/ewc/[guildId]/[season]/leaderboard", () => {
 
     const secondPage = await (await GET(req("?limit=2&offset=2"), ctx())).json();
     expect(secondPage.total).toBe(4);
+    expect(secondPage.topScore).toBe(900);
     expect(secondPage.rows.map((row: { rank: number; displayName: string }) => [row.rank, row.displayName])).toEqual([
       [3, "Member 0202"],
       [4, "Member 0401"],
@@ -99,6 +102,7 @@ describe("GET /api/ewc/[guildId]/[season]/leaderboard", () => {
 
     const pastEnd = await (await GET(req("?limit=2&offset=99"), ctx())).json();
     expect(pastEnd.total).toBe(4);
+    expect(pastEnd.topScore).toBe(900);
     expect(pastEnd.rows).toEqual([]);
   });
 
@@ -111,6 +115,7 @@ describe("GET /api/ewc/[guildId]/[season]/leaderboard", () => {
     const body = await res.json();
     expect(body.rows).toEqual([]);
     expect(body.total).toBe(0);
+    expect(body.topScore).toBe(0);
   });
 
   test("rejects an invalid guild or season", async () => {
