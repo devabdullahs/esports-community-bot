@@ -1,6 +1,7 @@
 import "server-only";
 
 import { Pool } from "pg";
+import { resolvePgSslConfig } from "@bot/db/client.js";
 import { devDiscordUserId, isDevAuthUser } from "@/lib/dev-auth";
 
 type SqliteDatabase = typeof import("@bot/db/connection.js").db;
@@ -14,13 +15,6 @@ const pgPoolKey = "__esportsCommunityBotPgPool";
 const driver = (process.env.DB_DRIVER || "").toLowerCase();
 const usePostgres = driver === "postgres" || (!driver && Boolean(process.env.DATABASE_URL));
 
-function postgresSslConfig() {
-  const mode = String(process.env.PGSSLMODE || "").toLowerCase();
-  if (mode === "disable") return false;
-  if (mode === "require" || mode === "no-verify") return { rejectUnauthorized: false };
-  return undefined;
-}
-
 function getPostgresPool() {
   if (!process.env.DATABASE_URL) {
     throw new Error("DATABASE_URL is required when DB_DRIVER=postgres.");
@@ -28,9 +22,14 @@ function getPostgresPool() {
 
   const globalWithPool = globalThis as typeof globalThis & { __esportsCommunityBotPgPool?: Pool };
   if (!globalWithPool[pgPoolKey]) {
+    if (!process.env.PGSSLMODE && !/sslmode=/i.test(process.env.DATABASE_URL || "")) {
+      console.warn(
+        "[auth-db] Postgres connection has no PGSSLMODE and no sslmode in DATABASE_URL — TLS may be disabled. Set PGSSLMODE=verify-full (recommended) or require.",
+      );
+    }
     globalWithPool[pgPoolKey] = new Pool({
       connectionString: process.env.DATABASE_URL,
-      ssl: postgresSslConfig(),
+      ssl: resolvePgSslConfig(process.env.PGSSLMODE, { rootCertPath: process.env.PGSSLROOTCERT }),
     });
   }
   return globalWithPool[pgPoolKey];
