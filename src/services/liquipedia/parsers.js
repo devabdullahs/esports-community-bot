@@ -98,11 +98,11 @@ function parseScoreCell(text) {
 }
 
 // Stable fallback id for a bracket/matchlist match that has NO Liquipedia
-// "Match:" page link. Keyed on the tournament page (scope) + the team PAIR
-// (order-independent) — deliberately NOT the scheduled time. A rescheduled match
-// then keeps the same id and updates one row, instead of minting a phantom
-// duplicate per reschedule that later "finishes" with no score. Matches that DO
-// link a Match: page keep that stable id and are unaffected by this.
+// "Match:" page link. Keyed on the structural scope (tournament page + row/list
+// position, when available) + the team PAIR (order-independent) — deliberately
+// NOT the scheduled time. A rescheduled match then keeps the same id and updates
+// one row, while separate rematches in the same tournament can still coexist.
+// Matches that DO link a Match: page keep that stable id and are unaffected by this.
 function fallbackMatchId(game, scope, teamA, teamB) {
   const pair = [teamA, teamB]
     .map((t) => String(t ?? '').replace(/\s+/g, ' ').trim().toLowerCase())

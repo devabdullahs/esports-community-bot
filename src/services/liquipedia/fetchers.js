@@ -92,8 +92,8 @@ export async function fetchSchedule(tournament) {
   const seenIds = new Set();
   const pairIndex = new Map(); // pairKey -> match (dedupe + live-status upgrade)
   const pairOf = (m) => [normalizeTeamName(m.teamA), normalizeTeamName(m.teamB)].sort().join('|');
-  const addAuthoritative = (el, parser) => {
-    const m = parser($, el, game, page);
+  const addAuthoritative = (el, parser, structuralScope) => {
+    const m = parser($, el, game, structuralScope || page);
     if (!m || seenIds.has(m.externalId)) return;
     seenIds.add(m.externalId);
     pairIndex.set(pairOf(m), m);
@@ -102,8 +102,10 @@ export async function fetchSchedule(tournament) {
 
   // 1) Brackets AND match lists (group / Swiss / weekly schedules) = authoritative:
   //    stable set, with winners + final scores.
-  $('.brkts-match').each((_i, el) => addAuthoritative(el, parseBracketMatch));
-  $('.brkts-matchlist-match').each((_i, el) => addAuthoritative(el, parseMatchlistMatch));
+  $('.brkts-match').each((i, el) => addAuthoritative(el, parseBracketMatch, `${page}:bracket:${i}`));
+  $('.brkts-matchlist-match').each((i, el) =>
+    addAuthoritative(el, parseMatchlistMatch, `${page}:matchlist:${i}`),
+  );
 
   // 1c) Swiss group standings grids (RLCS etc.) — matches are encoded in the round cells.
   for (const m of parseSwissMatches($, game)) {

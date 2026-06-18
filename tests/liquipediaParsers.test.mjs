@@ -706,6 +706,22 @@ test('parseBracketMatch: pair-scoped fallback id is order-independent', () => {
   assert.equal(id('Team Alpha', 'Team Beta'), id('Team Beta', 'Team Alpha'));
 });
 
+test('parseBracketMatch: structural scope keeps legitimate rematches separate', () => {
+  const ts = Math.floor(Date.now() / 1000) + 3600;
+  const mk = () => `
+    <div class="brkts-match">
+      <div class="brkts-opponent-entry" aria-label="Team Alpha"><span class="name">Team Alpha</span><div class="brkts-opponent-score-inner"></div></div>
+      <div class="brkts-opponent-entry" aria-label="Team Beta"><span class="name">Team Beta</span><div class="brkts-opponent-score-inner"></div></div>
+      <span data-timestamp="${ts}"></span>
+    </div>`;
+  const id = (scope) => {
+    const $ = load(mk());
+    return parseBracketMatch($, $('.brkts-match')[0], 'counterstrike', scope).externalId;
+  };
+  assert.notEqual(id('IEM/2026:bracket:1'), id('IEM/2026:bracket:2'));
+  assert.equal(id('IEM/2026:bracket:1'), id('IEM/2026:bracket:1'));
+});
+
 test('parseBracketMatch: tolerates whitespace/markup around the score digit; Match: id still wins', () => {
   const html = `
     <div class="brkts-match">
