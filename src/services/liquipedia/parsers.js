@@ -88,6 +88,29 @@ export function teamName($, cell) {
   return raw.replace(/\(page does not exist\)/i, '').replace(/\s+/g, ' ').trim();
 }
 
+// Extract a single integer score from a bracket/matchlist score cell, tolerating
+// surrounding whitespace/markup (a stray <sup>, a non-breaking space, etc.).
+// Returns null for an empty or non-numeric cell — e.g. an unplayed slot, or a
+// 'W'/'FF' walkover marker that carries no series score (never fabricate one).
+function parseScoreCell(text) {
+  const m = String(text ?? '').match(/\d+/);
+  return m ? Number(m[0]) : null;
+}
+
+// Stable fallback id for a bracket/matchlist match that has NO Liquipedia
+// "Match:" page link. Keyed on the tournament page (scope) + the team PAIR
+// (order-independent) — deliberately NOT the scheduled time. A rescheduled match
+// then keeps the same id and updates one row, instead of minting a phantom
+// duplicate per reschedule that later "finishes" with no score. Matches that DO
+// link a Match: page keep that stable id and are unaffected by this.
+function fallbackMatchId(game, scope, teamA, teamB) {
+  const pair = [teamA, teamB]
+    .map((t) => String(t ?? '').replace(/\s+/g, ' ').trim().toLowerCase())
+    .sort()
+    .join(' vs ');
+  return `${game}:${scope || 'unknown'}:${pair}`;
+}
+
 // ---------------------------------------------------------------------------
 // Match parsers
 // ---------------------------------------------------------------------------
@@ -221,9 +244,8 @@ export function parseBracketMatch($, el, game, scope = '') {
   const logoB = teamLogo($, entries[1]);
 
   const scoreEls = $m.find('.brkts-opponent-score-inner');
-  const num = (s) => (/^\d+$/.test(s) ? Number(s) : null);
-  const scoreA = scoreEls[0] ? num($(scoreEls[0]).text().trim()) : null;
-  const scoreB = scoreEls[1] ? num($(scoreEls[1]).text().trim()) : null;
+  const scoreA = scoreEls[0] ? parseScoreCell($(scoreEls[0]).text()) : null;
+  const scoreB = scoreEls[1] ? parseScoreCell($(scoreEls[1]).text()) : null;
 
   const winA = $(entries[0]).find('.brkts-opponent-win').length > 0;
   const winB = $(entries[1]).find('.brkts-opponent-win').length > 0;
@@ -242,8 +264,7 @@ export function parseBracketMatch($, el, game, scope = '') {
   });
 
   const matchHref = $m.find('a[href*="/Match:"]').attr('href') || '';
-  const fallbackScope = scheduledAt ?? (scope || 'unknown');
-  const externalId = matchHref.split('/').pop() || `${game}:${fallbackScope}:${teamA}:${teamB}`;
+  const externalId = matchHref.split('/').pop() || fallbackMatchId(game, scope, teamA, teamB);
 
   return {
     source: 'liquipedia',
@@ -282,9 +303,8 @@ export function parseMatchlistMatch($, el, game, scope = '') {
   const logoB = teamLogo($, opps[1]);
 
   const scoreEls = $m.find('.brkts-matchlist-score .brkts-matchlist-cell-content');
-  const num = (s) => (/^\d+$/.test(s) ? Number(s) : null);
-  const scoreA = scoreEls[0] ? num($(scoreEls[0]).text().trim()) : null;
-  const scoreB = scoreEls[1] ? num($(scoreEls[1]).text().trim()) : null;
+  const scoreA = scoreEls[0] ? parseScoreCell($(scoreEls[0]).text()) : null;
+  const scoreB = scoreEls[1] ? parseScoreCell($(scoreEls[1]).text()) : null;
 
   const winA = $(opps[0]).hasClass('brkts-matchlist-slot-winner');
   const winB = $(opps[1]).hasClass('brkts-matchlist-slot-winner');
@@ -302,8 +322,7 @@ export function parseMatchlistMatch($, el, game, scope = '') {
   });
 
   const matchHref = $m.find('a[href*="/Match:"]').attr('href') || '';
-  const fallbackScope = scheduledAt ?? (scope || 'unknown');
-  const externalId = matchHref.split('/').pop() || `${game}:${fallbackScope}:${teamA}:${teamB}`;
+  const externalId = matchHref.split('/').pop() || fallbackMatchId(game, scope, teamA, teamB);
 
   return {
     source: 'liquipedia',

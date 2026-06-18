@@ -7,7 +7,12 @@ import {
   listEndedTournaments,
   updateTournamentName,
 } from '../db/tournaments.js';
-import { deleteTournamentPlaceholderMatches, upsertMatch, toMatchRow } from '../db/matches.js';
+import {
+  deleteResolvedDuplicateMatches,
+  deleteTournamentPlaceholderMatches,
+  upsertMatch,
+  toMatchRow,
+} from '../db/matches.js';
 import { armMatch } from './pollingManager.js';
 import { refreshAllGuilds } from './refresh.js';
 import * as liquipedia from '../services/liquipedia.js';
@@ -85,6 +90,12 @@ export async function runMorningSync(client) {
     }
   }
   logger.info(`[morning-sync] Done — ${tournaments.length} tournament(s), ${total} match(es).`);
+  try {
+    const retired = await deleteResolvedDuplicateMatches();
+    if (retired) logger.info(`[morning-sync] retired ${retired} phantom finished match(es) (resolved elsewhere with a score).`);
+  } catch (err) {
+    logger.error(`[morning-sync] phantom cleanup failed: ${err.message}`);
+  }
   if (client) await refreshAllGuilds(client);
 }
 

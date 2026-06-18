@@ -667,3 +667,74 @@ test('parseMatchInfo: stale unscored match is finished, not upcoming', () => {
   assert.equal(m.scoreA, null);
   assert.equal(m.scoreB, null);
 });
+
+// ---------------------------------------------------------------------------
+// Fallback id stability (anti-churn) + lenient score parsing
+// ---------------------------------------------------------------------------
+
+test('parseBracketMatch: no Match link → pair-scoped id that survives a reschedule', () => {
+  const mk = (ts) => `
+    <div class="brkts-match">
+      <div class="brkts-opponent-entry" aria-label="Team Alpha"><span class="name">Team Alpha</span><div class="brkts-opponent-score-inner"></div></div>
+      <div class="brkts-opponent-entry" aria-label="Team Beta"><span class="name">Team Beta</span><div class="brkts-opponent-score-inner"></div></div>
+      <span data-timestamp="${ts}"></span>
+    </div>`;
+  const now = Math.floor(Date.now() / 1000);
+  const parse = (ts) => {
+    const $ = load(mk(ts));
+    return parseBracketMatch($, $('.brkts-match')[0], 'counterstrike', 'IEM/2026');
+  };
+  const first = parse(now + 3600);
+  const rescheduled = parse(now + 3600 + 5400); // pushed back 90 min
+  assert.equal(first.externalId, rescheduled.externalId, 'a reschedule keeps the same id (no phantom)');
+  assert.match(first.externalId, /^counterstrike:IEM\/2026:/, 'id is scoped to game + tournament page');
+  assert.doesNotMatch(first.externalId, /\d{9,}/, 'id no longer embeds the start timestamp');
+});
+
+test('parseBracketMatch: pair-scoped fallback id is order-independent', () => {
+  const ts = Math.floor(Date.now() / 1000) + 3600;
+  const mk = (a, b) => `
+    <div class="brkts-match">
+      <div class="brkts-opponent-entry" aria-label="${a}"><span class="name">${a}</span><div class="brkts-opponent-score-inner"></div></div>
+      <div class="brkts-opponent-entry" aria-label="${b}"><span class="name">${b}</span><div class="brkts-opponent-score-inner"></div></div>
+      <span data-timestamp="${ts}"></span>
+    </div>`;
+  const id = (a, b) => {
+    const $ = load(mk(a, b));
+    return parseBracketMatch($, $('.brkts-match')[0], 'counterstrike', 'IEM/2026').externalId;
+  };
+  assert.equal(id('Team Alpha', 'Team Beta'), id('Team Beta', 'Team Alpha'));
+});
+
+test('parseBracketMatch: tolerates whitespace/markup around the score digit; Match: id still wins', () => {
+  const html = `
+    <div class="brkts-match">
+      <div class="brkts-opponent-entry" aria-label="Team A"><span class="name">Team A</span><span class="brkts-opponent-win"></span><div class="brkts-opponent-score-inner"> 2 <sup>*</sup></div></div>
+      <div class="brkts-opponent-entry" aria-label="Team B"><span class="name">Team B</span><div class="brkts-opponent-score-inner">0</div></div>
+      <a href="/cs2/Match:200">details</a>
+      <div class="brkts-popup">(Bo3)</div>
+    </div>`;
+  const $ = load(html);
+  const m = parseBracketMatch($, $('.brkts-match')[0], 'counterstrike', 'IEM/2026');
+  assert.equal(m.scoreA, 2, 'extracts 2 from " 2 <sup>*</sup>"');
+  assert.equal(m.scoreB, 0);
+  assert.equal(m.status, 'finished');
+  assert.equal(m.externalId, 'Match:200', 'Match: href path is unchanged and still wins the id');
+});
+
+test('parseMatchlistMatch: no Match link → pair-scoped id stable across a reschedule', () => {
+  const mk = (ts) => `
+    <div class="brkts-matchlist-match">
+      <div class="brkts-matchlist-opponent" aria-label="OMiT"><span class="name">OMiT</span></div>
+      <div class="brkts-matchlist-score"><span class="brkts-matchlist-cell-content"></span><span class="brkts-matchlist-cell-content"></span></div>
+      <div class="brkts-matchlist-opponent" aria-label="BitterSweet"><span class="name">BitterSweet</span></div>
+      <span data-timestamp="${ts}"></span>
+    </div>`;
+  const now = Math.floor(Date.now() / 1000);
+  const parse = (ts) => {
+    const $ = load(mk(ts));
+    return parseMatchlistMatch($, $('.brkts-matchlist-match')[0], 'callofduty', 'Challengers/2026');
+  };
+  assert.equal(parse(now + 600).externalId, parse(now + 4200).externalId);
+  assert.match(parse(now + 600).externalId, /^callofduty:Challengers\/2026:/);
+});

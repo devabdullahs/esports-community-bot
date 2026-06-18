@@ -153,6 +153,33 @@ export async function markStaleActiveFinished(staleSeconds) {
   return result.changes || 0;
 }
 
+// Reschedule churn (an externalId once keyed on a shifting start time) can leave a
+// finished match with no score — a phantom shadowing the real, correctly-scored row
+// for the SAME pair in the SAME tournament. Retire those phantoms so they don't
+// pollute results/counts. Only deletes a finished null-score row when a finished
+// SCORED row exists for the same normalized team pair in the same tournament, so a
+// genuinely-unresolved match (no scored twin) is always kept.
+export async function deleteResolvedDuplicateMatches() {
+  const rows = await all(
+    `SELECT id, tournament_id, team_a, team_b, score_a, score_b
+     FROM matches WHERE status = 'finished'`,
+  );
+  const pairKey = (r) =>
+    `${r.tournament_id}|${[normalizeTeamName(r.team_a), normalizeTeamName(r.team_b)].sort().join('|')}`;
+  const scoredPairs = new Set();
+  for (const r of rows) {
+    if (r.score_a != null && r.score_b != null) scoredPairs.add(pairKey(r));
+  }
+  const ids = rows
+    .filter((r) => (r.score_a == null || r.score_b == null) && scoredPairs.has(pairKey(r)))
+    .map((r) => r.id);
+  if (!ids.length) return 0;
+  await transaction(async (tx) => {
+    for (const id of ids) await tx.run('DELETE FROM matches WHERE id = $1', [id]);
+  });
+  return ids.length;
+}
+
 export async function deleteTournamentPlaceholderMatches(tournamentId, currentExternalIds = null) {
   const rows = await all(
     'SELECT id, external_id, team_a, team_b, scheduled_at FROM matches WHERE tournament_id = $1',
