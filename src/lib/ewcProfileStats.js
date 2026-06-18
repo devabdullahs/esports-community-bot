@@ -239,14 +239,16 @@ export async function getEwcUserProfileStats(guildId, season = DEFAULT_EWC_PROFI
 
 export async function getPublicEwcLeaderboard({ guildId, season = DEFAULT_EWC_PROFILE_SEASON, limit = 50, offset = 0 }) {
   const rows = await leaderboardRows(guildId, season, limit, offset);
+  const start = Math.max(0, Math.floor(Number(offset)) || 0);
+  const topRows = start === 0 && rows.length ? rows : await leaderboardRows(guildId, season, 1, 0);
   const userIds = rows.map((row) => row.user_id);
   const weeklyByUser = await weeklyAggregateStatsForUsers(guildId, season, userIds);
   const topTeamsByUser = await seasonPickTeamsForUsers(guildId, season, userIds);
-  const start = Math.max(0, Math.floor(Number(offset)) || 0);
   return {
     guildId,
     season,
     total: await countOverallScored(guildId, season),
+    topScore: Number(topRows[0]?.score || 0),
     rows: rows.map((row, index) => {
       const userId = row.user_id;
       const weekly = weeklyByUser.get(userId) || emptyWeeklyAggregate();

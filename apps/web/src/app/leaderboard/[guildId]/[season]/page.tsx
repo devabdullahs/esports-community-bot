@@ -73,11 +73,7 @@ export default async function LeaderboardPage({
     });
   }
   // "Top score" is the global #1 — always from page 1, not the current page's first row.
-  const topScore =
-    page === 1
-      ? leaderboard.rows[0]?.overallPoints || 0
-      : (await getPublicEwcLeaderboardCached({ guildId, season, limit: 1, offset: 0 })).rows[0]
-          ?.overallPoints || 0;
+  const topScore = leaderboard.topScore ?? leaderboard.rows[0]?.overallPoints ?? 0;
   const rangeStart = leaderboard.total === 0 ? 0 : (page - 1) * PAGE_SIZE + 1;
   const rangeEnd = (page - 1) * PAGE_SIZE + leaderboard.rows.length;
 

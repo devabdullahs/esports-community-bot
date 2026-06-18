@@ -494,6 +494,9 @@ export async function execute(interaction) {
       const weekKey = interaction.options.getString('week', true);
       const round = await getEwcWeek(interaction.guildId, seasonYear, weekKey);
       if (!round) throw new Error(`Week \`${weekKey}\` does not exist.`);
+      if (round.status === 'scored') {
+        throw new Error(`Week \`${weekKey}\` is already scored. Reopen it first if you need to re-score.`);
+      }
       await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
       const perGame = Array.isArray(round.games) && round.games.length > 0;
@@ -509,6 +512,9 @@ export async function execute(interaction) {
       if (!perGame && !baseline.length) throw new Error('This week has no baseline snapshot yet.');
 
       const final = perGame ? round.final || [] : round.final?.length ? round.final : await currentStandings(seasonYear).catch(() => []);
+      if (!perGame && !final?.length) {
+        throw new Error('Could not fetch the final standings to score this week. Try again in a moment.');
+      }
       const predictions = await listWeeklyPredictions(round.id);
       let malformed = 0;
       // Wrap all writes in a transaction so a mid-loop crash leaves scores consistent.

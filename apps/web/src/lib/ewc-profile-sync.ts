@@ -160,6 +160,13 @@ export async function unlinkEwcProfileForAuthUser(authUserId: string) {
       accessToken,
       clientId: process.env.DISCORD_CLIENT_ID || "",
     });
+  } catch (error) {
+    console.warn("[ewc-profile-sync] Failed to delete Discord role connection during unlink.", {
+      authUserId,
+      discordUserId: account.accountId,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    throw error;
   } finally {
     await deleteEwcProfileLink(account.accountId);
   }
