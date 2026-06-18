@@ -200,6 +200,54 @@ test('scoreSeasonPrediction: picks beyond topSize are silently ignored', () => {
   assert.equal(result.details.picks.length, 10);
 });
 
+test('scoreSeasonPrediction: empty picks score 0 with no pick details', () => {
+  const result = scoreSeasonPrediction([], standings10, 10);
+  assert.equal(result.score, 0);
+  assert.deepEqual(result.details.picks, []);
+});
+
+test('scoreSeasonPrediction: fewer picks than topSize only score the provided picks', () => {
+  const result = scoreSeasonPrediction(['Team1', 'Team4'], standings10, 10);
+  assert.equal(result.details.picks.length, 2);
+  assert.deepEqual(result.details.picks.map((pick) => pick.points), [1250, 700]);
+  assert.equal(result.details.picks[0].hitPoints, 1000);
+  assert.equal(result.details.picks[0].exactBonus, SEASON_EXACT_RANK_BONUS);
+  assert.equal(result.details.picks[1].hitPoints, 700);
+  assert.equal(result.details.picks[1].exactBonus, 0);
+  assert.equal(result.score, 1950);
+});
+
+test('scoreSeasonPrediction: topSize boundary scores 100 points and rank beyond topSize scores 0', () => {
+  const boundaryStandings = Array.from({ length: 11 }, (_, i) => ({
+    team: `Boundary${i + 1}`,
+    rank: i + 1,
+    points: (11 - i) * 100,
+  }));
+  const result = scoreSeasonPrediction(['Boundary10', 'Boundary11'], boundaryStandings, 10);
+  const boundary = result.details.picks[0];
+  assert.equal(boundary.matchedTeam, 'Boundary10');
+  assert.equal(boundary.actualRank, 10);
+  assert.equal(boundary.hitPoints, 100);
+  assert.equal(boundary.points, 100);
+
+  const outside = result.details.picks[1];
+  assert.equal(outside.matchedTeam, null);
+  assert.equal(outside.points, 0);
+  assert.equal(result.score, 100);
+});
+
+test('scoreSeasonPrediction: exact-rank bonus applies at the matching predicted slot', () => {
+  const result = scoreSeasonPrediction(['Unknown1', 'Unknown2', 'Team3'], standings10, 10);
+  const exact = result.details.picks[2];
+  assert.equal(exact.matchedTeam, 'Team3');
+  assert.equal(exact.actualRank, 3);
+  assert.equal(exact.predictedRank, 3);
+  assert.equal(exact.hitPoints, 800);
+  assert.equal(exact.exactBonus, SEASON_EXACT_RANK_BONUS);
+  assert.equal(exact.points, 800 + SEASON_EXACT_RANK_BONUS);
+  assert.equal(result.score, 800 + SEASON_EXACT_RANK_BONUS);
+});
+
 // ─── Step 6: generateEwcWeekWindows and parsePredictionDate ─────────────────
 
 // Fixed epoch for deterministic window math
@@ -342,6 +390,43 @@ test('scorePerGameWeeklyPrediction: picking every game winner adds the all-winne
   assert.equal(out.score, 1000 + 1000 + WEEKLY_ALL_GAME_WINNERS_BONUS);
 });
 
+test('scorePerGameWeeklyPrediction: single-game winner does not earn the all-winners bonus', () => {
+  const picks = [{ gameKey: 'valorant-1', pick: 'Team Falcons' }];
+  const out = scorePerGameWeeklyPrediction(picks, [GAMES[0]], [resultsFor()[0]]);
+  const valorant = out.details.picks.find((p) => p.gameKey === 'valorant-1');
+  assert.equal(valorant.points, 1000);
+  // ewcPredictions.js:258 gates the all-winners bonus behind details.length > 1.
+  assert.equal(out.details.allWinners, false);
+  assert.equal(out.details.bonus, 0);
+  assert.equal(out.score, 1000);
+});
+
+test('scorePerGameWeeklyPrediction: picking every winner in a three-game round adds the all-winners bonus', () => {
+  const games = [
+    ...GAMES,
+    { key: 'chess-3', game: 'Chess', event: 'EWC Chess' },
+  ];
+  const results = [
+    ...resultsFor(),
+    {
+      gameKey: 'chess-3',
+      placements: [
+        { club: 'Team Spirit', points: 1000, place: '1st' },
+        { club: 'Team BDS', points: 750, place: '2nd' },
+      ],
+    },
+  ];
+  const picks = [
+    { gameKey: 'valorant-1', pick: 'Team Falcons' },
+    { gameKey: 'apex-2', pick: 'Team Liquid' },
+    { gameKey: 'chess-3', pick: 'Team Spirit' },
+  ];
+  const out = scorePerGameWeeklyPrediction(picks, games, results);
+  assert.equal(out.details.allWinners, true);
+  assert.equal(out.details.bonus, WEEKLY_ALL_GAME_WINNERS_BONUS);
+  assert.equal(out.score, 3 * 1000 + WEEKLY_ALL_GAME_WINNERS_BONUS);
+});
+
 test('scorePerGameWeeklyPrediction: a pending game (no result) scores 0 for that game and blocks the bonus', () => {
   const picks = [
     { gameKey: 'valorant-1', pick: 'Team Falcons' }, // 1st → 1000
@@ -375,6 +460,17 @@ test('scorePerGameWeeklyPrediction: a missing pick for a configured game scores 
   const apex = out.details.picks.find((p) => p.gameKey === 'apex-2');
   assert.equal(apex.pick, null);
   assert.equal(apex.points, 0);
+  assert.equal(out.score, 1000);
+});
+
+test('scorePerGameWeeklyPrediction: missing pick blocks the all-winners bonus even when results are available', () => {
+  const picks = [{ gameKey: 'valorant-1', pick: 'Team Falcons' }];
+  const out = scorePerGameWeeklyPrediction(picks, GAMES, resultsFor());
+  const apex = out.details.picks.find((p) => p.gameKey === 'apex-2');
+  assert.equal(apex.pick, null);
+  assert.equal(apex.resultAvailable, true);
+  assert.equal(out.details.allWinners, false);
+  assert.equal(out.details.bonus, 0);
   assert.equal(out.score, 1000);
 });
 
