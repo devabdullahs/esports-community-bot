@@ -32,6 +32,13 @@ const SEARCH_CACHE_TTL_MS = Math.max(60_000, Number(process.env.LIQUIPEDIA_SEARC
 // lookups resolve to empty immediately (the command then shows a plain search link) instead of
 // queueing without bound — this keeps latency sane and shields us during a usage flood.
 const SEARCH_MAX_QUEUE = Math.max(1, Number(process.env.LIQUIPEDIA_SEARCH_MAX_QUEUE || 12));
+// Hard ceiling on a single Liquipedia response body, as defense-in-depth against
+// a runaway/compromised upstream buffering unbounded bytes into memory (OOM).
+// Set FAR above any real response: parse/opensearch payloads are KB to low-MB,
+// so 50 MB never rejects a legitimate fetch — it only stops a pathological one.
+// The Math.max floor stops a misconfiguration from setting it dangerously low
+// (which could otherwise drop real pages and break tracking).
+const MAX_RESPONSE_BYTES = Math.max(8 * 1024 * 1024, Number(process.env.LIQUIPEDIA_MAX_RESPONSE_BYTES || 50 * 1024 * 1024));
 
 // ---------------------------------------------------------------------------
 // Axios client + caches (ESM singletons — one instance per process)
@@ -39,6 +46,8 @@ const SEARCH_MAX_QUEUE = Math.max(1, Number(process.env.LIQUIPEDIA_SEARCH_MAX_QU
 
 const httpClient = axios.create({
   timeout: 20_000,
+  maxContentLength: MAX_RESPONSE_BYTES,
+  maxBodyLength: MAX_RESPONSE_BYTES,
   headers: { 'User-Agent': config.liquipedia.userAgent, 'Accept-Encoding': 'gzip' },
 });
 
