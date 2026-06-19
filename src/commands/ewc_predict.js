@@ -717,7 +717,7 @@ export async function execute(interaction) {
             '**العربية**\n' +
               '**ما هو العرض؟** عرض EWC الخاص بك هو ترتيبك ونقاطك وانتصاراتك الأسبوعية معروضة على ملفك في ديسكورد كرتبة مرتبطة، فيراها الجميع دون فتح اللوحة.\n\n' +
               '**كيف تربطه؟** استخدم `/ewc_predict link`، ثم اضغط **Open my dashboard** وسجّل الدخول بنفس حساب ديسكورد. يتم الربط تلقائيًا — لا حاجة لإعداد إضافي.\n\n' +
-              '**التحديث والإزالة:** اضغط **Refresh** في اللوحة (أو استخدم `/ewc_predict sync`) لتحديث الإحصاءات المعروضة، واستخدم `/ewc_predict unlink` لإزالة الربط في أي وقت.\n\n' +
+              '**التحديث والإزالة:** اضغط زر **التحديث** في اللوحة (أو استخدم `/ewc_predict sync`) لتحديث الإحصاءات المعروضة، واستخدم `/ewc_predict unlink` لإزالة الربط في أي وقت.\n\n' +
               '**English**\n' +
               '**What it is:** Your EWC showcase is your EWC rank, points and weekly wins displayed on your Discord profile as a linked role, so everyone sees them without opening the dashboard.\n\n' +
               '**How to link:** Run `/ewc_predict link`, then tap **Open my dashboard** and sign in with the same Discord account. It links automatically — no extra setup.\n\n' +
@@ -765,7 +765,7 @@ export async function execute(interaction) {
               '**الخطوات:**\n' +
               '1. اضغط **Open my dashboard**.\n' +
               '2. سجّل الدخول بنفس حساب ديسكورد.\n' +
-              '3. خلاص — يتم الربط تلقائيًا. اضغط **Refresh** في اللوحة في أي وقت لتحديث إحصاءاتك.\n\n' +
+              '3. خلاص — يتم الربط تلقائيًا. اضغط زر **التحديث** في اللوحة في أي وقت لتحديث إحصاءاتك.\n\n' +
               '**English**\n' +
               '**What you get:** Your EWC rank, points and weekly wins show on your Discord profile (a linked role) for everyone to see.\n\n' +
               '**Steps:**\n' +
