@@ -122,6 +122,14 @@ export default async function AdminPage() {
           />
           {access.isSuper ? (
             <ManageLink
+              href="/admin/users"
+              icon={UsersIcon}
+              title={t.dashboard.links.usersTitle}
+              description={t.dashboard.links.usersDescription}
+            />
+          ) : null}
+          {access.isSuper ? (
+            <ManageLink
               href="/admin/team"
               icon={UsersIcon}
               title={t.dashboard.links.teamTitle}

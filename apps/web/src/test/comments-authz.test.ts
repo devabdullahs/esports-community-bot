@@ -67,6 +67,14 @@ describe("POST /api/news/:postId/comments — auth states", () => {
     expect(res.status).toBe(403);
   });
 
+  test("blocked member -> 403", async () => {
+    mockMember.mockResolvedValue({
+      response: new Response(JSON.stringify({ error: "suspended", code: "blocked" }), { status: 403 }),
+    } as never);
+    const res = await postComment(commentReq(postId, "hi"), ctx({ postId: String(postId) }));
+    expect(res.status).toBe(403);
+  });
+
   test("verified -> 201 and the comment is stored", async () => {
     mockMember.mockResolvedValue(verified("d-create") as never);
     const res = await postComment(commentReq(postId, "great game!"), ctx({ postId: String(postId) }));
