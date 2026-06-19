@@ -1,5 +1,40 @@
 import { all } from './client.js';
 
+// A comma-joined `$start..$(start+count-1)` placeholder list.
+function placeholders(count, start = 1) {
+  return Array.from({ length: count }, (_, i) => `$${start + i}`).join(',');
+}
+
+// Build the two activity-rollup queries for a set of ids. Exported so the
+// dual-backend placeholder invariant is unit-testable: the likes query refers to
+// the ids in TWO IN clauses, so on Postgres they MUST use DISTINCT placeholders
+// ($1..$N then $(N+1)..$2N) with the ids passed twice — reusing $1..$N there
+// fails ("bind message supplies 2N parameters, but prepared statement requires
+// N"), even though SQLite's per-occurrence rewrite tolerates the reuse.
+export function activityQueries(ids) {
+  const n = ids.length;
+  return {
+    comments: {
+      sql: `SELECT discord_user_id,
+              COUNT(*) AS comment_count,
+              MAX(created_at) AS last_comment_at
+       FROM post_comments
+       WHERE discord_user_id IN (${placeholders(n)}) AND status <> 'deleted'
+       GROUP BY discord_user_id`,
+      params: ids,
+    },
+    likes: {
+      sql: `SELECT discord_user_id, COUNT(*) AS like_count FROM (
+         SELECT discord_user_id FROM comment_likes WHERE discord_user_id IN (${placeholders(n, 1)})
+         UNION ALL
+         SELECT discord_user_id FROM post_likes WHERE discord_user_id IN (${placeholders(n, n + 1)})
+       ) AS combined
+       GROUP BY discord_user_id`,
+      params: [...ids, ...ids],
+    },
+  };
+}
+
 // Activity rollups for a set of Discord user ids, keyed by discord_user_id.
 // Comment counts + last-comment timestamp exclude soft-deleted rows; like
 // counts span both comment_likes and post_likes. Returns an empty Map when no
@@ -12,17 +47,9 @@ export async function activityForDiscordIds(ids) {
     result.set(String(id), { commentCount: 0, lastCommentAt: null, likeCount: 0 });
   }
 
-  const placeholders = ids.map((_, i) => `$${i + 1}`).join(',');
+  const { comments: cq, likes: lq } = activityQueries(ids);
 
-  const comments = await all(
-    `SELECT discord_user_id,
-            COUNT(*) AS comment_count,
-            MAX(created_at) AS last_comment_at
-     FROM post_comments
-     WHERE discord_user_id IN (${placeholders}) AND status <> 'deleted'
-     GROUP BY discord_user_id`,
-    ids,
-  );
+  const comments = await all(cq.sql, cq.params);
   for (const row of comments) {
     const entry = result.get(String(row.discord_user_id));
     if (!entry) continue;
@@ -30,15 +57,7 @@ export async function activityForDiscordIds(ids) {
     entry.lastCommentAt = row.last_comment_at ?? null;
   }
 
-  const likes = await all(
-    `SELECT discord_user_id, COUNT(*) AS like_count FROM (
-       SELECT discord_user_id FROM comment_likes WHERE discord_user_id IN (${placeholders})
-       UNION ALL
-       SELECT discord_user_id FROM post_likes WHERE discord_user_id IN (${placeholders})
-     ) AS combined
-     GROUP BY discord_user_id`,
-    [...ids, ...ids],
-  );
+  const likes = await all(lq.sql, lq.params);
   for (const row of likes) {
     const entry = result.get(String(row.discord_user_id));
     if (!entry) continue;
