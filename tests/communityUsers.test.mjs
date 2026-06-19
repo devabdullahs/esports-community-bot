@@ -13,7 +13,7 @@ const { createEwcNewsPost } = await import('../src/db/ewcNewsPosts.js');
 const { createComment, setCommentStatus } = await import('../src/db/postComments.js');
 const { setCommentLike } = await import('../src/db/commentLikes.js');
 const { setPostLike } = await import('../src/db/postLikes.js');
-const { activityForDiscordIds, listCommentsByAuthor } = await import('../src/db/communityUsers.js');
+const { activityForDiscordIds, activityQueries, listCommentsByAuthor } = await import('../src/db/communityUsers.js');
 
 const userA = '400000000000000001';
 const userB = '400000000000000002';
@@ -89,4 +89,25 @@ test('listCommentsByAuthor returns all statuses newest-first', async () => {
 test('listCommentsByAuthor respects the limit', async () => {
   const comments = await listCommentsByAuthor(userA, 1);
   assert.equal(comments.length, 1);
+});
+
+// Regression for the Postgres-only "bind message supplies N parameters, but
+// prepared statement requires M" crash: SQLite's per-occurrence placeholder
+// rewrite tolerates reusing $1..$N across two IN clauses, so a functional
+// SQLite test cannot catch it. Assert the invariant directly — every distinct
+// $n in a query must have exactly one matching param, and the max index equals
+// the param count (no reuse, no gaps).
+test('activityQueries: placeholders and params are 1:1 (dual-backend safe)', () => {
+  const distinctPlaceholders = (sql) => new Set([...sql.matchAll(/\$(\d+)/g)].map((m) => m[1])).size;
+  const maxPlaceholder = (sql) => Math.max(0, ...[...sql.matchAll(/\$(\d+)/g)].map((m) => Number(m[1])));
+
+  for (const ids of [['1'], ['1', '2', '3'], ['1', '2', '3', '4', '5', '6', '7', '8']]) {
+    const { comments, likes } = activityQueries(ids);
+    for (const { sql, params } of [comments, likes]) {
+      assert.equal(distinctPlaceholders(sql), params.length, 'each placeholder has one param');
+      assert.equal(maxPlaceholder(sql), params.length, 'highest $n equals the param count');
+    }
+    // The likes query references the ids in two IN clauses → twice the params.
+    assert.equal(likes.params.length, ids.length * 2);
+  }
 });
