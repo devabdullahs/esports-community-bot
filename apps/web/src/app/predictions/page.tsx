@@ -23,7 +23,7 @@ const COPY = {
     description:
       "Make weekly and season predictions in Discord, then track your rank, points, and top teams here.",
     profileTitle: "Your prediction profile",
-    profileDescription: "See your rank, points, weekly history, and sync your Discord showcase.",
+    profileDescription: "See your rank, points, and weekly history, and refresh your EWC showcase on Discord.",
     openProfile: "Open my profile",
     leaderboardTitle: "Public leaderboard",
     leaderboardDescription: "Browse a server's full ranking for the season.",
@@ -35,7 +35,7 @@ const COPY = {
     description:
       "قدّم توقعاتك الأسبوعية والموسمية عبر ديسكورد، ثم تابع ترتيبك ونقاطك وأفضل فرقك هنا.",
     profileTitle: "ملف توقعاتك",
-    profileDescription: "اطّلع على ترتيبك ونقاطك وسجلك الأسبوعي، وزامن عرضك على ديسكورد.",
+    profileDescription: "اطّلع على ترتيبك ونقاطك وسجلك الأسبوعي، وحدّث عرض EWC الخاص بك على ديسكورد.",
     openProfile: "افتح ملفي",
     leaderboardTitle: "لوحة الصدارة العامة",
     leaderboardDescription: "تصفّح ترتيب الخادم الكامل للموسم.",
