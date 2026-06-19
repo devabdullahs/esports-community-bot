@@ -359,6 +359,14 @@ CREATE TABLE IF NOT EXISTS comment_moderation_actions (
 );
 CREATE INDEX IF NOT EXISTS idx_comment_mod_actions ON comment_moderation_actions(comment_id, created_at);
 
+CREATE TABLE IF NOT EXISTS community_user_blocks (
+  discord_user_id TEXT PRIMARY KEY,
+  blocked_by      TEXT NOT NULL,
+  blocked_by_name TEXT,
+  reason          TEXT,
+  created_at      TEXT NOT NULL DEFAULT (to_char(now() AT TIME ZONE 'UTC', 'YYYY-MM-DD HH24:MI:SS'))
+);
+
 CREATE TABLE IF NOT EXISTS ewc_admins (
   discord_id   TEXT PRIMARY KEY,
   display_name TEXT NOT NULL DEFAULT '',

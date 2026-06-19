@@ -1,6 +1,7 @@
 import "server-only";
 
 import { NextResponse } from "next/server";
+import { isUserBlocked } from "@bot/db/communityUserBlocks.js";
 import type { Session } from "@/lib/auth";
 import { getDiscordAccountForAuthUser } from "@/lib/auth-database";
 import { devDiscordUserId, isDevAuthUser } from "@/lib/dev-auth";
@@ -123,6 +124,14 @@ export async function requireVerifiedMember(): Promise<RequireMemberResult> {
     return {
       response: NextResponse.json(
         { error: "Verified community membership is required.", code },
+        { status: 403 },
+      ),
+    };
+  }
+  if (await isUserBlocked(member.discordUserId)) {
+    return {
+      response: NextResponse.json(
+        { error: "Your access to community features has been suspended.", code: "blocked" },
         { status: 403 },
       ),
     };
