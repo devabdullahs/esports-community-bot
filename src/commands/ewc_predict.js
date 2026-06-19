@@ -710,6 +710,19 @@ export async function execute(interaction) {
               '**Season:** Use `/ewc_predict season` to pick your top clubs for the whole season. By default, it opens 14 days before the first EWC competition and closes 8 hours before it. After closing, picks cannot be changed. Season points are scored after EWC ends using the final club standings, with bonuses for exact rank predictions.\n\n' +
               '**Commands:** `/ewc_predict leaderboard` shows rankings, `/ewc_predict profile` shows your picks and results, and `/ewc_predict teams` searches participating clubs. The overall leaderboard combines weekly and season points; admins may count all weeks or only your best N weeks.',
           ),
+        new EmbedBuilder()
+          .setColor(0x5865f2)
+          .setTitle('اربط عرض EWC على ملفك في ديسكورد / Link your EWC showcase')
+          .setDescription(
+            '**العربية**\n' +
+              '**ما هو العرض؟** عرض EWC الخاص بك هو ترتيبك ونقاطك وانتصاراتك الأسبوعية معروضة على ملفك في ديسكورد كرتبة مرتبطة، فيراها الجميع دون فتح اللوحة.\n\n' +
+              '**كيف تربطه؟** استخدم `/ewc_predict link`، ثم اضغط **Open my dashboard** وسجّل الدخول بنفس حساب ديسكورد. يتم الربط تلقائيًا — لا حاجة لإعداد إضافي.\n\n' +
+              '**التحديث والإزالة:** اضغط زر **التحديث** في اللوحة (أو استخدم `/ewc_predict sync`) لتحديث الإحصاءات المعروضة، واستخدم `/ewc_predict unlink` لإزالة الربط في أي وقت.\n\n' +
+              '**English**\n' +
+              '**What it is:** Your EWC showcase is your EWC rank, points and weekly wins displayed on your Discord profile as a linked role, so everyone sees them without opening the dashboard.\n\n' +
+              '**How to link:** Run `/ewc_predict link`, then tap **Open my dashboard** and sign in with the same Discord account. It links automatically — no extra setup.\n\n' +
+              '**Update & remove:** Tap **Refresh** on the dashboard (or use `/ewc_predict sync`) to update the stats shown, and use `/ewc_predict unlink` to remove the link anytime.',
+          ),
       ],
     });
     return;
@@ -742,10 +755,28 @@ export async function execute(interaction) {
       return;
     }
     await interaction.reply({
-      content: 'Open your EWC dashboard to connect Discord profile showcase.',
+      embeds: [
+        new EmbedBuilder()
+          .setColor(0x5865f2)
+          .setTitle('اربط عرض EWC الخاص بك / Link your EWC showcase')
+          .setDescription(
+            '**العربية**\n' +
+              '**ماذا تحصل؟** يظهر ترتيبك ونقاطك وانتصاراتك الأسبوعية في EWC على ملفك في ديسكورد (رتبة مرتبطة) ليراها الجميع.\n\n' +
+              '**الخطوات:**\n' +
+              '1. اضغط **Open my dashboard**.\n' +
+              '2. سجّل الدخول بنفس حساب ديسكورد.\n' +
+              '3. خلاص — يتم الربط تلقائيًا. اضغط زر **التحديث** في اللوحة في أي وقت لتحديث إحصاءاتك.\n\n' +
+              '**English**\n' +
+              '**What you get:** Your EWC rank, points and weekly wins show on your Discord profile (a linked role) for everyone to see.\n\n' +
+              '**Steps:**\n' +
+              '1. Tap **Open my dashboard**.\n' +
+              '2. Sign in with the same Discord account.\n' +
+              '3. Done — it links automatically. Tap **Refresh** on the dashboard anytime to update your stats.',
+          ),
+      ],
       components: [
         new ActionRowBuilder().addComponents(
-          new ButtonBuilder().setStyle(ButtonStyle.Link).setURL(url).setLabel('Open dashboard'),
+          new ButtonBuilder().setStyle(ButtonStyle.Link).setURL(url).setLabel('Open my dashboard'),
           new ButtonBuilder()
             .setStyle(ButtonStyle.Link)
             .setURL(`${dashboardPublicUrl()}/leaderboard/${interaction.guildId}/${seasonYear}`)
