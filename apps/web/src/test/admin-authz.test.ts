@@ -109,6 +109,10 @@ import { POST as newsUploadPOST } from "@/app/api/admin/news/upload/route";
 import { GET as teamGET, POST as teamPOST } from "@/app/api/admin/team/route";
 import { PATCH as teamIdPATCH, DELETE as teamIdDELETE } from "@/app/api/admin/team/[discordId]/route";
 import { GET as authorsGET } from "@/app/api/admin/authors/route";
+import {
+  POST as userBlockPOST,
+  DELETE as userBlockDELETE,
+} from "@/app/api/admin/users/[discordId]/block/route";
 
 // ---------------------------------------------------------------------------
 // Suite 0: CSRF same-origin guard
@@ -626,5 +630,50 @@ describe("news author eligibility on write", () => {
       ctx({ id: String(postId) }),
     );
     expect(res.status).toBe(403);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Suite 11: Users area block/unblock route — SUPER ONLY (054)
+// superAdmin().discordUserId is 123456789012345678; a DIFFERENT target snowflake
+// is used for the happy path so the self-block guard does not interfere.
+// ---------------------------------------------------------------------------
+
+describe("users block route authorization (super-only)", () => {
+  const TARGET = "222222222222222222"; // != superAdmin().discordUserId
+
+  test("anonymous → 401", async () => {
+    mockAccess.mockResolvedValue(anonymous());
+    const res = await userBlockPOST(req("POST", {}), ctx({ discordId: TARGET }));
+    expect(res.status).toBe(401);
+  });
+
+  test("scoped (non-super) games admin → 403", async () => {
+    mockAccess.mockResolvedValue(gamesAdmin(["valorant"]));
+    const res = await userBlockPOST(req("POST", {}), ctx({ discordId: TARGET }));
+    expect(res.status).toBe(403);
+  });
+
+  test("non-admin → 403", async () => {
+    mockAccess.mockResolvedValue(nonAdmin());
+    const res = await userBlockPOST(req("POST", {}), ctx({ discordId: TARGET }));
+    expect(res.status).toBe(403);
+  });
+
+  test("super POST then DELETE → 200", async () => {
+    mockAccess.mockResolvedValue(superAdmin());
+    const blockRes = await userBlockPOST(req("POST", { reason: "spam" }), ctx({ discordId: TARGET }));
+    expect(blockRes.status).toBe(200);
+    expect((await blockRes.json()).blocked).toBe(true);
+
+    const unblockRes = await userBlockDELETE(req("DELETE"), ctx({ discordId: TARGET }));
+    expect(unblockRes.status).toBe(200);
+    expect((await unblockRes.json()).blocked).toBe(false);
+  });
+
+  test("super blocking themselves → 400", async () => {
+    mockAccess.mockResolvedValue(superAdmin());
+    const res = await userBlockPOST(req("POST", {}), ctx({ discordId: "123456789012345678" }));
+    expect(res.status).toBe(400);
   });
 });
