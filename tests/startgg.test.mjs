@@ -9,7 +9,9 @@ process.env.DISCORD_CLIENT_ID = 'test-client-id';
 process.env.STARTGG_TOKEN = 'test-token';
 process.env.LOG_LEVEL = 'error';
 
-const { fetchSchedule, resolveTournamentTitle, normalizeSet, query, startggClient } = await import('../src/services/startgg.js');
+const { fetchSchedule, resolveTournamentTitle, normalizeSet, query, startggClient, RECENT_WINDOW } = await import(
+  '../src/services/startgg.js'
+);
 
 // Build a set node in start.gg's shape. Unique id → unique externalId (`sgg:<id>`).
 function buildSet(id, { winner = false, state = 3, scoreA = winner ? 3 : 0, scoreB = winner ? 1 : 0 } = {}) {
@@ -52,19 +54,29 @@ function makeQuery({ name = 'Real Tournament', events = [], setsByEvent = {}, co
 
 const tournament = { external_id: 'rlcs-2026-mena-1v1-open', name: 'rlcs-2026-mena-1v1-open' };
 
-test('fetchSchedule paginates past page 1 — captures a 150-match event (the old 40-cap bug)', async () => {
-  const sets = Array.from({ length: 150 }, (_, i) => buildSet(i + 1));
+test('fetchSchedule caps a huge event at the RECENT window (no paging into 22k qualifiers)', async () => {
+  const sets = Array.from({ length: 1000 }, (_, i) => buildSet(i + 1));
   const q = makeQuery({ events: [{ id: 'E1', name: 'Main' }], setsByEvent: { E1: sets } });
 
   const matches = await fetchSchedule(tournament, { query: q });
 
-  assert.equal(matches.length, 150, 'every match across all pages is returned, not just the first 40');
-  // 1 HEAD call + ceil(150/50)=3 event-page calls.
-  assert.equal(q.eventCalls().length, 3, 'walked all three pages');
+  assert.equal(matches.length, RECENT_WINDOW, 'stops at the bounded window, not the full event');
+  // ceil(RECENT_WINDOW / 50) pages, no deeper.
+  assert.equal(q.eventCalls().length, Math.ceil(RECENT_WINDOW / 50));
   assert.deepEqual(
     q.eventCalls().map((c) => c.vars.page),
     [1, 2, 3],
   );
+});
+
+test('fetchSchedule returns ALL sets of a small event (Swiss/finals fit under the window)', async () => {
+  const sets = Array.from({ length: 20 }, (_, i) => buildSet(i + 1));
+  const q = makeQuery({ events: [{ id: 'E1', name: 'Finals' }], setsByEvent: { E1: sets } });
+
+  const matches = await fetchSchedule(tournament, { query: q });
+
+  assert.equal(matches.length, 20, 'a small event is returned in full');
+  assert.equal(q.eventCalls().length, 1, 'one page is enough');
 });
 
 test('fetchSchedule spans every event and dedupes overlapping set ids', async () => {
@@ -81,9 +93,6 @@ test('fetchSchedule spans every event and dedupes overlapping set ids', async ()
   const matches = await fetchSchedule(tournament, { query: q });
 
   assert.equal(matches.length, 30, 'overlapping externalIds across events are deduped');
-  const ids = new Set(matches.map((m) => m.externalId));
-  assert.equal(ids.size, 30);
-  // Both events were queried (one page each at 30 <= perPage 50).
   assert.deepEqual(new Set(q.eventCalls().map((c) => c.vars.eventId)), new Set(['E1', 'E2']));
 });
 
@@ -97,21 +106,14 @@ test('fetchSchedule retries the whole event at a smaller page size on a complexi
   assert.equal(matches.length, 60, 'all matches still collected after the retry');
   const perPages = q.eventCalls().map((c) => c.vars.perPage);
   assert.ok(perPages.includes(50), 'attempted the large page size first');
-  assert.ok(
-    perPages.filter((p) => p === 25).length >= 1,
-    'retried at the smaller page size',
-  );
+  assert.ok(perPages.includes(25), 'retried at the smaller page size');
 });
 
-test('fetchSchedule bounds runaway events at the page cap', async () => {
-  // 1600 sets / 50 per page = 32 pages, but MAX_PAGES_PER_EVENT caps the walk at 30.
-  const sets = Array.from({ length: 1600 }, (_, i) => buildSet(i + 1));
-  const q = makeQuery({ events: [{ id: 'E1', name: 'Huge' }], setsByEvent: { E1: sets } });
-
-  const matches = await fetchSchedule(tournament, { query: q });
-
-  assert.equal(q.eventCalls().length, 30, 'stops at the 30-page cap');
-  assert.equal(matches.length, 30 * 50, 'collects only the capped pages');
+test('fetchSchedule accepts a slug that is already a full tournament path', async () => {
+  const q = makeQuery({ events: [{ id: 'E1', name: 'Main' }], setsByEvent: { E1: [buildSet(1)] } });
+  await fetchSchedule({ external_id: 'tournament/already-pathed', name: 'x' }, { query: q });
+  const head = q.calls.find((c) => /tournament\(slug/.test(c.gql));
+  assert.equal(head.vars.slug, 'tournament/already-pathed', 'an existing path is not double-prefixed');
 });
 
 test('resolveTournamentTitle returns the real name, null on error or blank', async () => {
@@ -127,32 +129,9 @@ test('resolveTournamentTitle returns the real name, null on error or blank', asy
   assert.equal(await resolveTournamentTitle(tournament, { query: throws }), null);
 });
 
-test('fetchSchedule accepts a slug that is already a full tournament path', async () => {
-  const q = makeQuery({ events: [{ id: 'E1', name: 'Main' }], setsByEvent: { E1: [buildSet(1)] } });
-  await fetchSchedule({ external_id: 'tournament/already-pathed', name: 'x' }, { query: q });
-  const head = q.calls.find((c) => /tournament\(slug/.test(c.gql));
-  assert.equal(head.vars.slug, 'tournament/already-pathed', 'an existing path is not double-prefixed');
-});
-
-test('normalizeSet maps status, scores, and winner', () => {
-  const finished = normalizeSet(buildSet(7, { winner: true }));
-  assert.equal(finished.status, 'finished');
-  assert.equal(finished.winner, 'A7', 'winnerId matching slot A resolves to teamA');
-  assert.equal(finished.scoreA, 3);
-  assert.equal(finished.scoreB, 1);
-  assert.equal(finished.externalId, 'sgg:7');
-  assert.equal(finished.source, 'startgg');
-
-  const running = normalizeSet(buildSet(8, { state: 2 }));
-  assert.equal(running.status, 'running');
-  assert.equal(running.winner, null);
-
-  const scheduled = normalizeSet(buildSet(9, { state: 1 }));
-  assert.equal(scheduled.status, 'scheduled');
-});
-
-// The network-layer query() retries timeouts (start.gg is slow) but not GraphQL
-// errors. Stub the exported axios client's `post` so no request leaves the box.
+// The network-layer query() retries TRANSIENT failures (timeouts + start.gg's generic
+// "An unknown error has occurred") but not deterministic GraphQL errors. Stub the
+// exported axios client's `post` so no request leaves the box; delayMs:0 skips backoff.
 function stubPost(fn) {
   const original = startggClient.post;
   startggClient.post = fn;
@@ -175,39 +154,71 @@ test('query retries once on timeout, then succeeds', async () => {
     return { data: { data: { ok: true } } };
   });
   try {
-    assert.deepEqual(await query('{ x }'), { ok: true });
+    assert.deepEqual(await query('{ x }', {}, { delayMs: 0 }), { ok: true });
     assert.equal(calls, 2, 'one timeout then one success');
   } finally {
     restore();
   }
 });
 
-test('query gives up after a second timeout', async () => {
+test('query retries start.gg\'s generic "An unknown error has occurred"', async () => {
+  let calls = 0;
+  const restore = stubPost(async () => {
+    calls += 1;
+    if (calls === 1) return { data: { errors: [{ message: 'An unknown error has occurred' }] } };
+    return { data: { data: { ok: true } } };
+  });
+  try {
+    assert.deepEqual(await query('{ x }', {}, { delayMs: 0 }), { ok: true });
+    assert.equal(calls, 2, 'the generic transient error is retried');
+  } finally {
+    restore();
+  }
+});
+
+test('query gives up after exhausting retries', async () => {
   let calls = 0;
   const restore = stubPost(async () => {
     calls += 1;
     throw timeoutError();
   });
   try {
-    await assert.rejects(() => query('{ x }'), /timeout/i);
-    assert.equal(calls, 2, 'tried twice, no more');
+    await assert.rejects(() => query('{ x }', {}, { retries: 3, delayMs: 0 }), /timeout/i);
+    assert.equal(calls, 3, 'tried three times, no more');
   } finally {
     restore();
   }
 });
 
-test('query does NOT retry deterministic GraphQL errors', async () => {
+test('query does NOT retry deterministic GraphQL errors (complexity)', async () => {
   let calls = 0;
   const restore = stubPost(async () => {
     calls += 1;
     return { data: { errors: [{ message: 'query complexity is too high' }] } };
   });
   try {
-    await assert.rejects(() => query('{ x }'), /complexity/i);
-    assert.equal(calls, 1, 'GraphQL errors surface immediately');
+    await assert.rejects(() => query('{ x }', {}, { delayMs: 0 }), /complexity/i);
+    assert.equal(calls, 1, 'complexity errors surface immediately');
   } finally {
     restore();
   }
+});
+
+test('normalizeSet maps status, scores, and winner', () => {
+  const finished = normalizeSet(buildSet(7, { winner: true }));
+  assert.equal(finished.status, 'finished');
+  assert.equal(finished.winner, 'A7', 'winnerId matching slot A resolves to teamA');
+  assert.equal(finished.scoreA, 3);
+  assert.equal(finished.scoreB, 1);
+  assert.equal(finished.externalId, 'sgg:7');
+  assert.equal(finished.source, 'startgg');
+
+  const running = normalizeSet(buildSet(8, { state: 2 }));
+  assert.equal(running.status, 'running');
+  assert.equal(running.winner, null);
+
+  const scheduled = normalizeSet(buildSet(9, { state: 1 }));
+  assert.equal(scheduled.status, 'scheduled');
 });
 
 test('normalizeSet treats negative scores as null and drops fully-TBD sets', () => {
