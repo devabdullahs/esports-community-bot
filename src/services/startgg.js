@@ -4,19 +4,38 @@ import { logger } from '../lib/logger.js';
 
 // Start.gg GraphQL API (free tier). Best for FGC / community brackets hosted on start.gg.
 // Docs: https://developer.start.gg/docs/intro
+// start.gg's GraphQL is slow and bursty; a single full-event sync fires several
+// sequential requests, so use a generous per-request timeout and retry once on a
+// timeout (a slow response shouldn't zero out the whole tournament's sync).
+const REQUEST_TIMEOUT_MS = 25_000;
 const client = axios.create({
   baseURL: config.startgg.baseUrl,
-  timeout: 15_000,
+  timeout: REQUEST_TIMEOUT_MS,
   headers: {
     'Content-Type': 'application/json',
     ...(config.startgg.token ? { Authorization: `Bearer ${config.startgg.token}` } : {}),
   },
 });
 
+function isTimeout(e) {
+  return e?.code === 'ECONNABORTED' || /timeout/i.test(e?.message ?? '');
+}
+
 export async function query(gql, variables = {}) {
-  const { data } = await client.post('', { query: gql, variables });
-  if (data.errors) throw new Error(data.errors.map((e) => e.message).join('; '));
-  return data.data;
+  let lastErr;
+  for (let attempt = 1; attempt <= 2; attempt += 1) {
+    try {
+      const { data } = await client.post('', { query: gql, variables });
+      // GraphQL errors (complexity, bad query) are deterministic — surface them now, don't retry.
+      if (data.errors) throw new Error(data.errors.map((e) => e.message).join('; '));
+      return data.data;
+    } catch (e) {
+      if (!isTimeout(e) || attempt === 2) throw e;
+      lastErr = e;
+      logger.debug(`[startgg] request timed out (attempt ${attempt}/2); retrying`);
+    }
+  }
+  throw lastErr;
 }
 
 // external_id is the tournament slug ("rlcs-2026-mena-1v1-open") or already a "tournament/<slug>" path.
