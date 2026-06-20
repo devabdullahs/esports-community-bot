@@ -27,6 +27,7 @@ function isTransient(e) {
   const code = e?.code;
   if (code === 'ECONNABORTED' || code === 'ETIMEDOUT' || code === 'ECONNRESET') return true;
   const status = e?.response?.status;
+  if (status === 429) return true; // rate limited — back off and retry
   if (typeof status === 'number' && status >= 500) return true;
   return TRANSIENT_RE.test(e?.message ?? '');
 }
@@ -159,6 +160,24 @@ async function fetchEventSets(eventId, q) {
     for (const node of nodes) out.push(node);
   }
   return out;
+}
+
+// One set's current state, fetched DIRECTLY by id. The windowed fetchSchedule can't
+// include every set of a huge open, so the live-poller uses this to finalize a
+// specific tracked match it can't find in the window. externalId is `sgg:<setId>`.
+const SET_QUERY = `query Set($id: ID!) {
+  set(id: $id) {
+    id state startAt winnerId
+    slots { entrant { id name } standing { stats { score { value } } } }
+  }
+}`;
+
+export async function fetchMatch(externalId, { query: q = query } = {}) {
+  if (!config.startgg.token) return null;
+  const id = String(externalId ?? '').replace(/^sgg:/i, '');
+  if (!id) return null;
+  const data = await q(SET_QUERY, { id });
+  return data?.set ? normalizeSet(data.set) : null;
 }
 
 // The tracked matches (sets) for a start.gg tournament: live + upcoming + recent
