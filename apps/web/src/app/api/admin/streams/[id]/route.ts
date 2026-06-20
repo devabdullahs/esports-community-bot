@@ -29,6 +29,16 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
   if (typeof body.label === "string") patch.label = body.label.trim().slice(0, 120);
   if (typeof body.language === "string") patch.language = body.language.trim().toLowerCase().slice(0, 8);
   if (typeof body.active === "boolean") patch.active = body.active;
+  if (typeof body.creatorKey === "string") {
+    patch.creatorKey = body.creatorKey
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "")
+      .slice(0, 80);
+  }
+  if (Array.isArray(body.gameSlugs)) patch.gameSlugs = body.gameSlugs.map((v) => String(v));
+  if (typeof body.isDefault === "boolean") patch.isDefault = body.isDefault;
   if (typeof body.sortOrder === "number" && Number.isFinite(body.sortOrder)) patch.sortOrder = body.sortOrder;
 
   const updated = await updateStreamChannel(id, patch);

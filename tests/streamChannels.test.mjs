@@ -11,6 +11,7 @@ process.env.LOG_LEVEL = 'error';
 const { closeDb } = await import('../src/db/index.js');
 const {
   parseChannelHandle,
+  parseGameSlugs,
   channelUrl,
   createStreamChannel,
   getStreamChannel,
@@ -43,6 +44,15 @@ test('channelUrl builds a per-platform watch URL', () => {
   assert.equal(channelUrl('youtube', 'Chan'), 'https://www.youtube.com/@Chan');
 });
 
+test('parseGameSlugs accepts several separators and normalizes aliases', () => {
+  assert.deepEqual(parseGameSlugs('overwatch, rocket-league، teamfighttactics | valorant'), [
+    'overwatch',
+    'rocketleague',
+    'tft',
+    'valorant',
+  ]);
+});
+
 test('createStreamChannel validates platform, scope, and scope keys', async () => {
   await assert.rejects(() => createStreamChannel({ platform: 'mixer', handle: 'x', scope: 'game', gameSlug: 'overwatch' }), /platform/i);
   await assert.rejects(() => createStreamChannel({ platform: 'twitch', handle: 'x', scope: 'planet' }), /scope/i);
@@ -66,9 +76,49 @@ test('createStreamChannel hydrates a row with a watch URL', async () => {
   assert.equal(ch.handle, 'owbrain', 'handle is normalized on the way in');
   assert.equal(ch.scope, 'game');
   assert.equal(ch.gameSlug, 'overwatch');
+  assert.deepEqual(ch.gameSlugs, ['overwatch']);
   assert.equal(ch.label, 'OWBrain');
   assert.equal(ch.active, true);
   assert.equal(ch.url, 'https://www.twitch.tv/owbrain');
+});
+
+test('game-scoped channels can target multiple games', async () => {
+  const ch = await createStreamChannel({
+    platform: 'twitch',
+    handle: 'multi_game',
+    label: 'Multi Game',
+    scope: 'game',
+    gameSlugs: ['overwatch', 'rocket-league'],
+  });
+  assert.equal(ch.gameSlug, 'overwatch');
+  assert.deepEqual(ch.gameSlugs, ['overwatch', 'rocketleague']);
+
+  const rlChannels = await listStreamChannels({ scope: 'game', gameSlug: 'rocketleague' });
+  assert.ok(rlChannels.some((c) => c.id === ch.id), 'secondary game tag is filterable');
+
+  const matched = await channelsForMatch({ gameSlug: 'rocketleague', includeEwc: false });
+  assert.ok(matched.some((c) => c.id === ch.id), 'secondary game tag matches live cards');
+});
+
+test('only one platform is default within a creator group', async () => {
+  const first = await createStreamChannel({
+    platform: 'twitch',
+    handle: 'creator_default',
+    label: 'Creator Default',
+    creatorKey: 'creator-default',
+    scope: 'ewc',
+    isDefault: true,
+  });
+  const second = await createStreamChannel({
+    platform: 'kick',
+    handle: 'creator_default',
+    label: 'Creator Default',
+    creatorKey: 'creator-default',
+    scope: 'ewc',
+    isDefault: true,
+  });
+  assert.equal((await getStreamChannel(second.id)).isDefault, true);
+  assert.equal((await getStreamChannel(first.id)).isDefault, false);
 });
 
 test('re-adding the same channel at the same scope upserts (no duplicate)', async () => {

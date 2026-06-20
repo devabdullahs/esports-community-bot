@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { headers } from "next/headers";
 import { CoStreamsView } from "@/components/streams/co-streams-view";
 import { getEwcCoStreams } from "@/lib/co-streams";
 import { dashboardPublicUrl } from "@/lib/env";
@@ -16,12 +17,17 @@ const META: Record<Locale, { title: string; description: string }> = {
   },
   ar: {
     title: "البث المصاحب لكأس العالم للرياضات الإلكترونية",
-    description: "شاهد المذيعين المصاحبين الرسميين لكأس العالم للرياضات الإلكترونية — قنوات تويتش وكيك المباشرة في مكان واحد.",
+    description:
+      "شاهد المذيعين المصاحبين الرسميين لكأس العالم للرياضات الإلكترونية — قنوات تويتش وكيك المباشرة في مكان واحد.",
   },
 };
 
-// Twitch requires the embedding host as the `parent` param.
-function parentHost(): string {
+// Twitch requires the embedding host as the `parent` param. Use the actual
+// request host so canonical, www, CranL preview, and local URLs all work.
+async function parentHost(): Promise<string> {
+  const h = await headers();
+  const host = h.get("x-forwarded-host")?.split(",")[0]?.trim() || h.get("host")?.split(",")[0]?.trim();
+  if (host) return host.replace(/:\d+$/, "");
   try {
     return new URL(dashboardPublicUrl()).hostname;
   } catch {
@@ -43,5 +49,5 @@ export async function generateMetadata(): Promise<Metadata> {
 export default async function CoStreamsPage() {
   const locale = await getRequestLocale();
   const streams = await getEwcCoStreams();
-  return <CoStreamsView streams={streams} parent={parentHost()} locale={locale} />;
+  return <CoStreamsView streams={streams} parent={await parentHost()} locale={locale} />;
 }

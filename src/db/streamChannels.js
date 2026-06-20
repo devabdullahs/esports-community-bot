@@ -1,4 +1,5 @@
 import { all, get, run } from './client.js';
+import { normalizeGameSlug } from '../lib/games.js';
 import { normalizeTeamName } from '../lib/render.js';
 
 // Admin-curated live-stream / co-stream channels. A channel is attached at one
@@ -18,6 +19,49 @@ function nowText() {
 // constraint behave identically across SQLite and Postgres.
 function blank(value) {
   return typeof value === 'string' ? value.trim() : '';
+}
+
+function parseJson(value, fallback) {
+  try {
+    return value ? JSON.parse(value) : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+function normalizeCreatorKey(value) {
+  return blank(value)
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 80);
+}
+
+function cleanGameSlug(value) {
+  const raw = blank(value).toLowerCase();
+  if (!raw) return '';
+  return normalizeGameSlug(raw.replace(/[^a-z0-9]+/g, ''));
+}
+
+export function parseGameSlugs(value) {
+  const raw = Array.isArray(value)
+    ? value
+    : String(value ?? '')
+        .split(/[,،;|/\s]+/u)
+        .filter(Boolean);
+  const seen = new Set();
+  const out = [];
+  for (const item of raw) {
+    const slug = cleanGameSlug(item);
+    if (!slug || seen.has(slug)) continue;
+    seen.add(slug);
+    out.push(slug);
+  }
+  return out.slice(0, 12);
+}
+
+function gameSlugsJson(slugs) {
+  return JSON.stringify(parseGameSlugs(slugs));
 }
 
 // Accept a full channel URL, an @handle, or a bare handle and return the canonical
@@ -50,17 +94,24 @@ export function channelUrl(platform, handle) {
 
 function hydrate(row) {
   if (!row) return null;
+  let gameSlugs = parseGameSlugs(parseJson(row.game_slugs, row.game_slug ? [row.game_slug] : []));
+  if (!gameSlugs.length && row.game_slug) gameSlugs = parseGameSlugs([row.game_slug]);
+  const label = row.label || row.handle;
+  const creatorKey = row.creator_key || normalizeCreatorKey(label || row.handle);
   return {
     id: row.id,
     platform: row.platform,
     handle: row.handle,
-    label: row.label || row.handle,
+    label,
     scope: row.scope,
-    gameSlug: row.game_slug || null,
+    creatorKey,
+    gameSlug: row.game_slug || gameSlugs[0] || null,
+    gameSlugs,
     teamKey: row.team_key || null,
     matchExternalId: row.match_external_id || null,
     language: row.language || null,
     sortOrder: row.sort_order,
+    isDefault: Boolean(row.is_default),
     active: Boolean(row.active),
     addedBy: row.added_by || null,
     createdAt: row.created_at,
@@ -82,9 +133,12 @@ export async function createStreamChannel({
   label = '',
   scope,
   gameSlug = '',
+  gameSlugs = null,
+  creatorKey = '',
   team = '',
   matchExternalId = '',
   language = '',
+  isDefault = false,
   addedBy = null,
 }) {
   if (!PLATFORMS.has(platform)) throw new Error(`Unknown platform: ${platform}`);
@@ -94,7 +148,11 @@ export async function createStreamChannel({
 
   // game_slug doubles as an optional filter tag on any scope; team_key/match id
   // are only meaningful on their own scope.
-  const gameKey = blank(gameSlug);
+  const games = parseGameSlugs(gameSlugs ?? gameSlug);
+  const gameKey = games[0] || '';
+  const gamesJson = gameSlugsJson(games);
+  const cleanLabel = blank(label);
+  const cleanCreatorKey = normalizeCreatorKey(creatorKey || cleanLabel || cleanHandle);
   const teamKey = scope === 'team' ? normalizeTeamName(team) : '';
   const matchKey = scope === 'match' ? blank(matchExternalId) : '';
   if (scope === 'game' && !gameKey) throw new Error('A game-scope channel needs a game.');
@@ -104,18 +162,39 @@ export async function createStreamChannel({
   const now = nowText();
   const row = await get(
     `INSERT INTO stream_channels
-       (platform, handle, label, scope, game_slug, team_key, match_external_id, language,
-        sort_order, active, added_by, created_at, updated_at)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 1, $10, $11, $11)
+       (platform, handle, label, scope, creator_key, game_slug, game_slugs, team_key,
+        match_external_id, language, sort_order, is_default, active, added_by, created_at, updated_at)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, 1, $13, $14, $14)
      ON CONFLICT (platform, handle, scope, game_slug, team_key, match_external_id) DO UPDATE SET
        label = excluded.label,
+       creator_key = excluded.creator_key,
+       game_slugs = excluded.game_slugs,
        language = excluded.language,
+       is_default = excluded.is_default,
        active = 1,
        updated_at = excluded.updated_at
      RETURNING *`,
-    [platform, cleanHandle, blank(label), scope, gameKey, teamKey, matchKey, blank(language), await nextSortOrder(scope), addedBy, now],
+    [
+      platform,
+      cleanHandle,
+      cleanLabel,
+      scope,
+      cleanCreatorKey,
+      gameKey,
+      gamesJson,
+      teamKey,
+      matchKey,
+      blank(language),
+      await nextSortOrder(scope),
+      isDefault ? 1 : 0,
+      addedBy,
+      now,
+    ],
   );
-  return hydrate(row);
+  if (row?.is_default && cleanCreatorKey) {
+    await run('UPDATE stream_channels SET is_default = 0 WHERE creator_key = $1 AND id <> $2', [cleanCreatorKey, row.id]);
+  }
+  return getStreamChannel(row.id);
 }
 
 export async function getStreamChannel(id) {
@@ -131,8 +210,11 @@ export async function listStreamChannels({ scope = null, gameSlug = null, active
     where.push(`scope = $${params.length}`);
   }
   if (gameSlug) {
-    params.push(gameSlug);
-    where.push(`game_slug = $${params.length}`);
+    const slug = cleanGameSlug(gameSlug);
+    params.push(slug);
+    const single = `$${params.length}`;
+    params.push(`%"${slug}"%`);
+    where.push(`(game_slug = ${single} OR game_slugs LIKE $${params.length})`);
   }
   if (activeOnly) where.push('active = 1');
   const sql = `SELECT * FROM stream_channels ${where.length ? `WHERE ${where.join(' AND ')}` : ''}
@@ -159,8 +241,11 @@ export async function channelsForMatch({
 
   const params = [];
   const ors = [];
-  params.push(blank(gameSlug));
-  ors.push(`(scope = 'game' AND game_slug = $${params.length})`);
+  const matchGameSlug = cleanGameSlug(gameSlug);
+  params.push(matchGameSlug);
+  const gameParam = `$${params.length}`;
+  params.push(`%"${matchGameSlug}"%`);
+  ors.push(`(scope = 'game' AND (game_slug = ${gameParam} OR game_slugs LIKE $${params.length}))`);
   params.push(blank(matchExternalId));
   ors.push(`(scope = 'match' AND match_external_id = $${params.length})`);
   if (teams.length) {
@@ -189,7 +274,7 @@ export async function channelsForMatch({
   return out;
 }
 
-export async function updateStreamChannel(id, { label, language, sortOrder, active } = {}) {
+export async function updateStreamChannel(id, { label, language, sortOrder, active, gameSlugs, isDefault, creatorKey } = {}) {
   const sets = [];
   const params = [];
   const push = (col, value) => {
@@ -197,15 +282,27 @@ export async function updateStreamChannel(id, { label, language, sortOrder, acti
     sets.push(`${col} = $${params.length}`);
   };
   if (label !== undefined) push('label', blank(label));
+  if (creatorKey !== undefined) push('creator_key', normalizeCreatorKey(creatorKey));
   if (language !== undefined) push('language', blank(language));
   if (sortOrder !== undefined) push('sort_order', Number(sortOrder) || 0);
   if (active !== undefined) push('active', active ? 1 : 0);
+  if (gameSlugs !== undefined) {
+    const games = parseGameSlugs(gameSlugs);
+    push('game_slug', games[0] || '');
+    push('game_slugs', gameSlugsJson(games));
+  }
+  if (isDefault !== undefined) push('is_default', isDefault ? 1 : 0);
   if (!sets.length) return getStreamChannel(id);
   push('updated_at', nowText());
   params.push(id);
   const info = await run(`UPDATE stream_channels SET ${sets.join(', ')} WHERE id = $${params.length}`, params);
   if (!info.changes) return null;
-  return getStreamChannel(id);
+  const updated = await getStreamChannel(id);
+  if (updated?.isDefault && updated.creatorKey) {
+    await run('UPDATE stream_channels SET is_default = 0 WHERE creator_key = $1 AND id <> $2', [updated.creatorKey, id]);
+    return getStreamChannel(id);
+  }
+  return updated;
 }
 
 export async function setStreamChannelActive(id, active) {
