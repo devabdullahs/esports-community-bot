@@ -19,21 +19,42 @@ export async function query(gql, variables = {}) {
   return data.data;
 }
 
-const SETS_QUERY = `query Sets($slug: String!, $perPage: Int!) {
-  tournament(slug: $slug) {
-    events {
-      sets(page: 1, perPage: $perPage, sortType: RECENT) {
-        nodes {
-          id state startAt winnerId
-          slots { entrant { id name } standing { stats { score { value } } } }
-        }
+// external_id is the tournament slug ("rlcs-2026-mena-1v1-open") or already a "tournament/<slug>" path.
+function slugOf(tournament) {
+  const raw = String(tournament?.external_id ?? '');
+  return raw.includes('/') ? raw : `tournament/${raw}`;
+}
+
+// Lightweight: the tournament's display name + its event ids. One cheap request
+// that drives both the title resolver and the per-event set pagination below.
+const HEAD_QUERY = `query Head($slug: String!) {
+  tournament(slug: $slug) { name events { id name } }
+}`;
+
+// One PAGE of an event's sets. start.gg paginates per connection (pageInfo.totalPages),
+// so we walk the pages of each event to capture EVERY match — large 1v1 opens routinely
+// exceed a single page of 50.
+const EVENT_SETS_QUERY = `query EventSets($eventId: ID!, $page: Int!, $perPage: Int!) {
+  event(id: $eventId) {
+    sets(page: $page, perPage: $perPage, sortType: STANDARD) {
+      pageInfo { totalPages }
+      nodes {
+        id state startAt winnerId
+        slots { entrant { id name } standing { stats { score { value } } } }
       }
     }
   }
 }`;
 
+// Bounds so one pathological event can't issue unbounded requests. 50 sets/page,
+// up to 30 pages = 1500 sets/event ceiling; start.gg's complexity cap is handled
+// by retrying the whole event at a smaller page size.
+const SETS_PER_PAGE = 50;
+const MAX_PAGES_PER_EVENT = 30;
+const PAGE_SIZE_LADDER = [SETS_PER_PAGE, 25, 12, 6];
+
 // Normalize a start.gg set into the bot's standard match shape.
-function normalizeSet(s) {
+export function normalizeSet(s) {
   const [s1, s2] = s.slots ?? [];
   const teamA = s1?.entrant?.name ?? 'TBD';
   const teamB = s2?.entrant?.name ?? 'TBD';
@@ -63,31 +84,50 @@ function normalizeSet(s) {
   };
 }
 
-// Matches (sets) for a tracked start.gg tournament (external_id = slug, e.g. "evo-2024").
-export async function fetchSchedule(tournament) {
+// Walk EVERY page of one event's sets. On a start.gg complexity error, restart the
+// event from page 1 at a smaller page size (cleaner than mixing page sizes mid-walk).
+async function fetchEventSets(eventId, q) {
+  for (const perPage of PAGE_SIZE_LADDER) {
+    try {
+      const nodes = [];
+      let page = 1;
+      let totalPages = 1;
+      while (page <= totalPages && page <= MAX_PAGES_PER_EVENT) {
+        const data = await q(EVENT_SETS_QUERY, { eventId, page, perPage });
+        const conn = data?.event?.sets;
+        totalPages = Math.min(Number(conn?.pageInfo?.totalPages) || 1, MAX_PAGES_PER_EVENT);
+        for (const node of conn?.nodes ?? []) nodes.push(node);
+        page += 1;
+      }
+      return nodes;
+    } catch (e) {
+      if (/complexity/i.test(e.message) && perPage > PAGE_SIZE_LADDER[PAGE_SIZE_LADDER.length - 1]) {
+        logger.debug(`[startgg] event ${eventId} too complex at perPage ${perPage}; retrying smaller`);
+        continue;
+      }
+      throw e;
+    }
+  }
+  return [];
+}
+
+// All matches (sets) for a tracked start.gg tournament, across ALL of its events,
+// fully paginated. `query` is injectable for tests (no network).
+export async function fetchSchedule(tournament, { query: q = query } = {}) {
   if (!config.startgg.token) {
     logger.warn('[startgg] STARTGG_TOKEN not set — skipping.');
     return [];
   }
-  const raw = tournament.external_id;
-  const slug = raw.includes('/') ? raw : `tournament/${raw}`;
-  // start.gg caps each request at 1000 returned objects; tournaments with many events (e.g. Evo)
-  // exceed that, so start big and retry with fewer sets-per-event if it's too complex.
-  let data;
-  try {
-    data = await query(SETS_QUERY, { slug, perPage: 40 });
-  } catch (e) {
-    if (/complexity/i.test(e.message)) {
-      logger.debug('[startgg] query too complex, retrying with fewer sets per event');
-      data = await query(SETS_QUERY, { slug, perPage: 6 });
-    } else {
-      throw e;
-    }
-  }
+  const slug = slugOf(tournament);
+  const head = await q(HEAD_QUERY, { slug });
+  const events = head?.tournament?.events ?? [];
+
   const out = [];
   const seen = new Set();
-  for (const ev of data?.tournament?.events ?? []) {
-    for (const node of ev?.sets?.nodes ?? []) {
+  for (const ev of events) {
+    if (!ev?.id) continue;
+    const nodes = await fetchEventSets(ev.id, q);
+    for (const node of nodes) {
       const m = normalizeSet(node);
       if (m && !seen.has(m.externalId)) {
         seen.add(m.externalId);
@@ -96,6 +136,19 @@ export async function fetchSchedule(tournament) {
     }
   }
   return out;
+}
+
+// Resolve a tracked start.gg tournament's display name (so the board shows the real
+// name instead of the raw slug). Called by the morning sync; null on any problem.
+export async function resolveTournamentTitle(tournament, { query: q = query } = {}) {
+  if (!config.startgg.token) return null;
+  try {
+    const data = await q(HEAD_QUERY, { slug: slugOf(tournament) });
+    const name = data?.tournament?.name;
+    return name && String(name).trim() ? String(name).trim() : null;
+  } catch {
+    return null;
+  }
 }
 
 export { client as startggClient };
