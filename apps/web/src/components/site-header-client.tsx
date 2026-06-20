@@ -10,6 +10,7 @@ import {
   MedalIcon,
   MenuIcon,
   NewspaperIcon,
+  RadioIcon,
   ShieldCheckIcon,
   TargetIcon,
   TrophyIcon,
@@ -125,6 +126,7 @@ export function SiteHeaderClient({
   const ewcLinks: Destination[] = [
     { href: "/news/ewc", label: text.common.ewcNews, icon: NewspaperIcon },
     { href: "/tournaments/ewc", label: text.common.ewcTournaments, icon: TrophyIcon },
+    { href: "/co-streams", label: text.common.coStreams, icon: RadioIcon },
     { href: "/predictions", label: text.common.predictions, icon: TargetIcon },
     { href: "/leaderboard", label: text.common.publicLeaderboard, icon: CrownIcon },
   ];
