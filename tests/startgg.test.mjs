@@ -9,7 +9,7 @@ process.env.DISCORD_CLIENT_ID = 'test-client-id';
 process.env.STARTGG_TOKEN = 'test-token';
 process.env.LOG_LEVEL = 'error';
 
-const { fetchSchedule, resolveTournamentTitle, normalizeSet } = await import('../src/services/startgg.js');
+const { fetchSchedule, resolveTournamentTitle, normalizeSet, query, startggClient } = await import('../src/services/startgg.js');
 
 // Build a set node in start.gg's shape. Unique id → unique externalId (`sgg:<id>`).
 function buildSet(id, { winner = false, state = 3, scoreA = winner ? 3 : 0, scoreB = winner ? 1 : 0 } = {}) {
@@ -149,6 +149,65 @@ test('normalizeSet maps status, scores, and winner', () => {
 
   const scheduled = normalizeSet(buildSet(9, { state: 1 }));
   assert.equal(scheduled.status, 'scheduled');
+});
+
+// The network-layer query() retries timeouts (start.gg is slow) but not GraphQL
+// errors. Stub the exported axios client's `post` so no request leaves the box.
+function stubPost(fn) {
+  const original = startggClient.post;
+  startggClient.post = fn;
+  return () => {
+    startggClient.post = original;
+  };
+}
+
+function timeoutError() {
+  const e = new Error('timeout of 25000ms exceeded');
+  e.code = 'ECONNABORTED';
+  return e;
+}
+
+test('query retries once on timeout, then succeeds', async () => {
+  let calls = 0;
+  const restore = stubPost(async () => {
+    calls += 1;
+    if (calls === 1) throw timeoutError();
+    return { data: { data: { ok: true } } };
+  });
+  try {
+    assert.deepEqual(await query('{ x }'), { ok: true });
+    assert.equal(calls, 2, 'one timeout then one success');
+  } finally {
+    restore();
+  }
+});
+
+test('query gives up after a second timeout', async () => {
+  let calls = 0;
+  const restore = stubPost(async () => {
+    calls += 1;
+    throw timeoutError();
+  });
+  try {
+    await assert.rejects(() => query('{ x }'), /timeout/i);
+    assert.equal(calls, 2, 'tried twice, no more');
+  } finally {
+    restore();
+  }
+});
+
+test('query does NOT retry deterministic GraphQL errors', async () => {
+  let calls = 0;
+  const restore = stubPost(async () => {
+    calls += 1;
+    return { data: { errors: [{ message: 'query complexity is too high' }] } };
+  });
+  try {
+    await assert.rejects(() => query('{ x }'), /complexity/i);
+    assert.equal(calls, 1, 'GraphQL errors surface immediately');
+  } finally {
+    restore();
+  }
 });
 
 test('normalizeSet treats negative scores as null and drops fully-TBD sets', () => {
