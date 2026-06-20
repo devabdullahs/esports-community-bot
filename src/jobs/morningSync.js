@@ -5,6 +5,7 @@ import {
   deactivateTournament,
   listActiveTournaments,
   listEndedTournaments,
+  updateTournamentGame,
   updateTournamentName,
 } from '../db/tournaments.js';
 import {
@@ -39,6 +40,20 @@ export async function syncTournament(client, t) {
       }
     } catch (e) {
       logger.debug(`[sync] title lookup failed for ${t.source}:${t.external_id}: ${e.message}`);
+    }
+  }
+
+  // start.gg URLs don't encode the game, so a fresh start.gg tournament has game=null
+  // and won't group under its board. Detect it once from the source's metadata.
+  if (!t.game && service.resolveTournamentGame) {
+    try {
+      const game = await service.resolveTournamentGame(t);
+      if (game) {
+        await updateTournamentGame(t.id, game);
+        t = { ...t, game };
+      }
+    } catch (e) {
+      logger.debug(`[sync] game lookup failed for ${t.source}:${t.external_id}: ${e.message}`);
     }
   }
 

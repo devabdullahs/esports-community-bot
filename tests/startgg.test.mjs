@@ -2,45 +2,56 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 // config.js exits the process on missing required vars, and the token guard
-// short-circuits fetchSchedule/resolveTournamentTitle when unset — config reads
-// env at import time, so set everything BEFORE importing the module.
+// short-circuits the resolvers when unset — config reads env at import time, so
+// set everything BEFORE importing the module.
 process.env.DISCORD_TOKEN = 'test-token';
 process.env.DISCORD_CLIENT_ID = 'test-client-id';
 process.env.STARTGG_TOKEN = 'test-token';
 process.env.LOG_LEVEL = 'error';
 
-const { fetchSchedule, resolveTournamentTitle, normalizeSet, query, startggClient, RECENT_WINDOW } = await import(
-  '../src/services/startgg.js'
-);
+const { fetchSchedule, resolveTournamentTitle, resolveTournamentGame, normalizeSet, query, startggClient, STATE_WINDOWS } =
+  await import('../src/services/startgg.js');
 
-// Build a set node in start.gg's shape. Unique id → unique externalId (`sgg:<id>`).
-function buildSet(id, { winner = false, state = 3, scoreA = winner ? 3 : 0, scoreB = winner ? 1 : 0 } = {}) {
+const capFor = (state) => STATE_WINDOWS.find((w) => w.state === state).cap;
+
+// Build a set node in start.gg's shape. state 3 = completed (has a winner), 2 = in
+// progress, 1 = not started. Unique id → unique externalId (`sgg:<id>`).
+function buildSet(id, { state = 3, scoreA, scoreB } = {}) {
+  const finished = state === 3;
+  const sA = scoreA ?? (finished ? 3 : 0);
+  const sB = scoreB ?? (finished ? 1 : 0);
   return {
     id,
     state,
-    startAt: 1000 + id,
-    winnerId: winner ? id * 10 + 1 : null,
+    startAt: null,
+    winnerId: finished ? id * 10 + 1 : null,
     slots: [
-      { entrant: { id: id * 10 + 1, name: `A${id}` }, standing: { stats: { score: { value: scoreA } } } },
-      { entrant: { id: id * 10 + 2, name: `B${id}` }, standing: { stats: { score: { value: scoreB } } } },
+      { entrant: { id: id * 10 + 1, name: `A${id}` }, standing: { stats: { score: { value: sA } } } },
+      { entrant: { id: id * 10 + 2, name: `B${id}` }, standing: { stats: { score: { value: sB } } } },
     ],
   };
 }
 
-// A fake injected `query`: serves the HEAD query (tournament name + events) and the
-// per-event paginated sets query, computing totalPages from the page size like the
-// real API. `complexityAbove` makes it throw a complexity error for larger pages so
-// the retry ladder is exercised. Records every call for assertions. No network.
-function makeQuery({ name = 'Real Tournament', events = [], setsByEvent = {}, complexityAbove = Infinity } = {}) {
+function makeSets(state, startId, count) {
+  return Array.from({ length: count }, (_, i) => buildSet(startId + i, { state }));
+}
+
+// A fake injected `query`: serves the HEAD query (name + events + videogame) and the
+// per-event sets query, FILTERING by the requested lifecycle state and computing
+// totalPages from the page size like the real API. `complexityAbove` throws a
+// complexity error for larger pages so the retry ladder is exercised. No network.
+function makeQuery({ name = 'Real Tournament', events = [], setsByEvent = {}, videogame = null, complexityAbove = Infinity } = {}) {
   const q = async (gql, vars) => {
     q.calls.push({ gql, vars });
     if (/tournament\(slug/.test(gql)) {
-      return { tournament: { name, events } };
+      const evs = events.map((e) => ({ ...e, videogame: videogame ? { name: videogame } : null }));
+      return { tournament: { name, events: evs } };
     }
     if (/event\(id/.test(gql)) {
-      const { eventId, page, perPage } = vars;
+      const { eventId, page, perPage, state } = vars;
       if (perPage > complexityAbove) throw new Error('Your query complexity is too high (1500). Maximum is 1000.');
-      const all = setsByEvent[eventId] ?? [];
+      let all = setsByEvent[eventId] ?? [];
+      if (Array.isArray(state)) all = all.filter((s) => state.includes(s.state));
       const totalPages = Math.max(1, Math.ceil(all.length / perPage));
       const start = (page - 1) * perPage;
       return { event: { sets: { pageInfo: { totalPages }, nodes: all.slice(start, start + perPage) } } };
@@ -52,73 +63,99 @@ function makeQuery({ name = 'Real Tournament', events = [], setsByEvent = {}, co
   return q;
 }
 
-const tournament = { external_id: 'rlcs-2026-mena-1v1-open', name: 'rlcs-2026-mena-1v1-open' };
+function statusCounts(matches) {
+  return matches.reduce((acc, m) => ({ ...acc, [m.status]: (acc[m.status] ?? 0) + 1 }), {});
+}
 
-test('fetchSchedule caps a huge event at the RECENT window (no paging into 22k qualifiers)', async () => {
-  const sets = Array.from({ length: 1000 }, (_, i) => buildSet(i + 1));
-  const q = makeQuery({ events: [{ id: 'E1', name: 'Main' }], setsByEvent: { E1: sets } });
+const tournament = { external_id: 'rlcs-2026-na-1v1-open', name: 'rlcs-2026-na-1v1-open' };
+
+test('fetchSchedule returns live + upcoming + recent results — NOT just the finished ones', async () => {
+  // A LIVE event: lots of each state. The bug this guards: RECENT-only sorting returned
+  // finished-dominated windows, so the boards' live/upcoming views stayed empty.
+  const sets = [
+    ...makeSets(2, 1, 200), // active
+    ...makeSets(1, 1001, 200), // upcoming
+    ...makeSets(3, 2001, 200), // done
+  ];
+  const q = makeQuery({ events: [{ id: 'E1', name: '1v1 Open' }], setsByEvent: { E1: sets } });
 
   const matches = await fetchSchedule(tournament, { query: q });
+  const counts = statusCounts(matches);
 
-  assert.equal(matches.length, RECENT_WINDOW, 'stops at the bounded window, not the full event');
-  // ceil(RECENT_WINDOW / 50) pages, no deeper.
-  assert.equal(q.eventCalls().length, Math.ceil(RECENT_WINDOW / 50));
+  assert.equal(counts.running, capFor(2), 'live matches captured up to their cap');
+  assert.equal(counts.scheduled, capFor(1), 'upcoming matches captured up to their cap');
+  assert.equal(counts.finished, capFor(3), 'recent results captured up to their (smaller) cap');
+  assert.ok(counts.running > 0 && counts.scheduled > 0, 'the board-facing live/upcoming matches are present');
+  // Every window state was queried.
   assert.deepEqual(
-    q.eventCalls().map((c) => c.vars.page),
-    [1, 2, 3],
+    new Set(q.eventCalls().flatMap((c) => c.vars.state)),
+    new Set([1, 2, 3]),
   );
 });
 
-test('fetchSchedule returns ALL sets of a small event (Swiss/finals fit under the window)', async () => {
-  const sets = Array.from({ length: 20 }, (_, i) => buildSet(i + 1));
+test('fetchSchedule returns ALL sets of a small event across states', async () => {
+  const sets = [...makeSets(2, 1, 5), ...makeSets(1, 101, 5), ...makeSets(3, 201, 5)];
   const q = makeQuery({ events: [{ id: 'E1', name: 'Finals' }], setsByEvent: { E1: sets } });
 
   const matches = await fetchSchedule(tournament, { query: q });
 
-  assert.equal(matches.length, 20, 'a small event is returned in full');
-  assert.equal(q.eventCalls().length, 1, 'one page is enough');
+  assert.deepEqual(statusCounts(matches), { running: 5, scheduled: 5, finished: 5 });
 });
 
 test('fetchSchedule spans every event and dedupes overlapping set ids', async () => {
-  const e1 = Array.from({ length: 30 }, (_, i) => buildSet(i + 1)); // ids 1..30
-  const e2 = Array.from({ length: 30 }, (_, i) => buildSet(i + 1)); // ids 1..30 (full overlap)
+  const e1 = makeSets(2, 1, 10); // ids 1..10
+  const e2 = makeSets(2, 1, 10); // ids 1..10 (full overlap)
   const q = makeQuery({
     events: [
-      { id: 'E1', name: 'Bracket A' },
-      { id: 'E2', name: 'Bracket B' },
+      { id: 'E1', name: 'A' },
+      { id: 'E2', name: 'B' },
     ],
     setsByEvent: { E1: e1, E2: e2 },
   });
 
   const matches = await fetchSchedule(tournament, { query: q });
 
-  assert.equal(matches.length, 30, 'overlapping externalIds across events are deduped');
+  assert.equal(matches.length, 10, 'overlapping externalIds across events are deduped');
   assert.deepEqual(new Set(q.eventCalls().map((c) => c.vars.eventId)), new Set(['E1', 'E2']));
 });
 
-test('fetchSchedule retries the whole event at a smaller page size on a complexity error', async () => {
-  const sets = Array.from({ length: 60 }, (_, i) => buildSet(i + 1));
-  // Pages > 25 are rejected as too complex; the ladder drops 50 → 25 and restarts at page 1.
-  const q = makeQuery({ events: [{ id: 'E1', name: 'Main' }], setsByEvent: { E1: sets }, complexityAbove: 25 });
+test('fetchSchedule retries a window at a smaller page size on a complexity error', async () => {
+  const q = makeQuery({
+    events: [{ id: 'E1', name: 'Main' }],
+    setsByEvent: { E1: makeSets(2, 1, 60) },
+    complexityAbove: 25,
+  });
 
   const matches = await fetchSchedule(tournament, { query: q });
 
-  assert.equal(matches.length, 60, 'all matches still collected after the retry');
-  const perPages = q.eventCalls().map((c) => c.vars.perPage);
+  assert.equal(statusCounts(matches).running, capFor(2), 'live matches still collected after the retry');
+  const liveCalls = q.eventCalls().filter((c) => c.vars.state.includes(2));
+  const perPages = liveCalls.map((c) => c.vars.perPage);
   assert.ok(perPages.includes(50), 'attempted the large page size first');
   assert.ok(perPages.includes(25), 'retried at the smaller page size');
 });
 
 test('fetchSchedule accepts a slug that is already a full tournament path', async () => {
-  const q = makeQuery({ events: [{ id: 'E1', name: 'Main' }], setsByEvent: { E1: [buildSet(1)] } });
+  const q = makeQuery({ events: [{ id: 'E1', name: 'Main' }], setsByEvent: { E1: makeSets(2, 1, 1) } });
   await fetchSchedule({ external_id: 'tournament/already-pathed', name: 'x' }, { query: q });
   const head = q.calls.find((c) => /tournament\(slug/.test(c.gql));
   assert.equal(head.vars.slug, 'tournament/already-pathed', 'an existing path is not double-prefixed');
 });
 
+test('resolveTournamentGame maps the videogame name to a bot slug, null when unknown', async () => {
+  const rl = makeQuery({ events: [{ id: 'E1', name: '1v1 Open' }], videogame: 'Rocket League' });
+  assert.equal(await resolveTournamentGame(tournament, { query: rl }), 'rocketleague');
+
+  const unknown = makeQuery({ events: [{ id: 'E1', name: 'x' }], videogame: 'Some Untracked Game' });
+  assert.equal(await resolveTournamentGame(tournament, { query: unknown }), null);
+
+  const none = makeQuery({ events: [{ id: 'E1', name: 'x' }], videogame: null });
+  assert.equal(await resolveTournamentGame(tournament, { query: none }), null);
+});
+
 test('resolveTournamentTitle returns the real name, null on error or blank', async () => {
-  const ok = makeQuery({ name: 'RLCS 2026 MENA 1v1 Open', events: [] });
-  assert.equal(await resolveTournamentTitle(tournament, { query: ok }), 'RLCS 2026 MENA 1v1 Open');
+  const ok = makeQuery({ name: 'RLCS 2026 NA 1v1 Open', events: [] });
+  assert.equal(await resolveTournamentTitle(tournament, { query: ok }), 'RLCS 2026 NA 1v1 Open');
 
   const blank = makeQuery({ name: '   ', events: [] });
   assert.equal(await resolveTournamentTitle(tournament, { query: blank }), null);
@@ -205,7 +242,7 @@ test('query does NOT retry deterministic GraphQL errors (complexity)', async () 
 });
 
 test('normalizeSet maps status, scores, and winner', () => {
-  const finished = normalizeSet(buildSet(7, { winner: true }));
+  const finished = normalizeSet(buildSet(7, { state: 3 }));
   assert.equal(finished.status, 'finished');
   assert.equal(finished.winner, 'A7', 'winnerId matching slot A resolves to teamA');
   assert.equal(finished.scoreA, 3);

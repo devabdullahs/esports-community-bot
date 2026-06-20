@@ -53,7 +53,16 @@ export const GAMES = [
 ];
 
 const BY_SLUG = new Map(GAMES.map((g) => [g.slug, g]));
+const BY_NAME = new Map(GAMES.map((g) => [g.name.toLowerCase(), g]));
 const GAME_ALIASES = { teamfighttactics: 'tft' };
+
+// Resolve a source-supplied display name (e.g. start.gg's videogame.name "Rocket League")
+// to a registered game slug, or null if we don't track it. Lets start.gg tournaments —
+// whose URLs don't encode the game the way Liquipedia's do — group under the right board.
+export function gameSlugFromName(name) {
+  if (!name) return null;
+  return BY_NAME.get(String(name).trim().toLowerCase())?.slug ?? null;
+}
 const LOBBY_GAMES = new Set(['apexlegends', 'freefire', 'fortnite', 'pubg', 'pubgmobile', 'teamfighttactics', 'tft']);
 
 // Short tag for a game key (handles wiki slugs, a few legacy codes, and unknowns).

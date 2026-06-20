@@ -1,6 +1,7 @@
 import axios from 'axios';
 import { config } from '../config.js';
 import { logger } from '../lib/logger.js';
+import { gameSlugFromName } from '../lib/games.js';
 
 // Start.gg GraphQL API (free tier). Best for FGC / community brackets hosted on start.gg.
 // Docs: https://developer.start.gg/docs/intro
@@ -56,18 +57,16 @@ function slugOf(tournament) {
   return raw.includes('/') ? raw : `tournament/${raw}`;
 }
 
-// Lightweight: the tournament's display name + its event ids. One cheap request
-// that drives both the title resolver and the per-event set pagination below.
+// Lightweight: the tournament's display name, its event ids, and each event's game.
+// One cheap request that drives the title + game resolvers and the per-event walk below.
 const HEAD_QUERY = `query Head($slug: String!) {
-  tournament(slug: $slug) { name events { id name } }
+  tournament(slug: $slug) { name events { id name videogame { name } } }
 }`;
 
-// One PAGE of an event's sets, RECENT-first. RECENT bubbles the currently relevant
-// sets — live, just-finished, and actively-updating (upcoming) matches — to the top,
-// which is exactly the window we want to track.
-const EVENT_SETS_QUERY = `query EventSets($eventId: ID!, $page: Int!, $perPage: Int!) {
+// One PAGE of an event's sets, filtered by lifecycle state and sorted as the caller asks.
+const EVENT_SETS_QUERY = `query EventSets($eventId: ID!, $page: Int!, $perPage: Int!, $sortType: SetSortType!, $state: [Int!]) {
   event(id: $eventId) {
-    sets(page: $page, perPage: $perPage, sortType: RECENT) {
+    sets(page: $page, perPage: $perPage, sortType: $sortType, filters: { state: $state }) {
       pageInfo { totalPages }
       nodes {
         id state startAt winnerId
@@ -77,11 +76,17 @@ const EVENT_SETS_QUERY = `query EventSets($eventId: ID!, $page: Int!, $perPage: 
   }
 }`;
 
-// We do NOT pull a whole event. start.gg "open" events can carry tens of thousands
-// of qualifier sets (one RL 1v1 Open had 22,182 across 444 pages) — ingesting all of
-// them would flood the boards and hammer the API. Instead track a bounded, RECENT-
-// sorted window per event: the live/upcoming/recent matches that actually matter.
-const RECENT_WINDOW = 150;
+// We do NOT pull a whole event — start.gg "open" events carry tens of thousands of
+// qualifier sets (one RL 1v1 Open had 22,182 across 444 pages). We also can't just take
+// the most-RECENT sets: RECENT is dominated by just-FINISHED matches, so the live and
+// upcoming matches the boards actually show would never come through. Instead fetch a
+// bounded window PER lifecycle state — live now, then next-up, then a tail of recent
+// results. start.gg set states: 1 = not started, 2 = in progress, 3 = completed.
+const STATE_WINDOWS = [
+  { state: 2, sortType: 'STANDARD', cap: 60 }, // live now
+  { state: 1, sortType: 'STANDARD', cap: 60 }, // upcoming / next up
+  { state: 3, sortType: 'RECENT', cap: 40 }, // recent results
+];
 const SETS_PER_PAGE = 50;
 const PAGE_SIZE_LADDER = [SETS_PER_PAGE, 25, 12];
 
@@ -116,28 +121,28 @@ export function normalizeSet(s) {
   };
 }
 
-// Walk an event's sets RECENT-first until we've filled the window (or run out). On a
-// start.gg complexity error, restart the event at a smaller page size (cleaner than
-// mixing page sizes mid-walk). Small events return all their sets; huge ones stop at
-// the window cap, so we never page deep into qualifier brackets.
-async function fetchEventSets(eventId, q) {
+// One lifecycle window of an event's sets, paginated up to its cap. On a start.gg
+// complexity error, restart the window at a smaller page size (cleaner than mixing
+// page sizes mid-walk). Small events return all their sets in a window; huge ones
+// stop at the cap, so we never page deep into qualifier brackets.
+async function fetchWindow(eventId, q, { state, sortType, cap }) {
   for (const perPage of PAGE_SIZE_LADDER) {
     try {
       const nodes = [];
-      const maxPages = Math.ceil(RECENT_WINDOW / perPage);
+      const maxPages = Math.ceil(cap / perPage);
       let page = 1;
       let totalPages = 1;
-      while (page <= totalPages && page <= maxPages && nodes.length < RECENT_WINDOW) {
-        const data = await q(EVENT_SETS_QUERY, { eventId, page, perPage });
+      while (page <= totalPages && page <= maxPages && nodes.length < cap) {
+        const data = await q(EVENT_SETS_QUERY, { eventId, page, perPage, sortType, state: [state] });
         const conn = data?.event?.sets;
         totalPages = Number(conn?.pageInfo?.totalPages) || 1;
         for (const node of conn?.nodes ?? []) nodes.push(node);
         page += 1;
       }
-      return nodes.slice(0, RECENT_WINDOW);
+      return nodes.slice(0, cap);
     } catch (e) {
       if (/complexity/i.test(e.message) && perPage > PAGE_SIZE_LADDER[PAGE_SIZE_LADDER.length - 1]) {
-        logger.debug(`[startgg] event ${eventId} too complex at perPage ${perPage}; retrying smaller`);
+        logger.debug(`[startgg] event ${eventId} state ${state} too complex at perPage ${perPage}; retrying smaller`);
         continue;
       }
       throw e;
@@ -146,8 +151,18 @@ async function fetchEventSets(eventId, q) {
   return [];
 }
 
-// The tracked window of matches (sets) for a start.gg tournament: a bounded,
-// RECENT-sorted slice of each event (see RECENT_WINDOW), deduped across events.
+// The tracked sets for one event: live + upcoming + a tail of recent results.
+async function fetchEventSets(eventId, q) {
+  const out = [];
+  for (const window of STATE_WINDOWS) {
+    const nodes = await fetchWindow(eventId, q, window);
+    for (const node of nodes) out.push(node);
+  }
+  return out;
+}
+
+// The tracked matches (sets) for a start.gg tournament: live + upcoming + recent
+// results per event (see STATE_WINDOWS), deduped across events.
 // `query` is injectable for tests (no network).
 export async function fetchSchedule(tournament, { query: q = query } = {}) {
   if (!config.startgg.token) {
@@ -187,4 +202,22 @@ export async function resolveTournamentTitle(tournament, { query: q = query } = 
   }
 }
 
-export { client as startggClient, RECENT_WINDOW };
+// Auto-detect the tracked tournament's game from start.gg's videogame metadata, mapped
+// to the bot's game slug (e.g. "Rocket League" → "rocketleague"). start.gg URLs don't
+// encode the game the way Liquipedia's do, so without this a start.gg tournament has
+// game=null and never groups under its game's board. null on any problem.
+export async function resolveTournamentGame(tournament, { query: q = query } = {}) {
+  if (!config.startgg.token) return null;
+  try {
+    const data = await q(HEAD_QUERY, { slug: slugOf(tournament) });
+    for (const ev of data?.tournament?.events ?? []) {
+      const slug = gameSlugFromName(ev?.videogame?.name);
+      if (slug) return slug;
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+export { client as startggClient, STATE_WINDOWS };
