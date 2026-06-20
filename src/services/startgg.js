@@ -4,9 +4,10 @@ import { logger } from '../lib/logger.js';
 
 // Start.gg GraphQL API (free tier). Best for FGC / community brackets hosted on start.gg.
 // Docs: https://developer.start.gg/docs/intro
-// start.gg's GraphQL is slow and bursty; a single full-event sync fires several
-// sequential requests, so use a generous per-request timeout and retry once on a
-// timeout (a slow response shouldn't zero out the whole tournament's sync).
+// start.gg's GraphQL is slow and bursty: under load it throws timeouts and a generic
+// "An unknown error has occurred" that is almost always transient. A single sync fires
+// several sequential requests, so use a generous timeout and retry transient failures
+// with backoff — a hiccup shouldn't zero out the whole tournament's sync.
 const REQUEST_TIMEOUT_MS = 25_000;
 const client = axios.create({
   baseURL: config.startgg.baseUrl,
@@ -17,22 +18,33 @@ const client = axios.create({
   },
 });
 
-function isTimeout(e) {
-  return e?.code === 'ECONNABORTED' || /timeout/i.test(e?.message ?? '');
+// Transient = worth retrying the SAME request. Deterministic GraphQL errors
+// (complexity, validation) are NOT transient — they bubble up so the caller can
+// shrink the page size instead.
+const TRANSIENT_RE = /timeout|an unknown error has occurred|temporarily|service unavailable|bad gateway|gateway timeout/i;
+function isTransient(e) {
+  const code = e?.code;
+  if (code === 'ECONNABORTED' || code === 'ETIMEDOUT' || code === 'ECONNRESET') return true;
+  const status = e?.response?.status;
+  if (typeof status === 'number' && status >= 500) return true;
+  return TRANSIENT_RE.test(e?.message ?? '');
 }
 
-export async function query(gql, variables = {}) {
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+export async function query(gql, variables = {}, { retries = 3, delayMs = 500 } = {}) {
   let lastErr;
-  for (let attempt = 1; attempt <= 2; attempt += 1) {
+  for (let attempt = 1; attempt <= retries; attempt += 1) {
     try {
       const { data } = await client.post('', { query: gql, variables });
       // GraphQL errors (complexity, bad query) are deterministic — surface them now, don't retry.
       if (data.errors) throw new Error(data.errors.map((e) => e.message).join('; '));
       return data.data;
     } catch (e) {
-      if (!isTimeout(e) || attempt === 2) throw e;
+      if (!isTransient(e) || attempt === retries) throw e;
       lastErr = e;
-      logger.debug(`[startgg] request timed out (attempt ${attempt}/2); retrying`);
+      logger.debug(`[startgg] transient error (attempt ${attempt}/${retries}): ${e.message}; retrying`);
+      if (delayMs) await sleep(delayMs * attempt);
     }
   }
   throw lastErr;
@@ -50,12 +62,12 @@ const HEAD_QUERY = `query Head($slug: String!) {
   tournament(slug: $slug) { name events { id name } }
 }`;
 
-// One PAGE of an event's sets. start.gg paginates per connection (pageInfo.totalPages),
-// so we walk the pages of each event to capture EVERY match — large 1v1 opens routinely
-// exceed a single page of 50.
+// One PAGE of an event's sets, RECENT-first. RECENT bubbles the currently relevant
+// sets — live, just-finished, and actively-updating (upcoming) matches — to the top,
+// which is exactly the window we want to track.
 const EVENT_SETS_QUERY = `query EventSets($eventId: ID!, $page: Int!, $perPage: Int!) {
   event(id: $eventId) {
-    sets(page: $page, perPage: $perPage, sortType: STANDARD) {
+    sets(page: $page, perPage: $perPage, sortType: RECENT) {
       pageInfo { totalPages }
       nodes {
         id state startAt winnerId
@@ -65,12 +77,13 @@ const EVENT_SETS_QUERY = `query EventSets($eventId: ID!, $page: Int!, $perPage: 
   }
 }`;
 
-// Bounds so one pathological event can't issue unbounded requests. 50 sets/page,
-// up to 30 pages = 1500 sets/event ceiling; start.gg's complexity cap is handled
-// by retrying the whole event at a smaller page size.
+// We do NOT pull a whole event. start.gg "open" events can carry tens of thousands
+// of qualifier sets (one RL 1v1 Open had 22,182 across 444 pages) — ingesting all of
+// them would flood the boards and hammer the API. Instead track a bounded, RECENT-
+// sorted window per event: the live/upcoming/recent matches that actually matter.
+const RECENT_WINDOW = 150;
 const SETS_PER_PAGE = 50;
-const MAX_PAGES_PER_EVENT = 30;
-const PAGE_SIZE_LADDER = [SETS_PER_PAGE, 25, 12, 6];
+const PAGE_SIZE_LADDER = [SETS_PER_PAGE, 25, 12];
 
 // Normalize a start.gg set into the bot's standard match shape.
 export function normalizeSet(s) {
@@ -103,22 +116,25 @@ export function normalizeSet(s) {
   };
 }
 
-// Walk EVERY page of one event's sets. On a start.gg complexity error, restart the
-// event from page 1 at a smaller page size (cleaner than mixing page sizes mid-walk).
+// Walk an event's sets RECENT-first until we've filled the window (or run out). On a
+// start.gg complexity error, restart the event at a smaller page size (cleaner than
+// mixing page sizes mid-walk). Small events return all their sets; huge ones stop at
+// the window cap, so we never page deep into qualifier brackets.
 async function fetchEventSets(eventId, q) {
   for (const perPage of PAGE_SIZE_LADDER) {
     try {
       const nodes = [];
+      const maxPages = Math.ceil(RECENT_WINDOW / perPage);
       let page = 1;
       let totalPages = 1;
-      while (page <= totalPages && page <= MAX_PAGES_PER_EVENT) {
+      while (page <= totalPages && page <= maxPages && nodes.length < RECENT_WINDOW) {
         const data = await q(EVENT_SETS_QUERY, { eventId, page, perPage });
         const conn = data?.event?.sets;
-        totalPages = Math.min(Number(conn?.pageInfo?.totalPages) || 1, MAX_PAGES_PER_EVENT);
+        totalPages = Number(conn?.pageInfo?.totalPages) || 1;
         for (const node of conn?.nodes ?? []) nodes.push(node);
         page += 1;
       }
-      return nodes;
+      return nodes.slice(0, RECENT_WINDOW);
     } catch (e) {
       if (/complexity/i.test(e.message) && perPage > PAGE_SIZE_LADDER[PAGE_SIZE_LADDER.length - 1]) {
         logger.debug(`[startgg] event ${eventId} too complex at perPage ${perPage}; retrying smaller`);
@@ -130,8 +146,9 @@ async function fetchEventSets(eventId, q) {
   return [];
 }
 
-// All matches (sets) for a tracked start.gg tournament, across ALL of its events,
-// fully paginated. `query` is injectable for tests (no network).
+// The tracked window of matches (sets) for a start.gg tournament: a bounded,
+// RECENT-sorted slice of each event (see RECENT_WINDOW), deduped across events.
+// `query` is injectable for tests (no network).
 export async function fetchSchedule(tournament, { query: q = query } = {}) {
   if (!config.startgg.token) {
     logger.warn('[startgg] STARTGG_TOKEN not set — skipping.');
@@ -170,4 +187,4 @@ export async function resolveTournamentTitle(tournament, { query: q = query } = 
   }
 }
 
-export { client as startggClient };
+export { client as startggClient, RECENT_WINDOW };
