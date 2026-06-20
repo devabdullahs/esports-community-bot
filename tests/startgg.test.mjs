@@ -1,8 +1,11 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-// The token guard short-circuits fetchSchedule/resolveTournamentTitle when unset,
-// and config reads env at import time — so set it BEFORE importing the module.
+// config.js exits the process on missing required vars, and the token guard
+// short-circuits fetchSchedule/resolveTournamentTitle when unset — config reads
+// env at import time, so set everything BEFORE importing the module.
+process.env.DISCORD_TOKEN = 'test-token';
+process.env.DISCORD_CLIENT_ID = 'test-client-id';
 process.env.STARTGG_TOKEN = 'test-token';
 process.env.LOG_LEVEL = 'error';
 
