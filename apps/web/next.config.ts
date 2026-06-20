@@ -21,6 +21,8 @@ const csp = [
   "base-uri 'self'",
   "form-action 'self'",
   "frame-ancestors 'none'",
+  // Live co-stream players are embedded as iframes; allow only those hosts.
+  "frame-src 'self' https://player.twitch.tv https://*.twitch.tv https://player.kick.com https://*.kick.com",
 ].join("; ");
 
 const isProd = process.env.NODE_ENV === "production";

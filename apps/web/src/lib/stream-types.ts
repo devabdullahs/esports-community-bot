@@ -44,3 +44,11 @@ export type UpdateStreamChannelInput = {
   sortOrder?: number;
   active?: boolean;
 };
+
+// A channel joined with its current live status (for the public co-streams page).
+export type CoStream = StreamChannel & {
+  isLive: boolean;
+  liveTitle: string | null;
+  viewerCount: number | null;
+  startedAt: number | null;
+};
