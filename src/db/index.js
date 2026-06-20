@@ -418,6 +418,33 @@ db.exec(`
   );
   CREATE INDEX IF NOT EXISTS idx_admin_audit_created
     ON ewc_admin_audit_log(created_at DESC);
+
+  -- Admin-curated live-stream / co-stream channels (Twitch, Kick, YouTube, SOOP).
+  -- A channel is attached at one SCOPE: 'game' (every match of game_slug),
+  -- 'team' (every match a team plays, keyed by normalized team_key), 'match'
+  -- (one match by external id), or 'ewc' (the official EWC co-stream list).
+  -- Scope-key columns default to '' (not NULL) so the UNIQUE constraint behaves
+  -- identically on SQLite and Postgres. Live status lives in a separate table.
+  CREATE TABLE IF NOT EXISTS stream_channels (
+    id                INTEGER PRIMARY KEY AUTOINCREMENT,
+    platform          TEXT NOT NULL CHECK (platform IN ('twitch','kick','youtube','soop')),
+    handle            TEXT NOT NULL,
+    label             TEXT NOT NULL DEFAULT '',
+    scope             TEXT NOT NULL CHECK (scope IN ('game','team','match','ewc')),
+    game_slug         TEXT NOT NULL DEFAULT '',
+    team_key          TEXT NOT NULL DEFAULT '',
+    match_external_id TEXT NOT NULL DEFAULT '',
+    language          TEXT NOT NULL DEFAULT '',
+    sort_order        INTEGER NOT NULL DEFAULT 0,
+    active            INTEGER NOT NULL DEFAULT 1,
+    added_by          TEXT,
+    created_at        TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at        TEXT NOT NULL DEFAULT (datetime('now')),
+    UNIQUE (platform, handle, scope, game_slug, team_key, match_external_id)
+  );
+  CREATE INDEX IF NOT EXISTS idx_stream_channels_scope ON stream_channels(scope, active);
+  CREATE INDEX IF NOT EXISTS idx_stream_channels_game  ON stream_channels(game_slug, active);
+  CREATE INDEX IF NOT EXISTS idx_stream_channels_team  ON stream_channels(team_key, active);
 `);
 
 ensureColumns('ewc_prediction_weeks', [
