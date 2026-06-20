@@ -157,6 +157,27 @@ async function pollOnce(match, tournament) {
     return;
   }
 
+  // The windowed start.gg fetch can't include every set of a huge open, so the match
+  // this watcher tracks may be absent from `all`. Fetch THAT set directly to get its
+  // true state (running/finished) instead of waiting out the max-runtime safety net.
+  if (!polled && typeof service.fetchMatch === 'function') {
+    const fresh = await service.fetchMatch(match.external_id).catch((e) => {
+      logger.debug(`[poll] ${match.external_id} direct fetch failed: ${e.message}`);
+      return null;
+    });
+    if (fresh) {
+      const before = await getMatch(fresh.source, fresh.externalId);
+      const row = await upsertMatch(toMatchRow(fresh, match.tournament_id));
+      const changed =
+        !before ||
+        before.score_a !== row.score_a ||
+        before.score_b !== row.score_b ||
+        before.status !== row.status;
+      if (changed) onUpdate('update', row);
+      polled = row;
+    }
+  }
+
   if (polled) {
     // Stop watching only on a genuine finish (the bracket marks a winner) — never on a mere
     // disappearance from the page, which previously caused false/early "finished" results.

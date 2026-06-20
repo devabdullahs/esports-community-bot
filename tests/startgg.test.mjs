@@ -9,8 +9,16 @@ process.env.DISCORD_CLIENT_ID = 'test-client-id';
 process.env.STARTGG_TOKEN = 'test-token';
 process.env.LOG_LEVEL = 'error';
 
-const { fetchSchedule, resolveTournamentTitle, resolveTournamentGame, normalizeSet, query, startggClient, STATE_WINDOWS } =
-  await import('../src/services/startgg.js');
+const {
+  fetchSchedule,
+  fetchMatch,
+  resolveTournamentTitle,
+  resolveTournamentGame,
+  normalizeSet,
+  query,
+  startggClient,
+  STATE_WINDOWS,
+} = await import('../src/services/startgg.js');
 
 const capFor = (state) => STATE_WINDOWS.find((w) => w.state === state).cap;
 
@@ -151,6 +159,35 @@ test('resolveTournamentGame maps the videogame name to a bot slug, null when unk
 
   const none = makeQuery({ events: [{ id: 'E1', name: 'x' }], videogame: null });
   assert.equal(await resolveTournamentGame(tournament, { query: none }), null);
+});
+
+test('fetchMatch resolves one set directly by id (sgg: prefix stripped)', async () => {
+  const q = async (gql, vars) => {
+    assert.match(gql, /set\(id/);
+    assert.equal(vars.id, '104353062', 'the sgg: prefix is stripped before querying');
+    return {
+      set: {
+        id: 104353062,
+        state: 3,
+        startAt: 1781967600,
+        winnerId: 1,
+        slots: [
+          { entrant: { id: 1, name: 'Mawkzy' }, standing: { stats: { score: { value: 4 } } } },
+          { entrant: { id: 2, name: 'rebmob' }, standing: { stats: { score: { value: 1 } } } },
+        ],
+      },
+    };
+  };
+  const m = await fetchMatch('sgg:104353062', { query: q });
+  assert.equal(m.externalId, 'sgg:104353062');
+  assert.equal(m.status, 'finished');
+  assert.equal(m.winner, 'Mawkzy');
+  assert.equal(m.scoreA, 4);
+  assert.equal(m.scoreB, 1);
+});
+
+test('fetchMatch returns null when the set is missing', async () => {
+  assert.equal(await fetchMatch('sgg:999', { query: async () => ({ set: null }) }), null);
 });
 
 test('resolveTournamentTitle returns the real name, null on error or blank', async () => {
