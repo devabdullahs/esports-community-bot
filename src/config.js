@@ -35,6 +35,19 @@ export const config = {
     token: get('STARTGG_TOKEN'),
     baseUrl: get('STARTGG_BASE_URL', 'https://api.start.gg/gql/alpha'),
   },
+  // Live co-stream detection (optional). When a platform's client id+secret are set,
+  // the stream-status poller checks each tracked channel and records who's live.
+  twitch: {
+    clientId: get('TWITCH_CLIENT_ID'),
+    clientSecret: get('TWITCH_CLIENT_SECRET'),
+  },
+  kick: {
+    clientId: get('KICK_CLIENT_ID'),
+    clientSecret: get('KICK_CLIENT_SECRET'),
+  },
+  streams: {
+    pollSeconds: Math.max(30, Number(get('STREAM_STATUS_POLL_SECONDS', '60')) || 60),
+  },
   liquipedia: {
     // REQUIRED by Liquipedia's API ToS: identify the app and a contact.
     userAgent: get(

@@ -8,6 +8,7 @@ import { startCsRankings } from '../jobs/csRankings.js';
 import { startEwcPredictions } from '../jobs/ewcPredictions.js';
 import { startNewsAnnouncer } from '../jobs/newsAnnouncer.js';
 import { startMediaAnnouncer } from '../jobs/mediaAnnouncer.js';
+import { startStreamStatusJob } from '../jobs/streamStatus.js';
 import { primeEwcClubCache } from '../lib/ewcClubCache.js';
 
 // NOTE: in discord.js 14.26 this event's string is "clientReady" — always use the enum.
@@ -52,5 +53,6 @@ export function execute(client) {
   startEwcPredictions(client); // EWC prediction snapshots/scoring automation
   startNewsAnnouncer(client); // Auto-post published news to Discord (per-game / default channel)
   startMediaAnnouncer(client); // Auto-announce opted-in media channels to their Discord channel
+  startStreamStatusJob(); // Poll Twitch/Kick for which tracked co-stream channels are live
   primeEwcClubCache(); // Warm autocomplete without blocking startup.
 }
