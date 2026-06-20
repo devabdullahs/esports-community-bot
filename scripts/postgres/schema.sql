@@ -424,3 +424,21 @@ CREATE TABLE IF NOT EXISTS stream_channels (
 CREATE INDEX IF NOT EXISTS idx_stream_channels_scope ON stream_channels(scope, active);
 CREATE INDEX IF NOT EXISTS idx_stream_channels_game  ON stream_channels(game_slug, active);
 CREATE INDEX IF NOT EXISTS idx_stream_channels_team  ON stream_channels(team_key, active);
+
+-- Live status per platform+handle, refreshed by the stream-status poller. Keyed by
+-- platform+handle (NOT channel id) so multiple channel rows sharing a handle share
+-- one status row. is_live 0/1; timestamps are unix seconds.
+CREATE TABLE IF NOT EXISTS stream_channel_status (
+  platform      TEXT    NOT NULL,
+  handle        TEXT    NOT NULL,
+  is_live       INTEGER NOT NULL DEFAULT 0,
+  title         TEXT,
+  viewer_count  INTEGER,
+  category      TEXT,
+  thumbnail_url TEXT,
+  started_at    BIGINT,
+  checked_at    BIGINT,
+  updated_at    TEXT    NOT NULL DEFAULT (to_char(now() AT TIME ZONE 'UTC', 'YYYY-MM-DD HH24:MI:SS')),
+  PRIMARY KEY (platform, handle)
+);
+CREATE INDEX IF NOT EXISTS idx_stream_status_live ON stream_channel_status(is_live);
