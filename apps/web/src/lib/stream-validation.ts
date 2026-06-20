@@ -1,4 +1,3 @@
-import { normalizeSlug } from "@/lib/game-validation";
 import {
   STREAM_PLATFORMS,
   STREAM_SCOPES,
@@ -14,9 +13,34 @@ export const STREAM_LABEL_MAX = 120;
 export const STREAM_HANDLE_MAX = 200;
 export const STREAM_TEAM_MAX = 120;
 export const STREAM_MATCH_ID_MAX = 200;
+export const STREAM_CREATOR_KEY_MAX = 80;
 
 function str(value: unknown): string {
   return typeof value === "string" ? value.trim() : "";
+}
+
+function normalizeGameSlug(value: unknown): string {
+  return str(value)
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "")
+    .slice(0, 60);
+}
+
+function normalizeGameSlugs(value: unknown): string[] {
+  const raw = Array.isArray(value)
+    ? value
+    : String(value ?? "")
+        .split(/[,،;|/\s]+/u)
+        .filter(Boolean);
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const item of raw) {
+    const slug = normalizeGameSlug(item);
+    if (!slug || seen.has(slug)) continue;
+    seen.add(slug);
+    out.push(slug);
+  }
+  return out.slice(0, 12);
 }
 
 // Validate + normalize the admin create payload. Handle normalization (URL/@handle
@@ -48,7 +72,13 @@ export function validateStreamChannelInput(
   const language = str(body.language).toLowerCase();
   if (language.length > 8) return { ok: false, error: "Language code is too long." };
 
-  const gameSlug = body.gameSlug ? normalizeSlug(str(body.gameSlug)) : "";
+  const gameSlugs = normalizeGameSlugs(body.gameSlugs ?? body.gameSlug);
+  const gameSlug = gameSlugs[0] ?? "";
+  const creatorKey = str(body.creatorKey)
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, STREAM_CREATOR_KEY_MAX);
   const team = str(body.team);
   const matchExternalId = str(body.matchExternalId);
 
@@ -68,9 +98,12 @@ export function validateStreamChannelInput(
       label: label || undefined,
       scope: scope as StreamScope,
       gameSlug: gameSlug || undefined,
+      gameSlugs,
+      creatorKey: creatorKey || undefined,
       team: team || undefined,
       matchExternalId: matchExternalId || undefined,
       language: language || undefined,
+      isDefault: Boolean(body.isDefault),
     },
   };
 }

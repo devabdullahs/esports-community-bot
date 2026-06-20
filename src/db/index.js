@@ -431,11 +431,14 @@ db.exec(`
     handle            TEXT NOT NULL,
     label             TEXT NOT NULL DEFAULT '',
     scope             TEXT NOT NULL CHECK (scope IN ('game','team','match','ewc')),
+    creator_key       TEXT NOT NULL DEFAULT '',
     game_slug         TEXT NOT NULL DEFAULT '',
+    game_slugs        TEXT NOT NULL DEFAULT '[]',
     team_key          TEXT NOT NULL DEFAULT '',
     match_external_id TEXT NOT NULL DEFAULT '',
     language          TEXT NOT NULL DEFAULT '',
     sort_order        INTEGER NOT NULL DEFAULT 0,
+    is_default        INTEGER NOT NULL DEFAULT 0,
     active            INTEGER NOT NULL DEFAULT 1,
     added_by          TEXT,
     created_at        TEXT NOT NULL DEFAULT (datetime('now')),
@@ -474,6 +477,12 @@ ensureColumns('ewc_prediction_weeks', [
 ]);
 ensureColumns('ewc_prediction_seasons', [['score_after', 'INTEGER'], ['best_weeks', 'INTEGER']]);
 ensureColumns('post_comments', [['author_avatar_url', 'TEXT']]);
+ensureColumns('stream_channels', [
+  ['creator_key', "TEXT NOT NULL DEFAULT ''"],
+  ['game_slugs', "TEXT NOT NULL DEFAULT '[]'"],
+  ['is_default', 'INTEGER NOT NULL DEFAULT 0'],
+]);
+db.exec('CREATE INDEX IF NOT EXISTS idx_stream_channels_creator ON stream_channels(creator_key, active)');
 ensureColumns('ewc_news_posts', [
   ['content_mode', "TEXT NOT NULL DEFAULT 'shared' CHECK (content_mode IN ('shared','translated'))"],
   ['default_locale', "TEXT NOT NULL DEFAULT 'en' CHECK (default_locale IN ('en','ar'))"],

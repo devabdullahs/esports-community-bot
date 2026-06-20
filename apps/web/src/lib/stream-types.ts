@@ -14,11 +14,14 @@ export type StreamChannel = {
   handle: string;
   label: string;
   scope: StreamScope;
+  creatorKey: string;
   gameSlug: string | null;
+  gameSlugs: string[];
   teamKey: string | null;
   matchExternalId: string | null;
   language: string | null;
   sortOrder: number;
+  isDefault: boolean;
   active: boolean;
   addedBy: string | null;
   createdAt: string;
@@ -32,9 +35,12 @@ export type CreateStreamChannelInput = {
   label?: string;
   scope: StreamScope;
   gameSlug?: string;
+  gameSlugs?: string[];
+  creatorKey?: string;
   team?: string;
   matchExternalId?: string;
   language?: string;
+  isDefault?: boolean;
   addedBy?: string | null;
 };
 
@@ -43,12 +49,30 @@ export type UpdateStreamChannelInput = {
   language?: string;
   sortOrder?: number;
   active?: boolean;
+  gameSlugs?: string[];
+  creatorKey?: string;
+  isDefault?: boolean;
 };
 
 // A channel joined with its current live status (for the public co-streams page).
-export type CoStream = StreamChannel & {
+export type CoStreamChannel = StreamChannel & {
   isLive: boolean;
   liveTitle: string | null;
   viewerCount: number | null;
   startedAt: number | null;
+};
+
+export type CoStream = {
+  id: string;
+  label: string;
+  creatorKey: string;
+  gameSlugs: string[];
+  language: string | null;
+  channels: CoStreamChannel[];
+  embedChannel: CoStreamChannel | null;
+  isLive: boolean;
+  liveTitle: string | null;
+  viewerCount: number | null;
+  startedAt: number | null;
+  sortOrder: number;
 };

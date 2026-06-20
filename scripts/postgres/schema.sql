@@ -410,19 +410,27 @@ CREATE TABLE IF NOT EXISTS stream_channels (
   handle            TEXT NOT NULL,
   label             TEXT NOT NULL DEFAULT '',
   scope             TEXT NOT NULL CHECK (scope IN ('game','team','match','ewc')),
+  creator_key       TEXT NOT NULL DEFAULT '',
   game_slug         TEXT NOT NULL DEFAULT '',
+  game_slugs        TEXT NOT NULL DEFAULT '[]',
   team_key          TEXT NOT NULL DEFAULT '',
   match_external_id TEXT NOT NULL DEFAULT '',
   language          TEXT NOT NULL DEFAULT '',
   sort_order        INTEGER NOT NULL DEFAULT 0,
+  is_default        INTEGER NOT NULL DEFAULT 0,
   active            INTEGER NOT NULL DEFAULT 1,
   added_by          TEXT,
   created_at        TEXT NOT NULL DEFAULT (to_char(now() AT TIME ZONE 'UTC', 'YYYY-MM-DD HH24:MI:SS')),
   updated_at        TEXT NOT NULL DEFAULT (to_char(now() AT TIME ZONE 'UTC', 'YYYY-MM-DD HH24:MI:SS')),
   UNIQUE (platform, handle, scope, game_slug, team_key, match_external_id)
 );
+ALTER TABLE stream_channels ADD COLUMN IF NOT EXISTS creator_key TEXT NOT NULL DEFAULT '';
+ALTER TABLE stream_channels ADD COLUMN IF NOT EXISTS game_slugs TEXT NOT NULL DEFAULT '[]';
+ALTER TABLE stream_channels ADD COLUMN IF NOT EXISTS is_default INTEGER NOT NULL DEFAULT 0;
+
 CREATE INDEX IF NOT EXISTS idx_stream_channels_scope ON stream_channels(scope, active);
 CREATE INDEX IF NOT EXISTS idx_stream_channels_game  ON stream_channels(game_slug, active);
+CREATE INDEX IF NOT EXISTS idx_stream_channels_creator ON stream_channels(creator_key, active);
 CREATE INDEX IF NOT EXISTS idx_stream_channels_team  ON stream_channels(team_key, active);
 
 -- Live status per platform+handle, refreshed by the stream-status poller. Keyed by
