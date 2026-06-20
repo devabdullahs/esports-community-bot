@@ -4,6 +4,7 @@ import {
   Gamepad2Icon,
   type LucideIcon,
   MessagesSquareIcon,
+  RadioIcon,
   ShieldIcon,
   Tv2Icon,
   UsersIcon,
@@ -126,6 +127,14 @@ export default async function AdminPage() {
               icon={UsersIcon}
               title={t.dashboard.links.usersTitle}
               description={t.dashboard.links.usersDescription}
+            />
+          ) : null}
+          {access.isSuper ? (
+            <ManageLink
+              href="/admin/streams"
+              icon={RadioIcon}
+              title={t.dashboard.links.streamsTitle}
+              description={t.dashboard.links.streamsDescription}
             />
           ) : null}
           {access.isSuper ? (
