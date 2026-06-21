@@ -47,6 +47,8 @@ export type TournamentSummary = {
   matchCounts: MatchCounts;
 };
 
+export type MatchStream = { platform: string; channel: string; url: string };
+
 export type MatchRow = {
   id: number;
   external_id?: string;
@@ -61,6 +63,11 @@ export type MatchRow = {
   status: MatchStatus;
   scheduled_at: number | null;
   updated_at: string | null;
+  // Raw columns (present on DB reads, omitted from the public projection).
+  stream_platform?: string | null;
+  stream_channel?: string | null;
+  // Official per-match broadcast stream (derived watch link), public projection.
+  stream?: MatchStream | null;
   coStreams?: MatchCoStream[];
 };
 
@@ -92,7 +99,32 @@ function isEwcTournament(t: {
 }
 
 const MATCH_COLUMNS =
-  "id, external_id, name, team_a, team_b, logo_a, logo_b, score_a, score_b, status, scheduled_at, updated_at";
+  "id, external_id, name, team_a, team_b, logo_a, logo_b, score_a, score_b, status, scheduled_at, stream_platform, stream_channel, updated_at";
+
+// Build a watch URL for an official per-match stream parsed from Liquipedia. Only
+// platforms with a known channel-URL shape are surfaced; anything else is dropped.
+function matchStreamUrl(platform: string, channel: string): string | null {
+  const c = channel.trim();
+  if (!c) return null;
+  switch (platform) {
+    case "twitch":
+      return `https://www.twitch.tv/${c}`;
+    case "kick":
+      return `https://kick.com/${c}`;
+    case "youtube":
+      return `https://www.youtube.com/${c.startsWith("@") ? c : `@${c}`}`;
+    default:
+      return null;
+  }
+}
+
+function matchStream(row: MatchRow): MatchStream | null {
+  const platform = (row.stream_platform ?? "").toLowerCase();
+  const channel = row.stream_channel ?? "";
+  if (!platform || !channel) return null;
+  const url = matchStreamUrl(platform, channel);
+  return url ? { platform, channel, url } : null;
+}
 
 // running first, then upcoming by start time, then finished most-recent first
 // — mirrors getMatchesForGuild's ordering in src/db/matches.js.
@@ -114,6 +146,7 @@ function publicMatch(row: MatchRow): MatchRow {
     status: row.status,
     scheduled_at: row.scheduled_at,
     updated_at: row.updated_at,
+    stream: matchStream(row),
   };
 }
 

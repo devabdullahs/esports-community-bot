@@ -13,11 +13,10 @@ export {
   parseEwcEventPlacements,
   parseEwcEventSchedule,
   parseEwcPlayerList,
-  parseBroadcasterStreams,
   parseMatchInfo,
   parseMatchlistMatch,
+  parseMatchStream,
   parseSwissMatches,
-  streamChannelFromUrl,
   valveRankingRegions,
 } from './liquipedia/parsers.js';
 
@@ -31,7 +30,6 @@ export {
   fetchEwcWeekGameResults,
   fetchGameMatches,
   fetchSchedule,
-  fetchTournamentBroadcasters,
   fetchValveRegionalStandings,
   resolveTournamentTitle,
 } from './liquipedia/fetchers.js';

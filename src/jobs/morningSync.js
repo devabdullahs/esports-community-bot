@@ -14,7 +14,6 @@ import {
   upsertMatch,
   toMatchRow,
 } from '../db/matches.js';
-import { syncLiquipediaBroadcasters } from '../db/streamChannels.js';
 import { armMatch } from './pollingManager.js';
 import { refreshAllGuilds } from './refresh.js';
 import * as liquipedia from '../services/liquipedia.js';
@@ -66,25 +65,6 @@ export async function syncTournament(client, t) {
   }
   const deleted = await deleteTournamentPlaceholderMatches(t.id, currentIds);
   if (deleted) logger.info(`[sync] removed ${deleted} stale placeholder match(es) for ${t.source}:${t.external_id}`);
-
-  // Auto-import the tournament's official broadcaster streams (Liquipedia only).
-  // Reuses fetchSchedule's cached page fetch, so this adds no extra request.
-  if (config.liquipedia.importBroadcasters && t.game && service.fetchTournamentBroadcasters) {
-    try {
-      const streams = await service.fetchTournamentBroadcasters(t);
-      const { kept, removed } = await syncLiquipediaBroadcasters({
-        externalId: t.external_id,
-        gameSlug: t.game,
-        streams,
-      });
-      if (kept || removed) {
-        logger.info(`[sync] ${t.source}:${t.external_id} broadcasters → ${kept} stream(s), ${removed} removed.`);
-      }
-    } catch (e) {
-      logger.debug(`[sync] broadcaster import failed for ${t.source}:${t.external_id}: ${e.message}`);
-    }
-  }
-
   return matches.length;
 }
 
