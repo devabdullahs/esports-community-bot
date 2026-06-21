@@ -47,7 +47,7 @@ export type TournamentSummary = {
   matchCounts: MatchCounts;
 };
 
-export type MatchStream = { platform: string; channel: string; url: string };
+export type MatchStream = { platform: string; url: string };
 
 export type MatchRow = {
   id: number;
@@ -65,7 +65,7 @@ export type MatchRow = {
   updated_at: string | null;
   // Raw columns (present on DB reads, omitted from the public projection).
   stream_platform?: string | null;
-  stream_channel?: string | null;
+  stream_url?: string | null;
   // Official per-match broadcast stream (derived watch link), public projection.
   stream?: MatchStream | null;
   coStreams?: MatchCoStream[];
@@ -99,31 +99,17 @@ function isEwcTournament(t: {
 }
 
 const MATCH_COLUMNS =
-  "id, external_id, name, team_a, team_b, logo_a, logo_b, score_a, score_b, status, scheduled_at, stream_platform, stream_channel, updated_at";
+  "id, external_id, name, team_a, team_b, logo_a, logo_b, score_a, score_b, status, scheduled_at, stream_platform, stream_url, updated_at";
 
-// Build a watch URL for an official per-match stream parsed from Liquipedia. Only
-// platforms with a known channel-URL shape are surfaced; anything else is dropped.
-function matchStreamUrl(platform: string, channel: string): string | null {
-  const c = channel.trim();
-  if (!c) return null;
-  switch (platform) {
-    case "twitch":
-      return `https://www.twitch.tv/${c}`;
-    case "kick":
-      return `https://kick.com/${c}`;
-    case "youtube":
-      return `https://www.youtube.com/${c.startsWith("@") ? c : `@${c}`}`;
-    default:
-      return null;
-  }
-}
-
+// The official per-match stream is the Liquipedia Special:Stream link, which
+// resolves to the real channel (the path segment is Liquipedia's key, not the
+// handle — see parseMatchStream). We surface that link as-is; platform drives the
+// icon only. Only http(s) links are trusted.
 function matchStream(row: MatchRow): MatchStream | null {
   const platform = (row.stream_platform ?? "").toLowerCase();
-  const channel = row.stream_channel ?? "";
-  if (!platform || !channel) return null;
-  const url = matchStreamUrl(platform, channel);
-  return url ? { platform, channel, url } : null;
+  const url = row.stream_url ?? "";
+  if (!platform || !/^https?:\/\//i.test(url)) return null;
+  return { platform, url };
 }
 
 // running first, then upcoming by start time, then finished most-recent first

@@ -119,15 +119,22 @@ function fallbackMatchId(game, scope, teamA, teamB) {
 // It's encoded as an internal redirect anchor inside the match's stream button /
 // popup footer: <a href="/<wiki>/Special:Stream/<platform>/<channel>">. Liquipedia
 // only attaches it while the match is actually being streamed, so its presence is a
-// strong "watch this live now" signal. Returns { platform, channel } or null.
+// strong "watch this live now" signal.
+//
+// The <channel> segment is Liquipedia's stream-page KEY, NOT necessarily the real
+// channel handle (e.g. /Special:Stream/twitch/Overwatch_Esports resolves to
+// twitch.tv/ow_esports). So the watch link must go through Liquipedia's
+// Special:Stream page, which performs the redirect — building twitch.tv/<key>
+// directly would point at the wrong (or a non-existent) account.
+// Returns { platform, url } (url = the absolute Liquipedia Special:Stream link) or null.
 export function parseMatchStream($, el) {
   const href = $(el).find('a[href*="/Special:Stream/"]').first().attr('href') || '';
-  const m = href.match(/\/Special:Stream\/([^/]+)\/([^/?#]+)/i);
+  const m = href.match(/\/Special:Stream\/([^/]+)\/[^/?#]+/i);
   if (!m) return null;
   const platform = decodeURIComponent(m[1]).toLowerCase();
-  const channel = decodeURIComponent(m[2]).trim();
-  if (!platform || !channel) return null;
-  return { platform, channel };
+  if (!platform) return null;
+  const url = href.startsWith('http') ? href : `https://liquipedia.net${href}`;
+  return { platform, url };
 }
 
 // Parse a single .match-info element into a normalized match.

@@ -773,9 +773,12 @@ test('parseMatchStream: extracts platform + channel from a Special:Stream link',
       </div>
     </div>`;
   const $ = load(html);
+  // The channel segment is Liquipedia's stream-page key, so the watch link is the
+  // Liquipedia Special:Stream URL (which redirects to the real channel), not
+  // twitch.tv/<key>.
   assert.deepEqual(parseMatchStream($, $('.brkts-matchlist-match')[0]), {
     platform: 'twitch',
-    channel: 'RedirectEsports',
+    url: 'https://liquipedia.net/rocketleague/Special:Stream/twitch/RedirectEsports',
   });
 });
 
@@ -801,5 +804,8 @@ test('parseMatchlistMatch: surfaces the per-match stream when present', () => {
     </div>`;
   const $ = load(html);
   const m = parseMatchlistMatch($, $('.brkts-matchlist-match')[0], 'rocketleague', 'RLCS/2026');
-  assert.deepEqual(m.stream, { platform: 'twitch', channel: 'RedirectEsports' });
+  assert.deepEqual(m.stream, {
+    platform: 'twitch',
+    url: 'https://liquipedia.net/rocketleague/Special:Stream/twitch/RedirectEsports',
+  });
 });
