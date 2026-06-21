@@ -248,6 +248,9 @@ export function CoStreamsView({
                     ) : (
                       <Badge variant="outline">{t.offline}</Badge>
                     )}
+                    {stream.isLive && stream.liveGame ? (
+                      <span className="text-xs text-muted-foreground">{stream.liveGame}</span>
+                    ) : null}
                   </div>
                   <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
                     <span>{stream.channels.map(channelLabel).join(" / ")}</span>
