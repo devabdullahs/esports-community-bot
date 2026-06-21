@@ -17,6 +17,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { LocalDateTime } from "@/components/local-date-time";
+import { PlatformIcon } from "@/components/platform-icon";
 import { copy, directionForLocale, type Locale } from "@/lib/i18n";
 import { logoProxyUrl } from "@/lib/logo-url";
 import { safeUrlOrUndefined } from "@/lib/safe-url";
@@ -35,6 +36,7 @@ type MatchRow = {
   status: MatchStatus;
   scheduled_at: number | null;
   updated_at: string | null;
+  coStreams?: { platform: string; handle: string; label: string; url: string | null }[];
 };
 
 export type TournamentMatchesPayload = {
@@ -150,7 +152,7 @@ export function TournamentMatchList({
         {running.length ? (
           <div className="grid gap-3 sm:grid-cols-2">
             {running.map((m) => (
-              <Card key={m.id} size="sm">
+              <Card key={m.id} size="sm" className="flex flex-col">
                 <CardContent className="flex items-center justify-between gap-3 py-1">
                   <div className="flex min-w-0 items-center gap-2">
                     <Logo url={m.logo_a} alt={teamLabel(m.team_a, tbd)} />
@@ -166,6 +168,25 @@ export function TournamentMatchList({
                     <Logo url={m.logo_b} alt={teamLabel(m.team_b, tbd)} />
                   </div>
                 </CardContent>
+                {m.coStreams?.length ? (
+                  <div className="flex flex-wrap items-center gap-2 border-t px-3 py-1.5 text-xs text-muted-foreground">
+                    <RadioIcon className="size-3 text-primary" />
+                    <span>{text.coStreaming}</span>
+                    {m.coStreams.map((c) => (
+                      <a
+                        key={`${c.platform}:${c.handle}`}
+                        href={c.url ?? "#"}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="inline-flex items-center gap-1 hover:text-foreground"
+                        title={`${c.label} · ${c.platform}`}
+                      >
+                        <PlatformIcon platform={c.platform as never} className="size-3.5" />
+                        <span className="max-w-24 truncate">{c.label}</span>
+                      </a>
+                    ))}
+                  </div>
+                ) : null}
               </Card>
             ))}
           </div>

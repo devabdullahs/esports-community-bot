@@ -8,6 +8,7 @@ import {
 } from "@bot/db/tournaments.js";
 import { unstable_cache } from "next/cache";
 import { resolveDefaultGuildId } from "@/lib/guild";
+import { liveCoStreamsByMatch, type MatchCoStream } from "@/lib/match-co-streams";
 
 // ---------------------------------------------------------------------------
 // Typed boundary over the bot's tournament/match read helpers (see games.ts).
@@ -60,6 +61,7 @@ export type MatchRow = {
   status: MatchStatus;
   scheduled_at: number | null;
   updated_at: string | null;
+  coStreams?: MatchCoStream[];
 };
 
 export type TournamentMatches = {
@@ -171,7 +173,12 @@ export async function getTournamentMatches(
   if (!tournament || tournament.guild_id !== guildId || tournament.active !== 1) return null;
 
   const rows = await dedupedTournamentMatches(tournament);
-  const running = rows.filter((m) => m.status === "running").map(publicMatch);
+  const rawRunning = rows.filter((m) => m.status === "running");
+  const coStreamMap = await liveCoStreamsByMatch(rawRunning, {
+    gameSlug: tournament.game,
+    includeEwc: isEwcTournament(tournament),
+  });
+  const running = rawRunning.map((m) => ({ ...publicMatch(m), coStreams: coStreamMap.get(m.id) }));
   const scheduled = rows.filter((m) => m.status === "scheduled").map(publicMatch);
   const finishedAll = rows.filter((m) => m.status === "finished").map(publicMatch);
   const finished = finishedAll.slice(offset, offset + limit);
