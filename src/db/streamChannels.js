@@ -274,6 +274,38 @@ export async function channelsForMatch({
   return out;
 }
 
+// Every channel applicable to a whole tournament's live matches in ONE query —
+// the union of its game's channels, any of the listed teams' channels, channels
+// pinned to any of the listed match ids, and (optionally) the EWC list. The web
+// layer fans these back out per match. Distinct $n placeholders only (Postgres
+// rejects placeholder reuse). Returns hydrated rows (not deduped — callers map
+// per match by platform+handle).
+export async function channelsForTournament({ gameSlug = null, teams = [], matchExternalIds = [], includeEwc = false } = {}) {
+  const teamKeys = [...new Set(teams.map(normalizeTeamName).filter(Boolean))];
+  const matchIds = [...new Set(matchExternalIds.map((v) => String(v ?? '').trim()).filter(Boolean))];
+  const params = [];
+  const ors = [];
+  const gs = cleanGameSlug(gameSlug);
+  if (gs) {
+    params.push(gs);
+    const single = `$${params.length}`;
+    params.push(`%"${gs}"%`);
+    ors.push(`(scope = 'game' AND (game_slug = ${single} OR game_slugs LIKE $${params.length}))`);
+  }
+  if (includeEwc) ors.push(`(scope = 'ewc')`);
+  if (teamKeys.length) {
+    const ph = teamKeys.map((t) => { params.push(t); return `$${params.length}`; });
+    ors.push(`(scope = 'team' AND team_key IN (${ph.join(',')}))`);
+  }
+  if (matchIds.length) {
+    const ph = matchIds.map((m) => { params.push(m); return `$${params.length}`; });
+    ors.push(`(scope = 'match' AND match_external_id IN (${ph.join(',')}))`);
+  }
+  if (!ors.length) return [];
+  const rows = await all(`SELECT * FROM stream_channels WHERE active = 1 AND (${ors.join(' OR ')}) ORDER BY sort_order ASC, id ASC`, params);
+  return rows.map(hydrate);
+}
+
 export async function updateStreamChannel(id, { label, language, sortOrder, active, gameSlugs, isDefault, creatorKey } = {}) {
   const sets = [];
   const params = [];

@@ -18,6 +18,7 @@ const {
   listStreamChannels,
   listEwcStreamChannels,
   channelsForMatch,
+  channelsForTournament,
   updateStreamChannel,
   setStreamChannelActive,
   deleteStreamChannel,
@@ -211,6 +212,38 @@ test('channelsForMatch can exclude the EWC list and unrelated games/teams', asyn
   assert.ok(matched.some((c) => c.handle === 'val_caster'), 'game match still present');
   assert.ok(!matched.some((c) => c.handle === 'ewc_official'), 'ewc excluded when not requested');
   assert.ok(!matched.some((c) => c.handle === 'tm_fan'), 'unrelated team excluded');
+});
+
+test('channelsForTournament unions game + team + match + ewc across a tournament', async () => {
+  // Unique handles so this stands apart from the channelsForMatch fixtures above.
+  await createStreamChannel({ platform: 'twitch', handle: 'tour_game', scope: 'game', gameSlug: 'valorant' });
+  await createStreamChannel({ platform: 'twitch', handle: 'tour_team', scope: 'team', team: 'Team Vitality' });
+  await createStreamChannel({ platform: 'kick', handle: 'tour_match', scope: 'match', matchExternalId: 'Match:T-1' });
+  await createStreamChannel({ platform: 'youtube', handle: 'tour_ewc', scope: 'ewc' });
+
+  const withEwc = await channelsForTournament({
+    gameSlug: 'valorant',
+    teams: ['Team Vitality', 'Sentinels'],
+    matchExternalIds: ['Match:T-1'],
+    includeEwc: true,
+  });
+  const handles = withEwc.map((c) => `${c.platform}:${c.handle}`);
+  assert.ok(handles.includes('twitch:tour_game'), 'game-scope channel returned');
+  assert.ok(handles.includes('twitch:tour_team'), 'team-scope channel returned');
+  assert.ok(handles.includes('kick:tour_match'), 'match-scope channel returned');
+  assert.ok(handles.includes('youtube:tour_ewc'), 'ewc channel returned when requested');
+
+  const withoutEwc = await channelsForTournament({
+    gameSlug: 'valorant',
+    teams: ['Team Vitality', 'Sentinels'],
+    matchExternalIds: ['Match:T-1'],
+    includeEwc: false,
+  });
+  const noEwcHandles = withoutEwc.map((c) => `${c.platform}:${c.handle}`);
+  assert.ok(!noEwcHandles.includes('youtube:tour_ewc'), 'ewc-only channel absent when not requested');
+  assert.ok(noEwcHandles.includes('twitch:tour_game'), 'game-scope still present');
+  assert.ok(noEwcHandles.includes('twitch:tour_team'), 'team-scope still present');
+  assert.ok(noEwcHandles.includes('kick:tour_match'), 'match-scope still present');
 });
 
 test('update, deactivate, and delete', async () => {
