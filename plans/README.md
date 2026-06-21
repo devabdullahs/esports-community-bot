@@ -65,7 +65,75 @@ or optimize for guild counts.
 | 034  | Add public page metadata and discovery files | P2 | M | - | DONE - `lib/metadata.ts` (`absoluteUrl`, `buildPageMetadata` -> canonical + OpenGraph + Twitter); `layout.tsx` sets `metadataBase` + title template; `generateMetadata` on games/[slug], games/[slug]/news/[id], tournaments/[id], media/[slug], leaderboard pages; new `robots.ts` (allow /, disallow /admin /api/ /me /login) + `sitemap.ts` (static paths + games/media/tournaments/news from cached helpers, DB-failure tolerant). |
 | 035  | Server-page the public EWC leaderboard | P2 | M | 032 | DONE - `leaderboard/[guildId]/[season]/page.tsx` now does server pagination (PAGE_SIZE=100, `?page`, clamps over-range, topScore always from page 1, localized `showing(start,end,total)` range); server nav rendered only when `totalPages > 1`. |
 | 036  | Add bilingual route not-found/error/loading states | P3 | M | - | DONE - added `not-found.tsx` (server, getRequestLocale, 404 + Home), `error.tsx` (client, cookie-locale via lazy init, retry/reset + console.error), `loading.tsx` (server, spinner); bilingual `notFoundTitle/notFoundBody/errorTitle/errorBody/retry/loadingLabel` keys in en+ar common. |
+| 037  | Bound + throttle public comment reads | P2 | S | - | DONE - merged in PR #27 (`3889de6`); two-query bounded `listCommentsForPost`, throttled read-path auto-approval sweep. |
+| 038  | Bump form-data (GHSA-hmw2-7cc7-3qxx) | P3 | S | - | DONE - merged in PR #27 (`3889de6`). |
+| 039  | Key rate limits on cf-connecting-ip only | P2 | S | - | DONE - merged in PR #27 (`3889de6`); `clientIp` reads only `cf-connecting-ip` (behind Cloudflare), not spoofable forwarded headers. |
+| 040  | Same-origin (CSRF) guard on admin + me mutating routes | P2 | S | - | DONE - merged in PR #25 (`65cf75c`); `sameOriginOr403` on /api/admin/** and /api/me/ewc/*. Internal /api/internal/** intentionally excluded (server-to-server). |
+| 041  | Restrict logo-proxy redirects to allowed hosts (SSRF) | P2 | S | - | DONE - merged in PR #25 (`65cf75c`); `isAllowedLogoRedirect` + `maxRedirects:3` in `src/lib/logoSource.js`. |
+| 042  | Add verifying Postgres TLS modes (bot client) | P2 | S | - | DONE - merged in PR #25 (`65cf75c`); exported `resolvePgSslConfig` (disable/require/no-verify/verify-ca/verify-full + PGSSLROOTCERT), `tests/pgSslConfig.test.mjs`. NOTE: prod runs `PGSSLMODE=disable` — managed PG server rejects SSL (open infra item). |
+| 044  | Cap the Liquipedia HTTP client's response size | P3 | S | - | DONE (executed + reviewed 2026-06-18) — commit `703c53a` on branch `advisor/044-liquipedia-response-size-cap` (UNMERGED, in worktree). Added `MAX_RESPONSE_BYTES` (50 MB default, 8 MB floor, env `LIQUIPEDIA_MAX_RESPONSE_BYTES`) + `maxContentLength`/`maxBodyLength` on the shared axios client; `.env.example` documents it. Reviewer re-verified: bot 174/174, scope clean (only client.js + .env.example), throttle/cache/20s-timeout unchanged, behavior-preserving. |
+| 043  | Web auth-DB pool honors the same Postgres TLS modes as the bot | P2 | S | - | DONE (executed + reviewed 2026-06-18) — commit `5346c3d` on branch `advisor/043-web-auth-db-tls-config` (UNMERGED, in worktree). `auth-database.ts` drops its partial `postgresSslConfig` and reuses `resolvePgSslConfig` (+ PGSSLROOTCERT + unset-mode warning); new web test `apps/web/src/test/pg-ssl-config.test.ts` (5). Reviewer re-verified: web lint clean, web 230/230, web build OK, bot 174/174, scope clean (client.js untouched). |
+| 045  | Image decompression-bomb guard on logo decode | P3 | M | - | DEFERRED (accepted risk) — correct fix needs a pre-decode dimension check (new dep / header parser) + per-logo cost; threat is low-likelihood (allow-listed host serving a crafted image). See bot-internals audit note below. |
+| 046  | Characterization tests for the EWC prediction lifecycle (DB + status) | P2 | M | - | DONE — added `tests/ewcPredictionLifecycle.test.mjs` covering pick idempotency, score save/overwrite, status transitions, and best-N-weeks tied-score behavior. Commit `15c880d`. |
+| 047  | Bring admin score_week guards in line with the automation | P2 | S | 046 | DONE — added manual `score_week` guards for already-scored weeks and unavailable aggregate final standings. Commit `8b50391`. |
+| 048  | Web tests for the EWC public leaderboard + profile sync/unlink | P2 | M | - | DONE — added public leaderboard route tests plus EWC profile GET/sync/unlink tests. Commit `7e5b52b`. |
+| 049  | Fill EWC scoring-math edge-case test gaps | P3 | S | - | DONE — added scoring edge-case tests for single-game bonus gating, 3-game sweeps, sparse/boundary season picks, exact-rank bonus, and missing-pick bonus blocking. Commit `21bc7db`. |
+| 051  | Make `/ewc_predict link` + the guide actually explain linking | P2 | S–M | - | DONE — merged in PR #33, deployed 2026-06-19. `link` reply is a bilingual embed (what-you-get + 3 steps, "Open my dashboard"); `guide` gains a 2nd embed explaining the showcase + how to link. |
+| 052  | Unify EWC linking terminology + fix the single-guild empty state | P2 | S | 051 | DONE — merged in PR #33, deployed. "Sync profile"→"Refresh"/"تحديث"; "select a server" empty state replaced with an actionable single-guild one; predictions copy aligned. Plus a polish commit: Refresh error labels + the `Synced`→`Refreshed` badge + Arabic guide says "اضغط زر التحديث". Reviewer re-verified: bot 194/194, web 238/238, lint clean, build OK. |
+| 050  | EWC web minor cleanups (leaderboard topScore + unlink ordering) | P3 | S | - | DONE — added page-independent leaderboard `topScore`, removed the page-level page>1 top-score fetch, logged Discord unlink-delete failures while preserving delete+throw behavior, and extended leaderboard tests. Commit `06459a8`. |
+| 053  | Community user-block primitive (table + gate enforcement) | P2 | S–M | - | TODO — `community_user_blocks` table + `src/db/communityUserBlocks.js` + enforce in `requireVerifiedMember` (blocked → 403 `code:"blocked"`); bot + web tests. Foundation for 054. (admin-users feature 2026-06-19) |
+| 054  | Admin Users area — find, track, moderate community members | P2 | L | 053 | TODO — super-only `/admin/users` (search, newest-first, activity, Blocked badge) + per-user detail (their comments, moderatable) + block/unblock API (audited, super-only); admin-home card, i18n, RBAC tests. |
+| 055  | Pin patched `undici` via package.json `overrides` (clear HIGH advisories) | P1 | S | — | DONE — executor (worktree, reviewed/approved). Plan refined mid-execute: BOTH majors were flagged (the 7.x advisory was shadowed in baseline audit), so the override is `{"undici@6":"^6.27.0","undici@7":"^7.28.0"}` (discord.js→6.27.0, cheerio→7.28.0). `npm audit --omit=dev --audit-level=high` exits 0; bot 242 pass. Commit `c1bde38`. |
+| 056  | Sanitize request host before using it as the Twitch embed `parent` | P2 | S | — | DONE — executor (worktree, reviewed/approved). `parentHost` now returns the request host only if it matches `^[a-z0-9.-]{1,253}$/i`, else the configured host. web lint + build green. Commit `2d82927`. |
+| 057  | Co-stream management polish — grouping tests + fixes, group-edit propagation, normalization dedup, platform-logo links | P2 | M | — | DONE — executor (worktree, reviewed/APPROVED). All 4 parts landed; reviewer re-ran gates: bot 243, web 259, web lint+build green; scope clean (13 files). Part A (viewer-sum + numeric startedAt fixes + `buildCoStreamGroups` extracted/tested), B (creator-level edits propagate to sibling rows, distinct placeholders), C (`stream-normalize.ts` dedup), D (`@icons-pack/react-simple-icons` platform logos, SOOP fallback). **Follow-up noted**: the BUG-2 (`startedAt`) regression test uses same-magnitude timestamps that order identically lexicographically + numerically, so it doesn't discriminate the comparator fix — strengthen with different-magnitude values when next touched. 4th audit @ `ec39ad6`. |
+| 058  | (SPIKE) Per-match co-streams — surface `channelsForMatch` on match views | P3 | M–L | — | TODO/SPIKE — `channelsForMatch` is built+tested but unconsumed; needs 3 product decisions (placement, embed-vs-link, EWC inclusion) before it becomes a build plan. Land 057 (Part D icons) first. |
 Status values: TODO | IN PROGRESS | DONE | BLOCKED (reason) | REJECTED (rationale) | SUPERSEDED.
+
+## Fourth audit (2026-06-21 @ `ec39ad6`) — co-streaming feature + management
+
+Scoped to the co-stream feature only (security covered last run via 055/056).
+Findings → plan 057 (parts A–D) + spike 058. Considered and rejected:
+- **`game_slugs LIKE '%"slug"%'` JSON-substring matching** — fragile in theory
+  but `cleanGameSlug` makes slugs alphanumeric and the quoted pattern avoids
+  prefix collisions; a join table is heavier than the ≤12-slug payload warrants.
+- **`groupKey` collision when two creators share a normalized key** — admin
+  controls labels/creatorKeys; low real risk, not worth a uniqueness constraint.
+- **Public page `router.refresh()` every 60s per viewer (PERF-01)** — real but
+  only bites at live-event concurrency; recorded as backlog. A lightweight JSON
+  status endpoint + client poll is the fix when load warrants it.
+- **Admin manager client component has no tests** — UI logic; the valuable
+  pure logic (grouping, normalization) is extracted + tested by 057 instead.
+
+## Co-stream feature security audit (2026-06-21, main @ e6bd9a9)
+
+Focused security pass over the new live-co-stream feature (PRs #40–#44 + the
+multi-platform / `gameSlugs` / `creatorKey` / `isDefault` extensions) plus a
+`npm audit` sweep. The feature is well-built: SQL is fully parameterized (`$n`,
+`cleanGameSlug` sanitizes the JSON `LIKE` term, distinct placeholders — no
+injection/reuse), admin routes are super-only + `sameOriginOr403` + audited,
+input is validated/length-capped, the poller URL-builds via `URLSearchParams`
+(no SSRF — fixed hosts), the new columns are migrated in BOTH schemas
+(`ALTER TABLE ... ADD COLUMN IF NOT EXISTS` + `ensureColumns`), and all rendering
+is React-escaped (no `dangerouslySetInnerHTML`). Two findings became plans:
+
+- **055 (P1, HIGH)** — `undici@6.24.1` transitive via `discord.js` carries 8 HIGH
+  advisories; fix via `overrides`. Reachability limited (bot → Discord API), but
+  HIGH + cheap fix.
+- **056 (P2, LOW)** — `co-streams/page.tsx` reflects client `x-forwarded-host`
+  into the Twitch embed `parent`; React-escaped so no XSS, but trust-smell.
+
+### Findings considered and rejected (2026-06-21) — do not re-audit
+
+- **`*.twitch.tv` / `*.kick.com` wildcards in CSP `frame-src`** (`next.config.ts`):
+  required for the player's nested frames; scoped to the two trusted vendors. By design.
+- **No `sandbox` on the Twitch/Kick `<iframe>`** (`stream-embed.tsx`): sandboxing a
+  trusted video player breaks it; CSP already restricts framed origins. Not a finding.
+- **Public co-streams directory exposes channel handles/labels/live status**: by
+  design — they are public streamer handles, no PII.
+- **No rate-limit on `/api/admin/streams`**: super-admin-only (trusted), consistent
+  with the other admin CRUD routes (media/games). Not worth doing.
+- **`game_slugs LIKE %"slug"%` substring match**: the slug is alphanumeric-cleaned
+  and quoted, so cross-slug false matches don't occur in practice. Minor correctness, not security.
 
 ## Security deep audit (2026-06-14, main @ d19a87f)
 
@@ -95,6 +163,217 @@ actionable website polish work is tracked in plans 033-036. Directional backlog
 items not turned into first-batch plans: archive pagination for news lists,
 finished-tournament archive filters, and a future DOM/component test harness for
 large client editors once the admin CMS stabilizes.
+
+## Security audit (2026-06-18, main @ 347a0d0)
+
+Focused security pass (3 read-only subagents) on the surfaces added since the
+2026-06-14 deep audits: the comments/likes/moderation feature, the SQLite→Postgres
+dual-backend (`src/db/client.js`), web auth/RBAC/CSRF, the locale middleware
+(`apps/web/src/proxy.ts`), the post-share component, and deps/config/secrets.
+Recent hardening (PRs #25/#27/#29) had already closed most of the real surface;
+this pass produced exactly **one** plan-worthy finding → plan 043 (web auth-DB
+pool TLS mapping diverges from the bot pool — can't certificate-verify the
+session/credential connection even when the operator sets `verify-full`).
+
+Verified directly during vetting (no action needed): comment edit/delete enforce
+server-side ownership (`apps/web/src/app/api/comments/[id]/route.ts:26,55`, 403 on
+mismatch) + CSRF + rate limits — no IDOR; comment POST/GET and likes are gated and
+bounded; the post-share X-intent URL is `encodeURIComponent`-escaped.
+
+## Bot-internals security audit (2026-06-18, main @ 347a0d0)
+
+Focused pass (3 subagents) on surfaces skipped in the prior pass: Liquipedia
+client/fetchers/rateState, parsers + canvas/image rendering, slash-commands +
+the EWC scoring "money path". 13 candidates → 11 rejected (see below), 2 real
+hardening items, both about resilience to malicious/oversized UPSTREAM
+(Liquipedia) content — neither high-severity (Liquipedia is a trusted third
+party over HTTPS).
+
+- **044 (response-size cap on the Liquipedia axios client)** — TODO/executing.
+  Clean, behavior-preserving, generous env-overridable cap.
+- **045 (image decompression-bomb guard on logo decode)** — DEFERRED, accepted
+  risk. `src/lib/logoCache.js:31,34`: `loadImage(bytes)` then
+  `createCanvas(img.width, img.height)` run with only a 4 MB *byte* cap upstream
+  (`src/lib/logoSource.js:21,221`); a byte cap does not bound *decoded* pixels,
+  so a ≤4 MB image from an allow-listed host could decode to huge dimensions →
+  OOM. NOT executed per operator constraint ("don't hurt performance or current
+  behavior"): the correct fix needs a PRE-decode dimension check (the decode is
+  the bomb), which means a new runtime dependency or a hand-rolled multi-format
+  header parser — both add per-logo work and a real chance of turning an
+  unusual-but-legitimate logo into a placeholder (a visible behavior change).
+  The cheap "check after loadImage" version is theater (the OOM already happened
+  during decode). Threat is low-likelihood (needs an allow-listed host — i.e.
+  Liquipedia's own wiki/CDN — serving a crafted image referenced on a tracked
+  page). Revisit if the operator accepts a small per-logo header-read cost.
+
+Low-leverage, noted but not planned: unbounded parser loops / unclamped parsed
+name lengths in `src/services/liquipedia/parsers.js` (same malicious-wiki-content
+theme; path is cached + throttled, pages curated); `picks_json` read-side schema
+validation in `src/lib/ewcPredictions.js` (defense-in-depth only — the write path
+validates; would need DB corruption to bite).
+
+Not audited this pass: the cron jobs' internal logic (`src/jobs/*` beyond
+fetch/parse/render entry points), `markdownTools`/`discordContent` formatting.
+
+### Bot-internals findings rejected (2026-06-18) — do not re-audit
+
+- **ReDoS in `cleanName`** (`src/services/liquipedia/parsers.js:51`,
+  `/\((?:[^)]*?\s)?stack\)/gi`) — false. A single bounded lazy quantifier
+  (`[^)]` can't cross `)`), no nested/overlapping quantifiers → linear, not
+  catastrophic; applied to short names, not blobs.
+- **SSRF via `add_tournament` game param** — false. `game` interpolates into
+  `https://liquipedia.net/${game}/api.php` (`client.js:54`); the host is fixed,
+  `game` only affects the path (no host escape). Worst case is a 404. Data-hygiene
+  nit, not a vuln.
+- **Rate-state file needs bounds validation** (`rateState.js:19-25`) — not a
+  security finding. The parse is already try/caught (corrupt file → first-run
+  defaults); `blockedUntil` magnitude is a config constant, not remote-controllable
+  (upstream can only trigger the fixed backoff). Tampering needs local FS write =
+  host already owned.
+- **Internal secret undocumented / rotation risk** — false. `EWC_DASHBOARD_INTERNAL_SECRET`
+  IS documented (`.env.example:98`), env-based/gitignored, by-design internal
+  bot→web header; internal sync/unlink routes are already rate-limited.
+- **`setEwcWeekSnapshot` dynamic column** — already rejected (prior pass): ternary
+  between two hard-coded literals, not injectable.
+- **Score integer overflow** (`ewcPredictions.js`) — no practical trigger (~33k
+  max vs 2^53); speculative.
+- **Liquipedia axios follows redirects (maxRedirects:5)** — Liquipedia is a trusted
+  upstream over HTTPS; exploitation needs upstream compromise. Not changing.
+
+## EWC linking-experience audit (2026-06-18, main @ 946138d)
+
+Focused UX/docs audit of the EWC predict-link flow across Discord (`/ewc_predict
+link`/`sync`/`guide`/`unlink`) and web (`/me`, `/predictions`, ProfileDashboard).
+Operator note carried into the plans: **the bot serves ONE guild — there is no
+server to select**, so all guild-selection language is wrong copy, not a feature.
+Operator selected the link-message+guide rewrite and the terminology unification:
+
+- **051** (P2) rewrite the bare `/ewc_predict link` reply (what-you-get + 3 steps)
+  and add a linking/showcase section to `/ewc_predict guide` (it currently explains
+  predictions thoroughly but never mentions linking — the "guide isn't complete"
+  gap). Discord copy only.
+- **052** (P2, dep 051) unify the terminology (link / refresh / unlink / "your EWC
+  showcase") across the web, rename the "Sync profile" button to "Refresh", and
+  remove the single-guild-wrong "select a server" empty-state copy. Web copy only.
+
+**Dependency**: 052 reuses 051's chosen user-facing words — land 051's wording
+first (or keep them in lockstep).
+
+### Linking-UX findings deferred / reframed (2026-06-18)
+
+- **Website dead-end** (`/predictions` → "Open my profile" → `/me` with no guildId →
+  empty state) — reframed by the single-guild note: the harmful part was the
+  "select a server" copy (fixed in 052). The empty state itself is legitimate for a
+  member who hasn't made picks yet. A fully-seamless fix (auto-resolve the one guild
+  on `/me`, like `/leaderboard` does) is a flow change, deferred — noted in 052.
+- **link vs sync as separate commands** — not renaming the slash commands (renames
+  are disruptive); 052 instead clarifies the words and makes "sync"→"Refresh" on the
+  web where members actually see it.
+
+## EWC prediction-system audit (2026-06-18, main @ e7e0a6e)
+
+Feature-scoped audit of the EWC prediction system across bot + web (3 subagents:
+scoring money path, lifecycle/commands/job, web surface), weighted to
+CORRECTNESS + TEST COVERAGE since security was already swept 3×. The scoring
+**math** is well-tested and correct on the paths read; the gap is everything
+around it. Five plans (046-050) selected by the operator:
+
+- **046** (P2) bot lifecycle characterization tests — pin pick idempotency, score
+  save/overwrite, status transitions, best-N-weeks tie selection. **Land first.**
+- **047** (P2, dep 046) admin `score_week` guards — block re-scoring a 'scored'
+  week + reject empty aggregate standings (the automation already guards both; the
+  command can silently score everyone 0 on a fetch failure, then mark scored).
+- **048** (P2) web tests for the public leaderboard + profile sync/unlink (the
+  main public surface has ZERO web tests today).
+- **049** (P3) scoring-math edge cases + document the single-game all-winners-bonus
+  decision.
+- **050** (P3, optional) web cleanups: fold `topScore` into the leaderboard
+  response (drop the page>1 double-fetch); log a failed Discord unlink.
+
+**Dependency ordering**: 046 (tests, freezes behavior) → 047 (guard change). The
+rest are independent. 050's test extends 048's leaderboard test if 048 lands first.
+
+### EWC findings rejected (2026-06-18) — do not re-audit
+
+- **Leaderboard "single cache key" cross-contamination** (`public-ewc-leaderboard.ts:27`)
+  — false. `unstable_cache` keys on the wrapped fn's ARGS (guildId/season/limit/offset);
+  `["public-ewc-leaderboard"]` is only a namespace. No cross-contamination.
+- **Pagination off-by-one if total changes mid-render** — false. `total` and `rows`
+  come from ONE cached object (`page.tsx:65,82`); `rangeEnd` is always consistent.
+- **Unlink "returns success on Discord failure"** — false. `ewc-profile-sync.ts:157-167`
+  is `try/finally` with NO catch — a Discord failure propagates (caller gets the error),
+  it does not return `{deleted:true}`. (The minor residual — no log for the orphaned
+  role connection — is folded into plan 050.)
+- **Single-game all-winners bonus "bug"** (`ewcPredictions.js:258`) — design call,
+  not a bug; `details.length > 1` makes a "sweep ALL games" bonus meaningless for one
+  game. Pinned + flagged for decision in plan 049, not changed.
+- **Score integer overflow / NaN** — no practical trigger (~33k max vs 2^53); season
+  scoring read and correct.
+- **Transaction atomicity unknown** — already verified real (`client.js` BEGIN/COMMIT/ROLLBACK
+  on both backends); admin + automation scoring loops are wrapped in `transaction(...)`.
+- **Admin can score an unclosed (open) week** — intentional admin override; NOT guarded
+  by plan 047 (only re-score + empty-standings are).
+
+Not audited this pass: the leaderboard CARD render internals, `discordRoleConnection`
+payload building, `ewcClubCache`/`ewcNewsContent` — and security (covered 3× already).
+
+## Jobs + formatting security sweep (2026-06-18, main @ 347a0d0)
+
+Third focused pass, scoped to the only surface left un-audited after the
+web/data and bot-internals passes: `src/jobs/*` internal logic + the
+`markdownTools`/`discordContent`/`ewcNewsContent` formatting helpers. **Result:
+ZERO actionable findings.** The markdown helpers have no ReDoS (escaped
+anchored-prefix matches + a linear `[text](url)` regex), the formatting regexes
+are linear, mentions are neutralized by the global `allowedMentions: { parse: [] }`,
+and no job reaches a shell/eval/fs/SSRF sink. The security surface at this commit
+is now comprehensively covered across the three passes; further audits here have
+diminishing returns until the code changes. The productive security ACTION now is
+to ship the two ready hardening branches (043, 044), not more audits.
+
+### Jobs/formatting findings rejected (2026-06-18) — do not re-audit
+
+- **Unhandled Discord send/edit wedges the cron loop** — false. Jobs run as
+  `setInterval(() => run().catch(log), …)` (`src/jobs/ewcPredictions.js:429`); a
+  throw is caught per-tick and the next tick fires normally. `refresh.js` already
+  wraps each board; announcers have parent try/catch loops. A failed send skips
+  one update, it does not stop the schedule.
+- **User-supplied champion pick can blow past the 4096-char embed limit**
+  (`src/jobs/ewcPredictions.js:61-70,96`) — false. `championPick` is
+  `prediction.picks[0]`, a CONSTRAINED selection from the guided picker (not free
+  text), and `leaderboardLines` caps at 20 rows of `<@id>` mentions (not names) —
+  bounded to ~1.5 KB by construction, far under 4096.
+- **Many users × long picks → oversized embed** — same bounding; non-issue.
+- **Internal secret leaks via `response.text()`** (`src/jobs/ewcPredictions.js:238`)
+  — false. The secret travels only in the OUTGOING request header (`:229`); the
+  logged value is the web route's response body, which returns generic JSON errors
+  and never echoes request headers. No exposure.
+
+### Findings considered and rejected (2026-06-18) — do not re-audit
+
+- **`sqliteParams` "parameter corruption" on repeated `$N`** (`src/db/client.js:29-39`)
+  — false. The regex emits one `?` and pushes one value per `$N` occurrence, so the
+  `?` count always equals the params-array length by construction (`$12,$12` →
+  two `?` + two values is correct). SQLite path is dev/test-only anyway (prod = Postgres).
+- **`canManageGame`/`canManageMedia` call `.includes()` on the string `"ALL"`**
+  (`apps/web/src/lib/admin.ts:101,105`) — false. The `games !== "ALL"` guard narrows
+  the union before `.includes`; it never runs on the string. Correct and type-safe.
+- **Dynamic column name in `setEwcWeekSnapshot`** (`src/db/ewcPredictions.js:~148`)
+  — not injectable. `column` is a ternary between two hard-coded literals
+  (`baseline_json`/`final_json`); no input becomes the identifier. Same class as the
+  already-accepted `ensureColumns` hardcoded-constant pattern.
+- **`internalSecret()` returns `""` when unset** (`apps/web/src/lib/env.ts`) — fails
+  CLOSED (`isInternalRequestAuthorized` rejects on empty). Not a bypass (re-confirmed).
+- **Dynamic WHERE / `IN()` placeholder builders** (`src/db/postComments.js`,
+  `src/db/commentLikes.js`) — correctly parameterized (`$${params.length}` /
+  index-offset joins); "fragility/smell," not a vulnerability.
+- **PostCSS XSS advisory via Next bundle** — known; no stable fixed Next yet. Deferred.
+- **"Throw in prod if Postgres TLS is off"** (subagent's suggested 043 fix) — REJECTED:
+  prod runs `PGSSLMODE=disable` because the server rejects SSL; throwing would crash
+  boot. Plan 043 is mapping *consistency* only, not enforcement.
+
+Not re-audited (covered by prior audits, unchanged this cycle): Liquipedia
+parsers/client internals, canvas rendering, EWC scoring math, bot slash-command
+internals beyond an injection grep.
 
 ## Merged (2026-06-10)
 
