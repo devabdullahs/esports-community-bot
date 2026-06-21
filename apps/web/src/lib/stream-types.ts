@@ -55,9 +55,13 @@ export type UpdateStreamChannelInput = {
 };
 
 // A channel joined with its current live status (for the public co-streams page).
+// `isLive` is RELEVANCE-aware: a channel streaming an off-topic / non-esports
+// category counts as not-live here. `liveGame` is the display name of what they're
+// actually playing (null when offline or off-topic).
 export type CoStreamChannel = StreamChannel & {
   isLive: boolean;
   liveTitle: string | null;
+  liveGame: string | null;
   viewerCount: number | null;
   startedAt: number | null;
 };
@@ -72,6 +76,7 @@ export type CoStream = {
   embedChannel: CoStreamChannel | null;
   isLive: boolean;
   liveTitle: string | null;
+  liveGame: string | null;
   viewerCount: number | null;
   startedAt: number | null;
   sortOrder: number;

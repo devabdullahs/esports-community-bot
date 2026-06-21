@@ -32,6 +32,7 @@ function channel(overrides: Partial<CoStreamChannel> = {}): CoStreamChannel {
     url: overrides.url ?? `https://example.com/${handle}`,
     isLive: overrides.isLive ?? false,
     liveTitle: overrides.liveTitle ?? null,
+    liveGame: overrides.liveGame ?? null,
     viewerCount: overrides.viewerCount ?? null,
     startedAt: overrides.startedAt ?? null,
   };
@@ -109,11 +110,13 @@ describe("buildCoStreamGroups — headline aggregation regressions", () => {
   });
 
   test("BUG 2: startedAt is the numeric minimum, not lexicographic", () => {
+    // Different-magnitude values so a lexicographic `.sort()` would pick the WRONG
+    // one ("1700000000" < "999999999" as strings → 1700000000), proving the fix.
     const groups = buildCoStreamGroups([
-      channel({ platform: "twitch", handle: "tw", creatorKey: "alpha", isLive: true, startedAt: 1781970000 }),
-      channel({ platform: "kick", handle: "kk", creatorKey: "alpha", isLive: true, startedAt: 1781967600 }),
+      channel({ platform: "twitch", handle: "tw", creatorKey: "alpha", isLive: true, startedAt: 1700000000 }),
+      channel({ platform: "kick", handle: "kk", creatorKey: "alpha", isLive: true, startedAt: 999999999 }),
     ]);
-    expect(groups[0].startedAt).toBe(1781967600);
+    expect(groups[0].startedAt).toBe(999999999);
   });
 });
 

@@ -63,6 +63,30 @@ export function gameSlugFromName(name) {
   if (!name) return null;
   return BY_NAME.get(String(name).trim().toLowerCase())?.slug ?? null;
 }
+
+// Map a live-stream CATEGORY (the game a Twitch/Kick channel is currently playing,
+// e.g. "Overwatch 2", "Counter-Strike 2", "VALORANT", "Just Chatting") to a tracked
+// game slug, or null when it isn't a game we track (non-esports / off-topic). More
+// tolerant than gameSlugFromName: platform category names carry version/edition
+// suffixes and punctuation our slugs don't. Used to keep off-topic streams off the
+// co-stream surfaces.
+export function categoryToGameSlug(category) {
+  const raw = String(category ?? '').trim();
+  if (!raw) return null;
+  const exact = gameSlugFromName(raw); // "Rocket League", "Dota 2", "Valorant", …
+  if (exact) return exact;
+  const norm = raw.toLowerCase().replace(/[^a-z0-9]+/g, '');
+  if (!norm) return null;
+  if (BY_SLUG.has(norm)) return norm;
+  if (GAME_ALIASES[norm]) return GAME_ALIASES[norm];
+  // Suffix tolerance: a known slug that prefixes the category ("overwatch2" →
+  // overwatch, "counterstrike2" → counterstrike, "callofdutyblackops6" →
+  // callofduty). Longest slug first so "pubgmobile…" beats "pubg".
+  for (const slug of [...BY_SLUG.keys()].filter((s) => s.length >= 4).sort((a, b) => b.length - a.length)) {
+    if (norm.startsWith(slug)) return normalizeGameSlug(slug);
+  }
+  return null;
+}
 const LOBBY_GAMES = new Set(['apexlegends', 'freefire', 'fortnite', 'pubg', 'pubgmobile', 'teamfighttactics', 'tft']);
 
 // Short tag for a game key (handles wiki slugs, a few legacy codes, and unknowns).

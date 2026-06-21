@@ -2,6 +2,7 @@ import "server-only";
 
 import { listEwcStreamChannels } from "@bot/db/streamChannels.js";
 import { getStreamStatuses } from "@bot/db/streamChannelStatus.js";
+import { categoryToGameSlug, gameName } from "@bot/lib/games.js";
 import type { CoStream, CoStreamChannel, StreamChannel, StreamPlatform } from "@/lib/stream-types";
 
 export type { CoStream };
@@ -14,12 +15,15 @@ type StatusRow = {
   title: string | null;
   viewerCount: number | null;
   startedAt: number | null;
+  category: string | null;
 };
 
 const listEwc = listEwcStreamChannels as unknown as (opts?: { activeOnly?: boolean }) => Promise<StreamChannel[]>;
 const getStatuses = getStreamStatuses as unknown as (
   pairs: Array<{ platform: string; handle: string }>,
 ) => Promise<Map<string, StatusRow>>;
+const catToSlug = categoryToGameSlug as unknown as (category: string | null) => string | null;
+const slugToName = gameName as unknown as (slug: string) => string;
 
 const EMBEDDABLE = new Set<StreamPlatform>(["twitch", "kick"]);
 
@@ -80,6 +84,7 @@ export function buildCoStreamGroups(merged: CoStreamChannel[]): CoStream[] {
       embedChannel,
       isLive: liveChannels.length > 0,
       liveTitle: liveChannels.find((c) => c.liveTitle)?.liveTitle ?? null,
+      liveGame: (embedChannel?.isLive ? embedChannel.liveGame : null) ?? liveChannels.find((c) => c.liveGame)?.liveGame ?? null,
       viewerCount: headlineViewers,
       startedAt: liveChannels.map((c) => c.startedAt).filter((v): v is number => typeof v === "number").sort((a, b) => a - b)[0] ?? null,
       sortOrder: Math.min(...group.map((c) => c.sortOrder)),
@@ -104,10 +109,15 @@ export async function getEwcCoStreams(): Promise<CoStream[]> {
 
   const merged: CoStreamChannel[] = channels.map((c) => {
     const s = statuses.get(`${c.platform}:${c.handle}`);
+    // Relevance gate: a channel streaming an off-topic / non-esports category
+    // (e.g. Just Chatting, GTA) is NOT a live co-stream here. Only count it live
+    // when the current category maps to a game we track.
+    const gameSlug = s?.isLive ? catToSlug(s.category) : null;
     return {
       ...c,
-      isLive: Boolean(s?.isLive),
+      isLive: Boolean(s?.isLive && gameSlug),
       liveTitle: s?.title ?? null,
+      liveGame: gameSlug ? slugToName(gameSlug) : null,
       viewerCount: s?.viewerCount ?? null,
       startedAt: s?.startedAt ?? null,
     };
