@@ -47,6 +47,55 @@ function pickEmbedChannel(channels: CoStreamChannel[]): CoStreamChannel | null {
   );
 }
 
+// Pure grouping: collapse a creator's per-platform channels into one CoStream per
+// group, compute the headline live status, and sort live-first. Exported so it can
+// be tested without a DB.
+export function buildCoStreamGroups(merged: CoStreamChannel[]): CoStream[] {
+  const groups = new Map<string, CoStreamChannel[]>();
+  for (const channel of merged) {
+    const key = groupKey(channel);
+    groups.set(key, [...(groups.get(key) ?? []), channel]);
+  }
+
+  const out: CoStream[] = [...groups.entries()].map(([id, group]) => {
+    group.sort((a, b) => {
+      if (a.isDefault !== b.isDefault) return a.isDefault ? -1 : 1;
+      if (a.isLive !== b.isLive) return a.isLive ? -1 : 1;
+      return a.sortOrder - b.sortOrder;
+    });
+    const embedChannel = pickEmbedChannel(group);
+    const liveChannels = group.filter((c) => c.isLive);
+    // Headline viewers: the embed channel's count if it's live, otherwise the max
+    // across live platforms — never the sum (one creator, one audience).
+    const headlineViewers =
+      (embedChannel?.isLive ? embedChannel.viewerCount : null) ??
+      (liveChannels.length ? Math.max(...liveChannels.map((c) => c.viewerCount ?? 0)) : null);
+    return {
+      id,
+      label: group[0]?.label ?? "Co-streamer",
+      creatorKey: group[0]?.creatorKey ?? id,
+      gameSlugs: uniq(group.flatMap((c) => c.gameSlugs ?? (c.gameSlug ? [c.gameSlug] : []))),
+      language: group.find((c) => c.language)?.language ?? null,
+      channels: group,
+      embedChannel,
+      isLive: liveChannels.length > 0,
+      liveTitle: liveChannels.find((c) => c.liveTitle)?.liveTitle ?? null,
+      viewerCount: headlineViewers,
+      startedAt: liveChannels.map((c) => c.startedAt).filter((v): v is number => typeof v === "number").sort((a, b) => a - b)[0] ?? null,
+      sortOrder: Math.min(...group.map((c) => c.sortOrder)),
+    };
+  });
+
+  // Live first, then by viewers desc, then by the admin sort order.
+  out.sort((a, b) => {
+    if (a.isLive !== b.isLive) return a.isLive ? -1 : 1;
+    if (a.isLive && b.isLive) return (b.viewerCount ?? 0) - (a.viewerCount ?? 0);
+    return a.sortOrder - b.sortOrder;
+  });
+
+  return out;
+}
+
 export async function getEwcCoStreams(): Promise<CoStream[]> {
   const channels = await listEwc({ activeOnly: true });
   if (!channels.length) return [];
@@ -64,42 +113,5 @@ export async function getEwcCoStreams(): Promise<CoStream[]> {
     };
   });
 
-  const groups = new Map<string, CoStreamChannel[]>();
-  for (const channel of merged) {
-    const key = groupKey(channel);
-    groups.set(key, [...(groups.get(key) ?? []), channel]);
-  }
-
-  const out: CoStream[] = [...groups.entries()].map(([id, group]) => {
-    group.sort((a, b) => {
-      if (a.isDefault !== b.isDefault) return a.isDefault ? -1 : 1;
-      if (a.isLive !== b.isLive) return a.isLive ? -1 : 1;
-      return a.sortOrder - b.sortOrder;
-    });
-    const embedChannel = pickEmbedChannel(group);
-    const liveChannels = group.filter((c) => c.isLive);
-    return {
-      id,
-      label: group[0]?.label ?? "Co-streamer",
-      creatorKey: group[0]?.creatorKey ?? id,
-      gameSlugs: uniq(group.flatMap((c) => c.gameSlugs ?? (c.gameSlug ? [c.gameSlug] : []))),
-      language: group.find((c) => c.language)?.language ?? null,
-      channels: group,
-      embedChannel,
-      isLive: liveChannels.length > 0,
-      liveTitle: liveChannels.find((c) => c.liveTitle)?.liveTitle ?? null,
-      viewerCount: liveChannels.reduce((sum, c) => sum + (c.viewerCount ?? 0), 0) || null,
-      startedAt: liveChannels.map((c) => c.startedAt).filter((v): v is number => typeof v === "number").sort()[0] ?? null,
-      sortOrder: Math.min(...group.map((c) => c.sortOrder)),
-    };
-  });
-
-  // Live first, then by viewers desc, then by the admin sort order.
-  out.sort((a, b) => {
-    if (a.isLive !== b.isLive) return a.isLive ? -1 : 1;
-    if (a.isLive && b.isLive) return (b.viewerCount ?? 0) - (a.viewerCount ?? 0);
-    return a.sortOrder - b.sortOrder;
-  });
-
-  return out;
+  return buildCoStreamGroups(merged);
 }
