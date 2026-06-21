@@ -121,6 +121,35 @@ test('only one platform is default within a creator group', async () => {
   assert.equal((await getStreamChannel(first.id)).isDefault, false);
 });
 
+test('creator-level edits propagate to a creator\'s sibling platforms', async () => {
+  const twitch = await createStreamChannel({
+    platform: 'twitch',
+    handle: 'creator_edit_tw',
+    label: 'Old Name',
+    creatorKey: 'creator-edit',
+    scope: 'ewc',
+  });
+  const kick = await createStreamChannel({
+    platform: 'kick',
+    handle: 'creator_edit_kk',
+    label: 'Old Name',
+    creatorKey: 'creator-edit',
+    scope: 'ewc',
+  });
+
+  await updateStreamChannel(twitch.id, { label: 'New Name', gameSlugs: ['valorant'] });
+
+  const twAfter = await getStreamChannel(twitch.id);
+  const kkAfter = await getStreamChannel(kick.id);
+  assert.equal(twAfter.label, 'New Name');
+  assert.equal(kkAfter.label, 'New Name', 'creator label propagated to sibling');
+  assert.deepEqual(twAfter.gameSlugs, ['valorant']);
+  assert.deepEqual(kkAfter.gameSlugs, ['valorant'], 'creator game tags propagated to sibling');
+  // Per-row attributes we did NOT pass stay untouched on the sibling.
+  assert.equal(kkAfter.handle, 'creator_edit_kk', 'per-row handle unchanged on sibling');
+  assert.equal(kkAfter.platform, 'kick', 'per-row platform unchanged on sibling');
+});
+
 test('re-adding the same channel at the same scope upserts (no duplicate)', async () => {
   const first = await createStreamChannel({ platform: 'kick', handle: 'dupe', scope: 'ewc', label: 'First' });
   const again = await createStreamChannel({ platform: 'kick', handle: 'dupe', scope: 'ewc', label: 'Renamed' });

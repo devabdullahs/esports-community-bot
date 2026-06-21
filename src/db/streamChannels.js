@@ -298,11 +298,39 @@ export async function updateStreamChannel(id, { label, language, sortOrder, acti
   const info = await run(`UPDATE stream_channels SET ${sets.join(', ')} WHERE id = $${params.length}`, params);
   if (!info.changes) return null;
   const updated = await getStreamChannel(id);
+
+  // label/language/game tags describe the creator, not the individual platform —
+  // propagate ONLY those columns to siblings sharing creator_key + scope. Never
+  // touch is_default/active/sort_order (those stay per-row). Push every value with
+  // a distinct placeholder — reusing a $n across clauses crashes Postgres.
+  if (updated?.creatorKey && (label !== undefined || language !== undefined || gameSlugs !== undefined)) {
+    const sib = [];
+    const sp = [];
+    const spush = (col, value) => {
+      sp.push(value);
+      sib.push(`${col} = $${sp.length}`);
+    };
+    if (label !== undefined) spush('label', blank(label));
+    if (language !== undefined) spush('language', blank(language));
+    if (gameSlugs !== undefined) {
+      const games = parseGameSlugs(gameSlugs);
+      spush('game_slug', games[0] || '');
+      spush('game_slugs', gameSlugsJson(games));
+    }
+    spush('updated_at', nowText());
+    sp.push(updated.creatorKey);
+    sp.push(updated.scope);
+    sp.push(id);
+    await run(
+      `UPDATE stream_channels SET ${sib.join(', ')} WHERE creator_key = $${sp.length - 2} AND scope = $${sp.length - 1} AND id <> $${sp.length}`,
+      sp,
+    );
+  }
+
   if (updated?.isDefault && updated.creatorKey) {
     await run('UPDATE stream_channels SET is_default = 0 WHERE creator_key = $1 AND id <> $2', [updated.creatorKey, id]);
-    return getStreamChannel(id);
   }
-  return updated;
+  return getStreamChannel(id);
 }
 
 export async function setStreamChannelActive(id, active) {

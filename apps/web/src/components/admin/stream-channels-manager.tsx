@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useMemo, useState, type FormEvent } from "react";
-import { CheckIcon, ExternalLinkIcon, PencilIcon, PlusIcon, StarIcon, Trash2Icon } from "lucide-react";
+import { CheckIcon, PencilIcon, PlusIcon, StarIcon, Trash2Icon } from "lucide-react";
 import {
   STREAM_PLATFORMS,
   STREAM_SCOPES,
@@ -10,6 +10,8 @@ import {
   type StreamPlatform,
   type StreamScope,
 } from "@/lib/stream-types";
+import { normalizeCreatorKey } from "@/lib/stream-normalize";
+import { PlatformIcon } from "@/components/platform-icon";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -53,15 +55,6 @@ function scopeTarget(channel: StreamChannel): string | null {
   if (channel.scope === "team") return channel.teamKey;
   if (channel.scope === "match") return channel.matchExternalId;
   return channel.gameSlugs.length ? channel.gameSlugs.join(", ") : null;
-}
-
-function creatorKeyFrom(value: string): string {
-  return value
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "")
-    .slice(0, 80);
 }
 
 function firstHandle(handles: Record<StreamPlatform, string>): string {
@@ -177,7 +170,7 @@ export function StreamChannelsManager({
       return;
     }
 
-    const creatorKey = creatorKeyFrom(label || firstHandle(handles));
+    const creatorKey = normalizeCreatorKey(label || firstHandle(handles));
     const embeddableEntries = entries.filter((entry) => EMBED_PLATFORMS.includes(entry.platform));
     const effectiveDefault =
       embeddableEntries.find((entry) => entry.platform === defaultPlatform)?.platform ??
@@ -441,7 +434,7 @@ export function StreamChannelsManager({
                                 className="inline-flex items-center gap-1 font-mono text-xs text-muted-foreground hover:text-foreground"
                               >
                                 {channel.handle}
-                                <ExternalLinkIcon className="size-3" />
+                                <PlatformIcon platform={channel.platform} className="size-3" />
                               </a>
                             ) : (
                               <span className="font-mono text-xs text-muted-foreground">{channel.handle}</span>

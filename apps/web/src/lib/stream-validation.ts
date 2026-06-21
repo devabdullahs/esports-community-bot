@@ -5,6 +5,7 @@ import {
   type StreamPlatform,
   type StreamScope,
 } from "@/lib/stream-types";
+import { normalizeCreatorKey, normalizeGameSlugs } from "@/lib/stream-normalize";
 
 const PLATFORM_SET = new Set<string>(STREAM_PLATFORMS);
 const SCOPE_SET = new Set<string>(STREAM_SCOPES);
@@ -17,30 +18,6 @@ export const STREAM_CREATOR_KEY_MAX = 80;
 
 function str(value: unknown): string {
   return typeof value === "string" ? value.trim() : "";
-}
-
-function normalizeGameSlug(value: unknown): string {
-  return str(value)
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "")
-    .slice(0, 60);
-}
-
-function normalizeGameSlugs(value: unknown): string[] {
-  const raw = Array.isArray(value)
-    ? value
-    : String(value ?? "")
-        .split(/[,،;|/\s]+/u)
-        .filter(Boolean);
-  const seen = new Set<string>();
-  const out: string[] = [];
-  for (const item of raw) {
-    const slug = normalizeGameSlug(item);
-    if (!slug || seen.has(slug)) continue;
-    seen.add(slug);
-    out.push(slug);
-  }
-  return out.slice(0, 12);
 }
 
 // Validate + normalize the admin create payload. Handle normalization (URL/@handle
@@ -74,11 +51,7 @@ export function validateStreamChannelInput(
 
   const gameSlugs = normalizeGameSlugs(body.gameSlugs ?? body.gameSlug);
   const gameSlug = gameSlugs[0] ?? "";
-  const creatorKey = str(body.creatorKey)
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "")
-    .slice(0, STREAM_CREATOR_KEY_MAX);
+  const creatorKey = normalizeCreatorKey(body.creatorKey);
   const team = str(body.team);
   const matchExternalId = str(body.matchExternalId);
 

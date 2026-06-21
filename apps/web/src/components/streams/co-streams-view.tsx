@@ -2,8 +2,9 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ExternalLinkIcon, RadioIcon, UsersIcon } from "lucide-react";
+import { RadioIcon, UsersIcon } from "lucide-react";
 import type { CoStream, CoStreamChannel, StreamPlatform } from "@/lib/stream-types";
+import { PlatformIcon } from "@/components/platform-icon";
 import type { Locale } from "@/lib/i18n";
 import { StreamEmbed } from "@/components/streams/stream-embed";
 import { Badge } from "@/components/ui/badge";
@@ -156,7 +157,7 @@ export function CoStreamsView({
                     size="sm"
                   >
                     {t.openOn(channelLabel(channel))}
-                    <ExternalLinkIcon data-icon="inline-end" />
+                    <PlatformIcon platform={channel.platform} className="size-4" />
                   </Button>
                 ) : null,
               )}
@@ -272,7 +273,7 @@ export function CoStreamsView({
                         className="text-muted-foreground hover:text-foreground"
                         aria-label={t.openOn(channelLabel(channel))}
                       >
-                        <ExternalLinkIcon className="size-4" />
+                        <PlatformIcon platform={channel.platform} className="size-4" />
                       </a>
                     ) : null,
                   )}
