@@ -15,6 +15,7 @@ export {
   parseEwcPlayerList,
   parseMatchInfo,
   parseMatchlistMatch,
+  parseMatchStream,
   parseSwissMatches,
   valveRankingRegions,
 } from './liquipedia/parsers.js';

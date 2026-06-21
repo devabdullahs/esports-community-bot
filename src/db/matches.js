@@ -15,14 +15,16 @@ export async function upsertMatch(row) {
     score_a: null,
     score_b: null,
     scheduled_at: null,
+    stream_platform: null,
+    stream_channel: null,
     ...row,
   };
   const now = nowText();
   return get(
     `INSERT INTO matches
-       (tournament_id, source, external_id, name, team_a, team_b, logo_a, logo_b, score_a, score_b, status, scheduled_at, last_polled_at, updated_at)
+       (tournament_id, source, external_id, name, team_a, team_b, logo_a, logo_b, score_a, score_b, status, scheduled_at, stream_platform, stream_channel, last_polled_at, updated_at)
      VALUES
-       ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $13)
+       ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $15)
      ON CONFLICT (source, external_id) DO UPDATE SET
        tournament_id = excluded.tournament_id,
        name          = excluded.name,
@@ -34,8 +36,10 @@ export async function upsertMatch(row) {
        score_b       = excluded.score_b,
        status        = excluded.status,
        scheduled_at  = excluded.scheduled_at,
-       last_polled_at = $13,
-       updated_at    = $13
+       stream_platform = excluded.stream_platform,
+       stream_channel  = excluded.stream_channel,
+       last_polled_at = $15,
+       updated_at    = $15
      RETURNING *`,
     [
       merged.tournament_id,
@@ -50,6 +54,8 @@ export async function upsertMatch(row) {
       merged.score_b,
       merged.status,
       merged.scheduled_at,
+      merged.stream_platform,
+      merged.stream_channel,
       now,
     ],
   );
@@ -70,6 +76,8 @@ export function toMatchRow(parsed, tournamentId) {
     score_b: parsed.scoreB ?? null,
     status: parsed.status,
     scheduled_at: parsed.scheduledAt ?? null,
+    stream_platform: parsed.stream?.platform ?? null,
+    stream_channel: parsed.stream?.channel ?? null,
   };
 }
 

@@ -115,6 +115,21 @@ function fallbackMatchId(game, scope, teamA, teamB) {
 // Match parsers
 // ---------------------------------------------------------------------------
 
+// The per-match OFFICIAL broadcast stream, when Liquipedia tags one on the match.
+// It's encoded as an internal redirect anchor inside the match's stream button /
+// popup footer: <a href="/<wiki>/Special:Stream/<platform>/<channel>">. Liquipedia
+// only attaches it while the match is actually being streamed, so its presence is a
+// strong "watch this live now" signal. Returns { platform, channel } or null.
+export function parseMatchStream($, el) {
+  const href = $(el).find('a[href*="/Special:Stream/"]').first().attr('href') || '';
+  const m = href.match(/\/Special:Stream\/([^/]+)\/([^/?#]+)/i);
+  if (!m) return null;
+  const platform = decodeURIComponent(m[1]).toLowerCase();
+  const channel = decodeURIComponent(m[2]).trim();
+  if (!platform || !channel) return null;
+  return { platform, channel };
+}
+
 // Parse a single .match-info element into a normalized match.
 export function parseMatchInfo($, el, game) {
   const $m = $(el);
@@ -219,6 +234,7 @@ export function parseMatchInfo($, el, game) {
     bestOf,
     scheduledAt,
     status,
+    stream: parseMatchStream($, el),
     tournamentPath,
     tournamentName,
   };
@@ -279,6 +295,7 @@ export function parseBracketMatch($, el, game, scope = '') {
     bestOf,
     scheduledAt,
     status,
+    stream: parseMatchStream($, el),
     winner: winA ? teamA : winB ? teamB : null,
   };
 }
@@ -337,6 +354,7 @@ export function parseMatchlistMatch($, el, game, scope = '') {
     bestOf,
     scheduledAt,
     status,
+    stream: parseMatchStream($, el),
     winner: winA ? teamA : winB ? teamB : null,
   };
 }

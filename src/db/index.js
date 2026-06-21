@@ -32,6 +32,8 @@ db.exec(`
     status         TEXT    NOT NULL DEFAULT 'scheduled'
                      CHECK (status IN ('scheduled','running','finished')),
     scheduled_at   INTEGER,            -- unix seconds; feeds Discord <t:...> timestamps
+    stream_platform TEXT,              -- official per-match broadcast stream (Liquipedia)
+    stream_channel  TEXT,
     last_polled_at TEXT,
     updated_at     TEXT    NOT NULL DEFAULT (datetime('now')),
     UNIQUE (source, external_id)
@@ -91,6 +93,10 @@ ensureColumns('guild_settings', [
 ensureColumns('matches', [
   ['logo_a', 'TEXT'],
   ['logo_b', 'TEXT'],
+  // Official per-match broadcast stream (parsed from Liquipedia's per-match
+  // Special:Stream link). Present only while the match is being streamed.
+  ['stream_platform', 'TEXT'],
+  ['stream_channel', 'TEXT'],
 ]);
 
 // Per-game leaderboard boards (a guild can have one board per game, plus the combined board

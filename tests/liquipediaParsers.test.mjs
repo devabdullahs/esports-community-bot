@@ -24,6 +24,7 @@ const {
   parseMatchlistMatch,
   parseBracketMatch,
   parseMatchInfo,
+  parseMatchStream,
 } = await import('../src/services/liquipedia.js');
 
 // ---------------------------------------------------------------------------
@@ -753,4 +754,52 @@ test('parseMatchlistMatch: no Match link → pair-scoped id stable across a resc
   };
   assert.equal(parse(now + 600).externalId, parse(now + 4200).externalId);
   assert.match(parse(now + 600).externalId, /^callofduty:Challengers\/2026:/);
+});
+
+// ---------------------------------------------------------------------------
+// parseMatchStream — official per-match broadcast stream
+// ---------------------------------------------------------------------------
+
+test('parseMatchStream: extracts platform + channel from a Special:Stream link', () => {
+  // Liquipedia's per-match stream button / popup footer (real shape from RLCS).
+  const html = `
+    <div class="brkts-matchlist-match">
+      <div class="brkts-popup">
+        <div class="match-info-links">
+          <a href="/rocketleague/Special:Stream/twitch/RedirectEsports" title="Special:Stream/twitch/RedirectEsports">
+            <i class="fab fa-twitch"></i>
+          </a>
+        </div>
+      </div>
+    </div>`;
+  const $ = load(html);
+  assert.deepEqual(parseMatchStream($, $('.brkts-matchlist-match')[0]), {
+    platform: 'twitch',
+    channel: 'RedirectEsports',
+  });
+});
+
+test('parseMatchStream: null when the match has no stream link', () => {
+  const $ = load('<div class="brkts-matchlist-match"><div class="brkts-popup"></div></div>');
+  assert.equal(parseMatchStream($, $('.brkts-matchlist-match')[0]), null);
+});
+
+test('parseMatchlistMatch: surfaces the per-match stream when present', () => {
+  const html = `
+    <div class="brkts-matchlist-match">
+      <div class="brkts-matchlist-opponent" aria-label="marssyy"><span class="name">marssyy</span></div>
+      <div class="brkts-matchlist-score">
+        <span class="brkts-matchlist-cell-content"></span>
+        <span class="brkts-matchlist-cell-content"></span>
+      </div>
+      <div class="brkts-matchlist-opponent" aria-label="tweex"><span class="name">tweex</span></div>
+      <div class="brkts-popup">
+        <div class="match-info-links">
+          <a href="/rocketleague/Special:Stream/twitch/RedirectEsports"><i class="fab fa-twitch"></i></a>
+        </div>
+      </div>
+    </div>`;
+  const $ = load(html);
+  const m = parseMatchlistMatch($, $('.brkts-matchlist-match')[0], 'rocketleague', 'RLCS/2026');
+  assert.deepEqual(m.stream, { platform: 'twitch', channel: 'RedirectEsports' });
 });

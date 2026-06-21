@@ -36,10 +36,17 @@ CREATE TABLE IF NOT EXISTS matches (
   status         TEXT NOT NULL DEFAULT 'scheduled'
                    CHECK (status IN ('scheduled','running','finished')),
   scheduled_at   BIGINT,
+  stream_platform TEXT,
+  stream_channel  TEXT,
   last_polled_at TEXT,
   updated_at     TEXT NOT NULL DEFAULT (to_char(now() AT TIME ZONE 'UTC', 'YYYY-MM-DD HH24:MI:SS')),
   UNIQUE (source, external_id)
 );
+
+-- Official per-match broadcast stream (parsed from Liquipedia's per-match
+-- Special:Stream link); added for existing deployments.
+ALTER TABLE matches ADD COLUMN IF NOT EXISTS stream_platform TEXT;
+ALTER TABLE matches ADD COLUMN IF NOT EXISTS stream_channel TEXT;
 
 CREATE INDEX IF NOT EXISTS idx_matches_status ON matches(status);
 CREATE INDEX IF NOT EXISTS idx_matches_tournament ON matches(tournament_id);
