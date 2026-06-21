@@ -24,8 +24,6 @@ const {
   parseMatchlistMatch,
   parseBracketMatch,
   parseMatchInfo,
-  parseBroadcasterStreams,
-  streamChannelFromUrl,
 } = await import('../src/services/liquipedia.js');
 
 // ---------------------------------------------------------------------------
@@ -755,74 +753,4 @@ test('parseMatchlistMatch: no Match link → pair-scoped id stable across a resc
   };
   assert.equal(parse(now + 600).externalId, parse(now + 4200).externalId);
   assert.match(parse(now + 600).externalId, /^callofduty:Challengers\/2026:/);
-});
-
-// ---------------------------------------------------------------------------
-// Broadcaster / stream parsers
-// ---------------------------------------------------------------------------
-
-test('streamChannelFromUrl: keeps Twitch/Kick channels, rejects VODs/clips/other hosts', () => {
-  assert.deepEqual(streamChannelFromUrl('https://www.twitch.tv/ewc_cs'), { platform: 'twitch', handle: 'ewc_cs' });
-  assert.deepEqual(streamChannelFromUrl('https://www.twitch.tv/EWC_CS_FR'), { platform: 'twitch', handle: 'ewc_cs_fr' });
-  assert.deepEqual(streamChannelFromUrl('https://kick.com/SomePartner'), { platform: 'kick', handle: 'somepartner' });
-  // Not plain channels:
-  assert.equal(streamChannelFromUrl('https://www.twitch.tv/videos/12345'), null);
-  assert.equal(streamChannelFromUrl('https://www.twitch.tv/somechan/clip/abc'), null);
-  assert.equal(streamChannelFromUrl('https://www.twitch.tv/'), null);
-  // Not tracked hosts (poller can't check them):
-  assert.equal(streamChannelFromUrl('https://www.youtube.com/channel/UCabc'), null);
-  assert.equal(streamChannelFromUrl('https://youtu.be/abc?t=10'), null);
-  // Garbage:
-  assert.equal(streamChannelFromUrl('not a url'), null);
-  assert.equal(streamChannelFromUrl(null), null);
-});
-
-test('parseBroadcasterStreams: official streams from infobox + Streams table, skipping Talent and VODs', () => {
-  // Mirrors a real Liquipedia tournament page: an infobox icon row, a "Broadcast
-  // Talent" table (casters' personal channels — must be skipped), and a "Streams"
-  // table (official + partner channels, with some VOD links to ignore). Tables are
-  // wrapped like the real DOM (template-box > table-responsive > table) so the
-  // section-heading climb is exercised.
-  const html = `
-    <div class="mw-parser-output">
-      <div class="fo-nttax-infobox-wrapper">
-        <div class="fo-nttax-infobox">
-          <div class="infobox-center infobox-icons">
-            <a class="external text" href="https://esportsworldcup.com/cs"><i class="lp-icon lp-home"></i></a>
-            <a class="external text" href="https://twitter.com/EWC_EN"><i class="lp-icon lp-twitter"></i></a>
-            <a class="external text" href="https://www.twitch.tv/ewc_cs"><i class="lp-icon lp-twitch"></i></a>
-            <a class="external text" href="https://www.youtube.com/channel/UCabc"><i class="lp-icon lp-youtube"></i></a>
-          </div>
-        </div>
-      </div>
-
-      <h3><span class="mw-headline" id="Broadcast_Talent">Broadcast Talent</span></h3>
-      <div class="template-box"><div class="table-responsive">
-        <table class="wikitable">
-          <tr><th>Caster</th></tr>
-          <tr><td><a href="/counterstrike/SomeCaster">SomeCaster</a>
-            <a class="external text" href="https://www.twitch.tv/somecaster_personal"><i class="lp-icon lp-twitch"></i></a></td></tr>
-        </table>
-      </div></div>
-
-      <h3><span class="mw-headline" id="Streams">Streams</span></h3>
-      <div class="template-box"><div class="table-responsive">
-        <table class="wikitable">
-          <tr><th>Language</th><th>Stream</th></tr>
-          <tr><td>English</td><td><a class="external text" href="https://www.twitch.tv/ewc_cs"><i class="lp-icon lp-twitch"></i></a></td></tr>
-          <tr><td>French</td><td><a class="external text" href="https://www.twitch.tv/EWC_CS_FR"></a></td></tr>
-          <tr><td>Partner</td><td><a class="external text" href="https://kick.com/SomePartner"></a></td></tr>
-          <tr><td>VODs</td><td>
-            <a href="https://www.youtube.com/watch?v=abc"></a>
-            <a href="https://youtu.be/abc?t=10"></a>
-            <a href="https://www.twitch.tv/videos/12345"></a></td></tr>
-        </table>
-      </div></div>
-    </div>
-  `;
-  const streams = parseBroadcasterStreams(load(html));
-  const keys = streams.map((s) => `${s.platform}:${s.handle}`).sort();
-  assert.deepEqual(keys, ['kick:somepartner', 'twitch:ewc_cs', 'twitch:ewc_cs_fr']);
-  // ewc_cs appears in both infobox and table — deduped to one.
-  assert.equal(streams.filter((s) => s.handle === 'ewc_cs').length, 1);
 });
