@@ -21,7 +21,9 @@ test('per-match official stream round-trips through toMatchRow + upsertMatch', a
   );
   const tournamentId = Number(tournament.lastInsertRowid);
 
-  // toMatchRow lifts parsed.stream → stream_platform / stream_channel columns.
+  // toMatchRow lifts parsed.stream → stream_platform / stream_url columns. The url
+  // is the Liquipedia Special:Stream link (resolves the real channel).
+  const streamUrl = 'https://liquipedia.net/rocketleague/Special:Stream/twitch/RedirectEsports';
   const parsed = {
     source: 'liquipedia',
     externalId: 'Match:rl-live',
@@ -30,21 +32,21 @@ test('per-match official stream round-trips through toMatchRow + upsertMatch', a
     teamB: 'tweex',
     status: 'running',
     scheduledAt: Math.floor(Date.now() / 1000),
-    stream: { platform: 'twitch', channel: 'RedirectEsports' },
+    stream: { platform: 'twitch', url: streamUrl },
   };
   const row = toMatchRow(parsed, tournamentId);
   assert.equal(row.stream_platform, 'twitch');
-  assert.equal(row.stream_channel, 'RedirectEsports');
+  assert.equal(row.stream_url, streamUrl);
 
   await upsertMatch(row);
   const live = await getMatch('liquipedia', 'Match:rl-live');
   assert.equal(live.stream_platform, 'twitch');
-  assert.equal(live.stream_channel, 'RedirectEsports');
+  assert.equal(live.stream_url, streamUrl);
 
   // When the match ends Liquipedia drops the stream link → the upsert clears it
   // (overwrite-on-conflict, not COALESCE), so finished cards don't show a stale link.
   await upsertMatch(toMatchRow({ ...parsed, status: 'finished', stream: null }, tournamentId));
   const ended = await getMatch('liquipedia', 'Match:rl-live');
   assert.equal(ended.stream_platform, null);
-  assert.equal(ended.stream_channel, null);
+  assert.equal(ended.stream_url, null);
 });

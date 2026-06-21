@@ -36,7 +36,7 @@ type MatchRow = {
   status: MatchStatus;
   scheduled_at: number | null;
   updated_at: string | null;
-  stream?: { platform: string; channel: string; url: string } | null;
+  stream?: { platform: string; url: string } | null;
   coStreams?: { platform: string; handle: string; label: string; url: string | null }[];
 };
 
@@ -175,7 +175,7 @@ export function TournamentMatchList({
                     target="_blank"
                     rel="noreferrer"
                     className="flex items-center justify-center gap-1.5 border-t px-3 py-1.5 text-xs font-medium text-primary hover:bg-muted/50"
-                    title={`${m.stream.channel} · ${m.stream.platform}`}
+                    title={`${text.watchNow} · ${m.stream.platform}`}
                   >
                     <PlatformIcon platform={m.stream.platform as never} className="size-3.5" />
                     {text.watchNow}
