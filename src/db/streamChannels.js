@@ -374,6 +374,56 @@ export async function deleteStreamChannel(id) {
   return { deleted: info.changes || 0 };
 }
 
+// Sync the auto-imported broadcaster channels for ONE Liquipedia tournament.
+// Idempotent: upserts each current official Twitch/Kick stream as a game-scoped
+// channel tagged added_by='liquipedia:<external_id>', then deactivates channels we
+// previously imported for THIS tournament that the page no longer lists. Only ever
+// touches rows carrying our exact tag, so admin-added channels (any other added_by)
+// are never created, relabeled-away, or pruned here. Returns { kept, removed }.
+//
+// Scope is 'game' (the tournament's game): the per-match live strip already surfaces
+// game-scoped channels for a match's game, and the relevance gate keeps a stream off
+// a match unless it's actually live on that game.
+export async function syncLiquipediaBroadcasters({ externalId, gameSlug, streams = [] }) {
+  const slug = cleanGameSlug(gameSlug);
+  const id = blank(externalId);
+  if (!slug || !id) return { kept: 0, removed: 0 };
+  const tag = `liquipedia:${id}`;
+
+  const wanted = new Set();
+  for (const stream of streams) {
+    // Only platforms the live poller can track — a channel that can never report
+    // "live" would just sit inert on the registry.
+    if (stream?.platform !== 'twitch' && stream?.platform !== 'kick') continue;
+    const handle = parseChannelHandle(stream.platform, stream.handle);
+    if (!handle) continue;
+    const key = `${stream.platform}:${handle}`;
+    if (wanted.has(key)) continue;
+    wanted.add(key);
+    await createStreamChannel({
+      platform: stream.platform,
+      handle,
+      label: blank(stream.label) || handle,
+      scope: 'game',
+      gameSlug: slug,
+      addedBy: tag,
+    });
+  }
+
+  // Prune our own stale imports for this tournament (e.g. a language stream dropped).
+  const existing = await all(
+    'SELECT id, platform, handle FROM stream_channels WHERE added_by = $1 AND active = 1',
+    [tag],
+  );
+  let removed = 0;
+  for (const row of existing) {
+    if (wanted.has(`${row.platform}:${row.handle}`)) continue;
+    await run('UPDATE stream_channels SET active = 0, updated_at = $1 WHERE id = $2', [nowText(), row.id]);
+    removed += 1;
+  }
+  return { kept: wanted.size, removed };
+}
+
 // Distinct handles per platform — the input the live-status poller/webhook layer
 // needs to batch its API calls.
 export async function listDistinctActiveHandles() {
