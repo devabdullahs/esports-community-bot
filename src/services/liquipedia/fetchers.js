@@ -12,6 +12,7 @@ import {
   parseBracketMatch,
   parseMatchlistMatch,
   parseSwissMatches,
+  parseBroadcasterStreams,
   parseClubStandings,
   parseClubPrizepool,
   parseEwcClubs,
@@ -152,6 +153,20 @@ export async function fetchSchedule(tournament) {
   });
 
   return out;
+}
+
+// The official broadcast stream channels (Twitch/Kick) listed on a tournament's
+// Liquipedia page. Shares the same page (and 15-min response cache) as fetchSchedule,
+// so calling both for one tournament in a single sync costs ONE network request.
+// Returns [{ platform, handle }] (deduped); [] for non-liquipedia ids or on any error.
+export async function fetchTournamentBroadcasters(tournament) {
+  const [game, ...rest] = String(tournament.external_id ?? '').split('/');
+  const page = rest.join('/');
+  if (!game || !page) return [];
+  const data = await parsePage(game, page);
+  const html = data?.parse?.text?.['*'];
+  if (!html) return [];
+  return parseBroadcasterStreams(cheerio.load(html));
 }
 
 // ---------------------------------------------------------------------------

@@ -54,6 +54,11 @@ export const config = {
       'LIQUIPEDIA_USER_AGENT',
       'EsportsCommunityBot/0.1 (set LIQUIPEDIA_USER_AGENT with a contact email)',
     ),
+    // During the daily sync, auto-import a Liquipedia tournament's official
+    // broadcaster streams as game-scoped co-stream channels (shown under live match
+    // cards). Reuses the same cached page fetch as the schedule sync (no extra
+    // request). Set to 'false' to disable. On by default.
+    importBroadcasters: get('LIQUIPEDIA_IMPORT_BROADCASTERS', 'true') !== 'false',
   },
   lpdb: {
     // LiquipediaDB API (optional). When LPDB_API_KEY is set it's preferred over HTML parsing.

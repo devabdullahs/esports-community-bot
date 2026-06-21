@@ -23,6 +23,7 @@ const {
   setStreamChannelActive,
   deleteStreamChannel,
   listDistinctActiveHandles,
+  syncLiquipediaBroadcasters,
 } = await import('../src/db/streamChannels.js');
 
 test.after(() => {
@@ -265,4 +266,51 @@ test('listDistinctActiveHandles returns one entry per platform+handle for the po
   // val_caster was added at two scopes but is one distinct platform+handle.
   assert.equal(handles.filter((h) => h.handle === 'val_caster' && h.platform === 'twitch').length, 1);
   assert.ok(handles.every((h) => h.platform && h.handle));
+});
+
+test('syncLiquipediaBroadcasters imports official streams, prunes dropped, leaves admin rows', async () => {
+  const extId = 'counterstrike/Esports_World_Cup/2099';
+  const tag = `liquipedia:${extId}`;
+
+  // An admin-added game channel that must never be pruned by the importer.
+  await createStreamChannel({
+    platform: 'twitch', handle: 'admin_chan', scope: 'game', gameSlug: 'counterstrike', addedBy: 'discord:123',
+  });
+
+  const first = await syncLiquipediaBroadcasters({
+    externalId: extId,
+    gameSlug: 'counterstrike',
+    streams: [
+      { platform: 'twitch', handle: 'ewc_cs' },
+      { platform: 'twitch', handle: 'EWC_CS_FR' }, // mixed case → normalized
+      { platform: 'kick', handle: 'partner' },
+      { platform: 'youtube', handle: 'ignored' }, // not a tracked platform → skipped
+    ],
+  });
+  assert.equal(first.kept, 3);
+  assert.equal(first.removed, 0);
+
+  const imported = (await listStreamChannels({ scope: 'game', activeOnly: true }))
+    .filter((c) => c.addedBy === tag)
+    .map((c) => `${c.platform}:${c.handle}`)
+    .sort();
+  assert.deepEqual(imported, ['kick:partner', 'twitch:ewc_cs', 'twitch:ewc_cs_fr']);
+
+  // Re-sync with EWC_CS_FR dropped → it is deactivated, the rest kept.
+  const second = await syncLiquipediaBroadcasters({
+    externalId: extId,
+    gameSlug: 'counterstrike',
+    streams: [
+      { platform: 'twitch', handle: 'ewc_cs' },
+      { platform: 'kick', handle: 'partner' },
+    ],
+  });
+  assert.equal(second.kept, 2);
+  assert.equal(second.removed, 1);
+
+  const active = await listStreamChannels({ scope: 'game', activeOnly: true });
+  const stillImported = active.filter((c) => c.addedBy === tag).map((c) => `${c.platform}:${c.handle}`).sort();
+  assert.deepEqual(stillImported, ['kick:partner', 'twitch:ewc_cs']);
+  // The admin row is untouched (still active, original provenance).
+  assert.ok(active.some((c) => c.handle === 'admin_chan' && c.addedBy === 'discord:123'));
 });
