@@ -25,6 +25,10 @@
     "db:sqlite-to-pg": "node scripts/migrate-sqlite-to-postgres.mjs"
   },
   "license": "MIT",
+  "overrides": {
+    "undici@6": "^6.27.0",
+    "undici@7": "^7.28.0"
+  },
   "dependencies": {
     "@napi-rs/canvas": "^1.0.0",
     "axios": "^1.16.1",

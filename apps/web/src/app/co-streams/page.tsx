@@ -25,14 +25,20 @@ const META: Record<Locale, { title: string; description: string }> = {
 // Twitch requires the embedding host as the `parent` param. Use the actual
 // request host so canonical, www, CranL preview, and local URLs all work.
 async function parentHost(): Promise<string> {
+  const fallback = (() => {
+    try {
+      return new URL(dashboardPublicUrl()).hostname;
+    } catch {
+      return "localhost";
+    }
+  })();
   const h = await headers();
-  const host = h.get("x-forwarded-host")?.split(",")[0]?.trim() || h.get("host")?.split(",")[0]?.trim();
-  if (host) return host.replace(/:\d+$/, "");
-  try {
-    return new URL(dashboardPublicUrl()).hostname;
-  } catch {
-    return "localhost";
-  }
+  const raw = (h.get("x-forwarded-host")?.split(",")[0] || h.get("host")?.split(",")[0] || "")
+    .trim()
+    .replace(/:\d+$/, "");
+  // Only trust a request host that looks like a real hostname; otherwise use the
+  // configured public host. (Twitch's `parent` must be the serving host.)
+  return /^[a-z0-9.-]{1,253}$/i.test(raw) ? raw : fallback;
 }
 
 export async function generateMetadata(): Promise<Metadata> {
