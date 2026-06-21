@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useMemo, useState, type FormEvent } from "react";
-import { CheckIcon, ExternalLinkIcon, PencilIcon, PlusIcon, StarIcon, Trash2Icon } from "lucide-react";
+import { CheckIcon, PencilIcon, PlusIcon, StarIcon, Trash2Icon } from "lucide-react";
 import {
   STREAM_PLATFORMS,
   STREAM_SCOPES,
@@ -11,6 +11,7 @@ import {
   type StreamScope,
 } from "@/lib/stream-types";
 import { normalizeCreatorKey } from "@/lib/stream-normalize";
+import { PlatformIcon } from "@/components/platform-icon";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -433,7 +434,7 @@ export function StreamChannelsManager({
                                 className="inline-flex items-center gap-1 font-mono text-xs text-muted-foreground hover:text-foreground"
                               >
                                 {channel.handle}
-                                <ExternalLinkIcon className="size-3" />
+                                <PlatformIcon platform={channel.platform} className="size-3" />
                               </a>
                             ) : (
                               <span className="font-mono text-xs text-muted-foreground">{channel.handle}</span>
