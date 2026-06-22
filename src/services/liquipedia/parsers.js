@@ -126,15 +126,18 @@ function fallbackMatchId(game, scope, teamA, teamB) {
 // twitch.tv/ow_esports). So the watch link must go through Liquipedia's
 // Special:Stream page, which performs the redirect — building twitch.tv/<key>
 // directly would point at the wrong (or a non-existent) account.
-// Returns { platform, url } (url = the absolute Liquipedia Special:Stream link) or null.
+// Returns { platform, url } (url is always a liquipedia.net Special:Stream link) or null.
 export function parseMatchStream($, el) {
   const href = $(el).find('a[href*="/Special:Stream/"]').first().attr('href') || '';
+  // Only accept a Liquipedia-relative path. Real Special:Stream links always are;
+  // rejecting absolute / protocol-relative hrefs stops a community-edited external
+  // anchor from making our "Watch now" link point off-site.
+  if (!href.startsWith('/') || href.startsWith('//')) return null;
   const m = href.match(/\/Special:Stream\/([^/]+)\/[^/?#]+/i);
   if (!m) return null;
   const platform = decodeURIComponent(m[1]).toLowerCase();
   if (!platform) return null;
-  const url = href.startsWith('http') ? href : `https://liquipedia.net${href}`;
-  return { platform, url };
+  return { platform, url: `https://liquipedia.net${href}` };
 }
 
 // Parse a single .match-info element into a normalized match.

@@ -105,11 +105,18 @@ const MATCH_COLUMNS =
 // resolves to the real channel (the path segment is Liquipedia's key, not the
 // handle — see parseMatchStream). We surface that link as-is; platform drives the
 // icon only. Only http(s) links are trusted.
-function matchStream(row: MatchRow): MatchStream | null {
+export function matchStream(row: MatchRow): MatchStream | null {
   const platform = (row.stream_platform ?? "").toLowerCase();
-  const url = row.stream_url ?? "";
-  if (!platform || !/^https?:\/\//i.test(url)) return null;
-  return { platform, url };
+  const raw = row.stream_url ?? "";
+  if (!platform || !/^https?:\/\//i.test(raw)) return null;
+  let host: string;
+  try {
+    host = new URL(raw).hostname.toLowerCase();
+  } catch {
+    return null;
+  }
+  if (host !== "liquipedia.net" && !host.endsWith(".liquipedia.net")) return null;
+  return { platform, url: raw };
 }
 
 // running first, then upcoming by start time, then finished most-recent first

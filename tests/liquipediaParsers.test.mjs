@@ -787,6 +787,24 @@ test('parseMatchStream: null when the match has no stream link', () => {
   assert.equal(parseMatchStream($, $('.brkts-matchlist-match')[0]), null);
 });
 
+test('parseMatchStream: rejects an absolute (off-site) Special:Stream href', () => {
+  const $ = load(
+    '<div class="brkts-matchlist-match"><div class="brkts-popup"><div class="match-info-links">' +
+      '<a href="https://attacker.example/Special:Stream/twitch/x"><i class="fab fa-twitch"></i></a>' +
+      '</div></div></div>',
+  );
+  assert.equal(parseMatchStream($, $('.brkts-matchlist-match')[0]), null);
+});
+
+test('parseMatchStream: rejects a protocol-relative Special:Stream href', () => {
+  const $ = load(
+    '<div class="brkts-matchlist-match"><div class="brkts-popup"><div class="match-info-links">' +
+      '<a href="//attacker.example/Special:Stream/twitch/x"><i class="fab fa-twitch"></i></a>' +
+      '</div></div></div>',
+  );
+  assert.equal(parseMatchStream($, $('.brkts-matchlist-match')[0]), null);
+});
+
 test('parseMatchlistMatch: surfaces the per-match stream when present', () => {
   const html = `
     <div class="brkts-matchlist-match">
