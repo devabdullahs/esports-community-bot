@@ -39,13 +39,22 @@ const COPY = {
 export async function NewsHubView({
   locale,
   ewcOnly = false,
+  page = 1,
 }: {
   locale: Locale;
   ewcOnly?: boolean;
+  page?: number;
 }) {
   const t = COPY[locale];
   const common = copy[locale].common;
-  const posts = await listLatestPublishedNewsPostsCached(locale, ewcOnly ? 50 : 20, ewcOnly);
+  const PAGE_SIZE = ewcOnly ? 50 : 20;
+  const current = Math.max(1, page);
+  const offset = (current - 1) * PAGE_SIZE;
+  // Fetch one extra row to detect whether an "Older" page exists without a count query.
+  const fetched = await listLatestPublishedNewsPostsCached(locale, PAGE_SIZE + 1, ewcOnly, offset);
+  const hasNext = fetched.length > PAGE_SIZE;
+  const posts = fetched.slice(0, PAGE_SIZE);
+  const basePath = ewcOnly ? "/news/ewc" : "/news";
   const games = await listGamesCached();
   const gameTitleOf = (slug: string) => {
     const game = games.find((g) => g.slug === slug);
@@ -122,6 +131,31 @@ export async function NewsHubView({
       ) : (
         <p className="text-sm text-muted-foreground">{t.empty}</p>
       )}
+
+      {current > 1 || hasNext ? (
+        <nav className="flex items-center justify-between gap-3">
+          {current > 1 ? (
+            <Link
+              href={localizedPath(`${basePath}?page=${current - 1}`, locale)}
+              className="text-sm font-medium text-primary hover:underline"
+            >
+              {common.newer}
+            </Link>
+          ) : (
+            <span />
+          )}
+          {hasNext ? (
+            <Link
+              href={localizedPath(`${basePath}?page=${current + 1}`, locale)}
+              className="text-sm font-medium text-primary hover:underline"
+            >
+              {common.older}
+            </Link>
+          ) : (
+            <span />
+          )}
+        </nav>
+      ) : null}
     </main>
   );
 }

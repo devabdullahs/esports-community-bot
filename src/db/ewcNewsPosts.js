@@ -271,13 +271,15 @@ export async function listPublishedEwcNewsPosts({ gameSlug, locale }) {
 }
 
 // Global/EWC news feeds: game-owned posts only (media posts are media-page-only).
-export async function listLatestPublishedEwcNewsPosts({ locale, limit = 4, ewcOnly = false } = {}) {
+export async function listLatestPublishedEwcNewsPosts({ locale, limit = 4, ewcOnly = false, offset = 0 } = {}) {
   const rows = await all(
     `SELECT * FROM ewc_news_posts
      WHERE status = 'published' AND media_slug IS NULL${ewcOnly ? ' AND ewc = 1' : ''}
      ORDER BY published_at DESC, id DESC
-     LIMIT $1`,
-    [Math.max(1, Math.min(50, Number(limit) || 4))],
+     LIMIT $1 OFFSET $2`,
+    // Ceiling is 51 (not 50) so the news hub can request PAGE_SIZE + 1 (51 on the
+    // EWC page) to detect a next page via a sentinel row.
+    [Math.max(1, Math.min(51, Number(limit) || 4)), Math.max(0, Number(offset) || 0)],
   );
   return (await Promise.all(rows.map((row) => hydrate(row, locale)))).filter(Boolean);
 }

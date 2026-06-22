@@ -94,6 +94,7 @@ const listLatest = _listLatest as (args: {
   locale: Locale;
   limit?: number;
   ewcOnly?: boolean;
+  offset?: number;
 }) => Promise<NewsPost[]>;
 const create = _create as (input: NewsPostInput) => Promise<NewsPost>;
 const update = _update as (id: number, input: NewsPostInput) => Promise<NewsPost | null>;
@@ -128,8 +129,9 @@ export function listLatestPublishedNewsPosts(
   locale: Locale,
   limit = 4,
   ewcOnly = false,
+  offset = 0,
 ): Promise<NewsPost[]> {
-  return listLatest({ locale, limit, ewcOnly });
+  return listLatest({ locale, limit, ewcOnly, offset });
 }
 
 export function createNewsPost(input: NewsPostInput): Promise<NewsPost> {
@@ -167,8 +169,8 @@ export const listPublishedNewsPostsCached = unstable_cache(
 );
 
 export const listLatestPublishedNewsPostsCached = unstable_cache(
-  async (locale: Locale, limit = 4, ewcOnly = false) =>
-    listLatestPublishedNewsPosts(locale, limit, ewcOnly),
+  async (locale: Locale, limit = 4, ewcOnly = false, offset = 0) =>
+    listLatestPublishedNewsPosts(locale, limit, ewcOnly, offset),
   ["news-list-latest"],
   { tags: ["cms-news", "cms-games"] },
 );

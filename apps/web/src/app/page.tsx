@@ -19,6 +19,7 @@ import { DateTime } from "@/components/date-time";
 import { localizeText } from "@/lib/community-content";
 import { listGamesCached } from "@/lib/games";
 import { listLatestPublishedNewsPostsCached } from "@/lib/news";
+import { listTournamentSummariesCached, type TournamentSummary } from "@/lib/tournaments";
 import {
   copy,
   localizedPath,
@@ -53,6 +54,50 @@ export default async function Home() {
     const game = games.find((g) => g.slug === slug);
     return game ? localizeText(game.title, locale) : slug;
   };
+
+  const summaries = await listTournamentSummariesCached();
+  const live = summaries.filter((t) => t.matchCounts.running > 0);
+  const upcoming = summaries
+    .filter((t) => t.matchCounts.running === 0 && t.matchCounts.scheduled > 0)
+    .slice(0, 6);
+
+  const tournamentCard = (t: TournamentSummary, isLive: boolean) => (
+    <Link
+      key={t.id}
+      href={localizedPath(`/tournaments/${t.id}`, locale)}
+      className="group block"
+    >
+      <Card
+        size="sm"
+        className="h-full ring-1 ring-transparent transition-all group-hover:-translate-y-0.5 group-hover:border-primary/30 group-hover:shadow-md group-hover:ring-primary/40"
+      >
+        <CardHeader>
+          <Badge
+            variant={isLive ? "outline" : "secondary"}
+            className={
+              isLive
+                ? "mb-2 w-fit border-primary/35 bg-primary/10 text-primary"
+                : "mb-2 w-fit"
+            }
+          >
+            {isLive ? (
+              <>
+                <span aria-hidden className="inline-block size-1.5 rounded-full bg-primary" />
+                {text.home.liveBadge}
+              </>
+            ) : (
+              <TrophyIcon data-icon="inline-start" />
+            )}
+            {isLive
+              ? `${t.matchCounts.running} ${text.home.matchesLabel}`
+              : `${t.matchCounts.scheduled} ${text.home.matchesLabel}`}
+          </Badge>
+          <CardTitle dir="auto">{t.name ?? gameTitleOf(t.game ?? "")}</CardTitle>
+          <CardDescription>{gameTitleOf(t.game ?? "")}</CardDescription>
+        </CardHeader>
+      </Card>
+    </Link>
+  );
 
   return (
     <main className="flex-1">
@@ -91,6 +136,54 @@ export default async function Home() {
             <UserRoundIcon data-icon="inline-start" />
             {text.home.openProfile}
           </Button>
+        </div>
+      </section>
+
+      {/* Live now / Upcoming tournaments */}
+      <section className="border-t">
+        <div className="mx-auto flex max-w-6xl flex-col gap-8 px-5 py-10 sm:px-8">
+          {live.length || upcoming.length ? (
+            <>
+              {live.length ? (
+                <div className="flex flex-col gap-6">
+                  <div>
+                    <h2 className="flex items-center gap-2.5 text-2xl font-semibold leading-tight">
+                      <span aria-hidden className="h-5 w-1 shrink-0 rounded-full bg-primary" />
+                      {text.home.liveHeading}
+                    </h2>
+                    <p className="mt-1 text-sm text-muted-foreground">{text.home.liveSubtitle}</p>
+                  </div>
+                  <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-3">
+                    {live.map((t) => tournamentCard(t, true))}
+                  </div>
+                </div>
+              ) : null}
+              {upcoming.length ? (
+                <div className="flex flex-col gap-6">
+                  <div>
+                    <h2 className="flex items-center gap-2.5 text-2xl font-semibold leading-tight">
+                      <span aria-hidden className="h-5 w-1 shrink-0 rounded-full bg-primary" />
+                      {text.home.upcomingHeading}
+                    </h2>
+                    <p className="mt-1 text-sm text-muted-foreground">
+                      {text.home.upcomingSubtitle}
+                    </p>
+                  </div>
+                  <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-3">
+                    {upcoming.map((t) => tournamentCard(t, false))}
+                  </div>
+                </div>
+              ) : null}
+            </>
+          ) : (
+            <div>
+              <h2 className="flex items-center gap-2.5 text-2xl font-semibold leading-tight">
+                <span aria-hidden className="h-5 w-1 shrink-0 rounded-full bg-primary" />
+                {text.home.liveHeading}
+              </h2>
+              <p className="mt-1 text-sm text-muted-foreground">{text.home.liveEmpty}</p>
+            </div>
+          )}
         </div>
       </section>
 

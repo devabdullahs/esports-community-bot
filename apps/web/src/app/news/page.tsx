@@ -30,7 +30,13 @@ export async function generateMetadata(): Promise<Metadata> {
   });
 }
 
-export default async function NewsHubPage() {
+export default async function NewsHubPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ page?: string }>;
+}) {
   const locale = await getRequestLocale();
-  return <NewsHubView locale={locale} />;
+  const sp = await searchParams;
+  const page = Number(sp?.page) || 1;
+  return <NewsHubView locale={locale} page={page} />;
 }
