@@ -22,6 +22,7 @@ import { listLatestPublishedNewsPostsCached } from "@/lib/news";
 import { listTournamentSummariesCached, type TournamentSummary } from "@/lib/tournaments";
 import {
   copy,
+  formatMatchCount,
   localizedPath,
 } from "@/lib/i18n";
 import { getRequestLocale } from "@/lib/request-locale";
@@ -88,9 +89,10 @@ export default async function Home() {
             ) : (
               <TrophyIcon data-icon="inline-start" />
             )}
-            {isLive
-              ? `${t.matchCounts.running} ${text.home.matchesLabel}`
-              : `${t.matchCounts.scheduled} ${text.home.matchesLabel}`}
+            {formatMatchCount(
+              isLive ? t.matchCounts.running : t.matchCounts.scheduled,
+              locale,
+            )}
           </Badge>
           <CardTitle dir="auto">{t.name ?? gameTitleOf(t.game ?? "")}</CardTitle>
           <CardDescription>{gameTitleOf(t.game ?? "")}</CardDescription>

@@ -34,6 +34,20 @@ export function directionForLocale(locale: Locale) { return locale === "ar" ? "r
 export function numberLocale(locale: Locale) { return locale === "ar" ? "ar-SA" : "en-US"; }
 export function formatNumber(value: number, locale: Locale) { return new Intl.NumberFormat(numberLocale(locale)).format(value); }
 
+export function formatMatchCount(value: number, locale: Locale) {
+  const count = Number.isFinite(value) ? Math.max(0, Math.trunc(value)) : 0;
+  if (locale === "en") {
+    return `${formatNumber(count, locale)} match${count === 1 ? "" : "es"}`;
+  }
+  if (count === 0) return "\u0644\u0627 \u062a\u0648\u062c\u062f \u0645\u0628\u0627\u0631\u064a\u0627\u062a";
+  if (count === 1) return "\u0645\u0628\u0627\u0631\u0627\u0629 \u0648\u0627\u062d\u062f\u0629";
+  if (count === 2) return "\u0645\u0628\u0627\u0631\u0627\u062a\u0627\u0646";
+  if (count >= 3 && count <= 10) {
+    return `${formatNumber(count, locale)} \u0645\u0628\u0627\u0631\u064a\u0627\u062a`;
+  }
+  return `${formatNumber(count, locale)} \u0645\u0628\u0627\u0631\u0627\u0629`;
+}
+
 export const LOCALE_ROUTE_HEADER = "x-ec-locale";
 
 function splitHref(value: string) {
@@ -186,7 +200,6 @@ const baseCopy = {
       upcomingSubtitle: "Tournaments with matches on the way.",
       liveEmpty: "No live or upcoming matches right now.",
       liveBadge: "LIVE",
-      matchesLabel: "matches",
       viewTournament: "View",
       adminTitle: "Admin desk",
       adminDescription: "A private workspace for community content, game pages, news drafts, and bot-facing data.",
@@ -483,7 +496,6 @@ const baseCopy = {
       upcomingSubtitle: "\u0628\u0637\u0648\u0644\u0627\u062a \u0644\u062f\u064a\u0647\u0627 \u0645\u0628\u0627\u0631\u064a\u0627\u062a \u0642\u0627\u062f\u0645\u0629.",
       liveEmpty: "\u0644\u0627 \u062a\u0648\u062c\u062f \u0645\u0628\u0627\u0631\u064a\u0627\u062a \u0645\u0628\u0627\u0634\u0631\u0629 \u0623\u0648 \u0642\u0627\u062f\u0645\u0629 \u0627\u0644\u0622\u0646.",
       liveBadge: "\u0645\u0628\u0627\u0634\u0631",
-      matchesLabel: "\u0645\u0628\u0627\u0631\u064a\u0627\u062a",
       viewTournament: "\u0639\u0631\u0636",
       adminTitle: "\u0645\u0643\u062a\u0628 \u0627\u0644\u0625\u062f\u0627\u0631\u0629",
       adminDescription: "\u0645\u0633\u0627\u062d\u0629 \u062e\u0627\u0635\u0629 \u0644\u0645\u062d\u062a\u0648\u0649 \u0627\u0644\u0645\u062c\u062a\u0645\u0639 \u0648\u0635\u0641\u062d\u0627\u062a \u0627\u0644\u0623\u0644\u0639\u0627\u0628 \u0648\u0645\u0633\u0648\u062f\u0627\u062a \u0627\u0644\u0623\u062e\u0628\u0627\u0631 \u0648\u0628\u064a\u0627\u0646\u0627\u062a \u0627\u0644\u0628\u0648\u062a.",
