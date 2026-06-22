@@ -26,6 +26,14 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
   if (existing.discordUserId !== member.discordUserId) {
     return NextResponse.json({ error: "You can only edit your own comment." }, { status: 403 });
   }
+  // A moderator's hide/reject must survive an edit. Recomputing status from the new
+  // body would let the author edit clean text in and silently un-hide the comment.
+  if (existing.status === "hidden" || existing.status === "rejected") {
+    return NextResponse.json(
+      { error: "This comment has been moderated and can no longer be edited." },
+      { status: 403 },
+    );
+  }
 
   const limited = await rateLimitOr429({ key: `comment:edit:${member.discordUserId}`, limit: 10, windowSec: 600 });
   if (limited) return limited;
