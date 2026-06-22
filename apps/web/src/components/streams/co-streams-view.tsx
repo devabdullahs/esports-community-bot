@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
 import { RadioIcon, UsersIcon } from "lucide-react";
 import type { CoStream, CoStreamChannel, StreamPlatform } from "@/lib/stream-types";
 import { PlatformIcon } from "@/components/platform-icon";
@@ -67,7 +66,7 @@ function channelLabel(channel: CoStreamChannel) {
 }
 
 export function CoStreamsView({
-  streams,
+  streams: initialStreams,
   parent,
   locale,
 }: {
@@ -75,18 +74,34 @@ export function CoStreamsView({
   parent: string;
   locale: Locale;
 }) {
-  const router = useRouter();
   const t = STR[locale] ?? STR.en;
+  const [streams, setStreams] = useState<CoStream[]>(initialStreams);
   const [platform, setPlatform] = useState<"all" | StreamPlatform>("all");
   const [game, setGame] = useState("all");
   const [liveOnly, setLiveOnly] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
-  // Keep live status fresh without a manual reload (the poller writes every ~60s).
+  // Keep live status fresh without a full-page reload: poll the JSON endpoint and
+  // merge into state, preserving the viewer's filter/selection (the poller writes
+  // every ~60s).
   useEffect(() => {
-    const id = setInterval(() => router.refresh(), 60_000);
-    return () => clearInterval(id);
-  }, [router]);
+    let alive = true;
+    const tick = async () => {
+      try {
+        const res = await fetch("/api/co-streams", { cache: "no-store" });
+        if (!res.ok) return;
+        const data = (await res.json()) as { streams: CoStream[] };
+        if (alive && Array.isArray(data.streams)) setStreams(data.streams);
+      } catch {
+        /* keep last good data */
+      }
+    };
+    const id = setInterval(tick, 60_000);
+    return () => {
+      alive = false;
+      clearInterval(id);
+    };
+  }, []);
 
   const liveCount = streams.filter((s) => s.isLive).length;
   const platforms = useMemo(() => {
