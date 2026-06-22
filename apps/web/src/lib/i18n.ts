@@ -164,6 +164,8 @@ const baseCopy = {
       loadingLabel: "Loading…",
       termsOfService: "Terms of Service",
       privacyPolicy: "Privacy Policy",
+      newer: "Newer",
+      older: "Older",
     },
     home: {
       eyebrow: "Community hub",
@@ -459,6 +461,8 @@ const baseCopy = {
       loadingLabel: "\u062c\u0627\u0631\u064d \u0627\u0644\u062a\u062d\u0645\u064a\u0644\u2026",
       termsOfService: "\u0634\u0631\u0648\u0637 \u0627\u0644\u062e\u062f\u0645\u0629",
       privacyPolicy: "\u0633\u064a\u0627\u0633\u0629 \u0627\u0644\u062e\u0635\u0648\u0635\u064a\u0629",
+      newer: "\u0623\u062d\u062f\u062b",
+      older: "\u0623\u0642\u062f\u0645",
     },
     home: {
       eyebrow: "\u0645\u062c\u062a\u0645\u0639\u0643",
