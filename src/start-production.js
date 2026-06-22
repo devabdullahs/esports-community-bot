@@ -26,7 +26,10 @@ if (enabled('RUN_BOT')) {
 }
 
 if (enabled('RUN_WEB')) {
-  const host = process.env.WEB_HOST || process.env.HOSTNAME || '0.0.0.0';
+  // Bind all interfaces by default. Do NOT fall back to process.env.HOSTNAME:
+  // Docker sets it to the container ID, so Next would listen on a single hostname
+  // the platform router / health-probe can't reach (caused a full-site 404 once).
+  const host = process.env.WEB_HOST || '0.0.0.0';
   const port = process.env.WEB_PORT || process.env.PORT || '3000';
   addService('web', nextBin, ['start', '--hostname', host, '--port', port], { cwd: webDir });
 }
