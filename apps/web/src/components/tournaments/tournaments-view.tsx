@@ -11,7 +11,7 @@ import { PageBreadcrumb } from "@/components/page-breadcrumb";
 import { LiquipediaAttribution } from "@/components/tournaments/liquipedia-attribution";
 import { localizeText } from "@/lib/community-content";
 import { listGamesCached } from "@/lib/games";
-import { copy, formatNumber, localizedPath, type Locale } from "@/lib/i18n";
+import { copy, formatMatchStatusCount, formatNumber, localizedPath, type Locale } from "@/lib/i18n";
 import {
   listTournamentSummariesCached,
   type TournamentSummary,
@@ -100,12 +100,14 @@ export async function TournamentsView({
                     {group.live > 0 ? (
                       <Badge className="gap-1.5 border-primary/35 bg-primary/10 text-primary">
                         <span aria-hidden className="size-1.5 rounded-full bg-primary" />
-                        {formatNumber(group.live, locale)} {text.live}
+                        {formatMatchStatusCount(group.live, "live", locale)}
                       </Badge>
                     ) : null}
-                    <span className="text-muted-foreground">
-                      {formatNumber(group.upcoming, locale)} {text.upcoming}
-                    </span>
+                    {group.upcoming > 0 ? (
+                      <span className="text-muted-foreground">
+                        {formatMatchStatusCount(group.upcoming, "upcoming", locale)}
+                      </span>
+                    ) : null}
                   </div>
                 </div>
               </CardHeader>
@@ -131,13 +133,13 @@ export async function TournamentsView({
                     <span className="shrink-0 text-xs tabular-nums text-muted-foreground">
                       {t.matchCounts.running > 0 ? (
                         <span className="font-semibold text-primary">
-                          {formatNumber(t.matchCounts.running, locale)} {text.live}
+                          {formatMatchStatusCount(t.matchCounts.running, "live", locale)}
                         </span>
                       ) : null}
                       {t.matchCounts.running > 0 && t.matchCounts.scheduled > 0 ? " · " : null}
                       {t.matchCounts.scheduled > 0 ? (
                         <span>
-                          {formatNumber(t.matchCounts.scheduled, locale)} {text.upcoming}
+                          {formatMatchStatusCount(t.matchCounts.scheduled, "upcoming", locale)}
                         </span>
                       ) : null}
                     </span>
