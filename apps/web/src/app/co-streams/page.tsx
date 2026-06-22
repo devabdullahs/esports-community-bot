@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { headers } from "next/headers";
 import { CoStreamsView } from "@/components/streams/co-streams-view";
-import { getEwcCoStreams } from "@/lib/co-streams";
+import { getEwcCoStreamsCached } from "@/lib/co-streams";
 import { dashboardPublicUrl } from "@/lib/env";
 import { localizedPath, type Locale } from "@/lib/i18n";
 import { buildPageMetadata } from "@/lib/metadata";
@@ -54,6 +54,6 @@ export async function generateMetadata(): Promise<Metadata> {
 
 export default async function CoStreamsPage() {
   const locale = await getRequestLocale();
-  const streams = await getEwcCoStreams();
+  const streams = await getEwcCoStreamsCached();
   return <CoStreamsView streams={streams} parent={await parentHost()} locale={locale} />;
 }

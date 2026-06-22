@@ -1,5 +1,6 @@
 import "server-only";
 
+import { unstable_cache } from "next/cache";
 import { listEwcStreamChannels } from "@bot/db/streamChannels.js";
 import { getStreamStatuses } from "@bot/db/streamChannelStatus.js";
 import { categoryToGameSlug, gameName } from "@bot/lib/games.js";
@@ -125,3 +126,12 @@ export async function getEwcCoStreams(): Promise<CoStream[]> {
 
   return buildCoStreamGroups(merged);
 }
+
+// The /co-streams page and the /api/co-streams poll both read this. Live status is
+// written by the bot poller (~60s), so cache with a short time-based revalidate
+// (not a tag) — one DB read per 30s regardless of viewer/poll count.
+export const getEwcCoStreamsCached = unstable_cache(
+  async () => getEwcCoStreams(),
+  ["ewc-co-streams"],
+  { revalidate: 30 },
+);

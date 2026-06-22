@@ -37,6 +37,6 @@ export default async function EwcNewsPage({
 }) {
   const locale = await getRequestLocale();
   const sp = await searchParams;
-  const page = Number(sp?.page) || 1;
+  const page = Math.min(10_000, Math.max(1, Number(sp?.page) || 1));
   return <NewsHubView locale={locale} ewcOnly page={page} />;
 }
