@@ -66,7 +66,7 @@ export default async function MediaNewsPostPage({
   const placement = post.coverPlacement;
   const coverImage = cover ? (
     // eslint-disable-next-line @next/next/no-img-element -- external/admin URL, validated http(s)
-    <img src={cover} alt="" className="w-full rounded-xl border border-border object-cover" />
+    <img src={cover} alt="" className="aspect-video w-full rounded-xl border border-border object-cover" />
   ) : null;
 
   const common = copy[locale].common;

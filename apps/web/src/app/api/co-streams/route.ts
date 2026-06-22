@@ -1,9 +1,9 @@
-import { getEwcCoStreams } from "@/lib/co-streams";
+import { getEwcCoStreamsCached } from "@/lib/co-streams";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function GET() {
-  const streams = await getEwcCoStreams();
+  const streams = await getEwcCoStreamsCached();
   return Response.json({ streams });
 }
