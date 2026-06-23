@@ -23,10 +23,12 @@ import {
   countWeeklyScored,
   getEwcSeason,
   getEwcWeek,
+  getSeasonPrediction,
   getWeeklyPrediction,
   listEwcWeeks,
   overallLeaderboard,
   seasonLeaderboard,
+  upsertSeasonClubPick,
   upsertSeasonPrediction,
   upsertWeeklyGamePick,
   userPredictionProfile,
@@ -64,7 +66,7 @@ let builder = new SlashCommandBuilder()
 
 function seasonCommand(s) {
   let cmd = s.setName('season').setDescription('Pick your top 5-10 clubs for the whole EWC season.');
-  for (let i = 1; i <= 10; i += 1) cmd = addTeamOption(cmd, i, i <= 5);
+  for (let i = 1; i <= 10; i += 1) cmd = addTeamOption(cmd, i, false);
   return cmd.addStringOption((o) => o.setName('season').setDescription('Season year').setRequired(false));
 }
 
@@ -215,6 +217,14 @@ function weeklyPickModalId(seasonYear, weekKey, gameKey, ownerId) {
   return `ewc_predict:wpm:${seasonYear}:${weekKey}:${gameKey}:${ownerId}`;
 }
 
+function seasonSlotId(seasonYear, index, ownerId) {
+  return `ewc_predict:sg:${seasonYear}:${index}:${ownerId}`;
+}
+
+function seasonSlotModalId(seasonYear, index, ownerId) {
+  return `ewc_predict:spm:${seasonYear}:${index}:${ownerId}`;
+}
+
 function chunk(items, size) {
   const rows = [];
   for (let i = 0; i < items.length; i += size) rows.push(items.slice(i, i + size));
@@ -272,6 +282,42 @@ export async function currentOpenWeek(guildId, seasonYear) {
   if (!open.length) return null;
   open.sort((a, b) => (a.close_at || Infinity) - (b.close_at || Infinity));
   return open[0];
+}
+
+async function seasonPickPayload(guildId, seasonYear, userId) {
+  const round = await getEwcSeason(guildId, seasonYear);
+  const closed = roundClosedMessage(round);
+  if (closed) return { error: closed };
+
+  const saved = await getSeasonPrediction(guildId, seasonYear, userId);
+  const picks = saved?.picks || [];
+  const filled = picks.filter((p) => typeof p === 'string' && p.trim()).length;
+
+  // Components V2: one Section per slot so its button sits in line with the slot,
+  // and the message edits in place to show each pick. (V2 messages can't carry an embed.)
+  const container = new ContainerBuilder().setAccentColor(0xf1c40f);
+  container.addTextDisplayComponents(
+    new TextDisplayBuilder().setContent(
+      `## EWC ${seasonYear} Season Picks — choose ${round.top_size} clubs\n-# ${filled}/${round.top_size} picked. Tap a slot to set or change it.`,
+    ),
+  );
+  // V2 budget is 40 components total; each slot uses 3 (section + text + button), so 10 slots = 30, under budget.
+  for (let i = 0; i < round.top_size; i += 1) {
+    const pick = picks[i];
+    const text = `**Pick #${i + 1}** — ${pick ? `**${pick}**` : '*empty*'}`;
+    container.addSectionComponents(
+      new SectionBuilder()
+        .addTextDisplayComponents(new TextDisplayBuilder().setContent(text.slice(0, 4000)))
+        .setButtonAccessory(
+          new ButtonBuilder()
+            .setCustomId(seasonSlotId(seasonYear, i, userId))
+            .setLabel(pick ? 'Change' : 'Set')
+            .setStyle(pick ? ButtonStyle.Success : ButtonStyle.Primary),
+        ),
+    );
+  }
+
+  return { components: [container] };
 }
 
 async function getExistingGamePick(guildId, round, userId, gameKey) {
@@ -594,6 +640,140 @@ async function handleWeeklyPickModal(interaction, { seasonYear, weekKey, gameKey
   if (saved.firstPick) await announceWeeklyParticipation(interaction, round);
 }
 
+async function showSeasonSlotModal(interaction, { seasonYear, index, ownerId }) {
+  if (ownerId && interaction.user.id !== ownerId) {
+    await interaction.reply({
+      content: 'These buttons belong to whoever ran `/ewc_predict season`.',
+      flags: MessageFlags.Ephemeral,
+    });
+    return;
+  }
+
+  const round = await getEwcSeason(interaction.guildId, seasonYear);
+  const closed = roundClosedMessage(round);
+  if (closed) {
+    await interaction.reply({ content: `❌ ${closed}`, flags: MessageFlags.Ephemeral });
+    return;
+  }
+
+  const slot = Number(index);
+  const saved = await getSeasonPrediction(interaction.guildId, seasonYear, interaction.user.id);
+  const current = (saved?.picks || [])[slot] || null;
+  const choices = await searchEwcClubChoices('', {});
+  const modal = new ModalBuilder()
+    .setCustomId(seasonSlotModalId(seasonYear, slot, interaction.user.id))
+    .setTitle(`Season pick #${slot + 1}`.slice(0, 45));
+
+  if (choices.length) {
+    const select = new StringSelectMenuBuilder()
+      .setCustomId('club')
+      .setPlaceholder('Choose a club')
+      .setRequired(false)
+      .addOptions(
+        choices.map((choice) => {
+          const option = new StringSelectMenuOptionBuilder().setLabel(choice.value.slice(0, 100)).setValue(choice.value.slice(0, 100));
+          if (current === choice.value) option.setDefault(true);
+          return option;
+        }),
+      );
+    modal.addLabelComponents(
+      new LabelBuilder()
+        .setLabel('Club pick')
+        .setDescription('Use the manual field if your club is not listed.')
+        .setStringSelectMenuComponent(select),
+    );
+  }
+
+  const input = new TextInputBuilder()
+    .setCustomId('club_text')
+    .setStyle(TextInputStyle.Short)
+    .setRequired(!choices.length)
+    .setMaxLength(100)
+    .setPlaceholder('Team Falcons');
+  if (current && !choices.some((choice) => choice.value === current)) input.setValue(current.slice(0, 100));
+
+  modal.addLabelComponents(
+    new LabelBuilder()
+      .setLabel(choices.length ? 'Manual club name' : 'Club name')
+      .setDescription(choices.length ? 'Optional. This overrides the select menu.' : 'Type the official club name.')
+      .setTextInputComponent(input),
+  );
+
+  await interaction.showModal(modal);
+}
+
+async function handleSeasonSlotModal(interaction, { seasonYear, index, ownerId }) {
+  if (ownerId && interaction.user.id !== ownerId) {
+    await interaction.reply({
+      content: 'This modal belongs to whoever opened the season picker.',
+      flags: MessageFlags.Ephemeral,
+    });
+    return;
+  }
+
+  // The modal was opened from a button on the (ephemeral) picker message, so defer as an update
+  // and edit that message in place; errors surface as a separate ephemeral follow-up.
+  await interaction.deferUpdate();
+  const round = await getEwcSeason(interaction.guildId, seasonYear);
+  const closed = roundClosedMessage(round);
+  if (closed) {
+    await interaction.followUp({ content: `❌ ${closed}`, flags: MessageFlags.Ephemeral });
+    return;
+  }
+
+  const slot = Number(index);
+  const manual = modalTextValue(interaction, 'club_text').replace(/\s+/g, ' ').trim();
+  const selected = modalSelectValues(interaction, 'club')[0] || '';
+  const rawPick = manual || selected;
+  if (!rawPick) {
+    await interaction.followUp({ content: '❌ Choose a club from the list or type one manually.', flags: MessageFlags.Ephemeral });
+    return;
+  }
+
+  const resolved = await resolveEwcClubPick(rawPick, { wait: true });
+  if (!resolved.ok) {
+    await interaction.followUp({ content: `❌ ${resolved.message}`, flags: MessageFlags.Ephemeral });
+    return;
+  }
+
+  // Season picks must be distinct clubs — reject if another slot already holds this one.
+  const existingPicks = (await getSeasonPrediction(interaction.guildId, seasonYear, interaction.user.id))?.picks || [];
+  const duplicate = existingPicks.some((pick, i) => i !== slot && typeof pick === 'string' && pick === resolved.name);
+  if (duplicate) {
+    await interaction.followUp({ content: `❌ **${resolved.name}** is already in another slot — pick a different club.`, flags: MessageFlags.Ephemeral });
+    return;
+  }
+
+  const saved = await upsertSeasonClubPick({
+    guildId: interaction.guildId,
+    season: seasonYear,
+    userId: interaction.user.id,
+    index: slot,
+    pick: resolved.name,
+  });
+
+  // Re-render the picker in place so the new pick shows in line with its slot.
+  const payload = await seasonPickPayload(interaction.guildId, seasonYear, interaction.user.id);
+  if (payload.error) {
+    await interaction.followUp({ content: `❌ ${payload.error}`, flags: MessageFlags.Ephemeral });
+    return;
+  }
+  await interaction.editReply({ components: payload.components });
+  if (saved.firstPick) await announceSeasonParticipation(interaction, round, seasonYear);
+}
+
+// Publicly note (once per member) that someone joined the season predictions,
+// without revealing their picks — the picker itself stays ephemeral.
+function announceSeasonParticipation(interaction, round, seasonYear) {
+  refreshPredictionBoard(interaction);
+  return announceEwcParticipation(
+    interaction.client,
+    interaction.guildId,
+    `🎯 <@${interaction.user.id}> locked in their **${round.label || `EWC ${seasonYear}`}** season predictions! 🔒`,
+    { channelId: interaction.channelId },
+  );
+}
+
 // Publicly note (once per member per week) that someone joined this week's
 // predictions, without revealing their picks — the picker itself stays ephemeral.
 function announceWeeklyParticipation(interaction, round) {
@@ -692,6 +872,19 @@ export async function execute(interaction) {
     const closed = roundClosedMessage(round);
     if (closed) {
       await interaction.reply({ content: `❌ ${closed}`, flags: MessageFlags.Ephemeral });
+      return;
+    }
+    const anyTeam = Array.from({ length: 10 }, (_, i) => interaction.options.getString(`team_${i + 1}`)).some(Boolean);
+    if (!anyTeam) {
+      const payload = await seasonPickPayload(interaction.guildId, seasonYear, interaction.user.id);
+      if (payload.error) {
+        await interaction.reply({ content: `❌ ${payload.error}`, flags: MessageFlags.Ephemeral });
+        return;
+      }
+      await interaction.reply({
+        components: payload.components,
+        flags: MessageFlags.Ephemeral | MessageFlags.IsComponentsV2,
+      });
       return;
     }
     const picks = uniqueClubPicks(teamPicks(interaction, 10));
@@ -905,6 +1098,11 @@ export async function handleComponent(interaction) {
     await showWeeklyPickModal(interaction, { seasonYear, weekKey, gameKey, ownerId });
     return;
   }
+  if (action === 'sg') {
+    const [, , seasonYear, index, ownerId] = parts;
+    await showSeasonSlotModal(interaction, { seasonYear, index, ownerId });
+    return;
+  }
 
   if (action === 'open') {
     const seasonYear = parts[2] || DEFAULT_SEASON;
@@ -970,6 +1168,11 @@ export async function handleModal(interaction) {
   if (action === 'wpm') {
     const [, , seasonYear, weekKey, gameKey, ownerId] = parts;
     await handleWeeklyPickModal(interaction, { seasonYear, weekKey, gameKey, ownerId });
+    return;
+  }
+  if (action === 'spm') {
+    const [, , seasonYear, index, ownerId] = parts;
+    await handleSeasonSlotModal(interaction, { seasonYear, index, ownerId });
     return;
   }
 
