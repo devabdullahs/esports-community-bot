@@ -34,6 +34,7 @@ import {
 } from '../db/ewcPredictions.js';
 import { effectiveEwcWeekStatus, formatShortDate, formatTimestamp, uniqueClubPicks } from '../lib/ewcPredictions.js';
 import { resolveEwcClubPick, searchEwcClubChoices } from '../lib/ewcClubCache.js';
+import { announceEwcParticipation } from '../lib/ewcParticipation.js';
 
 const DEFAULT_SEASON = '2026';
 const PAGE_SIZE = 20;
@@ -531,7 +532,7 @@ async function handleWeeklyPickModal(interaction, { seasonYear, weekKey, gameKey
     return;
   }
 
-  await upsertWeeklyGamePick({
+  const saved = await upsertWeeklyGamePick({
     guildId: interaction.guildId,
     weekId: round.id,
     userId: interaction.user.id,
@@ -548,6 +549,17 @@ async function handleWeeklyPickModal(interaction, { seasonYear, weekKey, gameKey
     return;
   }
   await interaction.editReply({ components: payload.components });
+  if (saved.firstPick) await announceWeeklyParticipation(interaction, round);
+}
+
+// Publicly note (once per member per week) that someone joined this week's
+// predictions, without revealing their picks — the picker itself stays ephemeral.
+function announceWeeklyParticipation(interaction, round) {
+  return announceEwcParticipation(
+    interaction.client,
+    interaction.guildId,
+    `🎯 <@${interaction.user.id}> is in for **${round.label || round.week_key}** — predictions are open! Picks stay secret until lock. 🔒`,
+  );
 }
 
 export async function execute(interaction) {
@@ -613,6 +625,7 @@ export async function execute(interaction) {
       ],
       flags: MessageFlags.Ephemeral,
     });
+    if (saved.firstPick) await announceWeeklyParticipation(interaction, round);
     return;
   }
 
@@ -631,7 +644,7 @@ export async function execute(interaction) {
       });
       return;
     }
-    await upsertSeasonPrediction({ guildId: interaction.guildId, season: seasonYear, userId: interaction.user.id, picks });
+    const saved = await upsertSeasonPrediction({ guildId: interaction.guildId, season: seasonYear, userId: interaction.user.id, picks });
     await interaction.reply({
       embeds: [
         new EmbedBuilder()
@@ -641,6 +654,13 @@ export async function execute(interaction) {
       ],
       flags: MessageFlags.Ephemeral,
     });
+    if (saved.firstPick) {
+      await announceEwcParticipation(
+        interaction.client,
+        interaction.guildId,
+        `🎯 <@${interaction.user.id}> locked in their **${round.label || `EWC ${seasonYear}`}** season predictions! 🔒`,
+      );
+    }
     return;
   }
 
