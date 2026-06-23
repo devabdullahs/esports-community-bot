@@ -204,7 +204,10 @@ export async function upsertWeeklyGamePick({ guildId, weekId, userId, gameKey, p
     pickedAt: Math.floor(Date.now() / 1000),
   });
   next.sort((a, b) => String(a.game || a.gameKey).localeCompare(String(b.game || b.gameKey)));
-  return upsertWeeklyPrediction({ guildId, weekId, userId, picks: next });
+  const result = await upsertWeeklyPrediction({ guildId, weekId, userId, picks: next });
+  // `firstPick` = the member had NO picks for this week before now. Callers use it
+  // to publicly announce participation exactly once per member per week.
+  return { ...result, firstPick: current.length === 0 };
 }
 
 export async function getWeeklyPrediction(guildId, weekId, userId) {
@@ -343,6 +346,8 @@ export async function markEwcSeasonScored(guildId, season, finalStandings, clien
 }
 
 export async function upsertSeasonPrediction({ guildId, season = '2026', userId, picks }) {
+  // `firstPick` = the member had no season prediction before now (announce once).
+  const firstPick = !(await getSeasonPrediction(guildId, season, userId));
   const now = nowText();
   await run(
     `INSERT INTO ewc_season_predictions (guild_id, season, user_id, picks_json, created_at, updated_at)
@@ -354,7 +359,8 @@ export async function upsertSeasonPrediction({ guildId, season = '2026', userId,
        updated_at = excluded.updated_at`,
     [guildId, season, userId, stringify(picks), now],
   );
-  return getSeasonPrediction(guildId, season, userId);
+  const saved = await getSeasonPrediction(guildId, season, userId);
+  return { ...saved, firstPick };
 }
 
 export async function getSeasonPrediction(guildId, season, userId) {
