@@ -58,7 +58,7 @@ let builder = new SlashCommandBuilder()
     s
       .setName('weekly')
       .setDescription('Open the guided weekly EWC pick menu.')
-      .addStringOption((o) => o.setName('week').setDescription('Week key').setAutocomplete(true).setRequired(true))
+      .addStringOption((o) => o.setName('week').setDescription('Week key').setAutocomplete(true).setRequired(false))
       .addStringOption((o) => o.setName('season').setDescription('Season year').setRequired(false)),
   );
 
@@ -260,6 +260,18 @@ async function weeklyPickPayload(guildId, seasonYear, weekKey, userId) {
   });
 
   return { components: [container] };
+}
+
+// The week members should predict right now: the soonest-to-lock still-open round.
+export async function currentOpenWeek(guildId, seasonYear) {
+  const weeks = await listEwcWeeks(guildId, seasonYear);
+  const open = weeks.filter((w) => {
+    const label = effectiveEwcWeekStatus(w).label;
+    return label === 'open' || label === 'partly open';
+  });
+  if (!open.length) return null;
+  open.sort((a, b) => (a.close_at || Infinity) - (b.close_at || Infinity));
+  return open[0];
 }
 
 async function getExistingGamePick(guildId, round, userId, gameKey) {
@@ -605,7 +617,15 @@ export async function execute(interaction) {
   const seasonYear = season(interaction);
 
   if (sub === 'weekly') {
-    const weekKey = interaction.options.getString('week', true);
+    let weekKey = interaction.options.getString('week');
+    if (!weekKey) {
+      const current = await currentOpenWeek(interaction.guildId, seasonYear);
+      if (!current) {
+        await interaction.reply({ content: '❌ No EWC week is open for predictions right now.', flags: MessageFlags.Ephemeral });
+        return;
+      }
+      weekKey = current.week_key;
+    }
     const gameKey = interaction.options.getString('game');
     const pick = interaction.options.getString('team');
     const round = await getEwcWeek(interaction.guildId, seasonYear, weekKey);
@@ -883,6 +903,22 @@ export async function handleComponent(interaction) {
   if (action === 'wg') {
     const [, , seasonYear, weekKey, gameKey, ownerId] = parts;
     await showWeeklyPickModal(interaction, { seasonYear, weekKey, gameKey, ownerId });
+    return;
+  }
+
+  if (action === 'open') {
+    const seasonYear = parts[2] || DEFAULT_SEASON;
+    const current = await currentOpenWeek(interaction.guildId, seasonYear);
+    if (!current) {
+      await interaction.reply({ content: '❌ No EWC week is open for predictions right now.', flags: MessageFlags.Ephemeral });
+      return;
+    }
+    const payload = await weeklyPickPayload(interaction.guildId, seasonYear, current.week_key, interaction.user.id);
+    if (payload.error) {
+      await interaction.reply({ content: `❌ ${payload.error}`, flags: MessageFlags.Ephemeral });
+      return;
+    }
+    await interaction.reply({ components: payload.components, flags: MessageFlags.Ephemeral | MessageFlags.IsComponentsV2 });
     return;
   }
 

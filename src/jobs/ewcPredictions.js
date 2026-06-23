@@ -1,4 +1,4 @@
-import { AttachmentBuilder, EmbedBuilder } from 'discord.js';
+import { ActionRowBuilder, AttachmentBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder } from 'discord.js';
 import { config } from '../config.js';
 import {
   listEwcWeeks,
@@ -189,7 +189,16 @@ async function buildEwcPredictionLeaderboardPayload(client, guildId, season) {
     .setFooter({ text: 'Weekly and season prediction points' });
   const participating = participatingField(participantIds);
   if (participating) embed.addFields(participating);
-  return { embeds: [embed], files: [attachment] };
+  const open = (await listEwcWeeks(guildId, season)).some((w) => {
+    const label = effectiveEwcWeekStatus(w).label;
+    return label === 'open' || label === 'partly open';
+  });
+  const components = open
+    ? [new ActionRowBuilder().addComponents(
+        new ButtonBuilder().setCustomId(`ewc_predict:open:${season}`).setLabel('🎯 Open my picks').setStyle(ButtonStyle.Primary),
+      )]
+    : [];
+  return { embeds: [embed], files: [attachment], components };
 }
 
 async function buildEwcPredictionMentionsEmbed(guildId, season) {
