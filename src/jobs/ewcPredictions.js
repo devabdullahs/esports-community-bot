@@ -27,6 +27,7 @@ import {
 import { transaction } from '../db/client.js';
 import { logger } from '../lib/logger.js';
 import {
+  effectiveEwcWeekStatus,
   pendingEwcGameResults,
   scorePerGameWeeklyPrediction,
   scoreSeasonPrediction,
@@ -107,6 +108,42 @@ async function leaderboardMeta(guildId, season) {
   };
 }
 
+// Members with a prediction in any round that is STILL OPEN (picks not yet
+// revealed). Returns deduped user IDs ONLY — never picks — so the leaderboard can
+// show "who's playing" without leaking anyone's choices before each game locks.
+export async function openRoundParticipantIds(guildId, season) {
+  const ids = new Set();
+  for (const week of await listEwcWeeks(guildId, season)) {
+    const label = effectiveEwcWeekStatus(week).label;
+    if (label === 'open' || label === 'partly open') {
+      for (const prediction of await listWeeklyPredictions(week.id)) {
+        if (prediction.user_id) ids.add(prediction.user_id);
+      }
+    }
+  }
+  const seasonRound = await getEwcSeason(guildId, season);
+  const seasonOpen =
+    seasonRound && seasonRound.status === 'open' && !(seasonRound.close_at && nowSec() >= seasonRound.close_at);
+  if (seasonOpen) {
+    for (const prediction of await listSeasonPredictions(guildId, season)) {
+      if (prediction.user_id) ids.add(prediction.user_id);
+    }
+  }
+  return [...ids];
+}
+
+function participatingField(ids) {
+  if (!ids.length) return null;
+  const CAP = 40;
+  const shown = ids.slice(0, CAP).map((id) => `<@${id}>`).join(' ');
+  const more = ids.length > CAP ? ` +${ids.length - CAP} more` : '';
+  return {
+    name: `🎯 Predicting now (${ids.length})`,
+    value: `${shown}${more}\n-# Picks stay hidden until each game locks.`.slice(0, 1024),
+    inline: false,
+  };
+}
+
 async function buildEwcPredictionLeaderboardPayload(client, guildId, season) {
   const { rows, weeks, scoredWeeks, bestWeeks, championPickVisible } = await leaderboardMeta(guildId, season);
   const namedRows = await leaderboardRowsForImage(client, guildId, rows);
@@ -134,12 +171,14 @@ async function buildEwcPredictionLeaderboardPayload(client, guildId, season) {
       { name: 'Updated', value: `<t:${nowSec()}:R>`, inline: true },
     )
     .setFooter({ text: 'Weekly and season prediction points' });
+  const participating = participatingField(await openRoundParticipantIds(guildId, season));
+  if (participating) embed.addFields(participating);
   return { embeds: [embed], files: [attachment] };
 }
 
 async function buildEwcPredictionMentionsEmbed(guildId, season) {
   const { rows, weeks, scoredWeeks, bestWeeks, championPickVisible } = await leaderboardMeta(guildId, season);
-  return new EmbedBuilder()
+  const embed = new EmbedBuilder()
     .setColor(0xf1c40f)
     .setTitle(`EWC ${season} Prediction Leaderboard - Admin Mentions`)
     .setDescription(leaderboardLines(rows, { championPickVisible }))
@@ -150,6 +189,9 @@ async function buildEwcPredictionMentionsEmbed(guildId, season) {
       { name: 'Updated', value: `<t:${nowSec()}:R>`, inline: true },
     )
     .setFooter({ text: 'Mentions are shown for admin tracking; edits do not ping members.' });
+  const participating = participatingField(await openRoundParticipantIds(guildId, season));
+  if (participating) embed.addFields(participating);
+  return embed;
 }
 
 export async function updateEwcPredictionLeaderboard(client, guildId) {

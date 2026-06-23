@@ -35,6 +35,7 @@ import {
 import { effectiveEwcWeekStatus, formatShortDate, formatTimestamp, uniqueClubPicks } from '../lib/ewcPredictions.js';
 import { resolveEwcClubPick, searchEwcClubChoices } from '../lib/ewcClubCache.js';
 import { announceEwcParticipation } from '../lib/ewcParticipation.js';
+import { updateEwcPredictionLeaderboard } from '../jobs/ewcPredictions.js';
 
 const DEFAULT_SEASON = '2026';
 const PAGE_SIZE = 20;
@@ -555,11 +556,18 @@ async function handleWeeklyPickModal(interaction, { seasonYear, weekKey, gameKey
 // Publicly note (once per member per week) that someone joined this week's
 // predictions, without revealing their picks — the picker itself stays ephemeral.
 function announceWeeklyParticipation(interaction, round) {
+  refreshPredictionBoard(interaction);
   return announceEwcParticipation(
     interaction.client,
     interaction.guildId,
     `🎯 <@${interaction.user.id}> is in for **${round.label || round.week_key}** — predictions are open! Picks stay secret until lock. 🔒`,
   );
+}
+
+// Refresh the public leaderboard's "Predicting now" list. Fire-and-forget: the
+// canvas re-render + Discord edit must never block or fail the pick interaction.
+function refreshPredictionBoard(interaction) {
+  void updateEwcPredictionLeaderboard(interaction.client, interaction.guildId).catch(() => {});
 }
 
 export async function execute(interaction) {
@@ -655,6 +663,7 @@ export async function execute(interaction) {
       flags: MessageFlags.Ephemeral,
     });
     if (saved.firstPick) {
+      refreshPredictionBoard(interaction);
       await announceEwcParticipation(
         interaction.client,
         interaction.guildId,
