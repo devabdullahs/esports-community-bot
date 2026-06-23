@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { readFile, writeFile } from 'node:fs/promises';
+import { readFile, unlink, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import axios from 'axios';
 import { logger } from './logger.js';
@@ -93,6 +93,23 @@ export function isAllowedLogoRedirect(options) {
   return protocol === 'https:' && ALLOWED_LOGO_HOSTS.has(hostname);
 }
 
+export function rasterLogoContentType(bytes) {
+  const buffer = Buffer.isBuffer(bytes) ? bytes : Buffer.from(bytes || []);
+  if (buffer.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))) {
+    return 'image/png';
+  }
+  if (buffer.subarray(0, 3).equals(Buffer.from([0xff, 0xd8, 0xff]))) return 'image/jpeg';
+
+  const gif = buffer.subarray(0, 6).toString('ascii');
+  if (gif === 'GIF87a' || gif === 'GIF89a') return 'image/gif';
+
+  if (buffer.subarray(0, 4).toString('ascii') === 'RIFF' && buffer.subarray(8, 12).toString('ascii') === 'WEBP') {
+    return 'image/webp';
+  }
+
+  return null;
+}
+
 export function logoCandidates(url) {
   const original = String(url).trim();
   const variants = [];
@@ -178,7 +195,11 @@ function pumpQueue() {
 
 async function readCached(file) {
   try {
-    return await readFile(file);
+    const bytes = await readFile(file);
+    if (rasterLogoContentType(bytes)) return bytes;
+    await unlink(file).catch(() => {});
+    logger.debug(`[logo-cache] discarded non-raster cached logo (${file})`);
+    return null;
   } catch (e) {
     if (e.code !== 'ENOENT') logger.debug(`[logo-cache] read failed (${file}): ${e.message}`);
     return null;
@@ -219,6 +240,7 @@ async function downloadLogo(url, file, channel) {
 
   const bytes = Buffer.from(data);
   if (bytes.length > MAX_LOGO_BYTES) throw new Error(`logo too large (${bytes.length} bytes)`);
+  if (!rasterLogoContentType(bytes)) throw new Error('unexpected logo image format');
   await writeFile(file, bytes);
   return bytes;
 }
