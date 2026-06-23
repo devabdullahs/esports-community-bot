@@ -363,6 +363,17 @@ export async function upsertSeasonPrediction({ guildId, season = '2026', userId,
   return { ...saved, firstPick };
 }
 
+// Set ONE ordered slot (0-based) of a member's season picks, preserving the others.
+// Mirrors upsertWeeklyGamePick's incremental model. Pads with nulls; callers trim.
+export async function upsertSeasonClubPick({ guildId, season = '2026', userId, index, pick }) {
+  const existing = await getSeasonPrediction(guildId, season, userId);
+  const picks = Array.isArray(existing?.picks) ? [...existing.picks] : [];
+  while (picks.length <= index) picks.push(null);
+  picks[index] = pick;
+  const cleaned = picks.filter((p) => typeof p === 'string' && p.trim());
+  return upsertSeasonPrediction({ guildId, season, userId, picks: cleaned });
+}
+
 export async function getSeasonPrediction(guildId, season, userId) {
   return hydratePrediction(
     await get('SELECT * FROM ewc_season_predictions WHERE guild_id = $1 AND season = $2 AND user_id = $3', [
