@@ -561,6 +561,7 @@ function announceWeeklyParticipation(interaction, round) {
     interaction.client,
     interaction.guildId,
     `🎯 <@${interaction.user.id}> is in for **${round.label || round.week_key}** — predictions are open! Picks stay secret until lock. 🔒`,
+    { channelId: interaction.channelId },
   );
 }
 
@@ -668,6 +669,7 @@ export async function execute(interaction) {
         interaction.client,
         interaction.guildId,
         `🎯 <@${interaction.user.id}> locked in their **${round.label || `EWC ${seasonYear}`}** season predictions! 🔒`,
+        { channelId: interaction.channelId },
       );
     }
     return;

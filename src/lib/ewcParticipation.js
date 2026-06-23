@@ -1,14 +1,13 @@
 import { getSettings } from '../db/settings.js';
 import { logger } from './logger.js';
 
-// Public participation note in the EWC predictions channel so the community can SEE
-// who is playing — WITHOUT revealing anyone's picks (the prediction picker itself
-// stays ephemeral). Ping-free and best-effort: it must never throw into the
-// interaction flow, and it no-ops when no predictions channel is configured.
-export async function announceEwcParticipation(client, guildId, content) {
+// Public participation note so the community can see who is playing without
+// revealing anyone's picks. Prefer the command channel; fall back to the
+// configured predictions channel for non-interaction callers.
+export async function announceEwcParticipation(client, guildId, content, options = {}) {
   try {
     if (!client || !guildId || !content) return;
-    const channelId = (await getSettings(guildId))?.ewc_predictions_channel_id;
+    const channelId = options.channelId || (await getSettings(guildId))?.ewc_predictions_channel_id;
     if (!channelId) return;
     const channel = await client.channels.fetch(channelId).catch(() => null);
     if (!channel?.isTextBased?.()) return;

@@ -53,6 +53,26 @@ test('announceEwcParticipation no-ops when no predictions channel is configured'
   assert.equal(fetched, false, 'should not touch Discord when no channel is set');
 });
 
+test('announceEwcParticipation can target the command channel without changing result channel settings', async () => {
+  const guildId = 'guild-participation-command-channel';
+
+  let fetchedId = null;
+  let sent = null;
+  const client = {
+    channels: {
+      fetch: async (id) => {
+        fetchedId = id;
+        return { isTextBased: () => true, send: async (payload) => { sent = payload; } };
+      },
+    },
+  };
+
+  await announceEwcParticipation(client, guildId, 'joined', { channelId: 'command-channel-456' });
+  assert.equal(fetchedId, 'command-channel-456');
+  assert.equal(sent.content, 'joined');
+  assert.deepEqual(sent.allowedMentions, { parse: [] }, 'ping-free');
+});
+
 test('announceEwcParticipation posts the content ping-free to the configured channel', async () => {
   const guildId = 'guild-participation-3';
   await setEwcPredictionsChannel(guildId, 'chan-123');
