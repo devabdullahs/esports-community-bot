@@ -69,7 +69,7 @@ export async function getEwcMePayload({
   const activeSeason = season || link?.season || DEFAULT_SEASON;
   const stats =
     account && activeGuildId
-      ? await getEwcUserProfileStats(activeGuildId, activeSeason, account.accountId)
+      ? await getEwcUserProfileStats(activeGuildId, activeSeason, account.accountId, { includeHiddenPicks: true })
       : null;
 
   return {
@@ -103,7 +103,7 @@ export async function syncEwcProfileForAuthUser({
       await markEwcProfileLinkSynced(account.accountId);
       return {
         link: (await getEwcProfileLinkByDiscordUser(account.accountId)) || link,
-        stats: await getEwcUserProfileStats(guildId, season, account.accountId),
+        stats: await getEwcUserProfileStats(guildId, season, account.accountId, { includeHiddenPicks: true }),
         payload,
         devBypass: true,
       };
@@ -118,7 +118,7 @@ export async function syncEwcProfileForAuthUser({
     await markEwcProfileLinkSynced(account.accountId);
     return {
       link: (await getEwcProfileLinkByDiscordUser(account.accountId)) || link,
-      stats: await getEwcUserProfileStats(guildId, season, account.accountId),
+      stats: await getEwcUserProfileStats(guildId, season, account.accountId, { includeHiddenPicks: true }),
       payload,
     };
   } catch (error) {
