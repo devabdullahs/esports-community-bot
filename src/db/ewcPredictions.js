@@ -508,7 +508,7 @@ export async function overallRankForUser(guildId, season = '2026', userId) {
 export async function userPredictionProfile(guildId, season, userId) {
   const weeks = (
     await all(
-      `SELECT w.week_key, w.label, w.status, p.*
+      `SELECT w.week_key, w.label, w.status, w.close_at, w.games_json, p.*
        FROM ewc_prediction_weeks w
        LEFT JOIN ewc_weekly_predictions p
          ON p.week_id = w.id AND p.guild_id = w.guild_id AND p.user_id = $1
@@ -520,6 +520,7 @@ export async function userPredictionProfile(guildId, season, userId) {
     ...row,
     picks: parseJson(row.picks_json, []),
     details: parseJson(row.details_json, null),
+    games: parseJson(row.games_json, []),
   }));
   return {
     weekly: weeks,

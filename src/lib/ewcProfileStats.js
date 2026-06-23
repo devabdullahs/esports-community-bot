@@ -1,6 +1,7 @@
 import { all, get } from '../db/client.js';
 import {
   countOverallScored,
+  getEwcSeason,
   overallLeaderboard,
   overallRankForUser,
   userPredictionProfile,
@@ -10,6 +11,8 @@ import { WEEKLY_TOP_THREE_SWEEP_BONUS } from './ewcPredictions.js';
 export const DEFAULT_EWC_PROFILE_SEASON = '2026';
 const MAX_SHOWCASE_USERNAME = 100;
 const UNRANKED_VALUE = 999999;
+
+const nowSec = () => Math.floor(Date.now() / 1000);
 
 export const EWC_ROLE_CONNECTION_METADATA = [
   {
@@ -167,10 +170,23 @@ function seasonPickTeams(profile) {
   return profile?.season?.picks?.length ? profile.season.picks.slice(0, 3) : [];
 }
 
-async function seasonPickTeamsForUsers(guildId, season, userIds) {
+function seasonPicksVisible(round, score = null, now = nowSec()) {
+  return Boolean(
+    score != null ||
+      !round ||
+      round.status === 'closed' ||
+      round.status === 'scored' ||
+      (round.close_at && now >= round.close_at)
+  );
+}
+
+async function seasonPickTeamsForUsers(guildId, season, userIds, { includeHiddenPicks = false } = {}) {
   const uniqueIds = [...new Set(userIds.filter(Boolean))];
   const teams = new Map(uniqueIds.map((userId) => [userId, []]));
   if (!uniqueIds.length) return teams;
+
+  const round = await getEwcSeason(guildId, season);
+  if (!includeHiddenPicks && !seasonPicksVisible(round)) return teams;
 
   const rows = await all(
     `SELECT user_id, picks_json
@@ -206,16 +222,23 @@ function recentWeekly(profile) {
 export function formatShowcaseUsername(stats) {
   const rank = stats.rank ? `#${stats.rank} overall` : 'Unranked';
   const points = `${Number(stats.overallPoints || 0).toLocaleString()} pts`;
-  const teams = stats.topTeams?.length ? stats.topTeams.join(', ') : `${stats.weeksScored || 0} weeks`;
+  const teams = stats.seasonPicksHidden
+    ? 'picks hidden'
+    : stats.topTeams?.length
+      ? stats.topTeams.join(', ')
+      : `${stats.weeksScored || 0} weeks`;
   const value = `${rank} | ${points} | ${teams}`;
   return value.length <= MAX_SHOWCASE_USERNAME ? value : `${value.slice(0, MAX_SHOWCASE_USERNAME - 3)}...`;
 }
 
-export async function getEwcUserProfileStats(guildId, season = DEFAULT_EWC_PROFILE_SEASON, userId) {
+export async function getEwcUserProfileStats(guildId, season = DEFAULT_EWC_PROFILE_SEASON, userId, { includeHiddenPicks = false } = {}) {
   const rank = await rankForUser(guildId, season, userId);
   const weekly = await weeklyAggregateStats(guildId, season, userId);
   const profile = await userPredictionProfile(guildId, season, userId);
-  const topTeams = seasonPickTeams(profile);
+  const round = await getEwcSeason(guildId, season);
+  const hasSeasonPicks = Boolean(profile.season?.picks?.length);
+  const canShowSeasonPicks = includeHiddenPicks || seasonPicksVisible(round, profile.season?.score);
+  const topTeams = canShowSeasonPicks ? seasonPickTeams(profile) : [];
   const stats = {
     guildId,
     season,
@@ -227,7 +250,8 @@ export async function getEwcUserProfileStats(guildId, season = DEFAULT_EWC_PROFI
     weeklyWins: weekly.weeklyWins,
     top3Sweeps: weekly.top3Sweeps,
     topTeams,
-    seasonPicks: profile.season?.picks || [],
+    seasonPicks: canShowSeasonPicks ? profile.season?.picks || [] : [],
+    seasonPicksHidden: hasSeasonPicks && !canShowSeasonPicks,
     seasonScore: profile.season?.score == null ? null : Number(profile.season.score),
     recentWeekly: recentWeekly(profile),
   };

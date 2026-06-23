@@ -201,6 +201,8 @@ function medal(rank) {
 export function renderEwcPredictionLeaderboardCard({
   season = '2026',
   rows = [],
+  participantLabels = [],
+  participantCount = participantLabels.length,
   scoredWeeks = 0,
   totalWeeks = 0,
   bestWeeks = null,
@@ -259,12 +261,52 @@ export function renderEwcPredictionLeaderboardCard({
 
   if (!rows.length) {
     ctx.textAlign = 'center';
-    ctx.fillStyle = '#ffffff';
-    ctx.font = `bold 46px ${HEAD_STACK}`;
-    ctx.fillText('No scored predictions yet', W / 2, 590);
-    ctx.fillStyle = '#9fb3d1';
-    ctx.font = `26px ${BODY_STACK}`;
-    ctx.fillText('The leaderboard will fill in when weekly or season scores are posted.', W / 2, 634);
+    if (participantCount > 0) {
+      ctx.fillStyle = '#ffffff';
+      ctx.font = `bold 46px ${HEAD_STACK}`;
+      ctx.fillText(`Predicting now (${participantCount})`, W / 2, 520);
+      ctx.fillStyle = '#9fb3d1';
+      ctx.font = `24px ${BODY_STACK}`;
+      ctx.fillText('Picks stay hidden until each game or season locks.', W / 2, 562);
+
+      const visibleLabels = participantLabels.slice(0, 18);
+      const chipW = 220;
+      const chipH = 42;
+      const gap = 12;
+      const cols = 3;
+      const startX = (W - cols * chipW - (cols - 1) * gap) / 2;
+      let chipY = 612;
+      visibleLabels.forEach((label, index) => {
+        const col = index % cols;
+        if (index > 0 && col === 0) chipY += chipH + gap;
+        const chipX = startX + col * (chipW + gap);
+        ctx.fillStyle = 'rgba(255,255,255,0.05)';
+        roundRect(ctx, chipX, chipY - chipH + 8, chipW, chipH, 10);
+        ctx.fill();
+        ctx.textAlign = 'left';
+        ctx.fillStyle = '#dce8ff';
+        ctx.font = `bold 19px ${HEAD_STACK}`;
+        drawFitText(ctx, label, chipX + 18, chipY - 9, chipW - 36, { size: 19, weight: 'bold', baseStack: HEAD_STACK });
+      });
+      if (participantCount > visibleLabels.length) {
+        ctx.textAlign = 'center';
+        ctx.fillStyle = '#9fb3d1';
+        ctx.font = `20px ${BODY_STACK}`;
+        ctx.fillText(`+${participantCount - visibleLabels.length} more`, W / 2, chipY + 42);
+      }
+
+      ctx.textAlign = 'center';
+      ctx.fillStyle = '#9fb3d1';
+      ctx.font = `22px ${BODY_STACK}`;
+      ctx.fillText('No scored predictions yet. Scores appear here after rounds are posted.', W / 2, 860);
+    } else {
+      ctx.fillStyle = '#ffffff';
+      ctx.font = `bold 46px ${HEAD_STACK}`;
+      ctx.fillText('No scored predictions yet', W / 2, 590);
+      ctx.fillStyle = '#9fb3d1';
+      ctx.font = `26px ${BODY_STACK}`;
+      ctx.fillText('The leaderboard will fill in when weekly or season scores are posted.', W / 2, 634);
+    }
   } else {
     const rowStep = championPickVisible ? 64 : 48;
     const rowHeight = championPickVisible ? 58 : 44;

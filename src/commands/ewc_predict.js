@@ -267,13 +267,42 @@ async function getExistingGamePick(guildId, round, userId, gameKey) {
   return (saved?.picks || []).find((pick) => pick && typeof pick === 'object' && pick.gameKey === gameKey) || null;
 }
 
-function summarizeWeeklyPicks(row) {
+const HIDDEN_PICK_SUMMARY = 'Participated - picks hidden until lock.';
+const HIDDEN_SEASON_SUMMARY = 'Participated - picks hidden until the season locks.';
+
+function seasonPicksVisible(round, score = null, now = Math.floor(Date.now() / 1000)) {
+  return Boolean(
+    score != null ||
+      !round ||
+      round.status === 'closed' ||
+      round.status === 'scored' ||
+      (round.close_at && now >= round.close_at)
+  );
+}
+
+function weeklyPickVisible(row, pick, now = Math.floor(Date.now() / 1000)) {
+  if (row.score != null || row.status === 'scored') return true;
+  if (pick && typeof pick === 'object') {
+    const game = (row.games || []).find((roundGame) => roundGame.key === pick.gameKey);
+    return Boolean(game?.lockAt && now >= game.lockAt);
+  }
+  return Boolean(row.close_at && now >= row.close_at);
+}
+
+function summarizeWeeklyPicks(row, { isOwner = false } = {}) {
   const picks = row.picks || [];
   if (!picks.length) return 'No picks';
-  if (picks.every((pick) => typeof pick === 'string')) return picks.join(', ');
+  if (picks.every((pick) => typeof pick === 'string')) {
+    if (!isOwner && !weeklyPickVisible(row, picks[0])) return HIDDEN_PICK_SUMMARY;
+    return picks.join(', ');
+  }
+  if (!isOwner && !picks.some((pick) => weeklyPickVisible(row, pick))) return HIDDEN_PICK_SUMMARY;
   return picks
     .filter((pick) => pick && typeof pick === 'object')
-    .map((pick) => `${pick.game || pick.gameKey}: ${pick.pick}`)
+    .map((pick) => {
+      if (!isOwner && !weeklyPickVisible(row, pick)) return `${pick.game || pick.gameKey}: hidden`;
+      return `${pick.game || pick.gameKey}: ${pick.pick}`;
+    })
     .join(' | ') || 'No picks';
 }
 
@@ -697,12 +726,19 @@ export async function execute(interaction) {
 
   if (sub === 'profile') {
     const user = interaction.options.getUser('member') || interaction.user;
+    const isOwner = user.id === interaction.user.id;
+    const seasonRound = await getEwcSeason(interaction.guildId, seasonYear);
     const profile = await userPredictionProfile(interaction.guildId, seasonYear, user.id);
     const weekly = profile.weekly
       .filter((row) => row.picks?.length || row.score != null)
       .slice(-5)
-      .map((row) => `• **${row.label || row.week_key}** — ${summarizeWeeklyPicks(row)}${row.score != null ? ` — \`${row.score}\`` : ''}`);
-    const seasonPicks = profile.season?.picks?.length ? profile.season.picks.join(', ') : 'No season picks yet.';
+      .map((row) => `• **${row.label || row.week_key}** — ${summarizeWeeklyPicks(row, { isOwner })}${row.score != null ? ` — \`${row.score}\`` : ''}`);
+    const showSeasonPicks = isOwner || seasonPicksVisible(seasonRound, profile.season?.score);
+    const seasonPicks = profile.season?.picks?.length
+      ? showSeasonPicks
+        ? profile.season.picks.join(', ')
+        : HIDDEN_SEASON_SUMMARY
+      : 'No season picks yet.';
     const seasonValue = `${seasonPicks}${profile.season?.score != null ? ` — \`${profile.season.score}\`` : ''}`;
     await interaction.reply({
       embeds: [

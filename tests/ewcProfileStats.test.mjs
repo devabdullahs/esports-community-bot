@@ -10,6 +10,7 @@ process.env.LOG_LEVEL = 'error';
 
 const { closeDb } = await import('../src/db/index.js');
 const {
+  markEwcSeasonScored,
   markEwcWeekScored,
   saveSeasonPredictionScore,
   saveWeeklyPredictionScore,
@@ -21,6 +22,7 @@ const {
 const {
   buildDiscordRoleConnectionPayload,
   formatShowcaseUsername,
+  getEwcRoleConnectionPayload,
   getEwcUserProfileStats,
   getPublicEwcLeaderboard,
 } = await import('../src/lib/ewcProfileStats.js');
@@ -57,6 +59,7 @@ async function seed() {
   });
   await saveSeasonPredictionScore(guildId, season, userA, 1000, { picks: [] });
   await saveSeasonPredictionScore(guildId, season, userB, 200, { picks: [] });
+  await markEwcSeasonScored(guildId, season, []);
 
   const week1 = await upsertEwcWeek({
     guildId,
@@ -129,4 +132,36 @@ test('truncates showcase username to Discord limits', () => {
   });
   assert.ok(value.length <= 100);
   assert.ok(value.endsWith('...'));
+});
+
+test('hides season picks from public profile surfaces before season lock', async () => {
+  const hiddenSeason = '2027';
+  await upsertEwcSeason({
+    guildId,
+    season: hiddenSeason,
+    label: 'EWC 2027',
+    closeAt: Math.floor(Date.now() / 1000) + 86400,
+    topSize: 5,
+    createdBy: 'admin',
+  });
+  await upsertSeasonPrediction({
+    guildId,
+    season: hiddenSeason,
+    userId: userA,
+    picks: ['Team Falcons', 'Team Liquid', 'Team Vitality', 'T1', 'Gen.G'],
+  });
+
+  const publicStats = await getEwcUserProfileStats(guildId, hiddenSeason, userA);
+  assert.deepEqual(publicStats.topTeams, []);
+  assert.deepEqual(publicStats.seasonPicks, []);
+  assert.equal(publicStats.seasonPicksHidden, true);
+  assert.match(publicStats.showcaseUsername, /picks hidden/);
+  assert.doesNotMatch(publicStats.showcaseUsername, /Team Falcons/);
+
+  const rolePayload = await getEwcRoleConnectionPayload(guildId, hiddenSeason, userA);
+  assert.doesNotMatch(rolePayload.platform_username, /Team Falcons/);
+
+  const ownerStats = await getEwcUserProfileStats(guildId, hiddenSeason, userA, { includeHiddenPicks: true });
+  assert.deepEqual(ownerStats.topTeams, ['Team Falcons', 'Team Liquid', 'Team Vitality']);
+  assert.deepEqual(ownerStats.seasonPicks.slice(0, 3), ['Team Falcons', 'Team Liquid', 'Team Vitality']);
 });

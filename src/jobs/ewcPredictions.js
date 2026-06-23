@@ -84,6 +84,18 @@ async function leaderboardRowsForImage(client, guildId, rows) {
   );
 }
 
+async function participantLabelsForImage(client, guildId, ids) {
+  const guild = await client.guilds.fetch(guildId).catch(() => null);
+  return Promise.all(
+    ids.map(async (id) => {
+      const cachedMember = guild?.members?.cache?.get(id);
+      const member = cachedMember || (guild ? await guild.members.fetch(id).catch(() => null) : null);
+      const user = member?.user || (await client.users.fetch(id).catch(() => null));
+      return member?.displayName || user?.globalName || user?.username || `Member ${String(id).slice(-4)}`;
+    }),
+  );
+}
+
 async function leaderboardMeta(guildId, season) {
   const rows = await overallLeaderboard(guildId, season, 20, 0);
   const weeks = await listEwcWeeks(guildId, season);
@@ -147,11 +159,15 @@ function participatingField(ids) {
 async function buildEwcPredictionLeaderboardPayload(client, guildId, season) {
   const { rows, weeks, scoredWeeks, bestWeeks, championPickVisible } = await leaderboardMeta(guildId, season);
   const namedRows = await leaderboardRowsForImage(client, guildId, rows);
+  const participantIds = await openRoundParticipantIds(guildId, season);
+  const participantLabels = await participantLabelsForImage(client, guildId, participantIds.slice(0, 18));
   const imageName = `ewc-predictions-${season}-${Date.now()}.png`;
   const attachment = new AttachmentBuilder(
     renderEwcPredictionLeaderboardCard({
       season,
       rows: namedRows,
+      participantLabels,
+      participantCount: participantIds.length,
       scoredWeeks,
       totalWeeks: weeks.length,
       bestWeeks,
@@ -171,7 +187,7 @@ async function buildEwcPredictionLeaderboardPayload(client, guildId, season) {
       { name: 'Updated', value: `<t:${nowSec()}:R>`, inline: true },
     )
     .setFooter({ text: 'Weekly and season prediction points' });
-  const participating = participatingField(await openRoundParticipantIds(guildId, season));
+  const participating = participatingField(participantIds);
   if (participating) embed.addFields(participating);
   return { embeds: [embed], files: [attachment] };
 }
