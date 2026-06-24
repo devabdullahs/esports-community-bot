@@ -34,7 +34,7 @@ import {
   userPredictionProfile,
   weeklyLeaderboard,
 } from '../db/ewcPredictions.js';
-import { effectiveEwcWeekStatus, formatShortDate, formatTimestamp, uniqueClubPicks } from '../lib/ewcPredictions.js';
+import { effectiveEwcWeekStatus, formatShortDate, formatTimestamp } from '../lib/ewcPredictions.js';
 import { resolveEwcClubPick, searchEwcClubChoices } from '../lib/ewcClubCache.js';
 import { announceEwcParticipation } from '../lib/ewcParticipation.js';
 import { updateEwcPredictionLeaderboard } from '../jobs/ewcPredictions.js';
@@ -42,16 +42,6 @@ import { updateEwcPredictionLeaderboard } from '../jobs/ewcPredictions.js';
 const DEFAULT_SEASON = '2026';
 const PAGE_SIZE = 20;
 const WEEKLY_PICK_PAGE_SIZE = 25;
-
-function addTeamOption(command, index, required) {
-  return command.addStringOption((o) =>
-    o
-      .setName(`team_${index}`)
-      .setDescription(`Club pick #${index}`)
-      .setAutocomplete(true)
-      .setRequired(required),
-  );
-}
 
 let builder = new SlashCommandBuilder()
   .setName('ewc_predict')
@@ -65,9 +55,10 @@ let builder = new SlashCommandBuilder()
   );
 
 function seasonCommand(s) {
-  let cmd = s.setName('season').setDescription('Pick your top 5-10 clubs for the whole EWC season.');
-  for (let i = 1; i <= 10; i += 1) cmd = addTeamOption(cmd, i, false);
-  return cmd.addStringOption((o) => o.setName('season').setDescription('Season year').setRequired(false));
+  return s
+    .setName('season')
+    .setDescription('Open the guided picker for your EWC season clubs.')
+    .addStringOption((o) => o.setName('season').setDescription('Season year').setRequired(false));
 }
 
 builder = builder
@@ -155,12 +146,6 @@ async function dashboardInternalRequest(path, body) {
 
 function season(interaction) {
   return interaction.options.getString('season') || DEFAULT_SEASON;
-}
-
-function teamPicks(interaction, max = 10) {
-  const picks = [];
-  for (let i = 1; i <= max; i += 1) picks.push(interaction.options.getString(`team_${i}`));
-  return picks;
 }
 
 function roundClosedMessage(round) {
@@ -868,52 +853,15 @@ export async function execute(interaction) {
   }
 
   if (sub === 'season') {
-    const round = await getEwcSeason(interaction.guildId, seasonYear);
-    const closed = roundClosedMessage(round);
-    if (closed) {
-      await interaction.reply({ content: `❌ ${closed}`, flags: MessageFlags.Ephemeral });
+    const payload = await seasonPickPayload(interaction.guildId, seasonYear, interaction.user.id);
+    if (payload.error) {
+      await interaction.reply({ content: `❌ ${payload.error}`, flags: MessageFlags.Ephemeral });
       return;
     }
-    const anyTeam = Array.from({ length: 10 }, (_, i) => interaction.options.getString(`team_${i + 1}`)).some(Boolean);
-    if (!anyTeam) {
-      const payload = await seasonPickPayload(interaction.guildId, seasonYear, interaction.user.id);
-      if (payload.error) {
-        await interaction.reply({ content: `❌ ${payload.error}`, flags: MessageFlags.Ephemeral });
-        return;
-      }
-      await interaction.reply({
-        components: payload.components,
-        flags: MessageFlags.Ephemeral | MessageFlags.IsComponentsV2,
-      });
-      return;
-    }
-    const picks = uniqueClubPicks(teamPicks(interaction, 10));
-    if (picks.length !== round.top_size) {
-      await interaction.reply({
-        content: `❌ This season round needs exactly **${round.top_size}** different club picks.`,
-        flags: MessageFlags.Ephemeral,
-      });
-      return;
-    }
-    const saved = await upsertSeasonPrediction({ guildId: interaction.guildId, season: seasonYear, userId: interaction.user.id, picks });
     await interaction.reply({
-      embeds: [
-        new EmbedBuilder()
-          .setColor(0x57f287)
-          .setTitle(`✅ Season picks locked — ${round.label || `EWC ${seasonYear}`}`)
-          .setDescription(formatPicks(picks)),
-      ],
-      flags: MessageFlags.Ephemeral,
+      components: payload.components,
+      flags: MessageFlags.Ephemeral | MessageFlags.IsComponentsV2,
     });
-    if (saved.firstPick) {
-      refreshPredictionBoard(interaction);
-      await announceEwcParticipation(
-        interaction.client,
-        interaction.guildId,
-        `🎯 <@${interaction.user.id}> locked in their **${round.label || `EWC ${seasonYear}`}** season predictions! 🔒`,
-        { channelId: interaction.channelId },
-      );
-    }
     return;
   }
 
