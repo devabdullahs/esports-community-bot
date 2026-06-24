@@ -1107,16 +1107,22 @@ export async function handleComponent(interaction) {
   if (action === 'open') {
     const seasonYear = parts[2] || DEFAULT_SEASON;
     const current = await currentOpenWeek(interaction.guildId, seasonYear);
-    if (!current) {
-      await interaction.reply({ content: '❌ No EWC week is open for predictions right now.', flags: MessageFlags.Ephemeral });
+    if (current) {
+      const payload = await weeklyPickPayload(interaction.guildId, seasonYear, current.week_key, interaction.user.id);
+      if (payload.error) {
+        await interaction.reply({ content: `❌ ${payload.error}`, flags: MessageFlags.Ephemeral });
+        return;
+      }
+      await interaction.reply({ components: payload.components, flags: MessageFlags.Ephemeral | MessageFlags.IsComponentsV2 });
       return;
     }
-    const payload = await weeklyPickPayload(interaction.guildId, seasonYear, current.week_key, interaction.user.id);
-    if (payload.error) {
-      await interaction.reply({ content: `❌ ${payload.error}`, flags: MessageFlags.Ephemeral });
+    // No weekly week is open yet — offer the season picker if that round is open.
+    const seasonPayload = await seasonPickPayload(interaction.guildId, seasonYear, interaction.user.id);
+    if (!seasonPayload.error) {
+      await interaction.reply({ components: seasonPayload.components, flags: MessageFlags.Ephemeral | MessageFlags.IsComponentsV2 });
       return;
     }
-    await interaction.reply({ components: payload.components, flags: MessageFlags.Ephemeral | MessageFlags.IsComponentsV2 });
+    await interaction.reply({ content: '❌ Nothing is open for EWC predictions right now.', flags: MessageFlags.Ephemeral });
     return;
   }
 
