@@ -29,7 +29,6 @@ import {
   overallLeaderboard,
   seasonLeaderboard,
   upsertSeasonClubPick,
-  upsertSeasonPrediction,
   upsertWeeklyGamePick,
   userPredictionProfile,
   weeklyLeaderboard,
