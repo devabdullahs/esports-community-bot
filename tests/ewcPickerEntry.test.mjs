@@ -11,8 +11,9 @@ process.env.DISCORD_TOKEN = 'test-token';
 process.env.DISCORD_CLIENT_ID = 'test-client-id';
 
 const { closeDb } = await import('../src/db/index.js');
-const { upsertEwcWeek, setEwcWeekStatus } = await import('../src/db/ewcPredictions.js');
+const { upsertEwcWeek, setEwcWeekStatus, upsertEwcSeason } = await import('../src/db/ewcPredictions.js');
 const { currentOpenWeek } = await import('../src/commands/ewc_predict.js');
+const { anyRoundOpen } = await import('../src/jobs/ewcPredictions.js');
 
 test.after(() => {
   closeDb();
@@ -45,4 +46,27 @@ test('currentOpenWeek returns null when no week is open', async () => {
   await setEwcWeekStatus(scored.id, 'scored');
 
   assert.equal(await currentOpenWeek(guildId, '2026'), null);
+});
+
+test('anyRoundOpen is true when only the season round is open (weekly week opens later)', async () => {
+  const guildId = 'guild-picker-4';
+  await upsertEwcSeason({ guildId, season: '2026', label: 'S', topSize: 5, createdBy: 'admin' });
+  await upsertEwcWeek({
+    guildId,
+    season: '2026',
+    weekKey: 'future',
+    label: 'F',
+    openAt: Math.floor(Date.now() / 1000) + 86400,
+    createdBy: 'admin',
+  });
+
+  assert.equal(await anyRoundOpen(guildId, '2026'), true);
+});
+
+test('anyRoundOpen is false with only a scored week and no season round', async () => {
+  const guildId = 'guild-picker-5';
+  const scored = await upsertEwcWeek({ guildId, season: '2026', weekKey: 'scored-only', label: 'Scored Only', createdBy: 'admin' });
+  await setEwcWeekStatus(scored.id, 'scored');
+
+  assert.equal(await anyRoundOpen(guildId, '2026'), false);
 });

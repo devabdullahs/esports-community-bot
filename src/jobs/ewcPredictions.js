@@ -144,6 +144,18 @@ export async function openRoundParticipantIds(guildId, season) {
   return [...ids];
 }
 
+// True when members can still make ANY EWC prediction right now: a weekly week is
+// effectively open, or the season round is open. Drives the leaderboard's picks button.
+export async function anyRoundOpen(guildId, season) {
+  const weeklyOpen = (await listEwcWeeks(guildId, season)).some((w) => {
+    const label = effectiveEwcWeekStatus(w).label;
+    return label === 'open' || label === 'partly open';
+  });
+  if (weeklyOpen) return true;
+  const seasonRound = await getEwcSeason(guildId, season);
+  return Boolean(seasonRound && seasonRound.status === 'open' && !(seasonRound.close_at && nowSec() >= seasonRound.close_at));
+}
+
 function participatingField(ids) {
   if (!ids.length) return null;
   const CAP = 40;
@@ -189,10 +201,7 @@ async function buildEwcPredictionLeaderboardPayload(client, guildId, season) {
     .setFooter({ text: 'Weekly and season prediction points' });
   const participating = participatingField(participantIds);
   if (participating) embed.addFields(participating);
-  const open = (await listEwcWeeks(guildId, season)).some((w) => {
-    const label = effectiveEwcWeekStatus(w).label;
-    return label === 'open' || label === 'partly open';
-  });
+  const open = await anyRoundOpen(guildId, season);
   const components = open
     ? [new ActionRowBuilder().addComponents(
         new ButtonBuilder().setCustomId(`ewc_predict:open:${season}`).setLabel('🎯 Open my picks').setStyle(ButtonStyle.Primary),
