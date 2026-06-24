@@ -268,6 +268,16 @@ export async function currentOpenWeek(guildId, seasonYear) {
   return open[0];
 }
 
+// Season picks fill strictly top-down: you can change an already-set rank or set the
+// next empty one, but not skip ahead (a gap would be silently collapsed by storage).
+// 'filled' = rank already set, 'next' = the one settable empty rank, 'locked' = skip-ahead.
+export function seasonSlotState(picks, index) {
+  const filled = (picks || []).filter((p) => typeof p === 'string' && p.trim()).length;
+  if (index < filled) return 'filled';
+  if (index === filled) return 'next';
+  return 'locked';
+}
+
 async function seasonPickPayload(guildId, seasonYear, userId) {
   const round = await getEwcSeason(guildId, seasonYear);
   const closed = roundClosedMessage(round);
@@ -282,21 +292,28 @@ async function seasonPickPayload(guildId, seasonYear, userId) {
   const container = new ContainerBuilder().setAccentColor(0xf1c40f);
   container.addTextDisplayComponents(
     new TextDisplayBuilder().setContent(
-      `## EWC ${seasonYear} Season Picks — choose ${round.top_size} clubs\n-# ${filled}/${round.top_size} picked. Tap a slot to set or change it.`,
+      `## EWC ${seasonYear} Season Picks — choose ${round.top_size} clubs\n-# ${
+        filled >= round.top_size
+          ? `All ${round.top_size} picked — tap any rank to change it.`
+          : `${filled}/${round.top_size} picked — fill in order (Pick #${filled + 1} is next).`
+      }`,
     ),
   );
   // V2 budget is 40 components total; each slot uses 3 (section + text + button), so 10 slots = 30, under budget.
+  // Picks fill strictly top-down: only the next empty rank is settable, so no gaps can form.
   for (let i = 0; i < round.top_size; i += 1) {
     const pick = picks[i];
-    const text = `**Pick #${i + 1}** — ${pick ? `**${pick}**` : '*empty*'}`;
+    const state = seasonSlotState(picks, i);
+    const value = pick ? `**${pick}**` : state === 'next' ? '*tap Set →*' : '🔒 *locked*';
     container.addSectionComponents(
       new SectionBuilder()
-        .addTextDisplayComponents(new TextDisplayBuilder().setContent(text.slice(0, 4000)))
+        .addTextDisplayComponents(new TextDisplayBuilder().setContent(`**Pick #${i + 1}** — ${value}`.slice(0, 4000)))
         .setButtonAccessory(
           new ButtonBuilder()
             .setCustomId(seasonSlotId(seasonYear, i, userId))
-            .setLabel(pick ? 'Change' : 'Set')
-            .setStyle(pick ? ButtonStyle.Success : ButtonStyle.Primary),
+            .setLabel(state === 'filled' ? 'Change' : state === 'next' ? 'Set' : 'Locked')
+            .setStyle(state === 'filled' ? ButtonStyle.Success : state === 'next' ? ButtonStyle.Primary : ButtonStyle.Secondary)
+            .setDisabled(state === 'locked'),
         ),
     );
   }
@@ -642,7 +659,16 @@ async function showSeasonSlotModal(interaction, { seasonYear, index, ownerId }) 
 
   const slot = Number(index);
   const saved = await getSeasonPrediction(interaction.guildId, seasonYear, interaction.user.id);
-  const current = (saved?.picks || [])[slot] || null;
+  const picks = saved?.picks || [];
+  if (seasonSlotState(picks, slot) === 'locked') {
+    const filled = picks.filter((p) => typeof p === 'string' && p.trim()).length;
+    await interaction.reply({
+      content: `❌ Set Pick #${filled + 1} first — season picks fill in order.`,
+      flags: MessageFlags.Ephemeral,
+    });
+    return;
+  }
+  const current = picks[slot] || null;
   const choices = await searchEwcClubChoices('', {});
   const modal = new ModalBuilder()
     .setCustomId(seasonSlotModalId(seasonYear, slot, interaction.user.id))
@@ -720,8 +746,17 @@ async function handleSeasonSlotModal(interaction, { seasonYear, index, ownerId }
     return;
   }
 
-  // Season picks must be distinct clubs — reject if another slot already holds this one.
   const existingPicks = (await getSeasonPrediction(interaction.guildId, seasonYear, interaction.user.id))?.picks || [];
+  // Top-down only: a stale "locked" button must not skip ahead and leave a collapsing gap.
+  if (seasonSlotState(existingPicks, slot) === 'locked') {
+    const filled = existingPicks.filter((p) => typeof p === 'string' && p.trim()).length;
+    await interaction.followUp({
+      content: `❌ Set Pick #${filled + 1} first — season picks fill in order.`,
+      flags: MessageFlags.Ephemeral,
+    });
+    return;
+  }
+  // Season picks must be distinct clubs — reject if another slot already holds this one.
   const duplicate = existingPicks.some((pick, i) => i !== slot && typeof pick === 'string' && pick === resolved.name);
   if (duplicate) {
     await interaction.followUp({ content: `❌ **${resolved.name}** is already in another slot — pick a different club.`, flags: MessageFlags.Ephemeral });
