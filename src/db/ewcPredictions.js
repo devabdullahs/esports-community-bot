@@ -374,6 +374,16 @@ export async function upsertSeasonClubPick({ guildId, season = '2026', userId, i
   return upsertSeasonPrediction({ guildId, season, userId, picks: cleaned });
 }
 
+// Swap two already-set ranks of a member's season picks in one step (reorder, no gaps).
+// Both indices must hold a pick — callers enforce that; a no-op if either is out of range.
+export async function swapSeasonClubPicks({ guildId, season = '2026', userId, a, b }) {
+  const existing = await getSeasonPrediction(guildId, season, userId);
+  const picks = Array.isArray(existing?.picks) ? [...existing.picks] : [];
+  if (a === b || a < 0 || b < 0 || a >= picks.length || b >= picks.length) return existing;
+  [picks[a], picks[b]] = [picks[b], picks[a]];
+  return upsertSeasonPrediction({ guildId, season, userId, picks });
+}
+
 export async function getSeasonPrediction(guildId, season, userId) {
   return hydratePrediction(
     await get('SELECT * FROM ewc_season_predictions WHERE guild_id = $1 AND season = $2 AND user_id = $3', [
