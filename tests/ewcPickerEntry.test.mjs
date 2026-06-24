@@ -12,7 +12,7 @@ process.env.DISCORD_CLIENT_ID = 'test-client-id';
 
 const { closeDb } = await import('../src/db/index.js');
 const { upsertEwcWeek, setEwcWeekStatus, upsertEwcSeason } = await import('../src/db/ewcPredictions.js');
-const { currentOpenWeek } = await import('../src/commands/ewc_predict.js');
+const { currentOpenWeek, seasonSlotState } = await import('../src/commands/ewc_predict.js');
 const { anyRoundOpen } = await import('../src/jobs/ewcPredictions.js');
 
 test.after(() => {
@@ -69,4 +69,16 @@ test('anyRoundOpen is false with only a scored week and no season round', async 
   await setEwcWeekStatus(scored.id, 'scored');
 
   assert.equal(await anyRoundOpen(guildId, '2026'), false);
+});
+
+test('seasonSlotState enforces top-down (no skipping ahead)', () => {
+  // Two ranks filled → 0,1 are changeable, 2 is the next settable, 3+ are locked.
+  assert.equal(seasonSlotState(['A', 'B'], 0), 'filled');
+  assert.equal(seasonSlotState(['A', 'B'], 1), 'filled');
+  assert.equal(seasonSlotState(['A', 'B'], 2), 'next');
+  assert.equal(seasonSlotState(['A', 'B'], 3), 'locked');
+  assert.equal(seasonSlotState(['A', 'B'], 9), 'locked');
+  // Empty → only rank 0 is settable.
+  assert.equal(seasonSlotState([], 0), 'next');
+  assert.equal(seasonSlotState([], 1), 'locked');
 });
