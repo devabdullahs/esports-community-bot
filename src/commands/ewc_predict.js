@@ -28,6 +28,7 @@ import {
   listEwcWeeks,
   overallLeaderboard,
   seasonLeaderboard,
+  swapSeasonClubPicks,
   upsertSeasonClubPick,
   upsertWeeklyGamePick,
   userPredictionProfile,
@@ -756,10 +757,32 @@ async function handleSeasonSlotModal(interaction, { seasonYear, index, ownerId }
     });
     return;
   }
-  // Season picks must be distinct clubs — reject if another slot already holds this one.
-  const duplicate = existingPicks.some((pick, i) => i !== slot && typeof pick === 'string' && pick === resolved.name);
-  if (duplicate) {
-    await interaction.followUp({ content: `❌ **${resolved.name}** is already in another slot — pick a different club.`, flags: MessageFlags.Ephemeral });
+  // The club is already in the list at another rank: SWAP the two ranks in one step when
+  // editing a filled rank; refuse when setting the next empty rank (can't trade with empty).
+  const existingIndex = existingPicks.findIndex(
+    (pick, i) => i !== slot && typeof pick === 'string' && pick === resolved.name,
+  );
+  if (existingIndex !== -1) {
+    if (seasonSlotState(existingPicks, slot) === 'filled') {
+      await swapSeasonClubPicks({
+        guildId: interaction.guildId,
+        season: seasonYear,
+        userId: interaction.user.id,
+        a: slot,
+        b: existingIndex,
+      });
+      const swapPayload = await seasonPickPayload(interaction.guildId, seasonYear, interaction.user.id);
+      if (swapPayload.error) {
+        await interaction.followUp({ content: `❌ ${swapPayload.error}`, flags: MessageFlags.Ephemeral });
+        return;
+      }
+      await interaction.editReply({ components: swapPayload.components });
+      return;
+    }
+    await interaction.followUp({
+      content: `❌ **${resolved.name}** is already your Pick #${existingIndex + 1}. Edit that rank to move it.`,
+      flags: MessageFlags.Ephemeral,
+    });
     return;
   }
 
