@@ -56,7 +56,7 @@ let builder = new SlashCommandBuilder()
 function seasonCommand(s) {
   return s
     .setName('season')
-    .setDescription('Open the guided picker for your EWC season clubs.')
+    .setDescription('Predict your top clubs for the whole EWC season.')
     .addStringOption((o) => o.setName('season').setDescription('Season year').setRequired(false));
 }
 
