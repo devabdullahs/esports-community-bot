@@ -2,6 +2,7 @@ import {
   SlashCommandBuilder,
   InteractionContextType,
   MessageFlags,
+  AttachmentBuilder,
   EmbedBuilder,
   ActionRowBuilder,
   ButtonBuilder,
@@ -38,6 +39,7 @@ import { effectiveEwcWeekStatus, formatShortDate, formatTimestamp } from '../lib
 import { resolveEwcClubPick, searchEwcClubChoices } from '../lib/ewcClubCache.js';
 import { announceEwcParticipation } from '../lib/ewcParticipation.js';
 import { updateEwcPredictionLeaderboard } from '../jobs/ewcPredictions.js';
+import { renderEwcShareCard } from '../lib/ewcShareCard.js';
 
 const DEFAULT_SEASON = '2026';
 const PAGE_SIZE = 20;
@@ -87,6 +89,18 @@ builder = builder
       .setName('profile')
       .setDescription('Show your EWC prediction profile.')
       .addUserOption((o) => o.setName('member').setDescription('Member to inspect'))
+      .addStringOption((o) => o.setName('season').setDescription('Season year').setRequired(false)),
+  )
+  .addSubcommand((s) =>
+    s
+      .setName('share')
+      .setDescription('Generate a shareable image of your EWC predictions for X/Twitter.')
+      .addStringOption((o) =>
+        o
+          .setName('language')
+          .setDescription('Card language')
+          .addChoices({ name: 'English', value: 'en' }, { name: 'العربية', value: 'ar' }),
+      )
       .addStringOption((o) => o.setName('season').setDescription('Season year').setRequired(false)),
   )
   .addSubcommand((s) => s.setName('guide').setDescription('Show the EWC prediction guide (Arabic + English).'))
@@ -969,6 +983,69 @@ export async function execute(interaction) {
           ),
       ],
       flags: MessageFlags.Ephemeral,
+    });
+    return;
+  }
+
+  if (sub === 'share') {
+    // Self-only by design: a member shares their OWN picks (their choice), so this is allowed
+    // even during the hidden period — it never exposes anyone else's hidden predictions.
+    const lang = interaction.options.getString('language') === 'ar' ? 'ar' : 'en';
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+    const profile = await userPredictionProfile(interaction.guildId, seasonYear, interaction.user.id);
+    const seasonPicks = (profile.season?.picks || []).filter((p) => typeof p === 'string' && p.trim());
+    const weeklyCount = (profile.weekly || []).reduce(
+      (n, w) => n + (Array.isArray(w.picks) ? w.picks.filter((p) => p && typeof p === 'object').length : 0),
+      0,
+    );
+    if (!seasonPicks.length && !weeklyCount) {
+      await interaction.editReply({
+        content:
+          lang === 'ar'
+            ? '❌ لا توجد لديك توقعات لمشاركتها بعد — استخدم `/ewc_predict season` أو `weekly` أولاً.'
+            : '❌ You have no predictions to share yet — make some with `/ewc_predict season` or `weekly` first.',
+      });
+      return;
+    }
+    let avatar = null;
+    try {
+      const res = await fetch(interaction.user.displayAvatarURL({ extension: 'png', size: 256, forceStatic: true }));
+      if (res.ok) avatar = Buffer.from(await res.arrayBuffer());
+    } catch {
+      /* placeholder initials drawn instead */
+    }
+    const png = await renderEwcShareCard({
+      displayName: interaction.user.globalName || interaction.user.username,
+      avatar,
+      seasonPicks,
+      weeklyCount,
+      season: seasonYear,
+      communityName: interaction.guild?.name || 'Esports Community',
+      discordUrl: 'esportscommunity.net/discord',
+      locale: lang,
+    });
+    const file = new AttachmentBuilder(png, { name: `ewc-${seasonYear}-predictions.png` });
+    const tweet =
+      lang === 'ar'
+        ? `سجّلت توقعاتي لـ EWC ${seasonYear}! 🏆 انضم إلى مجتمعنا وشارك بتوقعاتك 👉 https://esportscommunity.net/discord`
+        : `I locked in my EWC ${seasonYear} predictions! 🏆 Join the community and make yours 👉 https://esportscommunity.net/discord`;
+    const row = new ActionRowBuilder().addComponents(
+      new ButtonBuilder()
+        .setStyle(ButtonStyle.Link)
+        .setLabel(lang === 'ar' ? 'انشر على X 🐦' : 'Share on X 🐦')
+        .setURL(`https://twitter.com/intent/tweet?text=${encodeURIComponent(tweet)}`),
+      new ButtonBuilder()
+        .setStyle(ButtonStyle.Link)
+        .setLabel(lang === 'ar' ? 'رابط الدعوة' : 'Discord invite')
+        .setURL('https://esportscommunity.net/discord'),
+    );
+    await interaction.editReply({
+      content:
+        lang === 'ar'
+          ? '📸 احفظ الصورة، ثم اضغط «انشر على X» وأرفقها في تغريدتك.'
+          : '📸 Save the image, then tap **Share on X** and attach it to your tweet.',
+      files: [file],
+      components: [row],
     });
     return;
   }
