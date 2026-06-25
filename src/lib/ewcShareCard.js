@@ -40,17 +40,23 @@ const BODY =
     ],
     'EwcShareBody',
   ) || 'sans-serif';
+// Arabic must come from a real Arabic font — DejaVu/Inter have no Arabic glyphs (tofu).
+// Docker installs fonts-noto-core (Noto Sans Arabic); dev (Windows) falls back to Segoe UI.
+// Final fallback is the bare family name so fontconfig can resolve the installed font on
+// Linux even when the exact file path differs across distro versions.
 const ARABIC =
   sys('Noto Sans Arabic') ||
+  sys('Noto Naskh Arabic') ||
   reg(
     [
-      '/usr/share/fonts/truetype/noto/NotoSansArabic-Bold.ttf',
       '/usr/share/fonts/truetype/noto/NotoSansArabic-Regular.ttf',
+      '/usr/share/fonts/truetype/noto/NotoSansArabic-Bold.ttf',
+      '/usr/share/fonts/opentype/noto/NotoSansArabic-Regular.ttf',
       'C:/Windows/Fonts/segoeui.ttf',
-      '/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf',
     ],
     'EwcShareArabic',
-  );
+  ) ||
+  'Noto Sans Arabic';
 const EMOJI =
   sys('Noto Color Emoji') ||
   reg(['C:/Windows/Fonts/seguiemj.ttf', '/usr/share/fonts/truetype/noto/NotoColorEmoji.ttf'], 'EwcShareEmoji');
