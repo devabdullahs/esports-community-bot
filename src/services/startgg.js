@@ -52,16 +52,29 @@ export async function query(gql, variables = {}, { retries = 3, delayMs = 500 } 
   throw lastErr;
 }
 
-// external_id is the tournament slug ("rlcs-2026-mena-1v1-open") or already a "tournament/<slug>" path.
+// external_id is the tournament slug ("rlcs-2026-mena-1v1-open"), an already
+// full "tournament/<slug>" path, or an event-scoped
+// "tournament/<slug>/event/<event-slug>" path.
 function slugOf(tournament) {
-  const raw = String(tournament?.external_id ?? '');
-  return raw.includes('/') ? raw : `tournament/${raw}`;
+  const raw = String(tournament?.external_id ?? '').trim().replace(/^\/+|\/+$/g, '');
+  if (!raw) return '';
+  return /^tournament\//i.test(raw) ? raw : `tournament/${raw}`;
+}
+
+function isEventSlug(slug) {
+  return /\/event\/[^/]+$/i.test(slug);
 }
 
 // Lightweight: the tournament's display name, its event ids, and each event's game.
 // One cheap request that drives the title + game resolvers and the per-event walk below.
 const HEAD_QUERY = `query Head($slug: String!) {
   tournament(slug: $slug) { name events { id name videogame { name } } }
+}`;
+
+// Event-scoped URLs are important for multi-game tournaments such as Evo. Without
+// this path, adding /event/tekken-8 imports every Evo event instead of just Tekken.
+const EVENT_HEAD_QUERY = `query EventHead($slug: String!) {
+  event(slug: $slug) { id name videogame { name } tournament { name } }
 }`;
 
 // One PAGE of an event's sets, filtered by lifecycle state and sorted as the caller asks.
@@ -90,6 +103,41 @@ const STATE_WINDOWS = [
 ];
 const SETS_PER_PAGE = 50;
 const PAGE_SIZE_LADDER = [SETS_PER_PAGE, 25, 12];
+
+function cleanName(value) {
+  const trimmed = String(value ?? '').trim();
+  return trimmed || null;
+}
+
+async function fetchHead(tournament, q) {
+  const slug = slugOf(tournament);
+  if (!slug) return { tournamentName: null, eventName: null, events: [] };
+
+  if (isEventSlug(slug)) {
+    const data = await q(EVENT_HEAD_QUERY, { slug });
+    const event = data?.event;
+    if (!event?.id) return { tournamentName: null, eventName: null, events: [] };
+    return {
+      tournamentName: event?.tournament?.name ?? null,
+      eventName: event?.name ?? null,
+      events: [{ id: event.id, name: event.name, videogame: event.videogame ?? null }],
+    };
+  }
+
+  const data = await q(HEAD_QUERY, { slug });
+  return {
+    tournamentName: data?.tournament?.name ?? null,
+    eventName: null,
+    events: data?.tournament?.events ?? [],
+  };
+}
+
+function displayNameFromHead(head) {
+  const tournamentName = cleanName(head?.tournamentName);
+  const eventName = cleanName(head?.eventName);
+  if (eventName) return tournamentName ? `${tournamentName}: ${eventName}` : eventName;
+  return tournamentName;
+}
 
 // Normalize a start.gg set into the bot's standard match shape.
 export function normalizeSet(s) {
@@ -188,9 +236,8 @@ export async function fetchSchedule(tournament, { query: q = query } = {}) {
     logger.warn('[startgg] STARTGG_TOKEN not set — skipping.');
     return [];
   }
-  const slug = slugOf(tournament);
-  const head = await q(HEAD_QUERY, { slug });
-  const events = head?.tournament?.events ?? [];
+  const head = await fetchHead(tournament, q);
+  const events = head.events ?? [];
 
   const out = [];
   const seen = new Set();
@@ -213,9 +260,7 @@ export async function fetchSchedule(tournament, { query: q = query } = {}) {
 export async function resolveTournamentTitle(tournament, { query: q = query } = {}) {
   if (!config.startgg.token) return null;
   try {
-    const data = await q(HEAD_QUERY, { slug: slugOf(tournament) });
-    const name = data?.tournament?.name;
-    return name && String(name).trim() ? String(name).trim() : null;
+    return displayNameFromHead(await fetchHead(tournament, q));
   } catch {
     return null;
   }
@@ -228,8 +273,8 @@ export async function resolveTournamentTitle(tournament, { query: q = query } = 
 export async function resolveTournamentGame(tournament, { query: q = query } = {}) {
   if (!config.startgg.token) return null;
   try {
-    const data = await q(HEAD_QUERY, { slug: slugOf(tournament) });
-    for (const ev of data?.tournament?.events ?? []) {
+    const head = await fetchHead(tournament, q);
+    for (const ev of head.events ?? []) {
       const slug = gameSlugFromName(ev?.videogame?.name);
       if (slug) return slug;
     }

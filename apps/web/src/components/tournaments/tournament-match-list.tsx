@@ -99,21 +99,33 @@ function MatchTime({ value, locale }: { value: number | null; locale: Locale }) 
 function MatchText({
   a,
   b,
+  logoA,
+  logoB,
   locale,
   tbd,
   vs,
 }: {
   a: string | null;
   b: string | null;
+  logoA?: string | null;
+  logoB?: string | null;
   locale: Locale;
   tbd: string;
   vs: string;
 }) {
+  const aLabel = teamLabel(a, tbd);
+  const bLabel = teamLabel(b, tbd);
   return (
-    <span dir={directionForLocale(locale)} className="flex max-w-full items-center gap-1.5 text-start">
-      <bdi className="min-w-0 truncate">{teamLabel(a, tbd)}</bdi>
+    <span dir={directionForLocale(locale)} className="flex max-w-full items-center gap-2 text-start">
+      <span className="flex min-w-0 items-center gap-1.5">
+        <Logo url={logoA ?? null} alt={aLabel} />
+        <bdi className="min-w-0 truncate">{aLabel}</bdi>
+      </span>
       <span className="shrink-0 text-muted-foreground">{vs}</span>
-      <bdi className="min-w-0 truncate">{teamLabel(b, tbd)}</bdi>
+      <span className="flex min-w-0 items-center gap-1.5">
+        <bdi className="min-w-0 truncate">{bLabel}</bdi>
+        <Logo url={logoB ?? null} alt={bLabel} />
+      </span>
     </span>
   );
 }
@@ -228,7 +240,15 @@ export function TournamentMatchList({
                     <MatchTime value={m.scheduled_at} locale={locale} />
                   </TableCell>
                   <TableCell className="text-start">
-                    <MatchText a={m.team_a} b={m.team_b} locale={locale} tbd={tbd} vs={text.vs} />
+                    <MatchText
+                      a={m.team_a}
+                      b={m.team_b}
+                      logoA={m.logo_a}
+                      logoB={m.logo_b}
+                      locale={locale}
+                      tbd={tbd}
+                      vs={text.vs}
+                    />
                   </TableCell>
                 </TableRow>
               ))}
@@ -260,7 +280,15 @@ export function TournamentMatchList({
                     <MatchTime value={m.scheduled_at} locale={locale} />
                   </TableCell>
                   <TableCell className="text-start">
-                    <MatchText a={m.team_a} b={m.team_b} locale={locale} tbd={tbd} vs={text.vs} />
+                    <MatchText
+                      a={m.team_a}
+                      b={m.team_b}
+                      logoA={m.logo_a}
+                      logoB={m.logo_b}
+                      locale={locale}
+                      tbd={tbd}
+                      vs={text.vs}
+                    />
                   </TableCell>
                   <TableCell className="text-end">
                     <ResultScoreText a={m.score_a} b={m.score_b} fallback={text.finished} />

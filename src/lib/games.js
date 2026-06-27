@@ -54,14 +54,32 @@ export const GAMES = [
 
 const BY_SLUG = new Map(GAMES.map((g) => [g.slug, g]));
 const BY_NAME = new Map(GAMES.map((g) => [g.name.toLowerCase(), g]));
-const GAME_ALIASES = { teamfighttactics: 'tft' };
+const GAME_ALIASES = {
+  teamfighttactics: 'tft',
+  '2xko': 'fighters',
+  blazbluecentralfiction: 'fighters',
+  tekken8: 'fighters',
+  streetfighter6: 'fighters',
+  fatalfurycityofthewolves: 'fighters',
+  guiltygearstrive: 'fighters',
+  granbluefantasyversusrising: 'fighters',
+  invinciblevs: 'fighters',
+  rivalsofaetherii: 'fighters',
+  undernightinbirthiisysceles: 'fighters',
+  vampiresavior: 'fighters',
+  virtuafighter5revoworldstage: 'fighters',
+};
 
 // Resolve a source-supplied display name (e.g. start.gg's videogame.name "Rocket League")
 // to a registered game slug, or null if we don't track it. Lets start.gg tournaments —
 // whose URLs don't encode the game the way Liquipedia's do — group under the right board.
 export function gameSlugFromName(name) {
   if (!name) return null;
-  return BY_NAME.get(String(name).trim().toLowerCase())?.slug ?? null;
+  const raw = String(name).trim();
+  const exact = BY_NAME.get(raw.toLowerCase())?.slug;
+  if (exact) return exact;
+  const norm = raw.toLowerCase().replace(/[^a-z0-9]+/g, '');
+  return GAME_ALIASES[norm] ?? null;
 }
 
 // Map a live-stream CATEGORY (the game a Twitch/Kick channel is currently playing,
