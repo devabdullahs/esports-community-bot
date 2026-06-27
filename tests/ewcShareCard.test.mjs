@@ -22,3 +22,11 @@ test('renderEwcShareCard handles a member with no picks', async () => {
   const png = await renderEwcShareCard({ displayName: 'Empty', seasonPicks: [], weeklyCount: 0, locale: 'en' });
   assert.ok(isPng(png), 'expected a PNG buffer even with no picks');
 });
+
+test('renderEwcShareCard accepts optional avatar + qr PNG buffers', async () => {
+  // A previously-rendered card is a valid PNG, so reuse it to exercise the
+  // optional avatar (loadImage/clip) and qr (drawOptionalQr) image paths.
+  const image = await renderEwcShareCard({ displayName: 'Seed', seasonPicks: ['A'] });
+  const png = await renderEwcShareCard({ displayName: 'Q', seasonPicks: picks, avatar: image, qr: image, locale: 'en' });
+  assert.ok(isPng(png), 'expected a PNG buffer with avatar + qr buffers');
+});

@@ -31,7 +31,8 @@ ENV NODE_ENV=production \
   LOGO_RATE_STATE_PATH=/app/data/logo-rate-limit.json
 
 RUN apt-get update \
-  && apt-get install -y --no-install-recommends ca-certificates fontconfig fonts-dejavu-core fonts-inter \
+  && apt-get install -y --no-install-recommends ca-certificates fontconfig fonts-dejavu-core fonts-inter fonts-noto-core \
+  && fc-cache -f \
   && rm -rf /var/lib/apt/lists/* \
   && mkdir -p /app/data \
   && chown -R node:node /app
