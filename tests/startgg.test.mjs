@@ -48,9 +48,26 @@ function makeSets(state, startId, count) {
 // per-event sets query, FILTERING by the requested lifecycle state and computing
 // totalPages from the page size like the real API. `complexityAbove` throws a
 // complexity error for larger pages so the retry ladder is exercised. No network.
-function makeQuery({ name = 'Real Tournament', events = [], setsByEvent = {}, videogame = null, complexityAbove = Infinity } = {}) {
+function makeQuery({
+  name = 'Real Tournament',
+  eventName = null,
+  events = [],
+  setsByEvent = {},
+  videogame = null,
+  complexityAbove = Infinity,
+} = {}) {
   const q = async (gql, vars) => {
     q.calls.push({ gql, vars });
+    if (/event\(slug/.test(gql)) {
+      return {
+        event: {
+          id: events[0]?.id ?? 'E1',
+          name: eventName ?? events[0]?.name ?? 'Main Event',
+          videogame: videogame ? { name: videogame } : (events[0]?.videogame ?? null),
+          tournament: { name },
+        },
+      };
+    }
     if (/tournament\(slug/.test(gql)) {
       const evs = events.map((e) => ({ ...e, videogame: videogame ? { name: videogame } : null }));
       return { tournament: { name, events: evs } };
@@ -68,6 +85,8 @@ function makeQuery({ name = 'Real Tournament', events = [], setsByEvent = {}, vi
   };
   q.calls = [];
   q.eventCalls = () => q.calls.filter((c) => /event\(id/.test(c.gql));
+  q.eventHeadCalls = () => q.calls.filter((c) => /event\(slug/.test(c.gql));
+  q.tournamentHeadCalls = () => q.calls.filter((c) => /tournament\(slug/.test(c.gql));
   return q;
 }
 
@@ -146,13 +165,36 @@ test('fetchSchedule retries a window at a smaller page size on a complexity erro
 test('fetchSchedule accepts a slug that is already a full tournament path', async () => {
   const q = makeQuery({ events: [{ id: 'E1', name: 'Main' }], setsByEvent: { E1: makeSets(2, 1, 1) } });
   await fetchSchedule({ external_id: 'tournament/already-pathed', name: 'x' }, { query: q });
-  const head = q.calls.find((c) => /tournament\(slug/.test(c.gql));
+  const head = q.tournamentHeadCalls()[0];
   assert.equal(head.vars.slug, 'tournament/already-pathed', 'an existing path is not double-prefixed');
+});
+
+test('fetchSchedule scopes a full start.gg event path to that single event', async () => {
+  const q = makeQuery({
+    name: 'Evo 2026',
+    eventName: 'TEKKEN 8',
+    events: [{ id: 'TEKKEN', name: 'TEKKEN 8' }],
+    setsByEvent: { TEKKEN: makeSets(2, 1, 2) },
+    videogame: 'TEKKEN 8',
+  });
+
+  const matches = await fetchSchedule({ external_id: 'tournament/evo-2026/event/tekken-8', name: 'x' }, { query: q });
+
+  assert.equal(matches.length, 2);
+  assert.equal(q.eventHeadCalls()[0].vars.slug, 'tournament/evo-2026/event/tekken-8');
+  assert.equal(q.tournamentHeadCalls().length, 0, 'event URLs do not walk all tournament events');
+  assert.deepEqual(new Set(q.eventCalls().map((c) => c.vars.eventId)), new Set(['TEKKEN']));
 });
 
 test('resolveTournamentGame maps the videogame name to a bot slug, null when unknown', async () => {
   const rl = makeQuery({ events: [{ id: 'E1', name: '1v1 Open' }], videogame: 'Rocket League' });
   assert.equal(await resolveTournamentGame(tournament, { query: rl }), 'rocketleague');
+
+  const tekken = makeQuery({ events: [{ id: 'E1', name: 'TEKKEN 8' }], videogame: 'TEKKEN 8' });
+  assert.equal(
+    await resolveTournamentGame({ external_id: 'tournament/evo-2026/event/tekken-8' }, { query: tekken }),
+    'fighters',
+  );
 
   const unknown = makeQuery({ events: [{ id: 'E1', name: 'x' }], videogame: 'Some Untracked Game' });
   assert.equal(await resolveTournamentGame(tournament, { query: unknown }), null);
@@ -193,6 +235,12 @@ test('fetchMatch returns null when the set is missing', async () => {
 test('resolveTournamentTitle returns the real name, null on error or blank', async () => {
   const ok = makeQuery({ name: 'RLCS 2026 NA 1v1 Open', events: [] });
   assert.equal(await resolveTournamentTitle(tournament, { query: ok }), 'RLCS 2026 NA 1v1 Open');
+
+  const event = makeQuery({ name: 'Evo 2026', eventName: 'TEKKEN 8', events: [{ id: 'E1', name: 'TEKKEN 8' }] });
+  assert.equal(
+    await resolveTournamentTitle({ external_id: 'tournament/evo-2026/event/tekken-8' }, { query: event }),
+    'Evo 2026: TEKKEN 8',
+  );
 
   const blank = makeQuery({ name: '   ', events: [] });
   assert.equal(await resolveTournamentTitle(tournament, { query: blank }), null);

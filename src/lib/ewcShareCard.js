@@ -41,27 +41,26 @@ const BODY =
     ],
     'EwcShareBody',
   ) || 'sans-serif';
-// Prefer a plain system Arabic stack here. Some Arabic font families look too
-// stylized in small social-card text; Arial/Segoe UI/DejaVu stay neutral.
+// Prefer a plain, Linux-friendly Arabic stack. Noto Arabic is installed in the
+// production image; register it before Latin fallbacks so the canvas renderer
+// does not choose a family that lacks Arabic glyphs and draw square boxes.
 const ARABIC =
+  sys('Noto Sans Arabic') ||
   reg(
     [
-      'C:/Windows/Fonts/arial.ttf',
-      'C:/Windows/Fonts/segoeui.ttf',
-      '/usr/share/fonts/truetype/msttcorefonts/Arial.ttf',
-      '/usr/share/fonts/truetype/liberation2/LiberationSans-Regular.ttf',
-      '/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf',
-      '/Library/Fonts/Arial.ttf',
       '/usr/share/fonts/truetype/noto/NotoSansArabic-Regular.ttf',
       '/usr/share/fonts/truetype/noto/NotoSansArabic-Bold.ttf',
       '/usr/share/fonts/opentype/noto/NotoSansArabic-Regular.ttf',
+      'C:/Windows/Fonts/arial.ttf',
+      'C:/Windows/Fonts/segoeui.ttf',
+      '/Library/Fonts/Arial.ttf',
+      '/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf',
     ],
     'EwcShareArabic',
   ) ||
   sys('Arial') ||
   sys('Arial Unicode MS') ||
   sys('Segoe UI') ||
-  sys('Noto Sans Arabic') ||
   'Arial';
 const EMOJI =
   sys('Noto Color Emoji') ||
