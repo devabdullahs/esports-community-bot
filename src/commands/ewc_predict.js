@@ -40,10 +40,31 @@ import { resolveEwcClubPick, searchEwcClubChoices } from '../lib/ewcClubCache.js
 import { announceEwcParticipation } from '../lib/ewcParticipation.js';
 import { updateEwcPredictionLeaderboard } from '../jobs/ewcPredictions.js';
 import { renderEwcShareCard } from '../lib/ewcShareCard.js';
+import QRCode from 'qrcode';
 
 const DEFAULT_SEASON = '2026';
 const PAGE_SIZE = 20;
 const WEEKLY_PICK_PAGE_SIZE = 25;
+const SHARE_DISCORD_URL = 'https://esportscommunity.net/discord';
+
+let shareQrPromise = null;
+
+function getShareQr() {
+  shareQrPromise ??= QRCode.toBuffer(SHARE_DISCORD_URL, {
+    type: 'png',
+    errorCorrectionLevel: 'M',
+    margin: 1,
+    width: 320,
+    color: {
+      dark: '#0b1628',
+      light: '#f3f6fb',
+    },
+  }).catch((error) => {
+    shareQrPromise = null;
+    throw error;
+  });
+  return shareQrPromise;
+}
 
 let builder = new SlashCommandBuilder()
   .setName('ewc_predict')
@@ -1014,21 +1035,28 @@ export async function execute(interaction) {
     } catch {
       /* placeholder initials drawn instead */
     }
+    let qr = null;
+    try {
+      qr = await getShareQr();
+    } catch {
+      /* QR placeholder drawn instead */
+    }
     const png = await renderEwcShareCard({
       displayName: interaction.user.globalName || interaction.user.username,
       avatar,
+      qr,
       seasonPicks,
       weeklyCount,
       season: seasonYear,
       communityName: interaction.guild?.name || 'Esports Community',
-      discordUrl: 'esportscommunity.net/discord',
+      discordUrl: SHARE_DISCORD_URL,
       locale: lang,
     });
     const file = new AttachmentBuilder(png, { name: `ewc-${seasonYear}-predictions.png` });
     const tweet =
       lang === 'ar'
-        ? `سجّلت توقعاتي لـ EWC ${seasonYear}! 🏆 انضم إلى مجتمعنا وشارك بتوقعاتك 👉 https://esportscommunity.net/discord`
-        : `I locked in my EWC ${seasonYear} predictions! 🏆 Join the community and make yours 👉 https://esportscommunity.net/discord`;
+        ? `سجّلت توقعاتي لـ EWC ${seasonYear}! 🏆 انضم إلى مجتمعنا وشارك بتوقعاتك 👉 ${SHARE_DISCORD_URL}`
+        : `I locked in my EWC ${seasonYear} predictions! 🏆 Join the community and make yours 👉 ${SHARE_DISCORD_URL}`;
     const row = new ActionRowBuilder().addComponents(
       new ButtonBuilder()
         .setStyle(ButtonStyle.Link)
@@ -1037,7 +1065,7 @@ export async function execute(interaction) {
       new ButtonBuilder()
         .setStyle(ButtonStyle.Link)
         .setLabel(lang === 'ar' ? 'رابط الدعوة' : 'Discord invite')
-        .setURL('https://esportscommunity.net/discord'),
+        .setURL(SHARE_DISCORD_URL),
     );
     await interaction.editReply({
       content:
