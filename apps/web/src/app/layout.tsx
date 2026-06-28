@@ -1,8 +1,10 @@
 import type { Metadata } from "next";
 import { Suspense } from "react";
+import { DeploymentUpdateAlert } from "@/components/deployment-update-alert";
 import { Providers } from "@/components/providers";
 import { SiteFooter } from "@/components/site-footer";
 import { SiteHeader } from "@/components/site-header";
+import { getDeploymentVersion } from "@/lib/deployment-version";
 import { copy, directionForLocale } from "@/lib/i18n";
 import { getRequestLocale } from "@/lib/request-locale";
 import {
@@ -110,6 +112,7 @@ export default async function RootLayout({
   children: React.ReactNode;
 }>) {
   const locale = await getRequestLocale();
+  const deploymentVersion = getDeploymentVersion();
   return (
     <html lang={locale} dir={directionForLocale(locale)} suppressHydrationWarning className="h-full antialiased">
       <body className="min-h-full" suppressHydrationWarning>
@@ -134,6 +137,7 @@ export default async function RootLayout({
             <Suspense fallback={null}>
               <SiteFooter />
             </Suspense>
+            <DeploymentUpdateAlert initialVersion={deploymentVersion} locale={locale} />
           </Providers>
         </div>
       </body>

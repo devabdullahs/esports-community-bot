@@ -516,6 +516,26 @@ function drawFooter(ctx, { rtl, W, t, url, qr }) {
 // ---------------------------------------------------------------------------
 // Localized strings
 // ---------------------------------------------------------------------------
+const arNumber = (value) => new Intl.NumberFormat('ar-SA').format(Math.max(0, Math.trunc(Number(value) || 0)));
+
+function arChampionPickCount(value) {
+  const n = Math.max(0, Math.trunc(Number(value) || 0));
+  if (n === 0) return 'لا توقعات أبطال';
+  if (n === 1) return 'توقع بطل واحد';
+  if (n === 2) return 'توقعا بطلين';
+  if (n <= 10) return `${arNumber(n)} توقعات أبطال`;
+  return `${arNumber(n)} توقعًا للأبطال`;
+}
+
+function arWeeklyPickCount(value) {
+  const n = Math.max(0, Math.trunc(Number(value) || 0));
+  if (n === 0) return 'لا توقعات أسبوعية';
+  if (n === 1) return 'توقع أسبوعي واحد';
+  if (n === 2) return 'توقعان أسبوعيان';
+  if (n <= 10) return `${arNumber(n)} توقعات أسبوعية`;
+  return `${arNumber(n)} توقعًا أسبوعيًا`;
+}
+
 const STR = {
   en: {
     brand: (c) => String(c || 'Esports Community').toUpperCase(),
@@ -533,7 +553,7 @@ const STR = {
     league: 'دوري التوقعات',
     pill: (s) => `توقعات EWC ${s}`,
     subtitle: 'شارك بالتوقع',
-    meta: (n, w) => `${n} توقع للأبطال • +${w} أسبوعية`,
+    meta: (n, w) => `${arChampionPickCount(n)}، ${arWeeklyPickCount(w)}`,
     heading: 'توقعات أبطال الموسم',
     none: 'تم تسجيل التوقعات',
     footLead: 'توقعاتك داخل الديسكورد',

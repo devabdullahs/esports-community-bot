@@ -1,4 +1,6 @@
 import axios from 'axios';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
 import { config } from '../config.js';
 import { logger } from '../lib/logger.js';
 import { gameSlugFromName } from '../lib/games.js';
@@ -10,6 +12,17 @@ import { gameSlugFromName } from '../lib/games.js';
 // several sequential requests, so use a generous timeout and retry transient failures
 // with backoff — a hiccup shouldn't zero out the whole tournament's sync.
 const REQUEST_TIMEOUT_MS = 25_000;
+const IS_TEST =
+  process.env.NODE_ENV === 'test' ||
+  process.env.npm_lifecycle_event === 'test' ||
+  process.execArgv.includes('--test');
+const configuredMinGapMs = Number(process.env.STARTGG_MIN_GAP_MS || 1_000);
+const configuredBackoffMs = Number(process.env.STARTGG_BACKOFF_MS || 20 * 60_000);
+const MIN_GAP_MS = IS_TEST ? 0 : Math.max(750, Number.isFinite(configuredMinGapMs) ? configuredMinGapMs : 1_000);
+const BACKOFF_MS = IS_TEST ? 0 : Math.max(60_000, Number.isFinite(configuredBackoffMs) ? configuredBackoffMs : 20 * 60_000);
+const RATE_STATE_PATH =
+  process.env.STARTGG_RATE_STATE_PATH ||
+  join(/* turbopackIgnore: true */ process.cwd(), 'data', 'startgg-rate-limit.json');
 const client = axios.create({
   baseURL: config.startgg.baseUrl,
   timeout: REQUEST_TIMEOUT_MS,
@@ -18,6 +31,96 @@ const client = axios.create({
     ...(config.startgg.token ? { Authorization: `Bearer ${config.startgg.token}` } : {}),
   },
 });
+
+const rateState = {
+  lastRequestAt: 0,
+  blockedUntil: 0,
+  loaded: false,
+};
+let requestChain = Promise.resolve();
+
+function loadRateState({ force = false } = {}) {
+  if (IS_TEST) return;
+  if (rateState.loaded && !force) return;
+  rateState.loaded = true;
+  try {
+    const data = JSON.parse(readFileSync(/* turbopackIgnore: true */ RATE_STATE_PATH, 'utf8'));
+    rateState.lastRequestAt = Number(data.lastRequestAt) || 0;
+    rateState.blockedUntil = Number(data.blockedUntil) || 0;
+  } catch {
+    // Missing or invalid state just means this is the first start.gg run.
+  }
+}
+
+function saveRateState() {
+  if (IS_TEST) return;
+  try {
+    mkdirSync(/* turbopackIgnore: true */ dirname(RATE_STATE_PATH), { recursive: true });
+    writeFileSync(
+      /* turbopackIgnore: true */ RATE_STATE_PATH,
+      JSON.stringify({ lastRequestAt: rateState.lastRequestAt, blockedUntil: rateState.blockedUntil }, null, 2),
+    );
+  } catch (e) {
+    logger.debug(`[startgg] could not save rate state: ${e.message}`);
+  }
+}
+
+function backoffError() {
+  return new Error('start.gg: backing off after a rate limit');
+}
+
+export function isStartggRateLimitBackoff(error) {
+  return /start\.gg: backing off after a rate limit/i.test(error?.message || '');
+}
+
+function retryAfterMs(error) {
+  const header = error?.response?.headers?.['retry-after'];
+  if (header == null) return 0;
+  const seconds = Number(header);
+  if (Number.isFinite(seconds)) return Math.max(0, seconds * 1000);
+  const dateMs = Date.parse(String(header));
+  return Number.isFinite(dateMs) ? Math.max(0, dateMs - Date.now()) : 0;
+}
+
+function markRateLimited(error) {
+  const durationMs = Math.max(BACKOFF_MS, retryAfterMs(error));
+  loadRateState({ force: true });
+  rateState.blockedUntil = Math.max(rateState.blockedUntil, Date.now() + durationMs);
+  saveRateState();
+  const minutes = Math.max(1, Math.round(durationMs / 60000));
+  logger.warn(`[startgg] rate limited (HTTP 429) - pausing requests for ${minutes} min`);
+}
+
+async function throttleRequest() {
+  loadRateState({ force: true });
+  if (Date.now() < rateState.blockedUntil) throw backoffError();
+
+  const wait = rateState.lastRequestAt + MIN_GAP_MS - Date.now();
+  if (wait > 0) await sleep(wait);
+
+  loadRateState({ force: true });
+  if (Date.now() < rateState.blockedUntil) throw backoffError();
+
+  rateState.lastRequestAt = Date.now();
+  saveRateState();
+}
+
+function scheduleRequest(task) {
+  const run = requestChain.then(async () => {
+    await throttleRequest();
+    try {
+      return await task();
+    } catch (error) {
+      if (error?.response?.status === 429) {
+        markRateLimited(error);
+        throw backoffError();
+      }
+      throw error;
+    }
+  });
+  requestChain = run.then(() => undefined, () => undefined);
+  return run;
+}
 
 // Transient = worth retrying the SAME request. Deterministic GraphQL errors
 // (complexity, validation) are NOT transient — they bubble up so the caller can
@@ -38,12 +141,27 @@ export async function query(gql, variables = {}, { retries = 3, delayMs = 500 } 
   let lastErr;
   for (let attempt = 1; attempt <= retries; attempt += 1) {
     try {
-      const { data } = await client.post('', { query: gql, variables });
+      const { data } = await scheduleRequest(() => client.post('', { query: gql, variables }));
       // GraphQL errors (complexity, bad query) are deterministic — surface them now, don't retry.
-      if (data.errors) throw new Error(data.errors.map((e) => e.message).join('; '));
+      if (data?.success === false) {
+        const message = data.message || 'start.gg API request failed';
+        if (/rate.?limit/i.test(message)) {
+          markRateLimited({ response: { status: 429, headers: {} } });
+          throw backoffError();
+        }
+        throw new Error(message);
+      }
+      if (data.errors) {
+        const message = data.errors.map((e) => e.message).join('; ');
+        if (/rate.?limit/i.test(message)) {
+          markRateLimited({ response: { status: 429, headers: {} } });
+          throw backoffError();
+        }
+        throw new Error(message);
+      }
       return data.data;
     } catch (e) {
-      if (!isTransient(e) || attempt === retries) throw e;
+      if (isStartggRateLimitBackoff(e) || !isTransient(e) || attempt === retries) throw e;
       lastErr = e;
       logger.debug(`[startgg] transient error (attempt ${attempt}/${retries}): ${e.message}; retrying`);
       if (delayMs) await sleep(delayMs * attempt);
