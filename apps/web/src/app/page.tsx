@@ -17,7 +17,7 @@ import {
 } from "@/components/ui/card";
 import { DateTime } from "@/components/date-time";
 import { localizeText } from "@/lib/community-content";
-import { listGamesCached } from "@/lib/games";
+import { gameTitleForSlug, listGamesCached } from "@/lib/games";
 import { listLatestPublishedNewsPostsCached } from "@/lib/news";
 import { listTournamentSummariesCached, type TournamentSummary } from "@/lib/tournaments";
 import {
@@ -51,10 +51,7 @@ export default async function Home() {
 
   const games = await listGamesCached();
   const latestPosts = await listLatestPublishedNewsPostsCached(locale, 3);
-  const gameTitleOf = (slug: string) => {
-    const game = games.find((g) => g.slug === slug);
-    return game ? localizeText(game.title, locale) : slug;
-  };
+  const gameTitleOf = (slug: string) => gameTitleForSlug(slug, games, locale);
 
   const summaries = await listTournamentSummariesCached();
   const live = summaries.filter((t) => t.matchCounts.running > 0);

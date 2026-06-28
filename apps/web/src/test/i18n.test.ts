@@ -1,5 +1,11 @@
 import { describe, expect, test } from "vitest";
-import { formatMatchCount, formatMatchStatusCount } from "@/lib/i18n";
+import {
+  directionForLocale,
+  formatMatchCount,
+  formatMatchStatusCount,
+  localizedPath,
+  stripLocalePrefix,
+} from "@/lib/i18n";
 
 describe("formatMatchCount", () => {
   test("formats English match counts", () => {
@@ -41,5 +47,26 @@ describe("formatMatchStatusCount", () => {
     expect(formatMatchStatusCount(2, "upcoming", "ar")).toBe("\u0645\u0628\u0627\u0631\u0627\u062a\u0627\u0646 \u0642\u0627\u062f\u0645\u062a\u0627\u0646");
     expect(formatMatchStatusCount(5, "upcoming", "ar")).toBe("\u0665 \u0645\u0628\u0627\u0631\u064a\u0627\u062a \u0642\u0627\u062f\u0645\u0629");
     expect(formatMatchStatusCount(16, "upcoming", "ar")).toBe("\u0661\u0666 \u0645\u0628\u0627\u0631\u0627\u0629 \u0642\u0627\u062f\u0645\u0629");
+  });
+});
+
+describe("locale routing helpers", () => {
+  test("keeps Arabic under /ar and English on canonical unprefixed paths", () => {
+    expect(localizedPath("/games", "ar")).toBe("/ar/games");
+    expect(localizedPath("/ar/games", "en")).toBe("/games");
+    expect(localizedPath("/ar/games?tab=live", "en")).toBe("/games?tab=live");
+    expect(localizedPath("/games?tab=live", "ar")).toBe("/ar/games?tab=live");
+  });
+
+  test("does not locale-prefix private or API routes", () => {
+    expect(localizedPath("/admin", "ar")).toBe("/admin");
+    expect(localizedPath("/api/tournaments", "ar")).toBe("/api/tournaments");
+    expect(localizedPath("/me", "ar")).toBe("/me");
+  });
+
+  test("normalizes locale prefixes and directions", () => {
+    expect(stripLocalePrefix("/ar/tournaments/1")).toBe("/tournaments/1");
+    expect(directionForLocale("ar")).toBe("rtl");
+    expect(directionForLocale("en")).toBe("ltr");
   });
 });

@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { LiquipediaAttribution } from "@/components/tournaments/liquipedia-attribution";
 import { TournamentMatchList } from "@/components/tournaments/tournament-match-list";
 import { copy, formatNumber, localizedPath } from "@/lib/i18n";
+import { gameTitleForSlug, listGamesCached } from "@/lib/games";
 import { getRequestLocale } from "@/lib/request-locale";
 import { safeUrlOrUndefined } from "@/lib/safe-url";
 import { getTournamentMatchesCached } from "@/lib/tournaments";
@@ -47,7 +48,10 @@ export default async function TournamentDetailPage({
   const tournamentId = /^\d+$/.test(id) ? Number(id) : NaN;
   if (!Number.isSafeInteger(tournamentId) || tournamentId <= 0) notFound();
 
-  const data = await getTournamentMatchesCached(tournamentId);
+  const [data, games] = await Promise.all([
+    getTournamentMatchesCached(tournamentId),
+    listGamesCached(),
+  ]);
   if (!data) notFound();
 
   const { tournament } = data;
@@ -69,8 +73,8 @@ export default async function TournamentDetailPage({
       <header className="flex flex-col gap-3">
         <div className="flex flex-wrap items-center gap-2">
           {tournament.game ? (
-            <Badge variant="secondary" className="uppercase">
-              {tournament.game}
+            <Badge variant="secondary">
+              {gameTitleForSlug(tournament.game, games, locale)}
             </Badge>
           ) : null}
           {isLive ? <Badge variant="destructive">{text.live}</Badge> : null}

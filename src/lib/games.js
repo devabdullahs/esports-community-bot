@@ -45,15 +45,12 @@ export const GAMES = [
   { name: 'Splatoon', slug: 'splatoon', tag: 'Splat' },
   { name: 'War Thunder', slug: 'warthunder', tag: 'WT' },
   { name: 'Stormgate', slug: 'stormgate', tag: 'SG' },
-  { name: 'Tekken', slug: 'fighters', tag: 'FGC' },
-  { name: 'Street Fighter', slug: 'fighters', tag: 'FGC' },
-  { name: 'Fatal Fury', slug: 'fighters', tag: 'FGC' },
+  { name: 'Fighter Games', slug: 'fighters', tag: 'FGC' },
   { name: 'Chess', slug: 'chess', tag: 'Chess' },
   { name: 'Esports / multi-game (EWC)', slug: 'esports', tag: 'EWC' },
 ];
 
 const BY_SLUG = new Map(GAMES.map((g) => [g.slug, g]));
-const BY_NAME = new Map(GAMES.map((g) => [g.name.toLowerCase(), g]));
 const GAME_ALIASES = {
   teamfighttactics: 'tft',
   '2xko': 'fighters',
@@ -69,6 +66,28 @@ const GAME_ALIASES = {
   vampiresavior: 'fighters',
   virtuafighter5revoworldstage: 'fighters',
 };
+const GAME_NAME_ALIASES = [
+  { name: '2XKO', slug: 'fighters' },
+  { name: 'BlazBlue: Central Fiction', slug: 'fighters' },
+  { name: 'Fatal Fury', slug: 'fighters' },
+  { name: 'Fatal Fury: City of the Wolves', slug: 'fighters' },
+  { name: 'Fighting Games', slug: 'fighters' },
+  { name: 'Granblue Fantasy Versus: Rising', slug: 'fighters' },
+  { name: 'Guilty Gear Strive', slug: 'fighters' },
+  { name: 'Invincible VS', slug: 'fighters' },
+  { name: 'Rivals of Aether II', slug: 'fighters' },
+  { name: 'Street Fighter', slug: 'fighters' },
+  { name: 'Street Fighter 6', slug: 'fighters' },
+  { name: 'Tekken', slug: 'fighters' },
+  { name: 'Tekken 8', slug: 'fighters' },
+  { name: 'Under Night In-Birth II Sys:Celes', slug: 'fighters' },
+  { name: 'Vampire Savior', slug: 'fighters' },
+  { name: 'Virtua Fighter 5 R.E.V.O. World Stage', slug: 'fighters' },
+];
+const BY_NAME = new Map([
+  ...GAMES.map((g) => [g.name.toLowerCase(), g]),
+  ...GAME_NAME_ALIASES.map((g) => [g.name.toLowerCase(), { ...BY_SLUG.get(g.slug), slug: g.slug }]),
+]);
 
 // Resolve a source-supplied display name (e.g. start.gg's videogame.name "Rocket League")
 // to a registered game slug, or null if we don't track it. Lets start.gg tournaments —
@@ -181,9 +200,25 @@ export function searchGames(query, { includeAll = false } = {}) {
   const q = (query || '').toLowerCase().trim();
   const list = q ? GAMES.filter((g) => g.name.toLowerCase().includes(q) || g.slug.includes(q)) : GAMES;
   const choices = [];
+  const seen = new Set();
+  const addChoice = (name, value) => {
+    const normalized = normalizeGameSlug(value);
+    if (seen.has(normalized)) return;
+    seen.add(normalized);
+    choices.push({ name, value: normalized });
+  };
+
   if (includeAll && (!q || 'all games'.includes(q) || q === 'all')) {
     choices.push({ name: 'All games', value: 'all' });
+    seen.add('all');
   }
-  choices.push(...list.map((g) => ({ name: g.name, value: g.slug })));
+  for (const game of list) addChoice(game.name, game.slug);
+  if (q) {
+    for (const alias of GAME_NAME_ALIASES) {
+      const aliasKey = alias.name.toLowerCase();
+      if (!aliasKey.includes(q) && !alias.slug.includes(q)) continue;
+      addChoice(`${alias.name} (Fighter Games)`, alias.slug);
+    }
+  }
   return choices.slice(0, 25);
 }
