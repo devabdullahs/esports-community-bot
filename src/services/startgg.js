@@ -227,7 +227,13 @@ const STATE_WINDOWS = [
 // card, ask start.gg for a RECENT-sorted not-started window too. This keeps
 // projected rows filtered out without walking entire open brackets.
 const UPCOMING_FALLBACK_WINDOWS = [{ state: 1, sortType: 'RECENT', cap: 60 }];
+// Some start.gg events do not expose late-bracket not-started sets through RECENT
+// sorting at all. For event-specific URLs only, make one bounded deeper STANDARD
+// pass after preview rows have been filtered, which catches realistic Top 8/Finals
+// matches without enabling whole-tournament deep walks.
+const UPCOMING_DEEP_FALLBACK_WINDOWS = [{ state: 1, sortType: 'STANDARD', cap: 300 }];
 const MIN_DISPLAYABLE_UPCOMING_ROWS = 5;
+const MIN_DEEP_FALLBACK_UPCOMING_ROWS = 1;
 const SETS_PER_PAGE = 50;
 const PAGE_SIZE_LADDER = [SETS_PER_PAGE, 25, 12];
 const PREVIEW_SET_ID_RE = /^preview_/i;
@@ -372,6 +378,13 @@ async function fetchEventSets(eventId, q, { allowUpcomingFallback = false } = {}
   }
   if (allowUpcomingFallback && displayableUpcoming < MIN_DISPLAYABLE_UPCOMING_ROWS) {
     for (const window of UPCOMING_FALLBACK_WINDOWS) {
+      const nodes = await fetchWindow(eventId, q, window);
+      addUniqueNodes(out, seen, nodes);
+    }
+    displayableUpcoming = countDisplayableUpcoming(out);
+  }
+  if (allowUpcomingFallback && displayableUpcoming < MIN_DEEP_FALLBACK_UPCOMING_ROWS) {
+    for (const window of UPCOMING_DEEP_FALLBACK_WINDOWS) {
       const nodes = await fetchWindow(eventId, q, window);
       addUniqueNodes(out, seen, nodes);
     }

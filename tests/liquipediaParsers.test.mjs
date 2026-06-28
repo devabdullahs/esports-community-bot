@@ -469,6 +469,32 @@ test('parseMatchlistMatch: stale unscored match is finished, not upcoming', () =
   assert.equal(m.scoreB, null);
 });
 
+test('parseMatchlistMatch: explicit LIVE badge is running even without timestamp or score', () => {
+  const html = `
+    <div class="brkts-matchlist-match">
+      <span class="match-live">LIVE</span>
+      <div class="brkts-matchlist-opponent" aria-label="Los Angeles Thieves">
+        <span class="name">Los Angeles Thieves</span>
+      </div>
+      <div class="brkts-matchlist-score">
+        <span class="brkts-matchlist-cell-content"></span>
+        <span class="brkts-matchlist-cell-content"></span>
+      </div>
+      <div class="brkts-matchlist-opponent" aria-label="OpTic Texas">
+        <span class="name">OpTic Texas</span>
+      </div>
+    </div>
+  `;
+  const $ = load(html);
+  const el = $('.brkts-matchlist-match')[0];
+  const m = parseMatchlistMatch($, el, 'callofduty', 'CDL/2026');
+
+  assert.ok(m);
+  assert.equal(m.status, 'running');
+  assert.equal(m.scoreA, null);
+  assert.equal(m.scoreB, null);
+});
+
 test('parseMatchlistMatch: both TBD returns null', () => {
   const html = `
     <div class="brkts-matchlist-match">
@@ -544,6 +570,30 @@ test('parseBracketMatch: upcoming match with future timestamp has status schedul
   assert.equal(m.scoreA, null);
   assert.equal(m.scoreB, null);
   assert.equal(m.winner, null);
+});
+
+test('parseBracketMatch: explicit LIVE badge is running even without timestamp or score', () => {
+  const html = `
+    <div class="brkts-match">
+      <span class="brkts-live">LIVE</span>
+      <div class="brkts-opponent-entry" aria-label="Team A">
+        <span class="name">Team A</span>
+        <div class="brkts-opponent-score-inner"></div>
+      </div>
+      <div class="brkts-opponent-entry" aria-label="Team B">
+        <span class="name">Team B</span>
+        <div class="brkts-opponent-score-inner"></div>
+      </div>
+    </div>
+  `;
+  const $ = load(html);
+  const el = $('.brkts-match')[0];
+  const m = parseBracketMatch($, el, 'callofduty', 'CDL/2026');
+
+  assert.ok(m);
+  assert.equal(m.status, 'running');
+  assert.equal(m.scoreA, null);
+  assert.equal(m.scoreB, null);
 });
 
 test('parseBracketMatch: both TBD slots return null', () => {
@@ -632,6 +682,38 @@ test('parseMatchInfo: no teams, no scores, future schedule → status scheduled'
 
   assert.ok(m);
   assert.equal(m.status, 'scheduled');
+  assert.equal(m.scoreA, null);
+  assert.equal(m.scoreB, null);
+});
+
+test('parseMatchInfo: explicit LIVE badge is running even without timestamp or score', () => {
+  const html = `
+    <div class="match-info">
+      <span class="match-info-status">LIVE</span>
+      <div class="match-info-header-opponent">
+        <div class="block-team">
+          <a title="Los Angeles Thieves">Los Angeles Thieves</a>
+        </div>
+      </div>
+      <div class="match-info-header-scoreholder-upper">vs</div>
+      <div class="match-info-header-opponent">
+        <div class="block-team">
+          <a title="OpTic Texas">OpTic Texas</a>
+        </div>
+      </div>
+      <div class="match-info-tournament">
+        <a href="/callofduty/Call_of_Duty_League/Season_7/Stage_4/Major">
+          <span class="match-info-tournament-name">Call of Duty League 2026: Stage 4 Major</span>
+        </a>
+      </div>
+    </div>
+  `;
+  const $ = load(html);
+  const el = $('.match-info')[0];
+  const m = parseMatchInfo($, el, 'callofduty');
+
+  assert.ok(m);
+  assert.equal(m.status, 'running');
   assert.equal(m.scoreA, null);
   assert.equal(m.scoreB, null);
 });
