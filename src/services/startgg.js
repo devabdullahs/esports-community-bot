@@ -172,15 +172,17 @@ export async function query(gql, variables = {}, { retries = 3, delayMs = 500 } 
 
 // external_id is the tournament slug ("rlcs-2026-mena-1v1-open"), an already
 // full "tournament/<slug>" path, or an event-scoped
-// "tournament/<slug>/event/<event-slug>" path.
+// "tournament/<slug>/event/<event-slug>" path. start.gg page URLs may show
+// "/events/", but GraphQL slugs are kept canonical as "/event/".
 function slugOf(tournament) {
   const raw = String(tournament?.external_id ?? '').trim().replace(/^\/+|\/+$/g, '');
   if (!raw) return '';
-  return /^tournament\//i.test(raw) ? raw : `tournament/${raw}`;
+  const slug = /^tournament\//i.test(raw) ? raw : `tournament/${raw}`;
+  return slug.replace(/\/events\//i, '/event/');
 }
 
 function isEventSlug(slug) {
-  return /\/event\/[^/]+$/i.test(slug);
+  return /\/events?\/[^/]+$/i.test(slug);
 }
 
 // Lightweight: the tournament's display name, its event ids, and each event's game.
@@ -219,6 +221,13 @@ const STATE_WINDOWS = [
   { state: 1, sortType: 'STANDARD', cap: 60 }, // upcoming / next up
   { state: 3, sortType: 'RECENT', cap: 40 }, // recent results
 ];
+// Late event-scoped start.gg brackets (Evo Top 8, finals, etc.) can have their
+// real not-started sets outside the STANDARD upcoming page while preview/projected
+// rows still occupy that window. If the standard window cannot fill one Discord
+// card, ask start.gg for a RECENT-sorted not-started window too. This keeps
+// projected rows filtered out without walking entire open brackets.
+const UPCOMING_FALLBACK_WINDOWS = [{ state: 1, sortType: 'RECENT', cap: 60 }];
+const MIN_DISPLAYABLE_UPCOMING_ROWS = 5;
 const SETS_PER_PAGE = 50;
 const PAGE_SIZE_LADDER = [SETS_PER_PAGE, 25, 12];
 const PREVIEW_SET_ID_RE = /^preview_/i;
@@ -328,12 +337,44 @@ async function fetchWindow(eventId, q, { state, sortType, cap }) {
   return [];
 }
 
+function rawSetKey(node) {
+  const id = node?.id;
+  return id == null ? null : String(id);
+}
+
+function addUniqueNodes(out, seen, nodes) {
+  for (const node of nodes) {
+    const key = rawSetKey(node);
+    if (key && seen.has(key)) continue;
+    if (key) seen.add(key);
+    out.push(node);
+  }
+}
+
+function countDisplayableUpcoming(nodes) {
+  let count = 0;
+  for (const node of nodes) {
+    const m = normalizeSet(node);
+    if (m?.status === 'scheduled') count += 1;
+  }
+  return count;
+}
+
 // The tracked sets for one event: live + upcoming + a tail of recent results.
-async function fetchEventSets(eventId, q) {
+async function fetchEventSets(eventId, q, { allowUpcomingFallback = false } = {}) {
   const out = [];
+  const seen = new Set();
+  let displayableUpcoming = 0;
   for (const window of STATE_WINDOWS) {
     const nodes = await fetchWindow(eventId, q, window);
-    for (const node of nodes) out.push(node);
+    addUniqueNodes(out, seen, nodes);
+    if (window.state === 1) displayableUpcoming += countDisplayableUpcoming(nodes);
+  }
+  if (allowUpcomingFallback && displayableUpcoming < MIN_DISPLAYABLE_UPCOMING_ROWS) {
+    for (const window of UPCOMING_FALLBACK_WINDOWS) {
+      const nodes = await fetchWindow(eventId, q, window);
+      addUniqueNodes(out, seen, nodes);
+    }
   }
   return out;
 }
@@ -365,6 +406,8 @@ export async function fetchSchedule(tournament, { query: q = query } = {}) {
     logger.warn('[startgg] STARTGG_TOKEN not set — skipping.');
     return [];
   }
+  const slug = slugOf(tournament);
+  const allowUpcomingFallback = isEventSlug(slug);
   const head = await fetchHead(tournament, q);
   const events = head.events ?? [];
 
@@ -372,7 +415,7 @@ export async function fetchSchedule(tournament, { query: q = query } = {}) {
   const seen = new Set();
   for (const ev of events) {
     if (!ev?.id) continue;
-    const nodes = await fetchEventSets(ev.id, q);
+    const nodes = await fetchEventSets(ev.id, q, { allowUpcomingFallback });
     for (const node of nodes) {
       const m = normalizeSet(node);
       if (m && !seen.has(m.externalId)) {

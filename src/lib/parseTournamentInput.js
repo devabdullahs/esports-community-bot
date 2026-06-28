@@ -32,6 +32,7 @@ export function formatLiquipediaPageTitle(page) {
 //   Liquipedia URL : https://liquipedia.net/valorant/VCT/2024/Champions
 //   Start.gg URL   : https://www.start.gg/tournament/<slug>/...
 //                    https://www.start.gg/tournament/<slug>/event/<event-slug>
+//                    https://www.start.gg/tournament/<slug>/events/<event-slug>
 //   PandaScore ID  : 12345            (bare numeric)
 //   Explicit form  : pandascore:12345 | startgg:<slug> | liquipedia:<game>/<Page>
 // Returns null when nothing matches.
@@ -56,7 +57,7 @@ export function parseTournamentInput(raw) {
   // Start.gg tournament/event URL -> capture the tournament slug, and preserve
   // an event slug when one is supplied so a single Evo game does not import
   // every event under the broader tournament.
-  const sg = input.match(/start\.gg\/tournament\/([^/?#]+)(?:\/event\/([^/?#]+))?/i);
+  const sg = input.match(/start\.gg\/tournament\/([^/?#]+)(?:\/events?\/([^/?#]+))?/i);
   if (sg) {
     const externalId = sg[2] ? `tournament/${sg[1]}/event/${sg[2]}` : sg[1];
     const tournamentName = cleanStartggTitlePart(sg[1]);
