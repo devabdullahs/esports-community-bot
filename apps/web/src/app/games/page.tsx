@@ -12,7 +12,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { localizeText } from "@/lib/community-content";
-import { listGamesCached } from "@/lib/games";
+import { gameTitleForSlug, listGamesCached } from "@/lib/games";
 import { listLatestPublishedNewsPostsCached } from "@/lib/news";
 import {
   copy,
@@ -40,10 +40,7 @@ export default async function GamesPage() {
   const common = copy[locale].common;
   const games = await listGamesCached();
   const latestPosts = await listLatestPublishedNewsPostsCached(locale, 2);
-  const gameTitle = (slug: string) => {
-    const game = games.find((g) => g.slug === slug);
-    return game ? localizeText(game.title, locale) : slug;
-  };
+  const gameTitle = (slug: string) => gameTitleForSlug(slug, games, locale);
 
   return (
     <main

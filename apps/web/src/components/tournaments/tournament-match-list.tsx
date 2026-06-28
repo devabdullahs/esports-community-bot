@@ -2,7 +2,7 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { RadioIcon } from "lucide-react";
-import { useState } from "react";
+import { Fragment, useState, useSyncExternalStore } from "react";
 import {
   Card,
   CardContent,
@@ -23,6 +23,8 @@ import { logoProxyUrl } from "@/lib/logo-url";
 import { safeUrlOrUndefined } from "@/lib/safe-url";
 
 type MatchStatus = "running" | "scheduled" | "finished";
+type Winner = "a" | "b" | "draw" | null;
+type TournamentCopy = (typeof copy)[Locale]["tournaments"];
 
 type MatchRow = {
   id: number;
@@ -46,9 +48,18 @@ export type TournamentMatchesPayload = {
   total: number;
 };
 
-// Live data: poll the matches API every 90s (design recommendation — the bot
-// polls at most every 5 min, so 90s keeps the view fresh without wasted load).
+// Live data: poll the matches API every 90s. The bot polls at most every 5 min,
+// so 90s keeps the page fresh without adding source-site load.
 const REFETCH_INTERVAL_MS = 90_000;
+const NUMBER_LOCALE: Record<Locale, string> = { en: "en-US", ar: "ar-SA" };
+
+function useHasHydrated() {
+  return useSyncExternalStore(
+    () => () => undefined,
+    () => true,
+    () => false,
+  );
+}
 
 function teamLabel(value: string | null, fallback: string) {
   const trimmed = (value ?? "").trim();
@@ -77,22 +88,52 @@ function Logo({ url, alt }: { url: string | null; alt: string }) {
   );
 }
 
+function resultWinner(match: MatchRow): Winner {
+  if (match.status !== "finished" || match.score_a == null || match.score_b == null) return null;
+  if (match.score_a > match.score_b) return "a";
+  if (match.score_b > match.score_a) return "b";
+  return "draw";
+}
+
 function ScoreText({ a, b }: { a: number | null; b: number | null }) {
-  if (a == null || b == null) return <span className="text-muted-foreground">—</span>;
+  if (a == null || b == null) return <span className="text-muted-foreground">-</span>;
   return (
     <span className="tabular-nums font-semibold">
-      {a} <span className="text-muted-foreground">–</span> {b}
+      {a} <span className="text-muted-foreground">-</span> {b}
     </span>
   );
 }
 
-function ResultScoreText({ a, b, fallback }: { a: number | null; b: number | null; fallback: string }) {
+function ResultScoreText({
+  a,
+  b,
+  winner,
+  fallback,
+  drawLabel,
+}: {
+  a: number | null;
+  b: number | null;
+  winner: Winner;
+  fallback: string;
+  drawLabel: string;
+}) {
   if (a == null || b == null) return <span className="text-muted-foreground">{fallback}</span>;
-  return <ScoreText a={a} b={b} />;
+  return (
+    <span className="inline-flex items-center gap-2 tabular-nums font-semibold">
+      <span className={winner === "a" ? "text-primary" : "text-foreground"}>{a}</span>
+      <span className="text-muted-foreground">-</span>
+      <span className={winner === "b" ? "text-primary" : "text-foreground"}>{b}</span>
+      {winner === "draw" ? (
+        <span className="rounded-full border border-border px-2 py-0.5 text-[0.65rem] text-muted-foreground">
+          {drawLabel}
+        </span>
+      ) : null}
+    </span>
+  );
 }
 
-function MatchTime({ value, locale }: { value: number | null; locale: Locale }) {
-  if (value == null || !Number.isFinite(value)) return <span>—</span>;
+function MatchTime({ value, locale, fallback }: { value: number | null; locale: Locale; fallback: string }) {
+  if (value == null || !Number.isFinite(value)) return <span>{fallback}</span>;
   return <LocalDateTime value={new Date(value * 1000).toISOString()} locale={locale} />;
 }
 
@@ -104,6 +145,7 @@ function MatchText({
   locale,
   tbd,
   vs,
+  winner,
 }: {
   a: string | null;
   b: string | null;
@@ -112,6 +154,7 @@ function MatchText({
   locale: Locale;
   tbd: string;
   vs: string;
+  winner?: Winner;
 }) {
   const aLabel = teamLabel(a, tbd);
   const bLabel = teamLabel(b, tbd);
@@ -119,14 +162,73 @@ function MatchText({
     <span dir={directionForLocale(locale)} className="flex max-w-full items-center gap-2 text-start">
       <span className="flex min-w-0 items-center gap-1.5">
         <Logo url={logoA ?? null} alt={aLabel} />
-        <bdi className="min-w-0 truncate">{aLabel}</bdi>
+        <bdi className={`min-w-0 truncate ${winner === "a" ? "font-bold text-foreground" : ""}`}>{aLabel}</bdi>
       </span>
       <span className="shrink-0 text-muted-foreground">{vs}</span>
       <span className="flex min-w-0 items-center gap-1.5">
-        <bdi className="min-w-0 truncate">{bLabel}</bdi>
+        <bdi className={`min-w-0 truncate ${winner === "b" ? "font-bold text-foreground" : ""}`}>{bLabel}</bdi>
         <Logo url={logoB ?? null} alt={bLabel} />
       </span>
     </span>
+  );
+}
+
+function localDayKey(timestamp: number | null) {
+  if (timestamp == null || !Number.isFinite(timestamp)) return "tbd";
+  const d = new Date(timestamp * 1000);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+function localDayStart(date: Date) {
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime();
+}
+
+function formatDayHeading(timestamp: number | null, locale: Locale, text: TournamentCopy) {
+  if (timestamp == null || !Number.isFinite(timestamp)) return text.timeTbd;
+
+  const date = new Date(timestamp * 1000);
+  const today = localDayStart(new Date());
+  const day = localDayStart(date);
+  const oneDay = 24 * 60 * 60 * 1000;
+
+  if (day === today) return text.today;
+  if (day === today + oneDay) return text.tomorrow;
+
+  return new Intl.DateTimeFormat(NUMBER_LOCALE[locale], {
+    weekday: "long",
+    month: "short",
+    day: "numeric",
+  }).format(date);
+}
+
+function groupMatchesByLocalDay(matches: MatchRow[], locale: Locale, text: TournamentCopy, enabled: boolean) {
+  if (!enabled) return [{ key: "all", label: null as string | null, matches }];
+
+  const groups = new Map<string, { key: string; label: string; matches: MatchRow[] }>();
+  for (const match of matches) {
+    const key = localDayKey(match.scheduled_at);
+    const current = groups.get(key);
+    if (current) {
+      current.matches.push(match);
+    } else {
+      groups.set(key, {
+        key,
+        label: formatDayHeading(match.scheduled_at, locale, text),
+        matches: [match],
+      });
+    }
+  }
+  return [...groups.values()];
+}
+
+function DayHeadingRow({ label, columns }: { label: string | null; columns: number }) {
+  if (!label) return null;
+  return (
+    <TableRow className="border-b-0 hover:bg-transparent">
+      <TableCell colSpan={columns} className="px-0 pb-1 pt-5">
+        <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{label}</span>
+      </TableCell>
+    </TableRow>
   );
 }
 
@@ -139,6 +241,7 @@ export function TournamentMatchList({
   locale: Locale;
   initialData: TournamentMatchesPayload;
 }) {
+  const hasHydrated = useHasHydrated();
   const text = copy[locale].tournaments;
   const query = useQuery<TournamentMatchesPayload>({
     queryKey: ["tournament-matches", tournamentId],
@@ -152,11 +255,12 @@ export function TournamentMatchList({
   });
 
   const { running, scheduled, finished } = query.data.matches;
+  const scheduledGroups = groupMatchesByLocalDay(scheduled, locale, text, hasHydrated);
+  const finishedGroups = groupMatchesByLocalDay(finished, locale, text, hasHydrated);
   const tbd = text.tbd;
 
   return (
     <div className="flex flex-col gap-8">
-      {/* Live now */}
       <section className="flex flex-col gap-3">
         <h2 className="flex items-center gap-2 text-lg font-semibold">
           <RadioIcon className="size-4 text-primary" />
@@ -187,7 +291,7 @@ export function TournamentMatchList({
                     target="_blank"
                     rel="noreferrer"
                     className="flex items-center justify-center gap-1.5 border-t px-3 py-1.5 text-xs font-medium text-primary hover:bg-muted/50"
-                    title={`${text.watchNow} · ${m.stream.platform}`}
+                    title={`${text.watchNow} - ${m.stream.platform}`}
                   >
                     <PlatformIcon platform={m.stream.platform as never} className="size-3.5" />
                     {text.watchNow}
@@ -204,7 +308,7 @@ export function TournamentMatchList({
                         target="_blank"
                         rel="noreferrer"
                         className="inline-flex items-center gap-1 hover:text-foreground"
-                        title={`${c.label} · ${c.platform}`}
+                        title={`${c.label} - ${c.platform}`}
                       >
                         <PlatformIcon platform={c.platform as never} className="size-3.5" />
                         <span className="max-w-24 truncate">{c.label}</span>
@@ -222,7 +326,6 @@ export function TournamentMatchList({
 
       <Separator />
 
-      {/* Upcoming */}
       <section className="flex flex-col gap-3">
         <h2 className="text-lg font-semibold">{text.upcoming}</h2>
         {scheduled.length ? (
@@ -234,23 +337,28 @@ export function TournamentMatchList({
               </TableRow>
             </TableHeader>
             <TableBody>
-              {scheduled.map((m) => (
-                <TableRow key={m.id}>
-                  <TableCell className="text-muted-foreground tabular-nums">
-                    <MatchTime value={m.scheduled_at} locale={locale} />
-                  </TableCell>
-                  <TableCell className="text-start">
-                    <MatchText
-                      a={m.team_a}
-                      b={m.team_b}
-                      logoA={m.logo_a}
-                      logoB={m.logo_b}
-                      locale={locale}
-                      tbd={tbd}
-                      vs={text.vs}
-                    />
-                  </TableCell>
-                </TableRow>
+              {scheduledGroups.map((group) => (
+                <Fragment key={group.key}>
+                  <DayHeadingRow label={group.label} columns={2} />
+                  {group.matches.map((m) => (
+                    <TableRow key={m.id}>
+                      <TableCell className="text-muted-foreground tabular-nums">
+                        <MatchTime value={m.scheduled_at} locale={locale} fallback={text.timeTbd} />
+                      </TableCell>
+                      <TableCell className="text-start">
+                        <MatchText
+                          a={m.team_a}
+                          b={m.team_b}
+                          logoA={m.logo_a}
+                          logoB={m.logo_b}
+                          locale={locale}
+                          tbd={tbd}
+                          vs={text.vs}
+                        />
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </Fragment>
               ))}
             </TableBody>
           </Table>
@@ -261,7 +369,6 @@ export function TournamentMatchList({
 
       <Separator />
 
-      {/* Recent results */}
       <section className="flex flex-col gap-3">
         <h2 className="text-lg font-semibold">{text.results}</h2>
         {finished.length ? (
@@ -274,26 +381,41 @@ export function TournamentMatchList({
               </TableRow>
             </TableHeader>
             <TableBody>
-              {finished.map((m) => (
-                <TableRow key={m.id}>
-                  <TableCell className="text-muted-foreground tabular-nums">
-                    <MatchTime value={m.scheduled_at} locale={locale} />
-                  </TableCell>
-                  <TableCell className="text-start">
-                    <MatchText
-                      a={m.team_a}
-                      b={m.team_b}
-                      logoA={m.logo_a}
-                      logoB={m.logo_b}
-                      locale={locale}
-                      tbd={tbd}
-                      vs={text.vs}
-                    />
-                  </TableCell>
-                  <TableCell className="text-end">
-                    <ResultScoreText a={m.score_a} b={m.score_b} fallback={text.finished} />
-                  </TableCell>
-                </TableRow>
+              {finishedGroups.map((group) => (
+                <Fragment key={group.key}>
+                  <DayHeadingRow label={group.label} columns={3} />
+                  {group.matches.map((m) => {
+                    const winner = resultWinner(m);
+                    return (
+                      <TableRow key={m.id}>
+                        <TableCell className="text-muted-foreground tabular-nums">
+                          <MatchTime value={m.scheduled_at} locale={locale} fallback={text.timeTbd} />
+                        </TableCell>
+                        <TableCell className="text-start">
+                          <MatchText
+                            a={m.team_a}
+                            b={m.team_b}
+                            logoA={m.logo_a}
+                            logoB={m.logo_b}
+                            locale={locale}
+                            tbd={tbd}
+                            vs={text.vs}
+                            winner={winner}
+                          />
+                        </TableCell>
+                        <TableCell className="text-end">
+                          <ResultScoreText
+                            a={m.score_a}
+                            b={m.score_b}
+                            winner={winner}
+                            fallback={text.finished}
+                            drawLabel={text.draw}
+                          />
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </Fragment>
               ))}
             </TableBody>
           </Table>

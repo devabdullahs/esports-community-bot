@@ -8,6 +8,7 @@ import {
   reorderEwcGames as _reorder,
   updateEwcGame as _update,
 } from "@bot/db/ewcGames.js";
+import { localizeText } from "@/lib/community-content";
 import type { Locale } from "@/lib/i18n";
 import { unstable_cache } from "next/cache";
 
@@ -32,6 +33,13 @@ export type GameInput = {
   owner: LocalizedText;
   focus: LocalizedText[];
   discordChannelId: string | null;
+};
+
+const CANONICAL_GAME_TITLES: Partial<Record<string, LocalizedText>> = {
+  fighters: {
+    en: "Fighter Games",
+    ar: "الألعاب القتالية",
+  },
 };
 
 const list = _list as () => Promise<GameRecord[]>;
@@ -66,6 +74,24 @@ export function deleteGame(slug: string): Promise<{ gameDeleted: number; postsDe
 
 export function reorderGames(slugs: string[]): Promise<GameRecord[]> {
   return reorder(slugs);
+}
+
+export function fallbackGameTitle(slug: string | null | undefined, locale: Locale): string {
+  const key = String(slug ?? "").trim();
+  if (!key) return "";
+  return CANONICAL_GAME_TITLES[key]?.[locale] ?? key;
+}
+
+export function gameTitleForSlug(
+  slug: string | null | undefined,
+  games: Pick<GameRecord, "slug" | "title">[],
+  locale: Locale,
+): string {
+  const key = String(slug ?? "").trim();
+  if (!key) return "";
+  const game = games.find((g) => g.slug === key);
+  const title = game ? localizeText(game.title, locale).trim() : "";
+  return title || fallbackGameTitle(key, locale);
 }
 
 // ---------------------------------------------------------------------------

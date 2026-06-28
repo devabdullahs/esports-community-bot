@@ -551,12 +551,12 @@ const STR = {
   ar: {
     brand: () => 'مجتمع الرياضات الإلكترونية',
     league: 'دوري التوقعات',
-    pill: (s) => `توقعات EWC ${s}`,
+    pill: (s) => `توقعات ${s}`,
     subtitle: 'شارك بالتوقع',
     meta: (n, w) => `${arChampionPickCount(n)}، ${arWeeklyPickCount(w)}`,
     heading: 'توقعات أبطال الموسم',
     none: 'تم تسجيل التوقعات',
-    footLead: 'توقعاتك داخل الديسكورد',
+    footLead: 'شارك توقعاتك داخل الديسكورد',
     footSub: 'انضم إلى المجتمع، سجّل توقعاتك، ونافس الآخرين.',
   },
 };

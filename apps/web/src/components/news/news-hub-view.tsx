@@ -9,8 +9,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { localizeText } from "@/lib/community-content";
-import { listGamesCached } from "@/lib/games";
+import { gameTitleForSlug, listGamesCached } from "@/lib/games";
 import { copy, localizedPath, type Locale } from "@/lib/i18n";
 import { listLatestPublishedNewsPostsCached } from "@/lib/news";
 import { safeUrlOrUndefined } from "@/lib/safe-url";
@@ -56,10 +55,7 @@ export async function NewsHubView({
   const posts = fetched.slice(0, PAGE_SIZE);
   const basePath = ewcOnly ? "/news/ewc" : "/news";
   const games = await listGamesCached();
-  const gameTitleOf = (slug: string) => {
-    const game = games.find((g) => g.slug === slug);
-    return game ? localizeText(game.title, locale) : slug;
-  };
+  const gameTitleOf = (slug: string) => gameTitleForSlug(slug, games, locale);
 
   const heading = ewcOnly ? t.ewcTitle : t.title;
 

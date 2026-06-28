@@ -9,8 +9,7 @@ import {
 } from "@/components/ui/card";
 import { PageBreadcrumb } from "@/components/page-breadcrumb";
 import { LiquipediaAttribution } from "@/components/tournaments/liquipedia-attribution";
-import { localizeText } from "@/lib/community-content";
-import { listGamesCached } from "@/lib/games";
+import { gameTitleForSlug, listGamesCached } from "@/lib/games";
 import { copy, formatMatchStatusCount, formatNumber, localizedPath, type Locale } from "@/lib/i18n";
 import {
   listTournamentSummariesCached,
@@ -35,11 +34,6 @@ export async function TournamentsView({
     listGamesCached(),
   ]);
 
-  const gameTitle = (slug: string) => {
-    const game = games.find((g) => g.slug === slug);
-    return game ? localizeText(game.title, locale) : slug;
-  };
-
   // Only count live + upcoming; drop tournaments whose matches are all finished
   // so the list stays focused on what's actually on.
   const scoped = ewcOnly ? tournaments.filter((t) => t.ewc) : tournaments;
@@ -56,7 +50,7 @@ export async function TournamentsView({
   const groups = [...byGame.entries()]
     .map(([slug, list]) => ({
       slug,
-      title: gameTitle(slug),
+      title: gameTitleForSlug(slug, games, locale),
       live: list.reduce((n, t) => n + t.matchCounts.running, 0),
       upcoming: list.reduce((n, t) => n + t.matchCounts.scheduled, 0),
       tournaments: [...list].sort(

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-const { categoryToGameSlug } = await import('../src/lib/games.js');
+const { categoryToGameSlug, gameName, gameSlugFromName, searchGames } = await import('../src/lib/games.js');
 
 test('categoryToGameSlug maps real Twitch/Kick categories to tracked game slugs', () => {
   // Exact name matches.
@@ -25,4 +25,18 @@ test('categoryToGameSlug returns null for off-topic / non-esports categories', (
   assert.equal(categoryToGameSlug(''), null);
   assert.equal(categoryToGameSlug(null), null);
   assert.equal(categoryToGameSlug(undefined), null);
+});
+
+test('fighter game aliases resolve to the canonical fighters board', () => {
+  assert.equal(gameName('fighters'), 'Fighter Games');
+  assert.equal(gameSlugFromName('Tekken 8'), 'fighters');
+  assert.equal(gameSlugFromName('Street Fighter 6'), 'fighters');
+  assert.equal(gameSlugFromName('Fatal Fury: City of the Wolves'), 'fighters');
+  assert.equal(categoryToGameSlug('TEKKEN 8'), 'fighters');
+});
+
+test('fighter autocomplete exposes aliases without duplicate slug choices', () => {
+  assert.deepEqual(searchGames('tekken')[0], { name: 'Tekken (Fighter Games)', value: 'fighters' });
+  const fighterChoices = searchGames('fighter');
+  assert.equal(fighterChoices.filter((choice) => choice.value === 'fighters').length, 1);
 });
