@@ -29,18 +29,18 @@ const capFor = (state) => STATE_WINDOWS.find((w) => w.state === state).cap;
 
 // Build a set node in start.gg's shape. state 3 = completed (has a winner), 2 = in
 // progress, 1 = not started. Unique id → unique externalId (`sgg:<id>`).
-function buildSet(id, { state = 3, scoreA, scoreB } = {}) {
+function buildSet(id, { state = 3, scoreA, scoreB, startAt = null, teamA, teamB } = {}) {
   const finished = state === 3;
   const sA = scoreA ?? (finished ? 3 : 0);
   const sB = scoreB ?? (finished ? 1 : 0);
   return {
     id,
     state,
-    startAt: null,
+    startAt,
     winnerId: finished ? id * 10 + 1 : null,
     slots: [
-      { entrant: { id: id * 10 + 1, name: `A${id}` }, standing: { stats: { score: { value: sA } } } },
-      { entrant: { id: id * 10 + 2, name: `B${id}` }, standing: { stats: { score: { value: sB } } } },
+      { entrant: { id: id * 10 + 1, name: teamA ?? `A${id}` }, standing: { stats: { score: { value: sA } } } },
+      { entrant: { id: id * 10 + 2, name: teamB ?? `B${id}` }, standing: { stats: { score: { value: sB } } } },
     ],
   };
 }
@@ -94,6 +94,7 @@ function makeQuery({
       const { eventId, page, perPage, state } = vars;
       if (perPage > complexityAbove) throw new Error('Your query complexity is too high (1500). Maximum is 1000.');
       let all = setsByEvent[eventId] ?? [];
+      if (!Array.isArray(all)) all = all[vars.sortType] ?? all.default ?? [];
       if (Array.isArray(state)) all = all.filter((s) => state.includes(s.state));
       const totalPages = Math.max(1, Math.ceil(all.length / perPage));
       const start = (page - 1) * perPage;
@@ -213,6 +214,99 @@ test('fetchSchedule scopes a full start.gg event path to that single event', asy
   assert.equal(q.eventHeadCalls()[0].vars.slug, 'tournament/evo-2026/event/tekken-8');
   assert.equal(q.tournamentHeadCalls().length, 0, 'event URLs do not walk all tournament events');
   assert.deepEqual(new Set(q.eventCalls().map((c) => c.vars.eventId)), new Set(['TEKKEN']));
+});
+
+test('fetchSchedule normalizes plural start.gg events paths before querying GraphQL', async () => {
+  const q = makeQuery({
+    name: 'Evo 2026',
+    eventName: 'Street Fighter 6',
+    events: [{ id: 'SF6', name: 'Street Fighter 6' }],
+    setsByEvent: { SF6: makeSets(1, 800, 2) },
+    videogame: 'Street Fighter 6',
+  });
+
+  const matches = await fetchSchedule(
+    { external_id: 'tournament/evo-2026/events/street-fighter-6', name: 'x' },
+    { query: q },
+  );
+
+  assert.equal(matches.length, 2);
+  assert.equal(q.eventHeadCalls()[0].vars.slug, 'tournament/evo-2026/event/street-fighter-6');
+  assert.equal(q.tournamentHeadCalls().length, 0, 'plural event URLs still stay event-scoped');
+});
+
+test('fetchSchedule uses event-scoped recent-upcoming fallback for late bracket real sets', async () => {
+  const standardUpcoming = [
+    buildPreviewSet('preview_3348077_2_1'),
+    buildPreviewSet('preview_3348077_2_2'),
+    buildPreviewSet('preview_3348077_2_3'),
+  ];
+  const top8 = [
+    buildSet(9001, {
+      state: 1,
+      startAt: 1782680400,
+      teamA: 'Vicious | Qasim Meer',
+      teamB: 'VARREL Rangchu',
+    }),
+    buildSet(9002, {
+      state: 1,
+      startAt: 1782680400,
+      teamA: 'TM | RB Arslan Ash',
+      teamB: 'KRX LowHigh',
+    }),
+    buildSet(9003, {
+      state: 1,
+      startAt: 1782696600,
+      teamA: 'AG x 8BitDo Zhen',
+      teamB: 'Falcons Craime',
+    }),
+    buildSet(9004, {
+      state: 1,
+      startAt: 1782684000,
+      teamA: 'VIT Fenritti',
+      teamB: 'VIT K-TOP',
+    }),
+  ];
+  const q = makeQuery({
+    name: 'Evo 2026',
+    eventName: 'TEKKEN 8',
+    events: [{ id: 'TEKKEN', name: 'TEKKEN 8' }],
+    setsByEvent: { TEKKEN: { STANDARD: standardUpcoming, RECENT: top8 } },
+    videogame: 'TEKKEN 8',
+  });
+
+  const matches = await fetchSchedule({ external_id: 'tournament/evo-2026/event/tekken-8', name: 'x' }, { query: q });
+
+  assert.deepEqual(
+    matches.map((m) => m.name),
+    [
+      'Vicious | Qasim Meer vs VARREL Rangchu',
+      'TM | RB Arslan Ash vs KRX LowHigh',
+      'AG x 8BitDo Zhen vs Falcons Craime',
+      'VIT Fenritti vs VIT K-TOP',
+    ],
+  );
+  assert.deepEqual(new Set(matches.map((m) => m.status)), new Set(['scheduled']));
+  assert.ok(
+    q.eventCalls().some((c) => c.vars.eventId === 'TEKKEN' && c.vars.sortType === 'RECENT' && c.vars.state.includes(1)),
+    'the event-scoped recent-upcoming fallback was queried',
+  );
+});
+
+test('fetchSchedule does not spend the recent-upcoming fallback on broad tournament windows', async () => {
+  const q = makeQuery({
+    events: [{ id: 'E1', name: 'Main' }],
+    setsByEvent: { E1: makeSets(1, 1200, 3) },
+  });
+
+  const matches = await fetchSchedule(tournament, { query: q });
+
+  assert.equal(matches.length, 3);
+  assert.equal(
+    q.eventCalls().some((c) => c.vars.sortType === 'RECENT' && c.vars.state.includes(1)),
+    false,
+    'whole-tournament imports avoid the extra upcoming fallback request',
+  );
 });
 
 test('resolveTournamentGame maps the videogame name to a bot slug, null when unknown', async () => {
