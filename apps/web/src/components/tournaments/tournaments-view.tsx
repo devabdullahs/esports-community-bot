@@ -10,7 +10,14 @@ import {
 import { PageBreadcrumb } from "@/components/page-breadcrumb";
 import { LiquipediaAttribution } from "@/components/tournaments/liquipedia-attribution";
 import { gameTitleForSlug, listGamesCached } from "@/lib/games";
-import { copy, formatMatchStatusCount, formatNumber, localizedPath, type Locale } from "@/lib/i18n";
+import {
+  copy,
+  formatMatchStatusCount,
+  formatNumber,
+  formatResultCount,
+  localizedPath,
+  type Locale,
+} from "@/lib/i18n";
 import {
   listTournamentSummariesCached,
   type TournamentSummary,
@@ -34,11 +41,15 @@ export async function TournamentsView({
     listGamesCached(),
   ]);
 
-  // Only count live + upcoming; drop tournaments whose matches are all finished
-  // so the list stays focused on what's actually on.
+  // Keep finished-only tournaments visible too. Some sources, especially
+  // start.gg event brackets, may have no real upcoming rows once projected sets
+  // are filtered out, but their result pages should remain reachable.
   const scoped = ewcOnly ? tournaments.filter((t) => t.ewc) : tournaments;
   const active = scoped.filter(
-    (t) => t.matchCounts.running > 0 || t.matchCounts.scheduled > 0,
+    (t) =>
+      t.matchCounts.running > 0 ||
+      t.matchCounts.scheduled > 0 ||
+      t.matchCounts.finished > 0,
   );
 
   const byGame = new Map<string, TournamentSummary[]>();
@@ -53,15 +64,20 @@ export async function TournamentsView({
       title: gameTitleForSlug(slug, games, locale),
       live: list.reduce((n, t) => n + t.matchCounts.running, 0),
       upcoming: list.reduce((n, t) => n + t.matchCounts.scheduled, 0),
+      finished: list.reduce((n, t) => n + t.matchCounts.finished, 0),
       tournaments: [...list].sort(
         (a, b) =>
           b.matchCounts.running - a.matchCounts.running ||
-          b.matchCounts.scheduled - a.matchCounts.scheduled,
+          b.matchCounts.scheduled - a.matchCounts.scheduled ||
+          b.matchCounts.finished - a.matchCounts.finished,
       ),
     }))
     .sort(
       (a, b) =>
-        b.live - a.live || b.upcoming - a.upcoming || a.title.localeCompare(b.title),
+        b.live - a.live ||
+        b.upcoming - a.upcoming ||
+        b.finished - a.finished ||
+        a.title.localeCompare(b.title),
     );
 
   return (
@@ -102,6 +118,11 @@ export async function TournamentsView({
                         {formatMatchStatusCount(group.upcoming, "upcoming", locale)}
                       </span>
                     ) : null}
+                    {group.finished > 0 ? (
+                      <span className="text-muted-foreground">
+                        {formatResultCount(group.finished, locale)}
+                      </span>
+                    ) : null}
                   </div>
                 </div>
               </CardHeader>
@@ -134,6 +155,15 @@ export async function TournamentsView({
                       {t.matchCounts.scheduled > 0 ? (
                         <span>
                           {formatMatchStatusCount(t.matchCounts.scheduled, "upcoming", locale)}
+                        </span>
+                      ) : null}
+                      {(t.matchCounts.running > 0 || t.matchCounts.scheduled > 0) &&
+                      t.matchCounts.finished > 0
+                        ? " · "
+                        : null}
+                      {t.matchCounts.finished > 0 ? (
+                        <span>
+                          {formatResultCount(t.matchCounts.finished, locale)}
                         </span>
                       ) : null}
                     </span>

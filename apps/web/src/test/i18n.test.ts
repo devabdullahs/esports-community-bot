@@ -3,6 +3,7 @@ import {
   directionForLocale,
   formatMatchCount,
   formatMatchStatusCount,
+  formatResultCount,
   localizedPath,
   stripLocalePrefix,
 } from "@/lib/i18n";
@@ -23,6 +24,22 @@ describe("formatMatchCount", () => {
     expect(formatMatchCount(11, "ar")).toBe("\u0661\u0661 \u0645\u0628\u0627\u0631\u0627\u0629");
     expect(formatMatchCount(25, "ar")).toBe("\u0662\u0665 \u0645\u0628\u0627\u0631\u0627\u0629");
     expect(formatMatchCount(102, "ar")).toBe("\u0661\u0660\u0662 \u0645\u0628\u0627\u0631\u0627\u0629");
+  });
+});
+
+describe("formatResultCount", () => {
+  test("formats English recent result counts", () => {
+    expect(formatResultCount(0, "en")).toBe("No recent results");
+    expect(formatResultCount(1, "en")).toBe("1 recent result");
+    expect(formatResultCount(12, "en")).toBe("12 recent results");
+  });
+
+  test("formats Arabic recent result counts with the right noun form", () => {
+    expect(formatResultCount(0, "ar")).toBe("\u0644\u0627 \u062a\u0648\u062c\u062f \u0646\u062a\u0627\u0626\u062c \u062d\u062f\u064a\u062b\u0629");
+    expect(formatResultCount(1, "ar")).toBe("\u0646\u062a\u064a\u062c\u0629 \u0648\u0627\u062d\u062f\u0629 \u062d\u062f\u064a\u062b\u0629");
+    expect(formatResultCount(2, "ar")).toBe("\u0646\u062a\u064a\u062c\u062a\u0627\u0646 \u062d\u062f\u064a\u062b\u062a\u0627\u0646");
+    expect(formatResultCount(5, "ar")).toBe("\u0665 \u0646\u062a\u0627\u0626\u062c \u062d\u062f\u064a\u062b\u0629");
+    expect(formatResultCount(16, "ar")).toBe("\u0661\u0666 \u0646\u062a\u064a\u062c\u0629 \u062d\u062f\u064a\u062b\u0629");
   });
 });
 

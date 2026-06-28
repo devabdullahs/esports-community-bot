@@ -75,6 +75,22 @@ export function formatMatchStatusCount(value: number, status: "live" | "upcoming
   return `${formatNumber(count, locale)} \u0645\u0628\u0627\u0631\u0627\u0629 \u0642\u0627\u062f\u0645\u0629`;
 }
 
+export function formatResultCount(value: number, locale: Locale) {
+  const count = Number.isFinite(value) ? Math.max(0, Math.trunc(value)) : 0;
+  if (locale === "en") {
+    if (count === 0) return "No recent results";
+    return `${formatNumber(count, locale)} recent result${count === 1 ? "" : "s"}`;
+  }
+
+  if (count === 0) return "\u0644\u0627 \u062a\u0648\u062c\u062f \u0646\u062a\u0627\u0626\u062c \u062d\u062f\u064a\u062b\u0629";
+  if (count === 1) return "\u0646\u062a\u064a\u062c\u0629 \u0648\u0627\u062d\u062f\u0629 \u062d\u062f\u064a\u062b\u0629";
+  if (count === 2) return "\u0646\u062a\u064a\u062c\u062a\u0627\u0646 \u062d\u062f\u064a\u062b\u062a\u0627\u0646";
+  if (count >= 3 && count <= 10) {
+    return `${formatNumber(count, locale)} \u0646\u062a\u0627\u0626\u062c \u062d\u062f\u064a\u062b\u0629`;
+  }
+  return `${formatNumber(count, locale)} \u0646\u062a\u064a\u062c\u0629 \u062d\u062f\u064a\u062b\u0629`;
+}
+
 export const LOCALE_ROUTE_HEADER = "x-ec-locale";
 
 function splitHref(value: string) {
