@@ -65,8 +65,11 @@ function clearWatcher(externalId) {
   watchers.delete(externalId);
 }
 
-function isLiquipediaBackoff(error) {
-  return /Liquipedia: backing off after a rate limit/i.test(error?.message || '');
+function isServiceBackoff(error) {
+  return (
+    /Liquipedia: backing off after a rate limit/i.test(error?.message || '') ||
+    startgg.isStartggRateLimitBackoff?.(error)
+  );
 }
 
 export function stopAll() {
@@ -107,7 +110,7 @@ function startPolling(match, tournament) {
   const tick = () =>
     pollOnce(match, tournament).catch((e) => {
       const message = `[poll] ${match.external_id}: ${e.message}`;
-      if (isLiquipediaBackoff(e)) logger.debug(message);
+      if (isServiceBackoff(e)) logger.debug(message);
       else logger.error(message);
     });
   w.pollTimer = setInterval(tick, config.scheduler.livePollIntervalMs);

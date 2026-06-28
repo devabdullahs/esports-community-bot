@@ -6,7 +6,10 @@ import test from 'node:test';
 // set everything BEFORE importing the module.
 process.env.DISCORD_TOKEN = 'test-token';
 process.env.DISCORD_CLIENT_ID = 'test-client-id';
+process.env.NODE_ENV = 'test';
 process.env.STARTGG_TOKEN = 'test-token';
+process.env.STARTGG_MIN_GAP_MS = '0';
+process.env.STARTGG_BACKOFF_MS = '0';
 process.env.LOG_LEVEL = 'error';
 
 const {
@@ -321,6 +324,20 @@ test('query does NOT retry deterministic GraphQL errors (complexity)', async () 
   try {
     await assert.rejects(() => query('{ x }', {}, { delayMs: 0 }), /complexity/i);
     assert.equal(calls, 1, 'complexity errors surface immediately');
+  } finally {
+    restore();
+  }
+});
+
+test('query treats start.gg JSON rate-limit responses as a global backoff', async () => {
+  let calls = 0;
+  const restore = stubPost(async () => {
+    calls += 1;
+    return { data: { success: false, message: 'Rate limit exceeded - api-token' } };
+  });
+  try {
+    await assert.rejects(() => query('{ x }', {}, { delayMs: 0 }), /start\.gg: backing off after a rate limit/);
+    assert.equal(calls, 1, 'rate limits fail fast instead of retrying the same rejected request');
   } finally {
     restore();
   }
