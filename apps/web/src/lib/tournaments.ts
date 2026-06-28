@@ -121,7 +121,9 @@ export function matchStream(row: MatchRow): MatchStream | null {
 
 // running first, then upcoming by start time, then finished most-recent first
 // — mirrors getMatchesForGuild's ordering in src/db/matches.js.
-const MATCHES_SQL = `SELECT ${MATCH_COLUMNS} FROM matches WHERE tournament_id = $1
+const MATCHES_SQL = `SELECT ${MATCH_COLUMNS} FROM matches
+   WHERE tournament_id = $1
+     AND NOT (source = 'startgg' AND external_id LIKE 'sgg:preview_%')
    ORDER BY CASE status WHEN 'running' THEN 0 WHEN 'scheduled' THEN 1 ELSE 2 END,
             CASE WHEN status = 'finished' THEN scheduled_at END DESC,
             scheduled_at ASC`;

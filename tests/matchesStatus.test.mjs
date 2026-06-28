@@ -7,9 +7,14 @@ process.env.DISCORD_CLIENT_ID = 'test-client-id';
 process.env.DB_PATH = ':memory:';
 
 const { run, closeDbClient } = await import('../src/db/client.js');
-const { deleteTournamentPlaceholderMatches, getMatch, markStaleActiveFinished, upsertMatch } = await import(
-  '../src/db/matches.js'
-);
+const {
+  deleteTournamentPlaceholderMatches,
+  getActiveMatches,
+  getMatch,
+  getMatchesForGuild,
+  markStaleActiveFinished,
+  upsertMatch,
+} = await import('../src/db/matches.js');
 
 test('markStaleActiveFinished retires old scheduled and running rows only', async (t) => {
   t.after(async () => {
@@ -86,6 +91,26 @@ test('markStaleActiveFinished retires old scheduled and running rows only', asyn
     status: 'scheduled',
     scheduled_at: future,
   });
+
+  const visibleMatches = await getMatchesForGuild('guild-1');
+  assert.equal(
+    visibleMatches.some((m) => m.external_id === 'sgg:preview_3348077_2_1'),
+    false,
+  );
+  assert.equal(
+    visibleMatches.some((m) => m.external_id === 'sgg:104353062'),
+    true,
+  );
+
+  const activeMatches = await getActiveMatches();
+  assert.equal(
+    activeMatches.some((m) => m.external_id === 'sgg:preview_3348077_2_1'),
+    false,
+  );
+  assert.equal(
+    activeMatches.some((m) => m.external_id === 'sgg:104353062'),
+    true,
+  );
 
   const changed = await markStaleActiveFinished(4 * 3600);
 
