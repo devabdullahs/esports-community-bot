@@ -54,6 +54,7 @@ export async function listEndedTournaments(staleSeconds) {
      FROM tournaments t
      JOIN matches m ON m.tournament_id = t.id
      WHERE t.active = 1
+       AND NOT (m.source = 'startgg' AND m.external_id LIKE 'sgg:preview_%')
      GROUP BY t.id, t.guild_id, t.name
      HAVING SUM(CASE WHEN m.status <> 'finished' THEN 1 ELSE 0 END) = 0
         AND MAX(m.scheduled_at) IS NOT NULL

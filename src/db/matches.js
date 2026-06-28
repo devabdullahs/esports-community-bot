@@ -5,6 +5,9 @@ function nowText() {
   return new Date().toISOString().slice(0, 19).replace('T', ' ');
 }
 
+const STARTGG_PREVIEW_MATCH_SQL = "(source = 'startgg' AND external_id LIKE 'sgg:preview_%')";
+const STARTGG_PREVIEW_MATCH_SQL_M = "(m.source = 'startgg' AND m.external_id LIKE 'sgg:preview_%')";
+
 export async function upsertMatch(row) {
   const merged = {
     name: null,
@@ -118,6 +121,7 @@ export async function getMatchesForGuild(guildId) {
      FROM matches m
      JOIN tournaments t ON t.id = m.tournament_id
      WHERE t.guild_id = $1 AND t.active = 1
+       AND NOT ${STARTGG_PREVIEW_MATCH_SQL_M}
      ORDER BY CASE m.status WHEN 'running' THEN 0 WHEN 'scheduled' THEN 1 ELSE 2 END,
               m.scheduled_at ASC`,
     [guildId],
@@ -131,7 +135,8 @@ export async function getActiveMatches() {
   return all(
     `SELECT * FROM matches
      WHERE status IN ('scheduled','running')
-       AND (scheduled_at IS NULL OR scheduled_at > $1)`,
+       AND (scheduled_at IS NULL OR scheduled_at > $1)
+       AND NOT ${STARTGG_PREVIEW_MATCH_SQL}`,
     [cutoff],
   );
 }
