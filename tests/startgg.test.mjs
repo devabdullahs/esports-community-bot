@@ -293,6 +293,64 @@ test('fetchSchedule uses event-scoped recent-upcoming fallback for late bracket 
   );
 });
 
+test('fetchSchedule uses event-scoped deep upcoming fallback when previews fill the first window', async () => {
+  const previewRows = Array.from({ length: 90 }, (_, i) => buildPreviewSet(`preview_3348077_2_${i + 1}`));
+  const top8 = [
+    buildSet(9101, {
+      state: 1,
+      startAt: 1782680400,
+      teamA: 'TeamYAMASA | NOBI',
+      teamB: 'NIP | Meo-IL',
+    }),
+    buildSet(9102, {
+      state: 1,
+      startAt: 1782680400,
+      teamA: 'VIT JeonDDing',
+      teamB: 'SYN | Ninjakilla_212',
+    }),
+    buildSet(9103, {
+      state: 1,
+      startAt: 1782680400,
+      teamA: 'Vicious | Qasim Meer',
+      teamB: 'VARREL Rangchu',
+    }),
+    buildSet(9104, {
+      state: 1,
+      startAt: 1782680400,
+      teamA: 'TM | RB Arslan Ash',
+      teamB: 'KRX LowHigh',
+    }),
+  ];
+  const q = makeQuery({
+    name: 'Evo 2026',
+    eventName: 'TEKKEN 8',
+    events: [{ id: 'TEKKEN', name: 'TEKKEN 8' }],
+    setsByEvent: { TEKKEN: { STANDARD: [...previewRows, ...top8], RECENT: [] } },
+    videogame: 'TEKKEN 8',
+  });
+
+  const matches = await fetchSchedule({ external_id: 'tournament/evo-2026/event/tekken-8', name: 'x' }, { query: q });
+
+  assert.deepEqual(
+    matches.map((m) => m.name),
+    [
+      'TeamYAMASA | NOBI vs NIP | Meo-IL',
+      'VIT JeonDDing vs SYN | Ninjakilla_212',
+      'Vicious | Qasim Meer vs VARREL Rangchu',
+      'TM | RB Arslan Ash vs KRX LowHigh',
+    ],
+  );
+  assert.deepEqual(new Set(matches.map((m) => m.status)), new Set(['scheduled']));
+  const standardUpcomingCalls = q
+    .eventCalls()
+    .filter((c) => c.vars.eventId === 'TEKKEN' && c.vars.sortType === 'STANDARD' && c.vars.state.includes(1));
+  assert.ok(standardUpcomingCalls.length > 2, 'event-scoped deep fallback walks beyond the shallow upcoming pages');
+  assert.ok(
+    q.eventCalls().some((c) => c.vars.eventId === 'TEKKEN' && c.vars.sortType === 'RECENT' && c.vars.state.includes(1)),
+    'the recent-upcoming fallback is tried before the deeper standard walk',
+  );
+});
+
 test('fetchSchedule does not spend the recent-upcoming fallback on broad tournament windows', async () => {
   const q = makeQuery({
     events: [{ id: 'E1', name: 'Main' }],

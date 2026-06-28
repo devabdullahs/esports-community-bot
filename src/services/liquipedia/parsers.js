@@ -65,11 +65,21 @@ const LIVE_WINDOW_S = 4 * 3600;
 const nowSec = () => Math.floor(Date.now() / 1000);
 
 // Shared status logic for brackets, match lists, and the upcoming-matches widget.
-export function deriveStatus({ winA = false, winB = false, scoreA, scoreB, bestOf, scheduledAt, placeholder = false }) {
+export function deriveStatus({
+  winA = false,
+  winB = false,
+  scoreA,
+  scoreB,
+  bestOf,
+  scheduledAt,
+  placeholder = false,
+  live = false,
+}) {
   const winAt = bestOf ? Math.floor(bestOf / 2) + 1 : null;
   const reachedWin = winAt != null && ((scoreA ?? 0) >= winAt || (scoreB ?? 0) >= winAt);
   if (winA || winB || reachedWin) return 'finished';
   if ((scoreA ?? 0) + (scoreB ?? 0) > 0) return 'running'; // has a partial score → in progress
+  if (live) return 'running';
   if (placeholder) return 'scheduled';
   const now = nowSec();
   if (scheduledAt && now >= scheduledAt && now - scheduledAt <= LIVE_WINDOW_S) return 'running';
@@ -109,6 +119,23 @@ function fallbackMatchId(game, scope, teamA, teamB) {
     .sort()
     .join(' vs ');
   return `${game}:${scope || 'unknown'}:${pair}`;
+}
+
+// Liquipedia can mark rows as live without exposing a timestamp or score in
+// action=parse HTML. Trust only local timer/status badges inside the match row.
+function hasLiveMarker($, el) {
+  return $(el)
+    .find(
+      '.timer-object, .timer, .live-icon, .match-countdown, .match-info-status, .match-live, .brkts-live, [class~="live"]',
+    )
+    .toArray()
+    .some((node) => {
+      const text = cleanName($(node).text());
+      const klass = String($(node).attr('class') ?? '');
+      const title = String($(node).attr('title') ?? '');
+      const label = String($(node).attr('aria-label') ?? '');
+      return /\blive\b/i.test(`${text} ${title} ${label}`) || /(^|[-_\s])live($|[-_\s])/i.test(klass);
+    });
 }
 
 // ---------------------------------------------------------------------------
@@ -170,6 +197,7 @@ export function parseMatchInfo($, el, game) {
   const logoB = blocks[1] ? teamLogo($, blocks[1]) : null;
 
   const scheduledAt = Number($m.find('.timer-object[data-timestamp]').attr('data-timestamp')) || null;
+  const live = hasLiveMarker($, el);
   const tHref = $m.find('.match-info-tournament a[href]').first().attr('href') || '';
   const tournamentPath = tHref.replace(/^\//, '').split('#')[0];
   const tournamentName =
@@ -188,7 +216,7 @@ export function parseMatchInfo($, el, game) {
   );
 
   if (!blocks.length && tournamentName) {
-    const status = deriveStatus({ scheduledAt });
+    const status = deriveStatus({ scheduledAt, live });
     const name = tournamentDetail ? `${tournamentName} — ${tournamentDetail}` : tournamentName;
     return {
       source: 'liquipedia',
@@ -229,7 +257,7 @@ export function parseMatchInfo($, el, game) {
   const matchId = matchHref.split('/').pop() || null;
   const externalId = matchId || `${game}:${scheduledAt}:${teamA}:${teamB}`;
 
-  const status = deriveStatus({ scoreA, scoreB, bestOf, scheduledAt });
+  const status = deriveStatus({ scoreA, scoreB, bestOf, scheduledAt, live });
 
   return {
     source: 'liquipedia',
@@ -278,6 +306,7 @@ export function parseBracketMatch($, el, game, scope = '') {
 
   const scheduledAt = Number($m.find('[data-timestamp]').attr('data-timestamp')) || null;
   const bestOf = Number($m.find('.brkts-popup').text().match(/\(Bo(\d+)\)/i)?.[1]) || null;
+  const live = hasLiveMarker($, el);
 
   const status = deriveStatus({
     winA,
@@ -287,6 +316,7 @@ export function parseBracketMatch($, el, game, scope = '') {
     bestOf,
     scheduledAt,
     placeholder: isPlaceholderTeam(teamA) || isPlaceholderTeam(teamB),
+    live,
   });
 
   const matchHref = $m.find('a[href*="/Match:"]').attr('href') || '';
@@ -338,6 +368,7 @@ export function parseMatchlistMatch($, el, game, scope = '') {
 
   const scheduledAt = Number($m.find('[data-timestamp]').attr('data-timestamp')) || null;
   const bestOf = Number($m.find('.brkts-popup').text().match(/\(Bo(\d+)\)/i)?.[1]) || null;
+  const live = hasLiveMarker($, el);
   const status = deriveStatus({
     winA,
     winB,
@@ -346,6 +377,7 @@ export function parseMatchlistMatch($, el, game, scope = '') {
     bestOf,
     scheduledAt,
     placeholder: isPlaceholderTeam(teamA) || isPlaceholderTeam(teamB),
+    live,
   });
 
   const matchHref = $m.find('a[href*="/Match:"]').attr('href') || '';
