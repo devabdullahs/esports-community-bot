@@ -221,10 +221,19 @@ const STATE_WINDOWS = [
 ];
 const SETS_PER_PAGE = 50;
 const PAGE_SIZE_LADDER = [SETS_PER_PAGE, 25, 12];
+const PREVIEW_SET_ID_RE = /^preview_/i;
 
 function cleanName(value) {
   const trimmed = String(value ?? '').trim();
   return trimmed || null;
+}
+
+export function isPreviewSetId(id) {
+  return PREVIEW_SET_ID_RE.test(String(id ?? '').trim());
+}
+
+export function isPreviewExternalId(externalId) {
+  return /^sgg:preview_/i.test(String(externalId ?? '').trim());
 }
 
 async function fetchHead(tournament, q) {
@@ -259,6 +268,7 @@ function displayNameFromHead(head) {
 
 // Normalize a start.gg set into the bot's standard match shape.
 export function normalizeSet(s) {
+  if (isPreviewSetId(s?.id)) return null;
   const [s1, s2] = s.slots ?? [];
   const teamA = s1?.entrant?.name ?? 'TBD';
   const teamB = s2?.entrant?.name ?? 'TBD';
@@ -340,6 +350,7 @@ const SET_QUERY = `query Set($id: ID!) {
 
 export async function fetchMatch(externalId, { query: q = query } = {}) {
   if (!config.startgg.token) return null;
+  if (isPreviewExternalId(externalId)) return null;
   const id = String(externalId ?? '').replace(/^sgg:/i, '');
   if (!id) return null;
   const data = await q(SET_QUERY, { id });

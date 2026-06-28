@@ -7,7 +7,9 @@ process.env.DISCORD_CLIENT_ID = 'test-client-id';
 process.env.DB_PATH = ':memory:';
 
 const { run, closeDbClient } = await import('../src/db/client.js');
-const { getMatch, markStaleActiveFinished, upsertMatch } = await import('../src/db/matches.js');
+const { deleteTournamentPlaceholderMatches, getMatch, markStaleActiveFinished, upsertMatch } = await import(
+  '../src/db/matches.js'
+);
 
 test('markStaleActiveFinished retires old scheduled and running rows only', async (t) => {
   t.after(async () => {
@@ -64,6 +66,26 @@ test('markStaleActiveFinished retires old scheduled and running rows only', asyn
     status: 'finished',
     scheduled_at: old,
   });
+  await upsertMatch({
+    tournament_id: tournamentId,
+    source: 'startgg',
+    external_id: 'sgg:preview_3348077_2_1',
+    name: 'Projected A vs Projected B',
+    team_a: 'Projected A',
+    team_b: 'Projected B',
+    status: 'scheduled',
+    scheduled_at: future,
+  });
+  await upsertMatch({
+    tournament_id: tournamentId,
+    source: 'startgg',
+    external_id: 'sgg:104353062',
+    name: 'Real A vs Real B',
+    team_a: 'Real A',
+    team_b: 'Real B',
+    status: 'scheduled',
+    scheduled_at: future,
+  });
 
   const changed = await markStaleActiveFinished(4 * 3600);
 
@@ -72,4 +94,9 @@ test('markStaleActiveFinished retires old scheduled and running rows only', asyn
   assert.equal((await getMatch('liquipedia', 'old-running')).status, 'finished');
   assert.equal((await getMatch('liquipedia', 'future-scheduled')).status, 'scheduled');
   assert.equal((await getMatch('liquipedia', 'old-finished')).status, 'finished');
+
+  const deletedPreviewRows = await deleteTournamentPlaceholderMatches(tournamentId, ['sgg:104353062']);
+  assert.equal(deletedPreviewRows, 1);
+  assert.equal(await getMatch('startgg', 'sgg:preview_3348077_2_1'), null);
+  assert.equal((await getMatch('startgg', 'sgg:104353062')).status, 'scheduled');
 });
