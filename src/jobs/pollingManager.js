@@ -47,6 +47,10 @@ function isPlaceholderTeam(value) {
   );
 }
 
+function isNonPollableMatch(match) {
+  return match.source === 'startgg' && startgg.isPreviewExternalId?.(match.external_id);
+}
+
 // Hook for the (next-phase) leaderboard embed + live voice-channel updaters.
 let onUpdate = () => {};
 export function setUpdateHandler(fn) {
@@ -80,6 +84,7 @@ export function stopAll() {
 export function armMatch(match, tournament) {
   if (match.status === 'finished') return false;
   if (watchers.has(match.external_id)) return false; // already armed or polling
+  if (isNonPollableMatch(match)) return false;
   if (isPlaceholderTeam(match.team_a) || isPlaceholderTeam(match.team_b)) return false;
   if (!match.scheduled_at && match.status !== 'running') return false;
 

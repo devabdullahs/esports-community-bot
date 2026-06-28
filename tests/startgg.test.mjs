@@ -18,6 +18,8 @@ const {
   resolveTournamentTitle,
   resolveTournamentGame,
   normalizeSet,
+  isPreviewExternalId,
+  isPreviewSetId,
   query,
   startggClient,
   STATE_WINDOWS,
@@ -45,6 +47,19 @@ function buildSet(id, { state = 3, scoreA, scoreB } = {}) {
 
 function makeSets(state, startId, count) {
   return Array.from({ length: count }, (_, i) => buildSet(startId + i, { state }));
+}
+
+function buildPreviewSet(id = 'preview_3348077_2_1', { state = 1 } = {}) {
+  return {
+    id,
+    state,
+    startAt: 1782680400,
+    winnerId: null,
+    slots: [
+      { entrant: { id: 1, name: 'Projected A' }, standing: { stats: { score: { value: 0 } } } },
+      { entrant: { id: 2, name: 'Projected B' }, standing: { stats: { score: { value: 0 } } } },
+    ],
+  };
 }
 
 // A fake injected `query`: serves the HEAD query (name + events + videogame) and the
@@ -130,6 +145,17 @@ test('fetchSchedule returns ALL sets of a small event across states', async () =
   const matches = await fetchSchedule(tournament, { query: q });
 
   assert.deepEqual(statusCounts(matches), { running: 5, scheduled: 5, finished: 5 });
+});
+
+test('fetchSchedule ignores projected preview sets', async () => {
+  const sets = [buildPreviewSet(), buildSet(101, { state: 1 })];
+  const q = makeQuery({ events: [{ id: 'E1', name: 'TEKKEN 8' }], setsByEvent: { E1: sets } });
+
+  const matches = await fetchSchedule(tournament, { query: q });
+
+  assert.equal(matches.length, 1);
+  assert.equal(matches[0].externalId, 'sgg:101');
+  assert.equal(matches[0].status, 'scheduled');
 });
 
 test('fetchSchedule spans every event and dedupes overlapping set ids', async () => {
@@ -231,8 +257,28 @@ test('fetchMatch resolves one set directly by id (sgg: prefix stripped)', async 
   assert.equal(m.scoreB, 1);
 });
 
+test('fetchMatch skips projected preview ids without querying start.gg', async () => {
+  let called = false;
+  const m = await fetchMatch('sgg:preview_3348077_2_1', {
+    query: async () => {
+      called = true;
+      return { set: buildSet(1, { state: 1 }) };
+    },
+  });
+  assert.equal(m, null);
+  assert.equal(called, false);
+});
+
 test('fetchMatch returns null when the set is missing', async () => {
   assert.equal(await fetchMatch('sgg:999', { query: async () => ({ set: null }) }), null);
+});
+
+test('preview id helpers detect projected start.gg rows', () => {
+  assert.equal(isPreviewSetId('preview_3348077_2_1'), true);
+  assert.equal(isPreviewSetId(104353062), false);
+  assert.equal(isPreviewExternalId('sgg:preview_3348077_2_1'), true);
+  assert.equal(isPreviewExternalId('sgg:104353062'), false);
+  assert.equal(normalizeSet(buildPreviewSet()), null);
 });
 
 test('resolveTournamentTitle returns the real name, null on error or blank', async () => {
