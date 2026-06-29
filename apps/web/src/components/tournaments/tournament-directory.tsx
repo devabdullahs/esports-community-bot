@@ -6,6 +6,7 @@ import {
   CalendarDaysIcon,
   ClockIcon,
   CrosshairIcon,
+  CrownIcon,
   Gamepad2Icon,
   ListFilterIcon,
   RadioIcon,
@@ -15,6 +16,15 @@ import {
   XIcon,
   type LucideIcon,
 } from "lucide-react";
+import {
+  SiCounterstrike,
+  SiDota2,
+  SiFifa,
+  SiFortnite,
+  SiLeagueoflegends,
+  SiPubg,
+  SiValorant,
+} from "@icons-pack/react-simple-icons";
 import { useMemo, useState, type ReactNode } from "react";
 import { LocalDateTime } from "@/components/local-date-time";
 import { Badge } from "@/components/ui/badge";
@@ -277,7 +287,11 @@ function TournamentCard({
         <CardHeader>
           <div className="flex items-start justify-between gap-3">
             <div className="flex min-w-0 items-start gap-3">
-              <TournamentMark slug={tournament.game ?? "other"} source={tournament.source} />
+              <TournamentMark
+                slug={tournament.game ?? "other"}
+                source={tournament.source}
+                logos={tournament.markLogos}
+              />
               <div className="min-w-0">
                 <CardTitle className="line-clamp-2 text-base" dir="auto">
                   {tournament.name || `#${formatNumber(tournament.id, locale)}`}
@@ -504,20 +518,38 @@ function initials(name: string): string {
 }
 
 export function GameIcon({ slug }: { slug: string }) {
+  if (slug === "counterstrike" || slug === "cs2") {
+    return <SiCounterstrike className="size-4" aria-hidden />;
+  }
+  if (slug === "dota2") {
+    return <SiDota2 className="size-4" aria-hidden />;
+  }
+  if (slug === "esportsfc" || slug === "fifa") {
+    return <SiFifa className="size-4" aria-hidden />;
+  }
+  if (slug === "fortnite") {
+    return <SiFortnite className="size-4" aria-hidden />;
+  }
+  if (slug === "leagueoflegends") {
+    return <SiLeagueoflegends className="size-4" aria-hidden />;
+  }
+  if (slug === "pubg" || slug === "pubgmobile") {
+    return <SiPubg className="size-4" aria-hidden />;
+  }
+  if (slug === "valorant") {
+    return <SiValorant className="size-4" aria-hidden />;
+  }
+
   const Icon =
     slug === "fighters"
       ? SwordsIcon
+      : slug === "chess"
+        ? CrownIcon
       : [
-            "counterstrike",
-            "cs2",
-            "valorant",
             "callofduty",
             "warzone",
             "rainbowsix",
             "apexlegends",
-            "fortnite",
-            "pubg",
-            "pubgmobile",
             "freefire",
             "crossfire",
           ].includes(slug)
@@ -534,10 +566,48 @@ export function SourceIcon({ source }: { source: string }) {
   );
 }
 
-export function TournamentMark({ slug, source }: { slug: string; source: string }) {
+function MarkLogo({ logo }: { logo: string }) {
+  const [failed, setFailed] = useState(false);
+  const safe = safeUrlOrUndefined(logo);
+  if (!safe || failed) return null;
   return (
-    <div className="relative grid size-12 shrink-0 place-items-center rounded-xl border bg-background/70 text-primary">
-      <GameIcon slug={slug} />
+    // eslint-disable-next-line @next/next/no-img-element
+    <img
+      src={logoProxyUrl(safe)}
+      alt=""
+      loading="lazy"
+      onError={() => setFailed(true)}
+      className="size-6 rounded-md bg-background/75 object-contain p-0.5 shadow-sm"
+    />
+  );
+}
+
+export function TournamentMark({
+  slug,
+  source,
+  logos = [],
+}: {
+  slug: string;
+  source: string;
+  logos?: string[];
+}) {
+  const visibleLogos = logos.slice(0, 2);
+  return (
+    <div className="relative grid size-12 shrink-0 place-items-center overflow-hidden rounded-xl border bg-background/70 text-primary">
+      <div className="absolute inset-0 grid place-items-center opacity-15">
+        <GameIcon slug={slug} />
+      </div>
+      {visibleLogos.length ? (
+        <div className="relative z-10 flex items-center justify-center gap-0.5">
+          {visibleLogos.map((logo) => (
+            <MarkLogo key={logo} logo={logo} />
+          ))}
+        </div>
+      ) : (
+        <div className="relative z-10">
+          <GameIcon slug={slug} />
+        </div>
+      )}
       <span className="absolute -bottom-1 -end-1 rounded-md border bg-card px-1 py-0.5">
         <SourceIcon source={source} />
       </span>

@@ -25,6 +25,7 @@ export type TournamentDirectoryItem = {
   url: string | null;
   ewc: boolean;
   matchCounts: MatchCounts;
+  markLogos: string[];
   featuredMatch: TournamentDirectoryMatch | null;
 };
 

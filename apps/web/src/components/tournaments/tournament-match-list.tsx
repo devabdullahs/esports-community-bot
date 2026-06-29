@@ -43,7 +43,14 @@ type MatchRow = {
 };
 
 export type TournamentMatchesPayload = {
-  tournament: { id: number; name: string | null; game: string | null; source: string; url: string | null };
+  tournament: {
+    id: number;
+    name: string | null;
+    game: string | null;
+    source: string;
+    url: string | null;
+    markLogos: string[];
+  };
   matches: { running: MatchRow[]; scheduled: MatchRow[]; finished: MatchRow[] };
   total: number;
 };
