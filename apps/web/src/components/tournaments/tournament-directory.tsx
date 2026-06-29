@@ -23,6 +23,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { copy, formatNumber, localizedPath, type Locale } from "@/lib/i18n";
 import { logoProxyUrl } from "@/lib/logo-url";
+import { safeUrlOrUndefined } from "@/lib/safe-url";
 import {
   filterTournamentDirectory,
   tournamentDirectoryStats,
@@ -468,20 +469,27 @@ function TeamPreview({
 }
 
 function TeamLogo({ name, logo }: { name: string; logo: string | null }) {
-  if (logo) {
+  const [failed, setFailed] = useState(false);
+  const safe = safeUrlOrUndefined(logo);
+  // The logo proxy 404s for any crest the bot has not warmed into the shared
+  // cache yet; without an onError fallback that surfaces as a broken-image icon.
+  // Mirror the match-list Logo: validate the URL and degrade to clean initials.
+  if (!safe || failed) {
     return (
-      <img
-        src={logoProxyUrl(logo)}
-        alt=""
-        className="size-8 shrink-0 rounded-md bg-background/70 object-contain p-1"
-        loading="lazy"
-      />
+      <span className="grid size-8 shrink-0 place-items-center rounded-md bg-muted text-[0.65rem] font-semibold text-muted-foreground">
+        {initials(name)}
+      </span>
     );
   }
   return (
-    <span className="grid size-8 shrink-0 place-items-center rounded-md bg-muted text-[0.65rem] font-semibold text-muted-foreground">
-      {initials(name)}
-    </span>
+    // eslint-disable-next-line @next/next/no-img-element
+    <img
+      src={logoProxyUrl(safe)}
+      alt=""
+      loading="lazy"
+      onError={() => setFailed(true)}
+      className="size-8 shrink-0 rounded-md bg-background/70 object-contain p-1"
+    />
   );
 }
 
