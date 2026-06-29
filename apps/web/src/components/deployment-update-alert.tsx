@@ -52,7 +52,8 @@ export function DeploymentUpdateAlert({
     try {
       const response = await fetch(`/api/deployment-version?t=${Date.now()}`, {
         cache: "no-store",
-        credentials: "same-origin",
+        // Public, unauthenticated endpoint — don't send the session cookie on the poll.
+        credentials: "omit",
       });
       if (!response.ok) return;
       const data = (await response.json()) as VersionResponse;
