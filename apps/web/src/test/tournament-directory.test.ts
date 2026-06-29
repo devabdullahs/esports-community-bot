@@ -18,7 +18,6 @@ function tournament(
     url: null,
     ewc: false,
     matchCounts: { running: 0, scheduled: 0, finished: 0 },
-    markLogos: [],
     featuredMatch: null,
     ...overrides,
   };

@@ -5,13 +5,10 @@ import {
   ArrowRightIcon,
   CalendarDaysIcon,
   ClockIcon,
-  CrosshairIcon,
-  CrownIcon,
   Gamepad2Icon,
   ListFilterIcon,
   RadioIcon,
   SearchIcon,
-  SwordsIcon,
   TrophyIcon,
   XIcon,
   type LucideIcon,
@@ -290,7 +287,6 @@ function TournamentCard({
               <TournamentMark
                 slug={tournament.game ?? "other"}
                 source={tournament.source}
-                logos={tournament.markLogos}
               />
               <div className="min-w-0">
                 <CardTitle className="line-clamp-2 text-base" dir="auto">
@@ -517,45 +513,77 @@ function initials(name: string): string {
     .toUpperCase();
 }
 
-export function GameIcon({ slug }: { slug: string }) {
-  if (slug === "counterstrike" || slug === "cs2") {
-    return <SiCounterstrike className="size-4" aria-hidden />;
+type GameIconSize = "inline" | "mark";
+
+const GAME_ICON_LABELS: Record<string, string> = {
+  apexlegends: "APEX",
+  callofduty: "CoD",
+  chess: "CH",
+  crossfire: "CF",
+  fighters: "FG",
+  freefire: "FF",
+  mobilelegends: "MLBB",
+  overwatch: "OW",
+  rainbowsix: "R6",
+  rocketleague: "RL",
+  teamfighttactics: "TFT",
+  tft: "TFT",
+  warzone: "WZ",
+};
+
+function normalizedGameSlug(slug: string): string {
+  const key = slug.trim().toLowerCase();
+  if (key === "cs2") return "counterstrike";
+  if (key === "fifa") return "esportsfc";
+  return key || "other";
+}
+
+function iconClass(size: GameIconSize): string {
+  return size === "mark" ? "size-5" : "size-4";
+}
+
+function fallbackIconLabel(slug: string): string {
+  const normalized = normalizedGameSlug(slug);
+  return GAME_ICON_LABELS[normalized] ?? normalized.slice(0, 3).toUpperCase();
+}
+
+export function GameIcon({ slug, size = "inline" }: { slug: string; size?: GameIconSize }) {
+  const normalized = normalizedGameSlug(slug);
+  const className = iconClass(size);
+  if (normalized === "counterstrike") {
+    return <SiCounterstrike className={className} aria-hidden />;
   }
-  if (slug === "dota2") {
-    return <SiDota2 className="size-4" aria-hidden />;
+  if (normalized === "dota2") {
+    return <SiDota2 className={className} aria-hidden />;
   }
-  if (slug === "esportsfc" || slug === "fifa") {
-    return <SiFifa className="size-4" aria-hidden />;
+  if (normalized === "esportsfc") {
+    return <SiFifa className={className} aria-hidden />;
   }
-  if (slug === "fortnite") {
-    return <SiFortnite className="size-4" aria-hidden />;
+  if (normalized === "fortnite") {
+    return <SiFortnite className={className} aria-hidden />;
   }
-  if (slug === "leagueoflegends") {
-    return <SiLeagueoflegends className="size-4" aria-hidden />;
+  if (normalized === "leagueoflegends") {
+    return <SiLeagueoflegends className={className} aria-hidden />;
   }
-  if (slug === "pubg" || slug === "pubgmobile") {
-    return <SiPubg className="size-4" aria-hidden />;
+  if (normalized === "pubg" || normalized === "pubgmobile") {
+    return <SiPubg className={className} aria-hidden />;
   }
-  if (slug === "valorant") {
-    return <SiValorant className="size-4" aria-hidden />;
+  if (normalized === "valorant") {
+    return <SiValorant className={className} aria-hidden />;
   }
 
-  const Icon =
-    slug === "fighters"
-      ? SwordsIcon
-      : slug === "chess"
-        ? CrownIcon
-      : [
-            "callofduty",
-            "warzone",
-            "rainbowsix",
-            "apexlegends",
-            "freefire",
-            "crossfire",
-          ].includes(slug)
-        ? CrosshairIcon
-        : Gamepad2Icon;
-  return <Icon className="size-3.5" aria-hidden />;
+  return (
+    <span
+      className={
+        size === "mark"
+          ? "inline-grid min-w-8 place-items-center rounded-md border border-primary/25 bg-primary/10 px-1.5 py-1 text-[0.62rem] font-bold uppercase leading-none text-primary"
+          : "inline-grid min-w-5 place-items-center rounded bg-muted px-1 text-[0.5rem] font-bold uppercase leading-4 text-muted-foreground"
+      }
+      aria-hidden
+    >
+      {fallbackIconLabel(normalized)}
+    </span>
+  );
 }
 
 export function SourceIcon({ source }: { source: string }) {
@@ -566,48 +594,19 @@ export function SourceIcon({ source }: { source: string }) {
   );
 }
 
-function MarkLogo({ logo }: { logo: string }) {
-  const [failed, setFailed] = useState(false);
-  const safe = safeUrlOrUndefined(logo);
-  if (!safe || failed) return null;
-  return (
-    // eslint-disable-next-line @next/next/no-img-element
-    <img
-      src={logoProxyUrl(safe)}
-      alt=""
-      loading="lazy"
-      onError={() => setFailed(true)}
-      className="size-6 rounded-md bg-background/75 object-contain p-0.5 shadow-sm"
-    />
-  );
-}
-
 export function TournamentMark({
   slug,
   source,
-  logos = [],
 }: {
   slug: string;
   source: string;
-  logos?: string[];
 }) {
-  const visibleLogos = logos.slice(0, 2);
   return (
     <div className="relative grid size-12 shrink-0 place-items-center overflow-hidden rounded-xl border bg-background/70 text-primary">
-      <div className="absolute inset-0 grid place-items-center opacity-15">
-        <GameIcon slug={slug} />
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_20%,hsl(var(--primary)/0.18),transparent_60%)]" />
+      <div className="relative z-10">
+        <GameIcon slug={slug} size="mark" />
       </div>
-      {visibleLogos.length ? (
-        <div className="relative z-10 flex items-center justify-center gap-0.5">
-          {visibleLogos.map((logo) => (
-            <MarkLogo key={logo} logo={logo} />
-          ))}
-        </div>
-      ) : (
-        <div className="relative z-10">
-          <GameIcon slug={slug} />
-        </div>
-      )}
       <span className="absolute -bottom-1 -end-1 rounded-md border bg-card px-1 py-0.5">
         <SourceIcon source={source} />
       </span>
