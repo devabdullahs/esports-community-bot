@@ -107,6 +107,20 @@ function parseScoreCell(text) {
   return m ? Number(m[0]) : null;
 }
 
+function parseMatchlistScorePair($, cells) {
+  const cellScores = [];
+  $(cells).each((_i, cell) => {
+    const raw = $(cell).text().replace(/\s+/g, ' ').trim();
+    const score = parseScoreCell(raw);
+    cellScores.push(score);
+  });
+  if (cellScores.length <= 2) return [cellScores[0] ?? null, cellScores[1] ?? null];
+
+  const scores = cellScores.filter((score) => score != null);
+  if (scores.length < 2) return [scores[0] ?? null, null];
+  return [scores[0], scores[scores.length - 1]];
+}
+
 // Stable fallback id for a bracket/matchlist match that has NO Liquipedia
 // "Match:" page link. Keyed on the structural scope (tournament page + row/list
 // position, when available) + the team PAIR (order-independent) — deliberately
@@ -360,8 +374,7 @@ export function parseMatchlistMatch($, el, game, scope = '') {
   const logoB = teamLogo($, opps[1]);
 
   const scoreEls = $m.find('.brkts-matchlist-score .brkts-matchlist-cell-content');
-  const scoreA = scoreEls[0] ? parseScoreCell($(scoreEls[0]).text()) : null;
-  const scoreB = scoreEls[1] ? parseScoreCell($(scoreEls[1]).text()) : null;
+  const [scoreA, scoreB] = parseMatchlistScorePair($, scoreEls);
 
   const winA = $(opps[0]).hasClass('brkts-matchlist-slot-winner');
   const winB = $(opps[1]).hasClass('brkts-matchlist-slot-winner');

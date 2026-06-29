@@ -414,6 +414,62 @@ test('parseMatchlistMatch: returns correct teams, scores, and status for a finis
   assert.equal(m.source, 'liquipedia');
 });
 
+test('parseMatchlistMatch: ignores middle info cells when reading scores', () => {
+  const html = `
+    <div class="brkts-matchlist-match">
+      <div class="brkts-matchlist-opponent brkts-matchlist-slot-winner" aria-label="Lazuli">
+        <span class="name">LAZ</span>
+      </div>
+      <div class="brkts-matchlist-score">
+        <span class="brkts-matchlist-cell-content">3</span>
+        <span class="brkts-matchlist-cell-content"><span class="brkts-popup">1</span></span>
+        <span class="brkts-matchlist-cell-content">2</span>
+      </div>
+      <div class="brkts-matchlist-opponent" aria-label="Uwinks">
+        <span class="name">UW</span>
+      </div>
+      <div class="brkts-popup">(Bo5)</div>
+    </div>
+  `;
+  const $ = load(html);
+  const el = $('.brkts-matchlist-match')[0];
+  const m = parseMatchlistMatch($, el, 'overwatch', 'OCS/2026');
+
+  assert.ok(m, 'should not return null');
+  assert.equal(m.teamA, 'Lazuli');
+  assert.equal(m.teamB, 'Uwinks');
+  assert.equal(m.scoreA, 3);
+  assert.equal(m.scoreB, 2);
+  assert.equal(m.status, 'finished');
+  assert.equal(m.winner, 'Lazuli');
+  assert.equal(m.bestOf, 5);
+});
+
+test('parseMatchlistMatch: preserves score sides for normal two-cell score rows', () => {
+  const html = `
+    <div class="brkts-matchlist-match">
+      <div class="brkts-matchlist-opponent" aria-label="Team Alpha">
+        <span class="name">Team Alpha</span>
+      </div>
+      <div class="brkts-matchlist-score">
+        <span class="brkts-matchlist-cell-content"></span>
+        <span class="brkts-matchlist-cell-content">1</span>
+      </div>
+      <div class="brkts-matchlist-opponent" aria-label="Team Beta">
+        <span class="name">Team Beta</span>
+      </div>
+    </div>
+  `;
+  const $ = load(html);
+  const el = $('.brkts-matchlist-match')[0];
+  const m = parseMatchlistMatch($, el, 'overwatch', 'OCS/2026');
+
+  assert.ok(m, 'should not return null');
+  assert.equal(m.scoreA, null);
+  assert.equal(m.scoreB, 1);
+  assert.equal(m.status, 'running');
+});
+
 test('parseMatchlistMatch: unplayed match has status scheduled', () => {
   const futureTs = Math.floor(Date.now() / 1000) + 7200; // 2h from now
   const html = `
