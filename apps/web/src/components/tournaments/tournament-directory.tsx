@@ -13,15 +13,6 @@ import {
   XIcon,
   type LucideIcon,
 } from "lucide-react";
-import {
-  SiCounterstrike,
-  SiDota2,
-  SiFifa,
-  SiFortnite,
-  SiLeagueoflegends,
-  SiPubg,
-  SiValorant,
-} from "@icons-pack/react-simple-icons";
 import { useMemo, useState, type ReactNode } from "react";
 import { LocalDateTime } from "@/components/local-date-time";
 import { Badge } from "@/components/ui/badge";
@@ -516,26 +507,120 @@ function initials(name: string): string {
 type GameIconSize = "inline" | "mark";
 
 const GAME_ICON_LABELS: Record<string, string> = {
+  ageofempires: "AoE",
   apexlegends: "APEX",
+  brawlstars: "BS",
+  brawlhalla: "BH",
   callofduty: "CoD",
+  callofdutyleague: "CDL",
   chess: "CH",
+  clashofclans: "CoC",
+  clashroyale: "CR",
   crossfire: "CF",
+  deadlock: "DL",
+  deltaforce: "DF",
+  easportsfc: "FC",
+  esports: "EWC",
+  esportsfc: "FC",
   fighters: "FG",
   freefire: "FF",
+  halo: "HALO",
+  hearthstone: "HS",
+  heroes: "HotS",
+  honorofkings: "HoK",
+  leagueoflegends: "LoL",
+  marvelrivals: "MR",
   mobilelegends: "MLBB",
+  naraka: "NK",
+  osu: "OSU",
   overwatch: "OW",
+  pubg: "PUBG",
+  pubgmobile: "PUBGM",
   rainbowsix: "R6",
   rocketleague: "RL",
+  simracing: "SIM",
+  smash: "SSB",
+  splatoon: "SPL",
+  starcraft2: "SC2",
+  stormgate: "SG",
   teamfighttactics: "TFT",
+  teamfortress: "TF2",
+  thefinals: "FIN",
   tft: "TFT",
+  trackmania: "TM",
+  valorant: "VCT",
+  warcraft: "WC",
+  warthunder: "WT",
   warzone: "WZ",
+  wildrift: "WR",
+  worldoftanks: "WoT",
 };
 
 function normalizedGameSlug(slug: string): string {
   const key = slug.trim().toLowerCase();
   if (key === "cs2") return "counterstrike";
-  if (key === "fifa") return "esportsfc";
+  if (key === "fifa" || key === "ea-sports-fc" || key === "easportsfc") return "esportsfc";
+  if (key === "teamfighttactics") return "tft";
   return key || "other";
+}
+
+const GAME_GLYPH_PATHS: Record<string, string> = {
+  ageofempires: "/game-glyphs/ageofempires.svg",
+  apexlegends: "/game-glyphs/apexlegends.png",
+  brawlstars: "/game-glyphs/brawlstars.svg",
+  brawlhalla: "/game-glyphs/brawlhalla.svg",
+  callofduty: "/game-glyphs/callofduty.png",
+  callofdutyleague: "/game-glyphs/callofdutyleague.png",
+  chess: "/game-glyphs/chess.svg",
+  clashofclans: "/game-glyphs/clashofclans.svg",
+  clashroyale: "/game-glyphs/clashroyale.svg",
+  counterstrike: "/game-glyphs/counterstrike.svg",
+  crossfire: "/game-glyphs/crossfire.svg",
+  deadlock: "/game-glyphs/deadlock.svg",
+  deltaforce: "/game-glyphs/deltaforce.svg",
+  dota2: "/game-glyphs/dota2.png",
+  easportsfc: "/game-glyphs/esportsfc.png",
+  esports: "/game-glyphs/esports.svg",
+  esportsfc: "/game-glyphs/esportsfc.png",
+  fifa: "/game-glyphs/esportsfc.png",
+  fighters: "/game-glyphs/fighters.png",
+  fortnite: "/game-glyphs/fortnite.png",
+  freefire: "/game-glyphs/freefire.png",
+  halo: "/game-glyphs/halo.svg",
+  hearthstone: "/game-glyphs/hearthstone.svg",
+  heroes: "/game-glyphs/heroes.svg",
+  honorofkings: "/game-glyphs/honorofkings.svg",
+  leagueoflegends: "/game-glyphs/leagueoflegends.png",
+  marvelrivals: "/game-glyphs/marvelrivals.svg",
+  mobilelegends: "/game-glyphs/mobilelegends.png",
+  naraka: "/game-glyphs/naraka.svg",
+  osu: "/game-glyphs/osu.svg",
+  overwatch: "/game-glyphs/overwatch.png",
+  pubg: "/game-glyphs/pubg.png",
+  pubgmobile: "/game-glyphs/pubgmobile.svg",
+  rainbowsix: "/game-glyphs/rainbowsix.png",
+  rocketleague: "/game-glyphs/rocketleague.svg",
+  simracing: "/game-glyphs/simracing.svg",
+  smash: "/game-glyphs/smash.svg",
+  splatoon: "/game-glyphs/splatoon.svg",
+  starcraft2: "/game-glyphs/starcraft2.svg",
+  stormgate: "/game-glyphs/stormgate.svg",
+  teamfighttactics: "/game-glyphs/tft.png",
+  teamfortress: "/game-glyphs/teamfortress.svg",
+  thefinals: "/game-glyphs/thefinals.svg",
+  tft: "/game-glyphs/tft.png",
+  trackmania: "/game-glyphs/trackmania.svg",
+  valorant: "/game-glyphs/valorant.png",
+  warcraft: "/game-glyphs/warcraft.svg",
+  warthunder: "/game-glyphs/warthunder.svg",
+  warzone: "/game-glyphs/warzone.png",
+  wildrift: "/game-glyphs/wildrift.svg",
+  worldoftanks: "/game-glyphs/worldoftanks.svg",
+};
+
+function gameGlyphPath(slug: string): string | null {
+  const normalized = normalizedGameSlug(slug);
+  return GAME_GLYPH_PATHS[normalized] ?? null;
 }
 
 function iconClass(size: GameIconSize): string {
@@ -550,26 +635,16 @@ function fallbackIconLabel(slug: string): string {
 export function GameIcon({ slug, size = "inline" }: { slug: string; size?: GameIconSize }) {
   const normalized = normalizedGameSlug(slug);
   const className = iconClass(size);
-  if (normalized === "counterstrike") {
-    return <SiCounterstrike className={className} aria-hidden />;
-  }
-  if (normalized === "dota2") {
-    return <SiDota2 className={className} aria-hidden />;
-  }
-  if (normalized === "esportsfc") {
-    return <SiFifa className={className} aria-hidden />;
-  }
-  if (normalized === "fortnite") {
-    return <SiFortnite className={className} aria-hidden />;
-  }
-  if (normalized === "leagueoflegends") {
-    return <SiLeagueoflegends className={className} aria-hidden />;
-  }
-  if (normalized === "pubg" || normalized === "pubgmobile") {
-    return <SiPubg className={className} aria-hidden />;
-  }
-  if (normalized === "valorant") {
-    return <SiValorant className={className} aria-hidden />;
+  const glyph = gameGlyphPath(normalized);
+  if (glyph) {
+    const mask = `url("${glyph}") center / contain no-repeat`;
+    return (
+      <span
+        className={`${className} inline-block shrink-0 bg-current`}
+        style={{ WebkitMask: mask, mask }}
+        aria-hidden
+      />
+    );
   }
 
   return (
