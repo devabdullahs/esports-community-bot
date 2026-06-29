@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import {
   ArrowRightIcon,
   CalendarDaysIcon,
@@ -275,10 +276,7 @@ function TournamentCard({
         <CardHeader>
           <div className="flex items-start justify-between gap-3">
             <div className="flex min-w-0 items-start gap-3">
-              <TournamentMark
-                slug={tournament.game ?? "other"}
-                source={tournament.source}
-              />
+              <TournamentMark slug={tournament.game ?? "other"} />
               <div className="min-w-0">
                 <CardTitle className="line-clamp-2 text-base" dir="auto">
                   {tournament.name || `#${formatNumber(tournament.id, locale)}`}
@@ -623,8 +621,18 @@ function gameGlyphPath(slug: string): string | null {
   return GAME_GLYPH_PATHS[normalized] ?? null;
 }
 
+const SOURCE_GLYPH_PATHS: Record<string, string> = {
+  liquipedia: "/source-glyphs/liquipedia.png",
+  pandascore: "/source-glyphs/pandascore.png",
+  startgg: "/source-glyphs/startgg.png",
+};
+
+function sourceGlyphPath(source: string): string | null {
+  return SOURCE_GLYPH_PATHS[source.toLowerCase()] ?? null;
+}
+
 function iconClass(size: GameIconSize): string {
-  return size === "mark" ? "size-5" : "size-4";
+  return size === "mark" ? "size-7" : "size-4";
 }
 
 function fallbackIconLabel(slug: string): string {
@@ -662,29 +670,29 @@ export function GameIcon({ slug, size = "inline" }: { slug: string; size?: GameI
 }
 
 export function SourceIcon({ source }: { source: string }) {
+  const glyph = sourceGlyphPath(source);
+  if (glyph) {
+    return (
+      <span className="grid size-4 shrink-0 place-items-center overflow-hidden rounded bg-muted/70 p-0.5">
+        <Image src={glyph} alt="" width={14} height={14} className="size-full object-contain" />
+      </span>
+    );
+  }
+
   return (
     <span className="grid size-4 place-items-center rounded bg-muted text-[0.5rem] font-bold uppercase text-muted-foreground">
-      {source === "startgg" ? "S" : source === "liquipedia" ? "L" : source.slice(0, 1)}
+      {source.slice(0, 1)}
     </span>
   );
 }
 
-export function TournamentMark({
-  slug,
-  source,
-}: {
-  slug: string;
-  source: string;
-}) {
+export function TournamentMark({ slug }: { slug: string }) {
   return (
     <div className="relative grid size-12 shrink-0 place-items-center overflow-hidden rounded-xl border bg-background/70 text-primary">
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_20%,hsl(var(--primary)/0.18),transparent_60%)]" />
-      <div className="relative z-10">
+      <div className="relative z-10 grid size-full place-items-center">
         <GameIcon slug={slug} size="mark" />
       </div>
-      <span className="absolute -bottom-1 -end-1 rounded-md border bg-card px-1 py-0.5">
-        <SourceIcon source={source} />
-      </span>
     </div>
   );
 }
