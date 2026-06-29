@@ -16,7 +16,8 @@ export async function addTournament(row) {
        game = excluded.game,
        name = excluded.name,
        url  = excluded.url,
-       active = 1
+       active = 1,
+       archived_at = NULL
      RETURNING *`,
     [merged.source, merged.external_id, merged.game, merged.name, merged.url, merged.guild_id, merged.added_by],
   );
@@ -24,8 +25,8 @@ export async function addTournament(row) {
 
 export async function listActiveTournaments(guildId) {
   return guildId
-    ? all('SELECT * FROM tournaments WHERE active = 1 AND guild_id = $1 ORDER BY created_at DESC', [guildId])
-    : all('SELECT * FROM tournaments WHERE active = 1 ORDER BY created_at DESC');
+    ? all('SELECT * FROM tournaments WHERE active = 1 AND archived_at IS NULL AND guild_id = $1 ORDER BY created_at DESC', [guildId])
+    : all('SELECT * FROM tournaments WHERE active = 1 AND archived_at IS NULL ORDER BY created_at DESC');
 }
 
 export async function getTournamentById(id) {
@@ -44,9 +45,39 @@ export async function deactivateTournament(id, guildId) {
   return run('UPDATE tournaments SET active = 0 WHERE id = $1 AND guild_id = $2', [id, guildId]);
 }
 
+export async function archiveTournament(id, guildId, archivedAt = Math.floor(Date.now() / 1000)) {
+  return run(
+    `UPDATE tournaments
+     SET archived_at = $1
+     WHERE id = $2 AND guild_id = $3 AND archived_at IS NULL`,
+    [archivedAt, id, guildId],
+  );
+}
+
+export async function listArchivedTournaments(guildId, { limit = 25, offset = 0 } = {}) {
+  const safeLimit = Math.max(1, Math.min(100, Number(limit) || 25));
+  const safeOffset = Math.max(0, Number(offset) || 0);
+  return all(
+    `SELECT t.*, lm.last_match_at
+     FROM tournaments t
+     LEFT JOIN (
+       SELECT tournament_id, MAX(scheduled_at) AS last_match_at
+       FROM matches
+       WHERE NOT (source = 'startgg' AND external_id LIKE 'sgg:preview_%')
+       GROUP BY tournament_id
+     ) lm ON lm.tournament_id = t.id
+     WHERE t.guild_id = $1 AND t.archived_at IS NOT NULL
+     ORDER BY COALESCE(lm.last_match_at, t.archived_at) DESC,
+              t.archived_at DESC,
+              t.id DESC
+     LIMIT $2 OFFSET $3`,
+    [guildId, safeLimit, safeOffset],
+  );
+}
+
 // Active tournaments that have ended: at least one match, EVERY match finished
 // (no running, scheduled, or TBD), and the last match started more than
-// `staleSeconds` ago. Used by the morning sweep to auto-untrack dead events.
+// `staleSeconds` ago. Used by the morning sweep to archive dead events.
 export async function listEndedTournaments(staleSeconds) {
   const cutoff = Math.floor(Date.now() / 1000) - staleSeconds;
   return all(
@@ -54,6 +85,7 @@ export async function listEndedTournaments(staleSeconds) {
      FROM tournaments t
      JOIN matches m ON m.tournament_id = t.id
      WHERE t.active = 1
+       AND t.archived_at IS NULL
        AND NOT (m.source = 'startgg' AND m.external_id LIKE 'sgg:preview_%')
      GROUP BY t.id, t.guild_id, t.name
      HAVING SUM(CASE WHEN m.status <> 'finished' THEN 1 ELSE 0 END) = 0

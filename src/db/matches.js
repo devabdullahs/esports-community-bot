@@ -121,6 +121,7 @@ export async function getMatchesForGuild(guildId) {
      FROM matches m
      JOIN tournaments t ON t.id = m.tournament_id
      WHERE t.guild_id = $1 AND t.active = 1
+       AND t.archived_at IS NULL
        AND NOT ${STARTGG_PREVIEW_MATCH_SQL_M}
      ORDER BY CASE m.status WHEN 'running' THEN 0 WHEN 'scheduled' THEN 1 ELSE 2 END,
               m.scheduled_at ASC`,
@@ -133,10 +134,14 @@ export async function getMatchesForGuild(guildId) {
 export async function getActiveMatches() {
   const cutoff = Math.floor(Date.now() / 1000) - 43200;
   return all(
-    `SELECT * FROM matches
-     WHERE status IN ('scheduled','running')
-       AND (scheduled_at IS NULL OR scheduled_at > $1)
-       AND NOT ${STARTGG_PREVIEW_MATCH_SQL}`,
+    `SELECT m.*
+     FROM matches m
+     JOIN tournaments t ON t.id = m.tournament_id
+     WHERE t.active = 1
+       AND t.archived_at IS NULL
+       AND m.status IN ('scheduled','running')
+       AND (m.scheduled_at IS NULL OR m.scheduled_at > $1)
+       AND NOT ${STARTGG_PREVIEW_MATCH_SQL_M}`,
     [cutoff],
   );
 }

@@ -2,7 +2,7 @@ import cron from 'node-cron';
 import { config } from '../config.js';
 import { logger } from '../lib/logger.js';
 import {
-  deactivateTournament,
+  archiveTournament,
   listActiveTournaments,
   listEndedTournaments,
   updateTournamentGame,
@@ -72,20 +72,19 @@ export async function syncTournament(client, t) {
 export async function runMorningSync(client) {
   logger.info('[morning-sync] Starting daily schedule sync…');
 
-  // Auto-untrack tournaments that fully ended (every match finished) more than
-  // TOURNAMENT_UNTRACK_AFTER_HOURS ago (default 72h). Keeps the tracked list and
-  // match-card boards focused on live/upcoming events; the end-of-run refresh
-  // removes their now-orphaned cards.
+  // Archive tournaments that fully ended (every match finished) more than
+  // TOURNAMENT_UNTRACK_AFTER_HOURS ago (default 72h). Archived events stay
+  // browseable on the site but leave live/polling surfaces.
   const staleHours = Number(process.env.TOURNAMENT_UNTRACK_AFTER_HOURS) || 72;
   try {
     const ended = await listEndedTournaments(staleHours * 3600);
     for (const t of ended) {
-      await deactivateTournament(t.id, t.guild_id);
-      logger.info(`[morning-sync] untracked ended tournament #${t.id} "${t.name}" (finished > ${staleHours}h ago).`);
+      await archiveTournament(t.id, t.guild_id);
+      logger.info(`[morning-sync] archived ended tournament #${t.id} "${t.name}" (finished > ${staleHours}h ago).`);
     }
-    if (ended.length) logger.info(`[morning-sync] auto-untracked ${ended.length} ended tournament(s).`);
+    if (ended.length) logger.info(`[morning-sync] archived ${ended.length} ended tournament(s).`);
   } catch (err) {
-    logger.error(`[morning-sync] auto-untrack failed: ${err.message}`);
+    logger.error(`[morning-sync] archive sweep failed: ${err.message}`);
   }
 
   const tournaments = await listActiveTournaments();
