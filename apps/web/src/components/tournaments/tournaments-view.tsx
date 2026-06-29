@@ -97,6 +97,15 @@ export async function TournamentsView({
           <h1 className="text-3xl font-semibold leading-tight sm:text-4xl">{heading}</h1>
           <p className="text-sm leading-6 text-muted-foreground sm:text-base">{text.description}</p>
         </div>
+        {!ewcOnly ? (
+          <Link
+            href={localizedPath("/tournaments/archive", locale)}
+            className="inline-flex items-center gap-1.5 text-sm font-medium text-primary underline-offset-4 hover:underline"
+          >
+            {text.archiveLink}
+            <ArrowRightIcon className="size-3.5 rtl:rotate-180" />
+          </Link>
+        ) : null}
       </section>
 
       {groups.length ? (

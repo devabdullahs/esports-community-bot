@@ -10,12 +10,19 @@
  *    and 400 on a non-numeric id.
  */
 
-import { beforeAll, describe, expect, test } from "vitest";
+import { renderToStaticMarkup } from "react-dom/server";
+import { beforeAll, describe, expect, test, vi } from "vitest";
 
 const GUILD_ID = "111111111111111111";
 
+vi.mock("@/lib/request-locale", () => ({
+  getRequestLocale: async () => "en",
+}));
+
 import { GET as listGET } from "@/app/api/tournaments/route";
 import { GET as matchesGET } from "@/app/api/tournaments/[id]/matches/route";
+import TournamentArchivePage from "@/app/tournaments/archive/page";
+import { listArchivedTournamentSummaries } from "@/lib/tournaments";
 
 function matchesReq(query = ""): Request {
   return new Request(`http://localhost/api/tournaments/x/matches${query}`);
@@ -26,6 +33,8 @@ function ctx(id: string) {
 }
 
 let tournamentId: number;
+let archivedTournamentId: number;
+let newestArchivedTournamentId: number;
 
 async function seed(): Promise<void> {
   // Bootstrap the SQLite schema on the shared connection. The tournaments/matches
@@ -33,7 +42,7 @@ async function seed(): Promise<void> {
   // so nothing else in this test would create the tables — mirror the bot-side ported
   // tests that import index.js up front (e.g. tests/ewcRateLimits.test.mjs).
   await import("@bot/db/index.js");
-  const { addTournament } = await import("@bot/db/tournaments.js");
+  const { addTournament, archiveTournament } = await import("@bot/db/tournaments.js");
   const { upsertMatch } = await import("@bot/db/matches.js");
 
   const tournament = (await addTournament({
@@ -64,6 +73,31 @@ async function seed(): Promise<void> {
       scheduled_at: 1_800_000_000 + i * 3600,
     });
   }
+
+  for (let i = 0; i < 13; i += 1) {
+    const archived = (await addTournament({
+      source: "liquipedia",
+      external_id: `Archive/Test-${Date.now()}-${i}`,
+      game: "valorant",
+      name: `Archived Test ${i}`,
+      url: `https://liquipedia.net/valorant/Archive/Test_${i}`,
+      guild_id: GUILD_ID,
+    })) as { id: number };
+    if (i === 0) archivedTournamentId = archived.id;
+    if (i === 12) newestArchivedTournamentId = archived.id;
+    await upsertMatch({
+      tournament_id: archived.id,
+      source: "liquipedia",
+      external_id: `Match:archive-${i}`,
+      team_a: `Archive A${i}`,
+      team_b: `Archive B${i}`,
+      score_a: 2,
+      score_b: 1,
+      status: "finished",
+      scheduled_at: 1_810_000_000 + i * 3600,
+    });
+    await archiveTournament(archived.id, GUILD_ID, 1_820_000_000 + i);
+  }
 }
 
 beforeAll(async () => {
@@ -82,6 +116,13 @@ describe("GET /api/tournaments", () => {
     expect(t.game).toBe("cs2");
     expect(t.matchCounts).toEqual({ running: 1, scheduled: 2, finished: 5 });
   });
+
+  test("excludes archived tournaments from the active tournament list", async () => {
+    const res = await listGET();
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.tournaments.some((row: { id: number }) => row.id === archivedTournamentId)).toBe(false);
+  });
 });
 
 describe("GET /api/tournaments/[id]/matches", () => {
@@ -98,6 +139,17 @@ describe("GET /api/tournaments/[id]/matches", () => {
     // finished ordered most-recent-first (scheduled_at DESC)
     const finishedTimes = body.matches.finished.map((m: { scheduled_at: number }) => m.scheduled_at);
     expect(finishedTimes).toEqual([...finishedTimes].sort((a, b) => b - a));
+  });
+
+  test("still serves archived tournament detail data", async () => {
+    const res = await matchesGET(matchesReq(), ctx(String(archivedTournamentId)));
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.tournament.id).toBe(archivedTournamentId);
+    expect(body.matches.running).toHaveLength(0);
+    expect(body.matches.scheduled).toHaveLength(0);
+    expect(body.matches.finished).toHaveLength(1);
+    expect(body.total).toBe(1);
   });
 
   test("clamps limit on the finished list (limit=2 returns 2)", async () => {
@@ -139,5 +191,37 @@ describe("GET /api/tournaments/[id]/matches", () => {
   test("404 for an unknown tournament id", async () => {
     const res = await matchesGET(matchesReq(), ctx("99999999"));
     expect(res.status).toBe(404);
+  });
+});
+
+describe("tournaments archive", () => {
+  test("lists archived tournaments newest-finished-first with offset pagination", async () => {
+    const firstPage = await listArchivedTournamentSummaries({ limit: 2 });
+    expect(firstPage).toHaveLength(2);
+    expect(firstPage[0].id).toBe(newestArchivedTournamentId);
+    expect(firstPage[0].name).toBe("Archived Test 12");
+    expect(firstPage[0].matchCounts).toEqual({ running: 0, scheduled: 0, finished: 1 });
+
+    const secondPage = await listArchivedTournamentSummaries({ limit: 2, offset: 2 });
+    expect(secondPage).toHaveLength(2);
+    expect(secondPage[0].name).toBe("Archived Test 10");
+  });
+
+  test("renders the archive route with cards and older/newer pagination", async () => {
+    const firstPage = await TournamentArchivePage({
+      searchParams: Promise.resolve({ page: "1" }),
+    });
+    const firstHtml = renderToStaticMarkup(firstPage);
+    expect(firstHtml).toContain("Finished tournaments");
+    expect(firstHtml).toContain("Archived Test 12");
+    expect(firstHtml).toContain("Older");
+    expect(firstHtml).not.toContain("Newer");
+
+    const secondPage = await TournamentArchivePage({
+      searchParams: Promise.resolve({ page: "2" }),
+    });
+    const secondHtml = renderToStaticMarkup(secondPage);
+    expect(secondHtml).toContain("Archived Test 0");
+    expect(secondHtml).toContain("Newer");
   });
 });

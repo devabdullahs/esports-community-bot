@@ -5,6 +5,7 @@ import { dedupeMatches as _dedupeMatches } from "@bot/db/matches.js";
 import {
   getTournamentById as _getById,
   listActiveTournaments as _listActive,
+  listArchivedTournaments as _listArchived,
 } from "@bot/db/tournaments.js";
 import { unstable_cache } from "next/cache";
 import { resolveDefaultGuildId } from "@/lib/guild";
@@ -30,7 +31,9 @@ export type TournamentRow = {
   url: string | null;
   guild_id: string;
   active: number;
+  archived_at: number | null;
   created_at: string;
+  last_match_at?: number | null;
 };
 
 export type MatchCounts = { running: number; scheduled: number; finished: number };
@@ -42,6 +45,8 @@ export type TournamentSummary = {
   source: string;
   url: string | null;
   active: number;
+  archived_at?: number | null;
+  last_match_at?: number | null;
   created_at: string;
   ewc: boolean;
   matchCounts: MatchCounts;
@@ -78,6 +83,10 @@ export type TournamentMatches = {
 };
 
 const listActive = _listActive as (guildId?: string) => Promise<TournamentRow[]>;
+const listArchived = _listArchived as (
+  guildId: string,
+  opts?: { limit?: number; offset?: number },
+) => Promise<TournamentRow[]>;
 const getById = _getById as (id: number) => Promise<TournamentRow | undefined>;
 const dedupeMatches = _dedupeMatches as <T extends MatchRow>(rows: T[]) => T[];
 
@@ -163,6 +172,22 @@ function countsFromRows(rows: MatchRow[]): MatchCounts {
   return counts;
 }
 
+async function tournamentSummary(t: TournamentRow): Promise<TournamentSummary> {
+  return {
+    id: t.id,
+    name: t.name,
+    game: t.game,
+    source: t.source,
+    url: t.url,
+    active: t.active,
+    archived_at: t.archived_at,
+    last_match_at: t.last_match_at,
+    created_at: t.created_at,
+    ewc: isEwcTournament(t),
+    matchCounts: countsFromRows(await dedupedTournamentMatches(t)),
+  };
+}
+
 /** Active tournaments for the configured guild, each with per-status match counts. */
 export async function listTournamentSummaries(): Promise<TournamentSummary[]> {
   // The bot only renders match cards for active tournaments (getMatchesForGuild
@@ -171,19 +196,24 @@ export async function listTournamentSummaries(): Promise<TournamentSummary[]> {
   const guildId = await resolveDefaultGuildId();
   if (!guildId) return [];
   const tournaments = await listActive(guildId);
-  return Promise.all(
-    tournaments.map(async (t) => ({
-      id: t.id,
-      name: t.name,
-      game: t.game,
-      source: t.source,
-      url: t.url,
-      active: t.active,
-      created_at: t.created_at,
-      ewc: isEwcTournament(t),
-      matchCounts: countsFromRows(await dedupedTournamentMatches(t)),
-    })),
-  );
+  return Promise.all(tournaments.map(tournamentSummary));
+}
+
+/** Archived tournaments for the configured guild, newest finished first. */
+export async function listArchivedTournamentSummaries({
+  limit = 25,
+  offset = 0,
+  ewcOnly = false,
+}: {
+  limit?: number;
+  offset?: number;
+  ewcOnly?: boolean;
+} = {}): Promise<TournamentSummary[]> {
+  const guildId = await resolveDefaultGuildId();
+  if (!guildId) return [];
+  const rows = await listArchived(guildId, { limit, offset });
+  const summaries = await Promise.all(rows.map(tournamentSummary));
+  return ewcOnly ? summaries.filter((t) => t.ewc) : summaries;
 }
 
 /**

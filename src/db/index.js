@@ -13,6 +13,7 @@ db.exec(`
     guild_id     TEXT    NOT NULL,
     added_by     TEXT,
     active       INTEGER NOT NULL DEFAULT 1,
+    archived_at  INTEGER,
     created_at   TEXT    NOT NULL DEFAULT (datetime('now')),
     UNIQUE (source, external_id, guild_id)
   );
@@ -174,6 +175,10 @@ ensureColumns('players', [
   ['last_seen_at', 'TEXT'],
   ['created_at', 'TEXT'],
   ['updated_at', 'TEXT'],
+]);
+
+ensureColumns('tournaments', [
+  ['archived_at', 'INTEGER'],
 ]);
 
 // Per-game leaderboard boards (a guild can have one board per game, plus the combined board
