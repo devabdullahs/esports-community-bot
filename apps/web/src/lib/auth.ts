@@ -41,7 +41,7 @@ export const auth = betterAuth({
         return {
           name: profile.global_name || profile.display_name || profile.username,
           email: profile.email || `${profile.id}@discord.local`,
-          emailVerified: Boolean(profile.verified || profile.email),
+          emailVerified: Boolean(profile.verified),
           image: discordImage(profile),
         };
       },
