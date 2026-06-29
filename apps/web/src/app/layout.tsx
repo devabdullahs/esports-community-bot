@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Suspense } from "react";
 import { DeploymentUpdateAlert } from "@/components/deployment-update-alert";
 import { Providers } from "@/components/providers";
+import { RouteFreshnessGuard } from "@/components/route-freshness-guard";
 import { SiteFooter } from "@/components/site-footer";
 import { SiteHeader } from "@/components/site-header";
 import { getDeploymentVersion } from "@/lib/deployment-version";
@@ -136,6 +137,9 @@ export default async function RootLayout({
             </div>
             <Suspense fallback={null}>
               <SiteFooter />
+            </Suspense>
+            <Suspense fallback={null}>
+              <RouteFreshnessGuard />
             </Suspense>
             <DeploymentUpdateAlert initialVersion={deploymentVersion} locale={locale} />
           </Providers>
