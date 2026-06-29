@@ -17,6 +17,8 @@ const schemaPath = resolve(rootDir, 'scripts/postgres/schema.sql');
 const appTables = [
   'tournaments',
   'matches',
+  'teams',
+  'players',
   'guild_settings',
   'game_leaderboards',
   'game_voice_channels',
@@ -44,6 +46,8 @@ const authTables = ['user', 'session', 'account', 'verification'];
 const identityColumns = new Map([
   ['tournaments', 'id'],
   ['matches', 'id'],
+  ['teams', 'id'],
+  ['players', 'id'],
   ['ewc_prediction_weeks', 'id'],
   ['ewc_news_posts', 'id'],
   ['ewc_admin_audit_log', 'id'],

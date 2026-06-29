@@ -30,6 +30,16 @@ export const config = {
   pandascore: {
     token: get('PANDASCORE_TOKEN'),
     baseUrl: get('PANDASCORE_BASE_URL', 'https://api.pandascore.co'),
+    profilesEnabled: get('PANDASCORE_PROFILES_ENABLED', 'false') === 'true',
+    profilesCron: get('PANDASCORE_PROFILES_CRON', '30 3 * * *'),
+    profilesTimezone: get('PANDASCORE_PROFILES_TIMEZONE', 'Asia/Riyadh'),
+    profilesGames: get('PANDASCORE_PROFILES_GAMES', ''),
+    profilesQuietStartHour: Number(get('PANDASCORE_PROFILES_QUIET_START_HOUR', 2)),
+    profilesQuietEndHour: Number(get('PANDASCORE_PROFILES_QUIET_END_HOUR', 6)),
+    profilesMinGapMs: Math.max(250, Number(get('PANDASCORE_PROFILES_MIN_GAP_MS', 1500)) || 1500),
+    profilesBackoffMs: Math.max(60_000, Number(get('PANDASCORE_PROFILES_BACKOFF_MS', 1_200_000)) || 1_200_000),
+    profilesPerPage: Math.min(100, Math.max(1, Number(get('PANDASCORE_PROFILES_PER_PAGE', 50)) || 50)),
+    profilesMaxPages: Math.max(1, Number(get('PANDASCORE_PROFILES_MAX_PAGES', 3)) || 3),
   },
   startgg: {
     token: get('STARTGG_TOKEN'),
