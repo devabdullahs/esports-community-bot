@@ -41,6 +41,15 @@ export const config = {
     profilesPerPage: Math.min(100, Math.max(1, Number(get('PANDASCORE_PROFILES_PER_PAGE', 50)) || 50)),
     profilesMaxPages: Math.max(1, Number(get('PANDASCORE_PROFILES_MAX_PAGES', 3)) || 3),
   },
+  logoWarmup: {
+    // Pre-download tracked-match crests into the shared cache so the web logo
+    // proxy can serve them (it never fetches upstream on public page views).
+    // Downloads reuse logoSource's serial, 10s-paced, back-off-protected queue.
+    enabled: get('LOGO_WARMUP_ENABLED', 'true') === 'true',
+    cron: get('LOGO_WARMUP_CRON', '20 */3 * * *'),
+    timezone: get('LOGO_WARMUP_TIMEZONE', 'Asia/Riyadh'),
+    maxDownloadsPerRun: Math.max(1, Number(get('LOGO_WARMUP_MAX_DOWNLOADS_PER_RUN', 40)) || 40),
+  },
   startgg: {
     token: get('STARTGG_TOKEN'),
     baseUrl: get('STARTGG_BASE_URL', 'https://api.start.gg/gql/alpha'),

@@ -13,6 +13,7 @@ import { stopNewsAnnouncer } from './jobs/newsAnnouncer.js';
 import { stopMediaAnnouncer } from './jobs/mediaAnnouncer.js';
 import { stopStreamStatusJob } from './jobs/streamStatus.js';
 import { stopPandaScoreProfileCache } from './jobs/pandascoreProfiles.js';
+import { stopLogoWarmup } from './jobs/logoWarmup.js';
 import { deployCommands } from './lib/commandRegistry.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -64,6 +65,7 @@ async function shutdown(signal) {
   stopMediaAnnouncer();
   stopStreamStatusJob();
   stopPandaScoreProfileCache();
+  stopLogoWarmup();
   client.destroy();
   await closeDbClient().catch((err) => logger.warn(`Failed to close DB cleanly: ${err.message}`));
   process.exit(0);
