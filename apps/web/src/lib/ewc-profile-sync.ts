@@ -64,7 +64,7 @@ export async function getEwcMePayload({
   season?: string | null;
 }) {
   const account = await getDiscordAccountForAuthUser(authUserId);
-  const link = await ensureEwcProfileLink({ authUserId, guildId, season });
+  const link = await getEwcProfileLinkByAuthUser(authUserId);
   const activeGuildId = guildId || link?.guildId;
   const activeSeason = season || link?.season || DEFAULT_SEASON;
   const stats =

@@ -96,6 +96,15 @@ export function ProfileDashboard({
       const params = new URLSearchParams();
       if (guildId) params.set("guildId", guildId);
       params.set("season", season);
+      if (guildId) {
+        return jsonOrThrow(
+          await fetch("/api/me/ewc", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ guildId, season }),
+          }),
+        );
+      }
       return jsonOrThrow(await fetch(`/api/me/ewc?${params.toString()}`));
     },
   });

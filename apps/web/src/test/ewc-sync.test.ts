@@ -12,13 +12,15 @@ vi.mock("@/lib/session", () => ({
 import { getOptionalSession } from "@/lib/session";
 const mockSession = vi.mocked(getOptionalSession);
 
-import { GET as meGET } from "@/app/api/me/ewc/route";
+import { GET as meGET, POST as mePOST } from "@/app/api/me/ewc/route";
 import { POST as syncPOST } from "@/app/api/me/ewc/sync/route";
 import { POST as unlinkPOST } from "@/app/api/me/ewc/unlink/route";
 
 const SEASON = "2026";
 const USERS = {
   get: { authUserId: "dev-ewc-get-user", discordUserId: "200000000000048101", guildId: "920000000000000101" },
+  readOnlyGet: { authUserId: "dev-ewc-readonly-user", discordUserId: "200000000000048104", guildId: "920000000000000104" },
+  link: { authUserId: "dev-ewc-link-user", discordUserId: "200000000000048105", guildId: "920000000000000105" },
   sync: { authUserId: "dev-ewc-sync-user", discordUserId: "200000000000048102", guildId: "920000000000000102" },
   unlink: { authUserId: "dev-ewc-unlink-user", discordUserId: "200000000000048103", guildId: "920000000000000103" },
   noAccount: { authUserId: "auth-without-discord-account" },
@@ -143,6 +145,49 @@ describe("EWC profile routes", () => {
       overallPoints: 420,
       weeksScored: 1,
     });
+  });
+
+  test("GET /api/me/ewc is read-only and does not create a profile link from query params", async () => {
+    const user = USERS.readOnlyGet;
+    useDevSession(user.authUserId, user.discordUserId);
+
+    const res = await meGET(new Request(`http://localhost/api/me/ewc?guildId=${user.guildId}&season=${SEASON}`));
+    expect(res.status).toBe(200);
+
+    const body = await res.json();
+    expect(body.link).toBeNull();
+
+    const { getEwcProfileLinkByDiscordUser } = await import("@bot/db/ewcProfileLinks.js");
+    await expect(getEwcProfileLinkByDiscordUser(user.discordUserId)).resolves.toBeNull();
+  });
+
+  test("POST /api/me/ewc creates the profile link with a same-origin request", async () => {
+    const user = USERS.link;
+    useDevSession(user.authUserId, user.discordUserId);
+
+    const res = await mePOST(postReq("http://localhost/api/me/ewc", { guildId: user.guildId, season: SEASON }));
+    expect(res.status).toBe(200);
+
+    const body = await res.json();
+    expect(body.link).toMatchObject({ guildId: user.guildId, season: SEASON });
+
+    const { getEwcProfileLinkByDiscordUser } = await import("@bot/db/ewcProfileLinks.js");
+    const link = await getEwcProfileLinkByDiscordUser(user.discordUserId);
+    expect(link).toMatchObject({ guildId: user.guildId, season: SEASON });
+  });
+
+  test("POST /api/me/ewc rejects cross-site profile-link creation", async () => {
+    const user = USERS.link;
+    useDevSession(user.authUserId, user.discordUserId);
+
+    const res = await mePOST(
+      new Request("http://localhost/api/me/ewc", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Origin: "https://evil.example", Host: "localhost" },
+        body: JSON.stringify({ guildId: user.guildId, season: SEASON }),
+      }),
+    );
+    expect(res.status).toBe(403);
   });
 
   test("POST /api/me/ewc/sync marks the profile link as synced", async () => {

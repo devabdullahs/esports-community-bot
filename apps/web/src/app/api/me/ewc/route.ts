@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
+import { sameOriginOr403 } from "@/lib/community";
 import { DEFAULT_SEASON } from "@/lib/env";
-import { getEwcMePayload } from "@/lib/ewc-profile-sync";
+import { ensureEwcProfileLink, getEwcMePayload } from "@/lib/ewc-profile-sync";
 import { getOptionalSession } from "@/lib/session";
 import { isSnowflake, isSeason } from "@/lib/validate";
 
@@ -27,6 +28,45 @@ export async function GET(request: Request) {
     authUserId: session.user.id,
     guildId,
     season,
+  });
+
+  return NextResponse.json({
+    user: { id: session.user.id, name: session.user.name, image: session.user.image ?? null },
+    ...payload,
+  });
+}
+
+export async function POST(request: Request) {
+  const origin = sameOriginOr403(request);
+  if (origin) return origin;
+
+  const session = await getOptionalSession();
+  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  const body = await request.json().catch(() => ({}));
+  const guildId = body.guildId ?? null;
+  const seasonParam = body.season ?? null;
+
+  if (guildId !== null && !isSnowflake(guildId)) {
+    return NextResponse.json({ error: "Invalid guildId." }, { status: 400 });
+  }
+  if (seasonParam !== null && !isSeason(seasonParam)) {
+    return NextResponse.json({ error: "Invalid season." }, { status: 400 });
+  }
+
+  const link = await ensureEwcProfileLink({
+    authUserId: session.user.id,
+    guildId,
+    season: seasonParam || DEFAULT_SEASON,
+  });
+  if (!link) {
+    return NextResponse.json({ error: "Choose a guild from a Discord link first." }, { status: 400 });
+  }
+
+  const payload = await getEwcMePayload({
+    authUserId: session.user.id,
+    guildId: link.guildId,
+    season: link.season,
   });
 
   return NextResponse.json({
