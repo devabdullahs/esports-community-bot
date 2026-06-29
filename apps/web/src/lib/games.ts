@@ -38,7 +38,7 @@ export type GameInput = {
 const CANONICAL_GAME_TITLES: Partial<Record<string, LocalizedText>> = {
   fighters: {
     en: "Fighter Games",
-    ar: "الألعاب القتالية",
+    ar: "\u0627\u0644\u0623\u0644\u0639\u0627\u0628 \u0627\u0644\u0642\u062a\u0627\u0644\u064a\u0629",
   },
 };
 
