@@ -146,6 +146,27 @@ export async function getActiveMatches() {
   );
 }
 
+// Distinct crest URLs across active, non-archived tournaments' matches. The logo
+// warmup job pre-downloads these into the shared on-disk cache so the web logo
+// proxy (which never fetches upstream on public page views) can serve them.
+export async function listTrackedMatchLogos() {
+  const rows = await all(
+    `SELECT DISTINCT logo FROM (
+       SELECT m.logo_a AS logo
+         FROM matches m
+         JOIN tournaments t ON t.id = m.tournament_id
+        WHERE t.active = 1 AND t.archived_at IS NULL AND m.logo_a IS NOT NULL AND m.logo_a <> ''
+       UNION
+       SELECT m.logo_b AS logo
+         FROM matches m
+         JOIN tournaments t ON t.id = m.tournament_id
+        WHERE t.active = 1 AND t.archived_at IS NULL AND m.logo_b IS NOT NULL AND m.logo_b <> ''
+     ) AS crests
+     ORDER BY logo`,
+  );
+  return rows.map((row) => row.logo).filter(Boolean);
+}
+
 export async function markFinished(id) {
   return run(`UPDATE matches SET status='finished', updated_at=$1 WHERE id = $2`, [nowText(), id]);
 }
