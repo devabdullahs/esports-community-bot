@@ -50,6 +50,7 @@ export type TournamentSummary = {
   created_at: string;
   ewc: boolean;
   matchCounts: MatchCounts;
+  featuredMatch: MatchRow | null;
 };
 
 export type MatchStream = { platform: string; url: string };
@@ -172,7 +173,18 @@ function countsFromRows(rows: MatchRow[]): MatchCounts {
   return counts;
 }
 
+function featuredMatchFromRows(rows: MatchRow[]): MatchRow | null {
+  return (
+    rows.find((row) => row.status === "running") ??
+    rows.find((row) => row.status === "scheduled") ??
+    rows.find((row) => row.status === "finished") ??
+    null
+  );
+}
+
 async function tournamentSummary(t: TournamentRow): Promise<TournamentSummary> {
+  const rows = await dedupedTournamentMatches(t);
+  const featuredMatch = featuredMatchFromRows(rows);
   return {
     id: t.id,
     name: t.name,
@@ -184,7 +196,8 @@ async function tournamentSummary(t: TournamentRow): Promise<TournamentSummary> {
     last_match_at: t.last_match_at,
     created_at: t.created_at,
     ewc: isEwcTournament(t),
-    matchCounts: countsFromRows(await dedupedTournamentMatches(t)),
+    matchCounts: countsFromRows(rows),
+    featuredMatch: featuredMatch ? publicMatch(featuredMatch) : null,
   };
 }
 

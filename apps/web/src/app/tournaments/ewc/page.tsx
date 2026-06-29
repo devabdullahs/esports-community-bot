@@ -6,6 +6,7 @@ import { getRequestLocale } from "@/lib/request-locale";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+
 const META: Record<Locale, { title: string; description: string }> = {
   en: {
     title: "EWC tournaments",
@@ -14,8 +15,7 @@ const META: Record<Locale, { title: string; description: string }> = {
   },
   ar: {
     title: "بطولات كأس العالم للرياضات الإلكترونية",
-    description:
-      "تابع مباريات كأس العالم للرياضات الإلكترونية، الجداول القادمة، وآخر نتائج المجتمع.",
+    description: "تابع مباريات كأس العالم للرياضات الإلكترونية، الجداول القادمة، وآخر نتائج المجتمع.",
   },
 };
 
