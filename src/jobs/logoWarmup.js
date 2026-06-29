@@ -5,6 +5,7 @@ import { listTrackedMatchLogos } from '../db/matches.js';
 import { loadLogoBytes as defaultLoadLogoBytes } from '../lib/logoSource.js';
 
 let task = null;
+let bootTimer = null;
 let running = false;
 
 // Pre-download tracked-match crests into the shared on-disk cache. The web logo
@@ -77,9 +78,17 @@ export function startLogoWarmup() {
     timezone: config.logoWarmup.timezone,
   });
   logger.info(`[logo-warmup] scheduled "${config.logoWarmup.cron}" (${config.logoWarmup.timezone}).`);
+
+  bootTimer = setTimeout(runSafe, config.logoWarmup.bootDelayMs);
+  bootTimer.unref?.();
+  logger.info(`[logo-warmup] first run in ${Math.round(config.logoWarmup.bootDelayMs / 1000)}s.`);
 }
 
 export function stopLogoWarmup() {
+  if (bootTimer) {
+    clearTimeout(bootTimer);
+    bootTimer = null;
+  }
   if (task) {
     task.stop();
     task = null;

@@ -49,6 +49,7 @@ export const config = {
     cron: get('LOGO_WARMUP_CRON', '20 */3 * * *'),
     timezone: get('LOGO_WARMUP_TIMEZONE', 'Asia/Riyadh'),
     maxDownloadsPerRun: Math.max(1, Number(get('LOGO_WARMUP_MAX_DOWNLOADS_PER_RUN', 40)) || 40),
+    bootDelayMs: Math.max(0, Number(get('LOGO_WARMUP_BOOT_DELAY_MS', 30000)) || 0),
   },
   startgg: {
     token: get('STARTGG_TOKEN'),

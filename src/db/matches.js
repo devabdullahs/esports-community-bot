@@ -150,19 +150,41 @@ export async function getActiveMatches() {
 // warmup job pre-downloads these into the shared on-disk cache so the web logo
 // proxy (which never fetches upstream on public page views) can serve them.
 export async function listTrackedMatchLogos() {
+  const now = Math.floor(Date.now() / 1000);
+  const recentCutoff = now - 7 * 24 * 60 * 60;
   const rows = await all(
-    `SELECT DISTINCT logo FROM (
-       SELECT m.logo_a AS logo
-         FROM matches m
-         JOIN tournaments t ON t.id = m.tournament_id
-        WHERE t.active = 1 AND t.archived_at IS NULL AND m.logo_a IS NOT NULL AND m.logo_a <> ''
-       UNION
-       SELECT m.logo_b AS logo
-         FROM matches m
-         JOIN tournaments t ON t.id = m.tournament_id
-        WHERE t.active = 1 AND t.archived_at IS NULL AND m.logo_b IS NOT NULL AND m.logo_b <> ''
-     ) AS crests
-     ORDER BY logo`,
+    `SELECT logo
+       FROM (
+         SELECT logo, MIN(priority) AS priority, MIN(sort_at) AS sort_at
+           FROM (
+             SELECT m.logo_a AS logo,
+                    CASE
+                      WHEN m.status = 'running' THEN 0
+                      WHEN m.status = 'scheduled' AND (m.scheduled_at IS NULL OR m.scheduled_at >= $1) THEN 1
+                      WHEN m.scheduled_at IS NOT NULL AND m.scheduled_at >= $2 THEN 2
+                      ELSE 3
+                    END AS priority,
+                    COALESCE(m.scheduled_at, 2147483647) AS sort_at
+               FROM matches m
+               JOIN tournaments t ON t.id = m.tournament_id
+              WHERE t.active = 1 AND t.archived_at IS NULL AND m.logo_a IS NOT NULL AND m.logo_a <> ''
+             UNION ALL
+             SELECT m.logo_b AS logo,
+                    CASE
+                      WHEN m.status = 'running' THEN 0
+                      WHEN m.status = 'scheduled' AND (m.scheduled_at IS NULL OR m.scheduled_at >= $1) THEN 1
+                      WHEN m.scheduled_at IS NOT NULL AND m.scheduled_at >= $2 THEN 2
+                      ELSE 3
+                    END AS priority,
+                    COALESCE(m.scheduled_at, 2147483647) AS sort_at
+               FROM matches m
+               JOIN tournaments t ON t.id = m.tournament_id
+              WHERE t.active = 1 AND t.archived_at IS NULL AND m.logo_b IS NOT NULL AND m.logo_b <> ''
+           ) AS logo_rows
+          GROUP BY logo
+       ) AS crests
+      ORDER BY priority ASC, sort_at ASC, logo ASC`,
+    [now, recentCutoff],
   );
   return rows.map((row) => row.logo).filter(Boolean);
 }
