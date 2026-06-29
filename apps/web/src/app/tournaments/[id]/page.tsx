@@ -81,7 +81,11 @@ export default async function TournamentDetailPage({
         <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-primary/60 to-transparent" />
         <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
           <div className="flex min-w-0 flex-col gap-4 sm:flex-row sm:items-start">
-            <TournamentMark slug={tournament.game ?? "other"} source={tournament.source} />
+            <TournamentMark
+              slug={tournament.game ?? "other"}
+              source={tournament.source}
+              logos={tournament.markLogos}
+            />
             <div className="flex min-w-0 flex-col gap-3">
               <div className="flex flex-wrap items-center gap-2">
                 <Badge variant="secondary">{gameTitle}</Badge>
