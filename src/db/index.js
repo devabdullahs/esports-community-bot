@@ -42,6 +42,51 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_matches_status     ON matches(status);
   CREATE INDEX IF NOT EXISTS idx_matches_tournament ON matches(tournament_id);
 
+  CREATE TABLE IF NOT EXISTS teams (
+    id             INTEGER PRIMARY KEY AUTOINCREMENT,
+    game           TEXT,
+    pandascore_id  INTEGER NOT NULL UNIQUE,
+    name           TEXT NOT NULL,
+    slug           TEXT,
+    acronym        TEXT,
+    nationality    TEXT,
+    image_url      TEXT,
+    location       TEXT,
+    modified_at    TEXT,
+    raw_json       TEXT,
+    last_seen_at   TEXT NOT NULL DEFAULT (datetime('now')),
+    created_at     TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at     TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_teams_game_name ON teams(game, name);
+  CREATE UNIQUE INDEX IF NOT EXISTS idx_teams_game_slug ON teams(game, slug) WHERE slug IS NOT NULL;
+
+  CREATE TABLE IF NOT EXISTS players (
+    id                          INTEGER PRIMARY KEY AUTOINCREMENT,
+    game                        TEXT,
+    pandascore_id               INTEGER NOT NULL UNIQUE,
+    name                        TEXT NOT NULL,
+    slug                        TEXT,
+    first_name                  TEXT,
+    last_name                   TEXT,
+    nationality                 TEXT,
+    image_url                   TEXT,
+    role                        TEXT,
+    current_team_id             INTEGER REFERENCES teams(id) ON DELETE SET NULL,
+    current_team_pandascore_id  INTEGER,
+    current_team_name           TEXT,
+    modified_at                 TEXT,
+    raw_json                    TEXT,
+    last_seen_at                TEXT NOT NULL DEFAULT (datetime('now')),
+    created_at                  TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at                  TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_players_game_name ON players(game, name);
+  CREATE INDEX IF NOT EXISTS idx_players_current_team ON players(current_team_id);
+  CREATE UNIQUE INDEX IF NOT EXISTS idx_players_game_slug ON players(game, slug) WHERE slug IS NOT NULL;
+
   CREATE TABLE IF NOT EXISTS guild_settings (
     guild_id               TEXT PRIMARY KEY,
     schedule_channel_id    TEXT,
@@ -97,6 +142,38 @@ ensureColumns('matches', [
   // Special:Stream link). Present only while the match is being streamed.
   ['stream_platform', 'TEXT'],
   ['stream_url', 'TEXT'],
+]);
+
+ensureColumns('teams', [
+  ['game', 'TEXT'],
+  ['slug', 'TEXT'],
+  ['acronym', 'TEXT'],
+  ['nationality', 'TEXT'],
+  ['image_url', 'TEXT'],
+  ['location', 'TEXT'],
+  ['modified_at', 'TEXT'],
+  ['raw_json', 'TEXT'],
+  ['last_seen_at', 'TEXT'],
+  ['created_at', 'TEXT'],
+  ['updated_at', 'TEXT'],
+]);
+
+ensureColumns('players', [
+  ['game', 'TEXT'],
+  ['slug', 'TEXT'],
+  ['first_name', 'TEXT'],
+  ['last_name', 'TEXT'],
+  ['nationality', 'TEXT'],
+  ['image_url', 'TEXT'],
+  ['role', 'TEXT'],
+  ['current_team_id', 'INTEGER REFERENCES teams(id) ON DELETE SET NULL'],
+  ['current_team_pandascore_id', 'INTEGER'],
+  ['current_team_name', 'TEXT'],
+  ['modified_at', 'TEXT'],
+  ['raw_json', 'TEXT'],
+  ['last_seen_at', 'TEXT'],
+  ['created_at', 'TEXT'],
+  ['updated_at', 'TEXT'],
 ]);
 
 // Per-game leaderboard boards (a guild can have one board per game, plus the combined board
