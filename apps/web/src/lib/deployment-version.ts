@@ -1,4 +1,5 @@
 import "server-only";
+import { createHash } from "node:crypto";
 
 const ENV_VERSION_KEYS = [
   "ECB_DEPLOYMENT_VERSION",
@@ -27,9 +28,11 @@ function envDeploymentVersion() {
 
 export function getDeploymentVersion() {
   if (cachedVersion) return cachedVersion;
-  cachedVersion =
-    envDeploymentVersion() ||
-    normalizeVersion(process.env.HOSTNAME) ||
-    "development";
+  // Opaque, public build token: a hash of the resolved deploy id. It still changes
+  // on every deployment (so the update-alert detects a new build) but does NOT
+  // reveal the exact commit SHA on a public repo. No HOSTNAME fallback — an unset
+  // version yields "development" rather than leaking the container id publicly.
+  const raw = envDeploymentVersion();
+  cachedVersion = raw ? createHash("sha256").update(raw).digest("hex").slice(0, 12) : "development";
   return cachedVersion;
 }
