@@ -19,6 +19,8 @@ const GUILD = 'guild-warmup';
 const A = 'https://liquipedia.net/commons/images/a.png';
 const B = 'https://liquipedia.net/commons/images/b.png';
 const C = 'https://liquipedia.net/commons/images/c.png';
+const OLD = 'https://liquipedia.net/commons/images/aa-old.png';
+const LIVE = 'https://liquipedia.net/commons/images/zz-live.png';
 const Z = 'https://liquipedia.net/commons/images/z.png';
 
 test.before(async () => {
@@ -51,6 +53,28 @@ test.before(async () => {
     logo_b: C,
     status: 'scheduled',
   });
+  await upsertMatch({
+    tournament_id: active.id,
+    source: 'liquipedia',
+    external_id: 'Match:warmup-live',
+    team_a: 'Live Team',
+    team_b: 'Opponent',
+    logo_a: LIVE,
+    logo_b: null,
+    status: 'running',
+    scheduled_at: Math.floor(Date.now() / 1000) - 60,
+  });
+  await upsertMatch({
+    tournament_id: active.id,
+    source: 'liquipedia',
+    external_id: 'Match:warmup-old',
+    team_a: 'Old Team',
+    team_b: 'Opponent',
+    logo_a: OLD,
+    logo_b: null,
+    status: 'finished',
+    scheduled_at: Math.floor(Date.now() / 1000) - 20 * 24 * 60 * 60,
+  });
 
   // Archived tournament: its crest (Z) must never be warmed.
   const archived = await addTournament({
@@ -81,7 +105,7 @@ test.after(() => {
 
 test('listTrackedMatchLogos returns distinct active crests and excludes archived ones', async () => {
   const logos = await listTrackedMatchLogos();
-  assert.deepEqual(logos, [A, B, C]); // sorted, distinct, no Z from the archived event
+  assert.deepEqual(logos, [LIVE, A, B, C, OLD]); // live first, old last, no Z from the archived event
 });
 
 test('warms each distinct active crest exactly once through the loader', async () => {
@@ -93,13 +117,13 @@ test('warms each distinct active crest exactly once through the loader', async (
 
   const summary = await warmTrackedMatchLogos({ load });
 
-  assert.equal(summary.total, 3);
-  assert.equal(summary.warmed, 3);
-  assert.equal(summary.downloaded, 3);
+  assert.equal(summary.total, 5);
+  assert.equal(summary.warmed, 5);
+  assert.equal(summary.downloaded, 5);
   assert.equal(summary.cached, 0);
   assert.deepEqual(
     calls.map((c) => c.url).sort(),
-    [A, B, C],
+    [A, B, C, LIVE, OLD].sort(),
   );
   // Every call uses the bot download channel and asks the cache to download misses.
   assert.ok(calls.every((c) => c.channel === 'bot' && c.options?.download === true));
@@ -128,9 +152,9 @@ test('already-cached crests do not count against the download cap', async () => 
 
   const summary = await warmTrackedMatchLogos({ load, maxDownloads: 1 });
 
-  assert.equal(summary.cached, 3);
+  assert.equal(summary.cached, 5);
   assert.equal(summary.downloaded, 0);
-  assert.equal(calls.length, 3); // cap is for fresh downloads only
+  assert.equal(calls.length, 5); // cap is for fresh downloads only
 });
 
 test('a loader error is counted as a miss without aborting the run', async () => {
@@ -141,6 +165,6 @@ test('a loader error is counted as a miss without aborting the run', async () =>
 
   const summary = await warmTrackedMatchLogos({ load });
 
-  assert.equal(summary.warmed, 2); // A and C
+  assert.equal(summary.warmed, 4); // every crest except B
   assert.equal(summary.failed, 1); // B threw
 });
