@@ -84,7 +84,6 @@ export default async function TournamentDetailPage({
             <TournamentMark
               slug={tournament.game ?? "other"}
               source={tournament.source}
-              logos={tournament.markLogos}
             />
             <div className="flex min-w-0 flex-col gap-3">
               <div className="flex flex-wrap items-center gap-2">

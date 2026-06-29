@@ -50,7 +50,6 @@ export type TournamentSummary = {
   created_at: string;
   ewc: boolean;
   matchCounts: MatchCounts;
-  markLogos: string[];
   featuredMatch: MatchRow | null;
 };
 
@@ -85,7 +84,6 @@ export type TournamentMatches = {
     game: string | null;
     source: string;
     url: string | null;
-    markLogos: string[];
   };
   matches: { running: MatchRow[]; scheduled: MatchRow[]; finished: MatchRow[] };
   total: number;
@@ -190,21 +188,6 @@ function featuredMatchFromRows(rows: MatchRow[]): MatchRow | null {
   );
 }
 
-function tournamentMarkLogos(rows: MatchRow[], limit = 2): string[] {
-  const logos: string[] = [];
-  const seen = new Set<string>();
-  for (const row of rows) {
-    for (const rawLogo of [row.logo_a, row.logo_b]) {
-      const logo = rawLogo?.trim();
-      if (!logo || seen.has(logo)) continue;
-      seen.add(logo);
-      logos.push(logo);
-      if (logos.length >= limit) return logos;
-    }
-  }
-  return logos;
-}
-
 async function tournamentSummary(t: TournamentRow): Promise<TournamentSummary> {
   const rows = await dedupedTournamentMatches(t);
   const featuredMatch = featuredMatchFromRows(rows);
@@ -220,7 +203,6 @@ async function tournamentSummary(t: TournamentRow): Promise<TournamentSummary> {
     created_at: t.created_at,
     ewc: isEwcTournament(t),
     matchCounts: countsFromRows(rows),
-    markLogos: tournamentMarkLogos(rows),
     featuredMatch: featuredMatch ? publicMatch(featuredMatch) : null,
   };
 }
@@ -285,7 +267,6 @@ export async function getTournamentMatches(
       game: tournament.game,
       source: tournament.source,
       url: tournament.url,
-      markLogos: tournamentMarkLogos(rows),
     },
     matches: { running, scheduled, finished },
     total: running.length + scheduled.length + finishedAll.length,

@@ -49,7 +49,6 @@ export type TournamentMatchesPayload = {
     game: string | null;
     source: string;
     url: string | null;
-    markLogos: string[];
   };
   matches: { running: MatchRow[]; scheduled: MatchRow[]; finished: MatchRow[] };
   total: number;
