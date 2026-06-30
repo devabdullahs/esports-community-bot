@@ -17,6 +17,7 @@ import type { MediaChannelRecord } from "@/lib/media";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 
 export function MediaList({
   channels,
@@ -34,6 +35,7 @@ export function MediaList({
   const [items, setItems] = useState<MediaChannelRecord[]>(channels);
   const [busy, setBusy] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<{ slug: string; name: string } | null>(null);
   const canEdit = (slug: string) => isSuper || editableSlugs.includes(slug);
 
   async function move(index: number, dir: -1 | 1) {
@@ -59,8 +61,7 @@ export function MediaList({
     }
   }
 
-  async function remove(slug: string, name: string) {
-    if (!window.confirm(t.media.deleteConfirm(name))) return;
+  async function remove(slug: string) {
     setDeleteError(null);
     setBusy(true);
     try {
@@ -156,7 +157,7 @@ export function MediaList({
                     size="icon-sm"
                     className="text-destructive"
                     disabled={busy}
-                    onClick={() => remove(channel.slug, localizeText(channel.name, locale))}
+                    onClick={() => setDeleteTarget({ slug: channel.slug, name: localizeText(channel.name, locale) })}
                     title={t.common.delete}
                     aria-label={t.common.delete}
                   >
@@ -172,6 +173,25 @@ export function MediaList({
           <p className="text-sm text-muted-foreground">{t.media.empty}</p>
         </div>
       )}
+      <ConfirmDialog
+        open={deleteTarget !== null}
+        onOpenChange={(open) => {
+          if (!open) setDeleteTarget(null);
+        }}
+        title={deleteTarget ? t.media.deleteConfirm(deleteTarget.name) : t.common.delete}
+        cancelLabel={t.common.cancel}
+        actions={[
+          {
+            label: t.common.delete,
+            variant: "destructive",
+            onClick: () => {
+              const target = deleteTarget;
+              setDeleteTarget(null);
+        if (target) void remove(target.slug);
+      },
+    },
+  ]}
+/>
     </div>
   );
 }

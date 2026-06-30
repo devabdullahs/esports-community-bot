@@ -1,12 +1,10 @@
-import Link from "next/link";
 import { redirect } from "next/navigation";
-import { ArrowLeftIcon } from "lucide-react";
 import { getAdminAccess } from "@/lib/admin";
 import { getAdminCopy } from "@/lib/admin-copy";
 import { listAuditLog } from "@/lib/audit";
 import { getRequestLocale } from "@/lib/request-locale";
+import { AdminPageShell } from "@/components/admin/admin-page-shell";
 import { DateTime } from "@/components/date-time";
-import { Button } from "@/components/ui/button";
 import {
   Card,
   CardContent,
@@ -14,6 +12,14 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -28,19 +34,14 @@ export default async function AdminAuditPage() {
   const entries = await listAuditLog(100);
 
   return (
-    <main className="mx-auto flex w-full max-w-5xl flex-1 flex-col gap-6 px-5 py-10 sm:px-8">
-      <Button render={<Link href="/admin" />} nativeButton={false} variant="ghost" className="w-fit">
-        <ArrowLeftIcon data-icon="inline-start" />
-        {t.common.backToAdmin}
-      </Button>
-      <div>
-        <p className="text-sm text-muted-foreground">{t.common.superAdmin}</p>
-        <h1 className="text-3xl font-semibold leading-tight">{t.audit.title}</h1>
-        <p className="mt-2 text-sm text-muted-foreground">
-          {t.audit.description}
-        </p>
-      </div>
-
+    <AdminPageShell
+      maxWidth="5xl"
+      backHref="/admin"
+      backLabel={t.common.backToAdmin}
+      eyebrow={t.common.superAdmin}
+      title={t.audit.title}
+      description={t.audit.description}
+    >
       <Card>
         <CardHeader>
           <CardTitle>{t.audit.recentTitle}</CardTitle>
@@ -52,38 +53,36 @@ export default async function AdminAuditPage() {
           {entries.length === 0 ? (
             <p className="text-sm text-muted-foreground">{t.audit.empty}</p>
           ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b text-start">
-                    <th className="pb-2 pe-4 font-medium text-muted-foreground">{t.audit.headers.time}</th>
-                    <th className="pb-2 pe-4 font-medium text-muted-foreground">{t.audit.headers.actor}</th>
-                    <th className="pb-2 pe-4 font-medium text-muted-foreground">{t.audit.headers.action}</th>
-                    <th className="pb-2 font-medium text-muted-foreground">{t.audit.headers.target}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {entries.map((entry) => (
-                    <tr key={entry.id} className="border-b last:border-0">
-                      <td className="py-2 pe-4 tabular-nums text-muted-foreground">
-                        <DateTime value={entry.createdAt} locale={locale} />
-                      </td>
-                      <td className="py-2 pe-4">
-                        <span className="font-medium">{entry.actorName ?? t.common.empty}</span>
-                        <span className="ms-1 text-xs text-muted-foreground">
-                          ({entry.actorId})
-                        </span>
-                      </td>
-                      <td className="py-2 pe-4 font-mono text-xs">{entry.action}</td>
-                      <td className="py-2 font-mono text-xs">{entry.target ?? t.common.empty}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>{t.audit.headers.time}</TableHead>
+                  <TableHead>{t.audit.headers.actor}</TableHead>
+                  <TableHead>{t.audit.headers.action}</TableHead>
+                  <TableHead>{t.audit.headers.target}</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {entries.map((entry) => (
+                  <TableRow key={entry.id}>
+                    <TableCell className="tabular-nums text-muted-foreground">
+                      <DateTime value={entry.createdAt} locale={locale} />
+                    </TableCell>
+                    <TableCell>
+                      <span className="font-medium">{entry.actorName ?? t.common.empty}</span>
+                      <span className="ms-1 text-xs text-muted-foreground">
+                        ({entry.actorId})
+                      </span>
+                    </TableCell>
+                    <TableCell className="font-mono text-xs">{entry.action}</TableCell>
+                    <TableCell className="font-mono text-xs">{entry.target ?? t.common.empty}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
           )}
         </CardContent>
       </Card>
-    </main>
+    </AdminPageShell>
   );
 }

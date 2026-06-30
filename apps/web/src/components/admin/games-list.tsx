@@ -17,6 +17,7 @@ import type { Locale } from "@/lib/i18n";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 
 export function GamesList({
   games,
@@ -32,6 +33,7 @@ export function GamesList({
   const [items, setItems] = useState<GameRecord[]>(games);
   const [busy, setBusy] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<{ slug: string; title: string } | null>(null);
 
   async function move(index: number, dir: -1 | 1) {
     const target = index + dir;
@@ -56,13 +58,7 @@ export function GamesList({
     }
   }
 
-  async function remove(slug: string, title: string) {
-    if (
-      !window.confirm(
-        t.games.deleteConfirm(title),
-      )
-    )
-      return;
+  async function remove(slug: string) {
     setDeleteError(null);
     setBusy(true);
     try {
@@ -156,10 +152,10 @@ export function GamesList({
                     size="icon-sm"
                     className="text-destructive"
                     disabled={busy}
-                    onClick={() => remove(game.slug, localizeText(game.title, locale))}
-                    title={t.common.delete}
-                    aria-label={t.common.delete}
-                  >
+                  onClick={() => setDeleteTarget({ slug: game.slug, title: localizeText(game.title, locale) })}
+                  title={t.common.delete}
+                  aria-label={t.common.delete}
+                >
                     <Trash2Icon />
                   </Button>
                 ) : null}
@@ -172,6 +168,25 @@ export function GamesList({
           <p className="text-sm text-muted-foreground">{t.games.empty}</p>
         </div>
       )}
+      <ConfirmDialog
+        open={deleteTarget !== null}
+        onOpenChange={(open) => {
+          if (!open) setDeleteTarget(null);
+        }}
+        title={deleteTarget ? t.games.deleteConfirm(deleteTarget.title) : t.common.delete}
+        cancelLabel={t.common.cancel}
+        actions={[
+          {
+            label: t.common.delete,
+            variant: "destructive",
+            onClick: () => {
+              const target = deleteTarget;
+              setDeleteTarget(null);
+        if (target) void remove(target.slug);
+      },
+    },
+  ]}
+/>
     </div>
   );
 }
