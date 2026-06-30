@@ -1,4 +1,5 @@
 import Link from "next/link";
+import type { ReactNode } from "react";
 import {
   ArrowUpRightIcon,
   CalendarDaysIcon,
@@ -106,6 +107,23 @@ function postCover(post: NewsPost) {
   return safeUrlOrUndefined(post.coverImageUrl);
 }
 
+function NewsMetricCard({
+  label,
+  value,
+}: {
+  label: string;
+  value: ReactNode;
+}) {
+  return (
+    <Card size="sm" className="bg-background/40 shadow-none">
+      <CardContent className="p-4">
+        <p className="text-xs text-muted-foreground">{label}</p>
+        <div className="mt-2 text-2xl font-semibold leading-none text-foreground">{value}</div>
+      </CardContent>
+    </Card>
+  );
+}
+
 // Shared news grid. `ewcOnly` narrows to posts an admin tagged as EWC-related;
 // otherwise every published post (general + EWC-tagged) is shown.
 export async function NewsHubView({
@@ -184,8 +202,12 @@ export async function NewsHubView({
         ]}
       />
 
-      <section className="overflow-hidden rounded-3xl border bg-card/35 p-6 shadow-sm shadow-black/10 sm:p-8">
-        <div className="grid gap-8 lg:grid-cols-[1.15fr_0.85fr] lg:items-center">
+      <section className="relative overflow-hidden rounded-3xl border bg-card/35 p-6 shadow-sm shadow-black/10 sm:p-8">
+        <div
+          aria-hidden="true"
+          className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-primary/60 to-transparent"
+        />
+        <div className="relative grid gap-8 lg:grid-cols-[1.15fr_0.85fr] lg:items-center">
           <div className="flex max-w-3xl flex-col items-start gap-5">
             <Badge variant="outline" className="border-primary/35 bg-primary/10 text-primary">
               <NewspaperIcon data-icon="inline-start" />
@@ -218,52 +240,47 @@ export async function NewsHubView({
           </div>
 
           <div className="grid gap-3 sm:grid-cols-2">
-            <div className="rounded-2xl border bg-background/35 p-4">
-              <p className="text-xs text-muted-foreground">{t.posts}</p>
-              <p className="mt-2 text-2xl font-semibold">{numberFormatter.format(posts.length)}</p>
-            </div>
-            <div className="rounded-2xl border bg-background/35 p-4">
-              <p className="text-xs text-muted-foreground">{t.gamesCovered}</p>
-              <p className="mt-2 text-2xl font-semibold">{numberFormatter.format(gameCount)}</p>
-            </div>
-            <div className="rounded-2xl border bg-background/35 p-4">
-              <p className="text-xs text-muted-foreground">{t.ewcPosts}</p>
-              <p className="mt-2 text-2xl font-semibold">{numberFormatter.format(ewcCount)}</p>
-            </div>
-            <div className="rounded-2xl border bg-background/35 p-4">
-              <p className="text-xs text-muted-foreground">{t.latestUpdate}</p>
-              <p className="mt-2 text-sm font-medium text-foreground">
-                {latestPost?.publishedAt ? (
-                  <DateTime value={latestPost.publishedAt} locale={locale} />
-                ) : (
-                  "\u2014"
-                )}
-              </p>
-            </div>
+            <NewsMetricCard label={t.posts} value={numberFormatter.format(posts.length)} />
+            <NewsMetricCard label={t.gamesCovered} value={numberFormatter.format(gameCount)} />
+            <NewsMetricCard label={t.ewcPosts} value={numberFormatter.format(ewcCount)} />
+            <NewsMetricCard
+              label={t.latestUpdate}
+              value={
+                <span className="text-sm font-medium leading-none">
+                  {latestPost?.publishedAt ? (
+                    <DateTime value={latestPost.publishedAt} locale={locale} />
+                  ) : (
+                    "\u2014"
+                  )}
+                </span>
+              }
+            />
             {coverageItems.length ? (
-              <div className="rounded-2xl border bg-background/35 p-4 sm:col-span-2">
-                <p className="text-xs text-muted-foreground">{t.topCoverage}</p>
-                <div className="mt-3 flex flex-wrap gap-2">
-                  {coverageItems.map((item) => (
-                    <Badge
-                      key={item.key}
-                      variant="secondary"
-                      className="gap-2 rounded-full px-2.5 py-1"
-                    >
-                      <GameLogoMark
-                        slug={item.slug}
-                        label={item.label}
-                        className="size-5 rounded-none border-0 bg-transparent shadow-none"
-                        iconClassName="size-4"
-                      />
-                      {item.label}
-                      <span className="rounded-full bg-background/60 px-1.5 text-[0.65rem] text-muted-foreground">
-                        {numberFormatter.format(item.count)}
-                      </span>
-                    </Badge>
-                  ))}
-                </div>
-              </div>
+              <Card size="sm" className="bg-background/40 shadow-none sm:col-span-2">
+                <CardContent className="p-4">
+                  <p className="text-xs text-muted-foreground">{t.topCoverage}</p>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {coverageItems.map((item) => (
+                      <Badge
+                        key={item.key}
+                        variant="secondary"
+                        className="gap-2 rounded-full px-2.5 py-1"
+                      >
+                        <GameLogoMark
+                          slug={item.slug}
+                          label={item.label}
+                          className="size-5 rounded-none border-0 bg-transparent shadow-none"
+                          iconClassName="size-4"
+                        />
+                        {item.label}
+                        <span className="rounded-full bg-background/60 px-1.5 text-[0.65rem] text-muted-foreground">
+                          {numberFormatter.format(item.count)}
+                        </span>
+                      </Badge>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
             ) : null}
           </div>
         </div>
@@ -272,7 +289,7 @@ export async function NewsHubView({
       {featured ? (
         <section className="grid gap-4 lg:grid-cols-[1.2fr_0.8fr]">
           <Link href={postHref(featured, locale)} className="group block">
-            <Card className="h-full min-h-80 overflow-hidden transition-all group-hover:-translate-y-0.5 group-hover:ring-primary/40">
+            <Card className="h-full min-h-80 overflow-hidden bg-card/70 transition-all group-hover:-translate-y-0.5 group-hover:ring-primary/40">
               {featuredCover ? (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img
@@ -324,7 +341,7 @@ export async function NewsHubView({
             </Card>
           </Link>
 
-          <div className="rounded-3xl border bg-card/25 p-4">
+          <div className="rounded-3xl border bg-card/25 p-4 shadow-sm shadow-black/10">
             <div className="mb-3 flex items-center justify-between gap-3">
               <div>
                 <p className="text-xs text-muted-foreground">{t.latestStory}</p>

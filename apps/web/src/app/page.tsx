@@ -94,7 +94,7 @@ export default async function Home() {
   return (
     <main className="flex-1">
       <section className="border-b px-5 py-10 sm:px-8 lg:py-14">
-        <div className="relative mx-auto grid max-w-6xl gap-8 overflow-hidden rounded-3xl border bg-card/35 p-6 shadow-sm shadow-black/10 sm:p-8 lg:grid-cols-[minmax(0,1fr)_24rem] lg:items-end lg:gap-10">
+        <div className="relative mx-auto grid max-w-6xl gap-8 overflow-hidden rounded-3xl border bg-card/35 p-6 shadow-sm shadow-black/10 sm:p-8 lg:grid-cols-[minmax(0,1fr)_28rem] lg:items-center lg:gap-10">
           <div
             aria-hidden="true"
             className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-primary/60 to-transparent"
@@ -138,7 +138,7 @@ export default async function Home() {
             </div>
           </div>
 
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-1">
+          <div className="grid gap-3 sm:grid-cols-2">
             <HomeStat
               icon={TrophyIcon}
               label={text.tournaments.trackedTournaments}
@@ -260,6 +260,9 @@ export default async function Home() {
                         </Badge>
                         <CardTitle>{localizeText(game.title, locale)}</CardTitle>
                       </div>
+                      <span className="inline-flex size-8 shrink-0 items-center justify-center rounded-xl border text-muted-foreground transition group-hover:border-primary/40 group-hover:text-primary">
+                        <ArrowRightIcon data-icon className="size-4 rtl:rotate-180" />
+                      </span>
                     </CardHeader>
                     <CardContent>
                       <CardDescription className="line-clamp-2">
@@ -410,7 +413,7 @@ function HomeStat({
   live?: boolean;
 }) {
   return (
-    <Card size="sm" className="bg-card/60">
+    <Card size="sm" className="bg-background/40 shadow-none">
       <CardContent className="flex items-center gap-4 p-4">
         <span className="inline-flex size-10 shrink-0 items-center justify-center rounded-2xl border bg-muted text-primary">
           <Icon data-icon className="size-5" />
@@ -440,8 +443,8 @@ function SectionHeading({
 }) {
   return (
     <div className="flex items-end justify-between gap-3">
-      <div>
-        <h2 className="flex items-center gap-2.5 text-2xl font-semibold leading-tight">
+      <div className="min-w-0">
+        <h2 className="flex items-center gap-2.5 text-balance text-2xl font-semibold leading-tight">
           <span aria-hidden className="h-5 w-1 shrink-0 rounded-full bg-primary" />
           {title}
         </h2>
