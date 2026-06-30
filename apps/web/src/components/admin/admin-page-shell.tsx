@@ -42,7 +42,7 @@ export function AdminPageShell({
   return (
     <main
       className={cn(
-        "mx-auto flex w-full flex-1 flex-col gap-6 px-5 py-10 sm:px-8",
+        "mx-auto flex w-full flex-1 flex-col gap-7 px-5 py-8 sm:px-8 lg:py-10",
         maxWidthClasses[maxWidth],
       )}
     >
@@ -51,27 +51,37 @@ export function AdminPageShell({
           render={<Link href={backHref} />}
           nativeButton={false}
           variant="ghost"
-          className="w-fit"
+          className="-ms-2 w-fit text-muted-foreground hover:text-foreground"
         >
-          <ArrowLeftIcon data-icon="inline-start" />
+          <ArrowLeftIcon data-icon="inline-start" className="rtl:rotate-180" />
           {backLabel}
         </Button>
       ) : null}
 
-      <Card className="overflow-hidden bg-card/60">
-        <CardHeader className="gap-3">
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <div className="flex min-w-0 flex-col gap-2">
-              {eyebrow ? <p className="text-sm text-muted-foreground">{eyebrow}</p> : null}
+      <Card className="overflow-hidden border-border/70 bg-card/70 shadow-sm">
+        <CardHeader className="gap-5 border-b border-border/60 bg-muted/10 p-6 sm:p-7">
+          <div className="flex flex-wrap items-start justify-between gap-5">
+            <div className="flex min-w-0 flex-col gap-3">
+              {eyebrow ? (
+                <p className="text-sm font-medium text-primary">{eyebrow}</p>
+              ) : null}
               <div className="flex flex-wrap items-center gap-2">
-                <CardTitle className="text-3xl leading-tight">{title}</CardTitle>
+                <CardTitle className="text-balance text-3xl leading-tight sm:text-4xl">
+                  {title}
+                </CardTitle>
                 {badge ? <Badge variant="secondary">{badge}</Badge> : null}
               </div>
               {description ? (
-                <CardDescription className="max-w-3xl text-sm">{description}</CardDescription>
+                <CardDescription className="max-w-3xl text-sm leading-6 text-muted-foreground sm:text-base sm:leading-7">
+                  {description}
+                </CardDescription>
               ) : null}
             </div>
-            {actions ? <CardAction className="shrink-0">{actions}</CardAction> : null}
+            {actions ? (
+              <CardAction className="flex shrink-0 flex-wrap items-start justify-end gap-2">
+                {actions}
+              </CardAction>
+            ) : null}
           </div>
         </CardHeader>
       </Card>
