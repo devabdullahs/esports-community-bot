@@ -2,8 +2,11 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import {
   ArrowRightIcon,
+  CalendarDaysIcon,
+  ClockIcon,
   Gamepad2Icon,
   NewspaperIcon,
+  RadioIcon,
   TrophyIcon,
   UserRoundIcon,
 } from "lucide-react";
@@ -11,19 +14,23 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Card,
+  CardContent,
   CardDescription,
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
 import { DateTime } from "@/components/date-time";
+import { GameLogoMark } from "@/components/game-logo-mark";
 import { localizeText } from "@/lib/community-content";
 import { gameTitleForSlug, listGamesCached } from "@/lib/games";
 import { listLatestPublishedNewsPostsCached } from "@/lib/news";
 import { listTournamentSummariesCached, type TournamentSummary } from "@/lib/tournaments";
 import {
   copy,
+  formatNumber,
   formatMatchStatusCount,
   localizedPath,
+  type Locale,
 } from "@/lib/i18n";
 import { getRequestLocale } from "@/lib/request-locale";
 import { buildPageMetadata, siteDescription, siteName } from "@/lib/metadata";
@@ -48,6 +55,8 @@ export default async function Home() {
   const leaderboardHref = localizedPath("/leaderboard", locale);
   const profileHref = localizedPath("/me", locale);
   const gamesHref = localizedPath("/games", locale);
+  const tournamentsHref = localizedPath("/tournaments", locale);
+  const newsHref = localizedPath("/news", locale);
 
   const games = await listGamesCached();
   const latestPosts = await listLatestPublishedNewsPostsCached(locale, 3);
@@ -58,118 +67,125 @@ export default async function Home() {
   const upcoming = summaries
     .filter((t) => t.matchCounts.running === 0 && t.matchCounts.scheduled > 0)
     .slice(0, 6);
-
-  const tournamentCard = (t: TournamentSummary, isLive: boolean) => (
-    <Link
-      key={t.id}
-      href={localizedPath(`/tournaments/${t.id}`, locale)}
-      className="group block"
-    >
-      <Card
-        size="sm"
-        className="h-full ring-1 ring-transparent transition-all group-hover:-translate-y-0.5 group-hover:border-primary/30 group-hover:shadow-md group-hover:ring-primary/40"
-      >
-        <CardHeader>
-          <Badge
-            variant={isLive ? "outline" : "secondary"}
-            className={
-              isLive
-                ? "mb-2 w-fit border-primary/35 bg-primary/10 text-primary"
-                : "mb-2 w-fit"
-            }
-          >
-            {isLive ? (
-              <>
-                <span aria-hidden className="inline-block size-1.5 rounded-full bg-primary" />
-              </>
-            ) : (
-              <TrophyIcon data-icon="inline-start" />
-            )}
-            {formatMatchStatusCount(
-              isLive ? t.matchCounts.running : t.matchCounts.scheduled,
-              isLive ? "live" : "upcoming",
-              locale,
-            )}
-          </Badge>
-          <CardTitle dir="auto">{t.name ?? gameTitleOf(t.game ?? "")}</CardTitle>
-          <CardDescription>{gameTitleOf(t.game ?? "")}</CardDescription>
-        </CardHeader>
-      </Card>
-    </Link>
-  );
+  const trackedGameCount = new Set(summaries.map((t) => t.game).filter(Boolean)).size || games.length;
+  const totalLiveMatches = summaries.reduce((sum, t) => sum + t.matchCounts.running, 0);
+  const totalUpcomingMatches = summaries.reduce((sum, t) => sum + t.matchCounts.scheduled, 0);
 
   return (
     <main className="flex-1">
-      {/* Hero */}
-      <section className="mx-auto flex max-w-6xl flex-col items-start gap-6 px-5 py-14 sm:px-8 lg:py-20">
-        <Badge variant="outline" className="border-primary/35 bg-primary/10 text-primary">
-          {text.home.eyebrow}
-        </Badge>
-        <h1 className="max-w-3xl text-4xl font-semibold leading-tight text-balance sm:text-5xl">
-          {text.home.title}
-        </h1>
-        <p className="max-w-2xl text-base leading-7 text-muted-foreground sm:text-lg">
-          {text.home.description}
-        </p>
-        <div className="flex flex-wrap gap-3">
-          <Button render={<Link href={gamesHref} />} nativeButton={false} size="lg">
-            <Gamepad2Icon data-icon="inline-start" />
-            {text.home.openGames}
-            <ArrowRightIcon data-icon="inline-end" className="rtl:rotate-180" />
-          </Button>
-          <Button
-            render={<Link href={leaderboardHref} />}
-            nativeButton={false}
-            size="lg"
-            variant="outline"
-          >
-            <TrophyIcon data-icon="inline-start" />
-            {text.home.openLeaderboard}
-          </Button>
-          <Button
-            render={<Link href={profileHref} />}
-            nativeButton={false}
-            size="lg"
-            variant="outline"
-          >
-            <UserRoundIcon data-icon="inline-start" />
-            {text.home.openProfile}
-          </Button>
+      <section className="border-b">
+        <div className="mx-auto grid max-w-6xl gap-10 px-5 py-14 sm:px-8 lg:grid-cols-[minmax(0,1fr)_24rem] lg:items-end lg:py-20">
+          <div className="flex flex-col items-start gap-6">
+            <Badge variant="outline" className="border-primary/35 bg-primary/10 text-primary">
+              {text.home.eyebrow}
+            </Badge>
+            <div className="flex max-w-3xl flex-col gap-4">
+              <h1 className="text-4xl font-semibold leading-tight text-balance sm:text-5xl">
+                {text.home.title}
+              </h1>
+              <p className="max-w-2xl text-base leading-7 text-muted-foreground sm:text-lg">
+                {text.home.description}
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-3">
+              <Button render={<Link href={gamesHref} />} nativeButton={false} size="lg">
+                <Gamepad2Icon data-icon="inline-start" />
+                {text.home.openGames}
+                <ArrowRightIcon data-icon="inline-end" className="rtl:rotate-180" />
+              </Button>
+              <Button
+                render={<Link href={leaderboardHref} />}
+                nativeButton={false}
+                size="lg"
+                variant="outline"
+              >
+                <TrophyIcon data-icon="inline-start" />
+                {text.home.openLeaderboard}
+              </Button>
+              <Button
+                render={<Link href={profileHref} />}
+                nativeButton={false}
+                size="lg"
+                variant="outline"
+              >
+                <UserRoundIcon data-icon="inline-start" />
+                {text.home.openProfile}
+              </Button>
+            </div>
+          </div>
+
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-1">
+            <HomeStat
+              icon={TrophyIcon}
+              label={text.tournaments.trackedTournaments}
+              value={summaries.length}
+              locale={locale}
+            />
+            <HomeStat
+              icon={Gamepad2Icon}
+              label={text.tournaments.trackedGames}
+              value={trackedGameCount}
+              locale={locale}
+            />
+            <HomeStat
+              icon={CalendarDaysIcon}
+              label={text.tournaments.upcoming}
+              value={totalUpcomingMatches}
+              locale={locale}
+            />
+            <HomeStat
+              icon={RadioIcon}
+              label={text.tournaments.live}
+              value={totalLiveMatches}
+              locale={locale}
+              live={totalLiveMatches > 0}
+            />
+          </div>
         </div>
       </section>
 
-      {/* Live now / Upcoming tournaments */}
       <section className="border-t">
         <div className="mx-auto flex max-w-6xl flex-col gap-8 px-5 py-10 sm:px-8">
           {live.length || upcoming.length ? (
             <>
               {live.length ? (
                 <div className="flex flex-col gap-6">
-                  <div>
-                    <h2 className="flex items-center gap-2.5 text-2xl font-semibold leading-tight">
-                      <span aria-hidden className="h-5 w-1 shrink-0 rounded-full bg-primary" />
-                      {text.home.liveHeading}
-                    </h2>
-                    <p className="mt-1 text-sm text-muted-foreground">{text.home.liveSubtitle}</p>
-                  </div>
-                  <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-3">
-                    {live.map((t) => tournamentCard(t, true))}
+                  <SectionHeading
+                    title={text.home.liveHeading}
+                    description={text.home.liveSubtitle}
+                    actionHref={tournamentsHref}
+                    actionLabel={text.home.seeAll}
+                  />
+                  <div className="grid gap-4 md:grid-cols-2">
+                    {live.slice(0, 4).map((t) => (
+                      <TournamentPreview
+                        key={t.id}
+                        tournament={t}
+                        locale={locale}
+                        gameTitleOf={gameTitleOf}
+                        isLive
+                      />
+                    ))}
                   </div>
                 </div>
               ) : null}
               {upcoming.length ? (
                 <div className="flex flex-col gap-6">
-                  <div>
-                    <h2 className="flex items-center gap-2.5 text-2xl font-semibold leading-tight">
-                      <span aria-hidden className="h-5 w-1 shrink-0 rounded-full bg-primary" />
-                      {text.home.upcomingHeading}
-                    </h2>
-                    <p className="mt-1 text-sm text-muted-foreground">
-                      {text.home.upcomingSubtitle}
-                    </p>
-                  </div>
-                  <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-3">
-                    {upcoming.map((t) => tournamentCard(t, false))}
+                  <SectionHeading
+                    title={text.home.upcomingHeading}
+                    description={text.home.upcomingSubtitle}
+                    actionHref={tournamentsHref}
+                    actionLabel={text.home.seeAll}
+                  />
+                  <div className="grid gap-4 md:grid-cols-2">
+                    {upcoming.map((t) => (
+                      <TournamentPreview
+                        key={t.id}
+                        tournament={t}
+                        locale={locale}
+                        gameTitleOf={gameTitleOf}
+                      />
+                    ))}
                   </div>
                 </div>
               ) : null}
@@ -190,25 +206,12 @@ export default async function Home() {
       {games.length ? (
         <section className="border-t">
           <div className="mx-auto flex max-w-6xl flex-col gap-6 px-5 py-10 sm:px-8">
-            <div className="flex items-end justify-between gap-3">
-              <div>
-                <h2 className="flex items-center gap-2.5 text-2xl font-semibold leading-tight">
-                  <span aria-hidden className="h-5 w-1 shrink-0 rounded-full bg-primary" />
-                  {text.home.gamesHeading}
-                </h2>
-                <p className="mt-1 text-sm text-muted-foreground">{text.home.gamesSubtitle}</p>
-              </div>
-              <Button
-                render={<Link href={gamesHref} />}
-                nativeButton={false}
-                variant="ghost"
-                size="sm"
-                className="shrink-0"
-              >
-                {text.home.seeAll}
-                <ArrowRightIcon data-icon="inline-end" className="rtl:rotate-180" />
-              </Button>
-            </div>
+            <SectionHeading
+              title={text.home.gamesHeading}
+              description={text.home.gamesSubtitle}
+              actionHref={gamesHref}
+              actionLabel={text.home.seeAll}
+            />
             <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-3">
               {games.slice(0, 6).map((game) => (
                 <Link
@@ -220,16 +223,25 @@ export default async function Home() {
                     size="sm"
                     className="h-full ring-1 ring-transparent transition-all group-hover:-translate-y-0.5 group-hover:border-primary/30 group-hover:shadow-md group-hover:ring-primary/40"
                   >
-                    <CardHeader>
-                      <Badge variant="secondary" className="mb-2 w-fit">
-                        <Gamepad2Icon data-icon="inline-start" />
-                        {localizeText(game.status, locale)}
-                      </Badge>
-                      <CardTitle>{localizeText(game.title, locale)}</CardTitle>
+                    <CardHeader className="flex-row items-start gap-4">
+                      <GameLogoMark
+                        slug={game.slug}
+                        label={localizeText(game.title, locale)}
+                        className="size-12 rounded-2xl"
+                        iconClassName="size-7"
+                      />
+                      <div className="min-w-0 flex-1">
+                        <Badge variant="secondary" className="mb-2 w-fit">
+                          {localizeText(game.status, locale)}
+                        </Badge>
+                        <CardTitle>{localizeText(game.title, locale)}</CardTitle>
+                      </div>
+                    </CardHeader>
+                    <CardContent>
                       <CardDescription className="line-clamp-2">
                         {localizeText(game.description, locale)}
                       </CardDescription>
-                    </CardHeader>
+                    </CardContent>
                   </Card>
                 </Link>
               ))}
@@ -241,13 +253,12 @@ export default async function Home() {
       {/* Latest news */}
       <section className="border-t">
         <div className="mx-auto flex max-w-6xl flex-col gap-6 px-5 py-10 sm:px-8">
-          <div>
-            <h2 className="flex items-center gap-2.5 text-2xl font-semibold leading-tight">
-              <span aria-hidden className="h-5 w-1 shrink-0 rounded-full bg-primary" />
-              {text.home.newsHeading}
-            </h2>
-            <p className="mt-1 text-sm text-muted-foreground">{text.home.newsSubtitle}</p>
-          </div>
+          <SectionHeading
+            title={text.home.newsHeading}
+            description={text.home.newsSubtitle}
+            actionHref={newsHref}
+            actionLabel={text.home.seeAll}
+          />
           {latestPosts.length ? (
             <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-3">
               {latestPosts.map((post) => {
@@ -267,11 +278,21 @@ export default async function Home() {
                         <img src={cover} alt="" className="aspect-video w-full object-cover" />
                       ) : null}
                       <CardHeader>
-                        <Badge variant="secondary" className="mb-2 w-fit">
-                          <NewspaperIcon data-icon="inline-start" />
-                          {gameTitleOf(post.gameSlug ?? "")}
-                        </Badge>
-                        <CardTitle dir="auto">{post.title}</CardTitle>
+                        <div className="mb-2 flex items-center gap-2">
+                          <GameLogoMark
+                            slug={post.gameSlug}
+                            label={gameTitleOf(post.gameSlug ?? "")}
+                            className="size-8 rounded-xl"
+                            iconClassName="size-5"
+                          />
+                          <Badge variant="secondary" className="w-fit">
+                            <NewspaperIcon data-icon="inline-start" />
+                            {gameTitleOf(post.gameSlug ?? "")}
+                          </Badge>
+                        </div>
+                        <CardTitle dir="auto" className="line-clamp-2">
+                          {post.title}
+                        </CardTitle>
                         {post.summary ? (
                           <CardDescription dir="auto" className="article-copy line-clamp-2">
                             {post.summary}
@@ -294,5 +315,226 @@ export default async function Home() {
         </div>
       </section>
     </main>
+  );
+}
+
+type FeaturedMatch = NonNullable<TournamentSummary["featuredMatch"]>;
+
+function HomeStat({
+  icon: Icon,
+  label,
+  value,
+  locale,
+  live = false,
+}: {
+  icon: typeof TrophyIcon;
+  label: string;
+  value: number;
+  locale: Locale;
+  live?: boolean;
+}) {
+  return (
+    <Card size="sm" className="bg-card/60">
+      <CardContent className="flex items-center gap-4 p-4">
+        <span className="inline-flex size-10 shrink-0 items-center justify-center rounded-2xl border bg-muted text-primary">
+          <Icon data-icon className="size-5" />
+        </span>
+        <div className="min-w-0">
+          <p className="text-2xl font-semibold leading-none">{formatNumber(value, locale)}</p>
+          <p className="mt-1 truncate text-xs text-muted-foreground">{label}</p>
+        </div>
+        {live ? (
+          <span aria-hidden className="ms-auto size-2 rounded-full bg-destructive" />
+        ) : null}
+      </CardContent>
+    </Card>
+  );
+}
+
+function SectionHeading({
+  title,
+  description,
+  actionHref,
+  actionLabel,
+}: {
+  title: string;
+  description: string;
+  actionHref: string;
+  actionLabel: string;
+}) {
+  return (
+    <div className="flex items-end justify-between gap-3">
+      <div>
+        <h2 className="flex items-center gap-2.5 text-2xl font-semibold leading-tight">
+          <span aria-hidden className="h-5 w-1 shrink-0 rounded-full bg-primary" />
+          {title}
+        </h2>
+        <p className="mt-1 text-sm text-muted-foreground">{description}</p>
+      </div>
+      <Button
+        render={<Link href={actionHref} />}
+        nativeButton={false}
+        variant="ghost"
+        size="sm"
+        className="shrink-0"
+      >
+        {actionLabel}
+        <ArrowRightIcon data-icon="inline-end" className="rtl:rotate-180" />
+      </Button>
+    </div>
+  );
+}
+
+function TournamentPreview({
+  tournament,
+  locale,
+  gameTitleOf,
+  isLive = false,
+}: {
+  tournament: TournamentSummary;
+  locale: Locale;
+  gameTitleOf: (slug: string) => string;
+  isLive?: boolean;
+}) {
+  const text = copy[locale];
+  const gameTitle = gameTitleOf(tournament.game ?? "");
+  const featured = tournament.featuredMatch;
+
+  return (
+    <Link
+      href={localizedPath(`/tournaments/${tournament.id}`, locale)}
+      className="group block"
+    >
+      <Card
+        size="sm"
+        className="h-full ring-1 ring-transparent transition-all group-hover:-translate-y-0.5 group-hover:border-primary/30 group-hover:shadow-md group-hover:ring-primary/40"
+      >
+        <CardHeader className="flex-row items-start gap-4">
+          <GameLogoMark
+            slug={tournament.game}
+            label={gameTitle}
+            className="size-12 rounded-2xl"
+            iconClassName="size-7"
+          />
+          <div className="min-w-0 flex-1">
+            <div className="mb-2 flex flex-wrap gap-2">
+              <Badge
+                variant={isLive ? "outline" : "secondary"}
+                className={
+                  isLive ? "border-primary/35 bg-primary/10 text-primary" : undefined
+                }
+              >
+                {isLive ? (
+                  <span aria-hidden className="inline-block size-1.5 rounded-full bg-primary" />
+                ) : (
+                  <CalendarDaysIcon data-icon="inline-start" />
+                )}
+                {formatMatchStatusCount(
+                  isLive ? tournament.matchCounts.running : tournament.matchCounts.scheduled,
+                  isLive ? "live" : "upcoming",
+                  locale,
+                )}
+              </Badge>
+              <Badge variant="secondary">{gameTitle}</Badge>
+            </div>
+            <CardTitle dir="auto" className="line-clamp-2">
+              {tournament.name ?? gameTitle}
+            </CardTitle>
+          </div>
+        </CardHeader>
+
+        {featured ? (
+          <CardContent>
+            <MatchPreview match={featured} locale={locale} />
+          </CardContent>
+        ) : (
+          <CardContent>
+            <p className="rounded-2xl border bg-muted/40 px-4 py-3 text-sm text-muted-foreground">
+              {text.tournaments.noMatches}
+            </p>
+          </CardContent>
+        )}
+      </Card>
+    </Link>
+  );
+}
+
+function MatchPreview({ match, locale }: { match: FeaturedMatch; locale: Locale }) {
+  const text = copy[locale];
+  const hasScore = match.score_a != null && match.score_b != null;
+  const score = hasScore
+    ? `${formatNumber(match.score_a ?? 0, locale)} - ${formatNumber(match.score_b ?? 0, locale)}`
+    : text.tournaments.vs;
+  const matchLabel =
+    match.status === "running" ? text.tournaments.liveNow : text.tournaments.nextMatch;
+
+  return (
+    <div className="rounded-2xl border bg-muted/30 p-4">
+      <div className="mb-3 flex items-center justify-between gap-3 text-xs text-muted-foreground">
+        <span className="inline-flex items-center gap-1.5">
+          {match.status === "running" ? (
+            <RadioIcon data-icon className="size-3.5 text-destructive" />
+          ) : (
+            <ClockIcon data-icon className="size-3.5 text-primary" />
+          )}
+          {matchLabel}
+        </span>
+        <span className="shrink-0">
+          {match.scheduled_at ? (
+            <DateTime value={match.scheduled_at * 1000} locale={locale} />
+          ) : (
+            text.tournaments.timeTbd
+          )}
+        </span>
+      </div>
+      <div className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-3">
+        <TeamPill name={match.team_a} fallback={text.tournaments.tbd} />
+        <span className="text-center text-sm font-semibold text-primary">{score}</span>
+        <TeamPill name={match.team_b} fallback={text.tournaments.tbd} align="end" />
+      </div>
+    </div>
+  );
+}
+
+function TeamPill({
+  name,
+  fallback,
+  align = "start",
+}: {
+  name: string | null;
+  fallback: string;
+  align?: "start" | "end";
+}) {
+  const label = name || fallback;
+  const initials = label
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0])
+    .join("")
+    .toUpperCase();
+
+  return (
+    <span
+      className={
+        align === "end"
+          ? "flex min-w-0 items-center justify-end gap-2"
+          : "flex min-w-0 items-center gap-2"
+      }
+    >
+      {align === "start" ? (
+        <span className="inline-flex size-8 shrink-0 items-center justify-center rounded-xl bg-muted text-[0.65rem] font-semibold text-muted-foreground">
+          {initials || "?"}
+        </span>
+      ) : null}
+      <span className="truncate text-sm font-semibold" dir="auto">
+        {label}
+      </span>
+      {align === "end" ? (
+        <span className="inline-flex size-8 shrink-0 items-center justify-center rounded-xl bg-muted text-[0.65rem] font-semibold text-muted-foreground">
+          {initials || "?"}
+        </span>
+      ) : null}
+    </span>
   );
 }
