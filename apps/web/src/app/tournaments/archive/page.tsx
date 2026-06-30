@@ -65,7 +65,7 @@ export default async function TournamentArchivePage({
   const hasNext = fetched.length > PAGE_SIZE;
 
   return (
-    <main className="mx-auto flex w-full max-w-6xl flex-1 flex-col gap-8 px-5 py-10 sm:px-8">
+    <main className="mx-auto flex w-full max-w-6xl flex-1 flex-col gap-8 px-4 py-8 sm:px-8 sm:py-10">
       <PageBreadcrumb
         items={[
           { label: common.home, href: localizedPath("/", locale) },
@@ -157,26 +157,26 @@ export default async function TournamentArchivePage({
       )}
 
       {current > 1 || hasNext ? (
-        <nav className="flex items-center justify-between gap-3">
+        <nav className="grid gap-3 sm:flex sm:items-center sm:justify-between">
           {current > 1 ? (
             <Link
               href={localizedPath(`/tournaments/archive?page=${current - 1}`, locale)}
-              className="text-sm font-medium text-primary hover:underline"
+              className="rounded-md border px-3 py-2 text-center text-sm font-medium text-primary hover:bg-muted/40"
             >
               {common.newer}
             </Link>
           ) : (
-            <span />
+            <span className="hidden sm:block" />
           )}
           {hasNext ? (
             <Link
               href={localizedPath(`/tournaments/archive?page=${current + 1}`, locale)}
-              className="text-sm font-medium text-primary hover:underline"
+              className="rounded-md border px-3 py-2 text-center text-sm font-medium text-primary hover:bg-muted/40"
             >
               {common.older}
             </Link>
           ) : (
-            <span />
+            <span className="hidden sm:block" />
           )}
         </nav>
       ) : null}

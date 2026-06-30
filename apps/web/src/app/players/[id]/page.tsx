@@ -131,7 +131,7 @@ export default async function PlayerProfilePage({
   const teamName = player.resolved_team_name ?? player.current_team_name;
 
   return (
-    <main className="mx-auto flex w-full max-w-5xl flex-1 flex-col gap-8 px-5 py-10 sm:px-8">
+    <main className="mx-auto flex w-full max-w-5xl flex-1 flex-col gap-8 px-4 py-8 sm:px-8 sm:py-10">
       <PageBreadcrumb
         items={[
           { label: common.home, href: localizedPath("/", locale) },

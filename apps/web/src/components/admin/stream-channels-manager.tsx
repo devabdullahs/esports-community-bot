@@ -73,7 +73,7 @@ function GamePicker({
   const selectedSet = new Set(selected);
   return (
     <div className="flex flex-col gap-2 sm:col-span-2">
-      <div className="flex items-center justify-between gap-3">
+      <div className="flex flex-wrap items-center justify-between gap-2">
         <Label>{required ? copy.games : copy.gameTagsOptional}</Label>
         <span className="text-xs text-muted-foreground">{copy.selectedCount(selected.length)}</span>
       </div>
@@ -504,7 +504,7 @@ export function StreamChannelsManager({
                 })}
               </div>
             ) : (
-              <div className="rounded-xl border border-dashed border-border/70 bg-muted/20 p-8 text-center">
+              <div className="rounded-xl border border-dashed border-border/70 bg-muted/20 p-5 text-center sm:p-8">
                 <p className="text-sm text-muted-foreground">{copy.empty}</p>
               </div>
             )}

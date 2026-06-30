@@ -42,7 +42,7 @@ export function AdminPageShell({
   return (
     <main
       className={cn(
-        "mx-auto flex w-full flex-1 flex-col gap-7 px-5 py-8 sm:px-8 lg:py-10",
+        "mx-auto flex w-full flex-1 flex-col gap-6 px-4 py-6 sm:gap-7 sm:px-8 sm:py-8 lg:py-10",
         maxWidthClasses[maxWidth],
       )}
     >
@@ -59,14 +59,14 @@ export function AdminPageShell({
       ) : null}
 
       <Card className="overflow-hidden border-border/70 bg-card/70 shadow-sm">
-        <CardHeader className="gap-5 border-b border-border/60 bg-muted/10 p-6 sm:p-7">
-          <div className="flex flex-wrap items-start justify-between gap-5">
+        <CardHeader className="gap-5 border-b border-border/60 bg-muted/10 p-5 sm:p-7">
+          <div className="flex flex-col items-start justify-between gap-5 sm:flex-row">
             <div className="flex min-w-0 flex-col gap-3">
               {eyebrow ? (
                 <p className="text-sm font-medium text-primary">{eyebrow}</p>
               ) : null}
               <div className="flex flex-wrap items-center gap-2">
-                <CardTitle className="text-balance text-3xl leading-tight sm:text-4xl">
+                <CardTitle className="text-balance text-2xl leading-tight sm:text-4xl">
                   {title}
                 </CardTitle>
                 {badge ? <Badge variant="secondary">{badge}</Badge> : null}
@@ -78,7 +78,7 @@ export function AdminPageShell({
               ) : null}
             </div>
             {actions ? (
-              <CardAction className="flex shrink-0 flex-wrap items-start justify-end gap-2">
+              <CardAction className="flex w-full shrink-0 flex-col items-stretch gap-2 sm:w-auto sm:flex-row sm:flex-wrap sm:items-start sm:justify-end">
                 {actions}
               </CardAction>
             ) : null}

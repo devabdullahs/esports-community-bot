@@ -31,7 +31,7 @@ export default async function MePage({
 
   return (
     <main
-      className="mx-auto flex w-full max-w-6xl flex-1 flex-col gap-8 px-5 py-10 sm:px-8"
+      className="mx-auto flex w-full max-w-6xl flex-1 flex-col gap-8 px-4 py-8 sm:px-8 sm:py-10"
     >
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div className="flex max-w-3xl flex-col gap-2">

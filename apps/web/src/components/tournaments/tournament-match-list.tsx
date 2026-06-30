@@ -276,7 +276,7 @@ export function TournamentMatchList({
           <div className="grid gap-3 sm:grid-cols-2">
             {running.map((m) => (
               <Card key={m.id} size="sm" className="flex flex-col">
-                <CardContent className="flex items-center justify-between gap-3 py-1">
+                <CardContent className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-3 py-1">
                   <div className="flex min-w-0 items-center gap-2">
                     <Logo url={m.logo_a} alt={teamLabel(m.team_a, tbd)} />
                     <span className="truncate text-sm font-medium" dir="auto">

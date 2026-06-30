@@ -131,7 +131,7 @@ export function CommentModeration({ locale }: { locale: Locale }) {
           <Loader2Icon className="size-4 animate-spin" /> {t.common.loading}
         </div>
       ) : comments.length === 0 ? (
-        <p className="rounded-md border border-dashed p-8 text-center text-sm text-muted-foreground">
+        <p className="rounded-md border border-dashed p-5 text-center text-sm text-muted-foreground sm:p-8">
           {t.comments.noComments(t.comments.filters[filter])}
         </p>
       ) : (

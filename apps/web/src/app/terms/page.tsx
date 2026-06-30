@@ -189,7 +189,7 @@ export default async function TermsPage() {
   const content = CONTENT[locale];
 
   return (
-    <main className="mx-auto flex w-full max-w-3xl flex-1 flex-col gap-8 px-5 py-10 sm:px-8">
+    <main className="mx-auto flex w-full max-w-3xl flex-1 flex-col gap-8 px-4 py-8 sm:px-8 sm:py-10">
       <div className="flex flex-col gap-2">
         <h1 className="text-3xl font-semibold leading-tight sm:text-4xl">{content.title}</h1>
         <p className="text-sm text-muted-foreground">{content.lastUpdated}</p>

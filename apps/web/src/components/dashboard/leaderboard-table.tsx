@@ -78,7 +78,7 @@ export function LeaderboardTable({
         accessorKey: "displayName",
         header: text.common.member,
         cell: ({ row }) => (
-          <div className="flex min-w-44 flex-col">
+          <div className="flex min-w-0 flex-col sm:min-w-44">
             <span className="font-medium">{row.original.displayName}</span>
           </div>
         ),
@@ -135,7 +135,7 @@ export function LeaderboardTable({
         accessorKey: "topTeams",
         header: text.common.topTeams,
         cell: ({ row }) => (
-          <div className="flex min-w-56 flex-wrap gap-1">
+          <div className="flex min-w-48 flex-wrap gap-1 sm:min-w-56">
             {row.original.topTeams.length ? (
               row.original.topTeams.map((team) => (
                 <Badge key={team} variant="secondary">
@@ -175,7 +175,7 @@ export function LeaderboardTable({
           className="ps-8"
         />
       </div>
-      <div className="overflow-hidden rounded-md border">
+      <div className="rounded-md border">
         <Table>
           <TableHeader>
             {table.getHeaderGroups().map((headerGroup) => (
@@ -210,11 +210,11 @@ export function LeaderboardTable({
           </TableBody>
         </Table>
       </div>
-      <div className="flex items-center justify-between gap-3">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <p className="text-sm text-muted-foreground">
           {text.leaderboard.page(table.getState().pagination.pageIndex + 1, table.getPageCount() || 1)}
         </p>
-        <div className="flex gap-2">
+        <div className="grid grid-cols-2 gap-2 sm:flex">
           <Button variant="outline" size="sm" onClick={() => table.previousPage()} disabled={!table.getCanPreviousPage()}>
             {text.common.previous}
           </Button>

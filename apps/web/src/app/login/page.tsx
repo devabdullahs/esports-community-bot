@@ -8,7 +8,7 @@ export default async function LoginPage() {
 
   return (
     <main
-      className="flex flex-1 items-center justify-center px-5 py-10 sm:px-8"
+      className="flex flex-1 items-center justify-center px-4 py-8 sm:px-8 sm:py-10"
     >
       <Suspense fallback={<Skeleton className="h-56 w-full max-w-md" />}>
         <LoginPanel locale={locale} />

@@ -93,8 +93,8 @@ export default async function Home() {
 
   return (
     <main className="flex-1">
-      <section className="border-b px-5 py-10 sm:px-8 lg:py-14">
-        <div className="relative mx-auto grid max-w-6xl gap-8 overflow-hidden rounded-3xl border bg-card/35 p-6 shadow-sm shadow-black/10 sm:p-8 lg:grid-cols-[minmax(0,1fr)_28rem] lg:items-center lg:gap-10">
+      <section className="border-b px-4 py-8 sm:px-8 lg:py-14">
+        <div className="relative mx-auto grid max-w-6xl gap-7 overflow-hidden rounded-2xl border bg-card/35 p-5 shadow-sm shadow-black/10 sm:rounded-3xl sm:p-8 lg:grid-cols-[minmax(0,1fr)_28rem] lg:items-center lg:gap-10">
           <div
             aria-hidden="true"
             className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-primary/60 to-transparent"
@@ -104,15 +104,20 @@ export default async function Home() {
               {text.home.eyebrow}
             </Badge>
             <div className="flex max-w-3xl flex-col gap-4">
-              <h1 className="text-4xl font-semibold leading-tight text-balance sm:text-5xl">
+              <h1 className="text-3xl font-semibold leading-tight text-balance sm:text-5xl">
                 {text.home.title}
               </h1>
               <p className="max-w-2xl text-base leading-7 text-muted-foreground sm:text-lg">
                 {text.home.description}
               </p>
             </div>
-            <div className="flex flex-wrap gap-3">
-              <Button render={<Link href={gamesHref} />} nativeButton={false} size="lg">
+            <div className="flex w-full flex-col gap-3 sm:w-auto sm:flex-row sm:flex-wrap">
+              <Button
+                render={<Link href={gamesHref} />}
+                nativeButton={false}
+                size="lg"
+                className="w-full sm:w-auto"
+              >
                 <Gamepad2Icon data-icon="inline-start" />
                 {text.home.openGames}
                 <ArrowRightIcon data-icon="inline-end" className="rtl:rotate-180" />
@@ -122,6 +127,7 @@ export default async function Home() {
                 nativeButton={false}
                 size="lg"
                 variant="outline"
+                className="w-full sm:w-auto"
               >
                 <TrophyIcon data-icon="inline-start" />
                 {text.home.openLeaderboard}
@@ -131,6 +137,7 @@ export default async function Home() {
                 nativeButton={false}
                 size="lg"
                 variant="outline"
+                className="w-full sm:w-auto"
               >
                 <UserRoundIcon data-icon="inline-start" />
                 {text.home.openProfile}
@@ -169,7 +176,7 @@ export default async function Home() {
       </section>
 
       <section className="border-t">
-        <div className="mx-auto flex max-w-6xl flex-col gap-8 px-5 py-10 sm:px-8">
+        <div className="mx-auto flex max-w-6xl flex-col gap-8 px-4 py-10 sm:px-8">
           {live.length || upcoming.length ? (
             <>
               {live.length ? (
@@ -229,7 +236,7 @@ export default async function Home() {
       {/* Games the community follows */}
       {games.length ? (
         <section className="border-t">
-          <div className="mx-auto flex max-w-6xl flex-col gap-6 px-5 py-10 sm:px-8">
+          <div className="mx-auto flex max-w-6xl flex-col gap-6 px-4 py-8 sm:px-8 sm:py-10">
             <SectionHeading
               title={text.home.gamesHeading}
               description={text.home.gamesSubtitle}
@@ -279,7 +286,7 @@ export default async function Home() {
 
       {/* Latest news */}
       <section className="border-t">
-        <div className="mx-auto flex max-w-6xl flex-col gap-6 px-5 py-10 sm:px-8">
+        <div className="mx-auto flex max-w-6xl flex-col gap-6 px-4 py-8 sm:px-8 sm:py-10">
           <SectionHeading
             title={text.home.newsHeading}
             description={text.home.newsSubtitle}
@@ -343,7 +350,7 @@ export default async function Home() {
 
               {secondaryPosts.length ? (
                 <div className="rounded-3xl border bg-card/25 p-4">
-                  <div className="mb-3 flex items-center justify-between gap-3">
+                  <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
                     <div>
                       <p className="text-xs text-muted-foreground">{text.home.newsHeading}</p>
                       <h3 className="font-semibold">{text.home.moreNews}</h3>
@@ -549,7 +556,7 @@ function MatchPreview({ match, locale }: { match: FeaturedMatch; locale: Locale 
 
   return (
     <div className="rounded-2xl border bg-muted/30 p-4">
-      <div className="mb-3 flex items-center justify-between gap-3 text-xs text-muted-foreground">
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-3 text-xs text-muted-foreground">
         <span className="inline-flex items-center gap-1.5">
           {match.status === "running" ? (
             <RadioIcon data-icon className="size-3.5 text-destructive" />

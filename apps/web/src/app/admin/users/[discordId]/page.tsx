@@ -42,7 +42,7 @@ export default async function AdminUserDetailPage({
   if (!detail) notFound();
 
   return (
-    <main className="mx-auto flex w-full max-w-5xl flex-1 flex-col gap-6 px-5 py-10 sm:px-8">
+    <main className="mx-auto flex w-full max-w-5xl flex-1 flex-col gap-6 px-4 py-8 sm:px-8 sm:py-10">
       <Button render={<Link href="/admin/users" />} nativeButton={false} variant="ghost" className="w-fit">
         <ArrowLeftIcon data-icon="inline-start" />
         {t.users.title}
@@ -117,7 +117,7 @@ function StatCard({
   return (
     <Card size="sm">
       <CardHeader>
-        <div className="flex items-center justify-between gap-2">
+        <div className="flex flex-wrap items-center justify-between gap-2">
           <CardDescription>{label}</CardDescription>
           {Icon ? <Icon className="text-muted-foreground" /> : null}
         </div>

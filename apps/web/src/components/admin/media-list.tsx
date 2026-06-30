@@ -89,12 +89,12 @@ export function MediaList({
           <AlertDescription>{deleteError}</AlertDescription>
         </Alert>
       ) : null}
-      <div className="flex items-center justify-between gap-3">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <p className="text-sm text-muted-foreground">
           {t.media.count(items.length)}
         </p>
         {isSuper ? (
-          <Button render={<Link href="/admin/media/new" />} nativeButton={false}>
+          <Button render={<Link href="/admin/media/new" />} nativeButton={false} className="w-full sm:w-auto">
             <PlusIcon data-icon="inline-start" />
             {t.media.newAction}
           </Button>
@@ -104,7 +104,7 @@ export function MediaList({
       {items.length ? (
         <div className="flex flex-col gap-2">
           {items.map((channel, index) => (
-            <div key={channel.slug} className="flex items-center gap-3 rounded-lg border p-3">
+            <div key={channel.slug} className="flex items-start gap-3 rounded-lg border p-3 sm:items-center">
               {isSuper ? (
                 <div className="flex flex-col">
                   <Button
@@ -138,7 +138,7 @@ export function MediaList({
                 </div>
                 <span className="font-mono text-xs text-muted-foreground">/media/{channel.slug}</span>
               </div>
-              <div className="flex gap-1">
+              <div className="flex shrink-0 gap-1">
                 {canEdit(channel.slug) ? (
                   <Button
                     render={<Link href={`/admin/media/${channel.slug}`} />}
@@ -169,7 +169,7 @@ export function MediaList({
           ))}
         </div>
       ) : (
-        <div className="rounded-md border border-dashed p-8 text-center">
+        <div className="rounded-md border border-dashed p-5 text-center sm:p-8">
           <p className="text-sm text-muted-foreground">{t.media.empty}</p>
         </div>
       )}

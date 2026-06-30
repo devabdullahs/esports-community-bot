@@ -290,7 +290,7 @@ export function TeamManager({
             </Card>
           ))
         ) : (
-          <div className="rounded-md border border-dashed p-8 text-center">
+          <div className="rounded-md border border-dashed p-5 text-center sm:p-8">
             <p className="text-sm text-muted-foreground">
               {t.team.empty}
             </p>

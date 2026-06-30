@@ -304,7 +304,7 @@ export function ProfileDashboard({
                   {stats.recentWeekly.length ? (
                     stats.recentWeekly.map((week) => (
                       <div key={week.weekKey} className="flex flex-col gap-2 rounded-md border p-3">
-                        <div className="flex items-center justify-between gap-3">
+                        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                           <div className="min-w-0">
                             <p className="font-medium">{week.label}</p>
                             <p className="truncate text-sm text-muted-foreground">
@@ -350,7 +350,7 @@ function StatCard({
   return (
     <Card size="sm">
       <CardHeader>
-        <div className="flex items-center justify-between gap-2">
+        <div className="flex flex-wrap items-center justify-between gap-2">
           <CardDescription>{label}</CardDescription>
           {Icon ? <Icon className="text-muted-foreground" /> : null}
         </div>
