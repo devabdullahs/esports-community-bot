@@ -45,6 +45,7 @@ const COPY = {
     gamesCovered: "Games covered",
     ewcPosts: "EWC posts",
     latestUpdate: "Latest update",
+    topCoverage: "Top coverage",
     readStory: "Read story",
     allNews: "All news",
     ewcNews: "EWC news",
@@ -70,6 +71,7 @@ const COPY = {
     gamesCovered: "\u0627\u0644\u0623\u0644\u0639\u0627\u0628 \u0627\u0644\u0645\u063a\u0637\u0627\u0629",
     ewcPosts: "\u0623\u062e\u0628\u0627\u0631 EWC",
     latestUpdate: "\u0622\u062e\u0631 \u062a\u062d\u062f\u064a\u062b",
+    topCoverage: "\u0623\u0628\u0631\u0632 \u0627\u0644\u062a\u063a\u0637\u064a\u0629",
     readStory: "\u0642\u0631\u0627\u0621\u0629 \u0627\u0644\u062e\u0628\u0631",
     allNews: "\u0643\u0644 \u0627\u0644\u0623\u062e\u0628\u0627\u0631",
     ewcNews: "\u0623\u062e\u0628\u0627\u0631 EWC",
@@ -81,6 +83,14 @@ const COPY = {
 
 const PAGE_SIZE = 20;
 const EWC_PAGE_SIZE = 50;
+
+type CoverageItem = {
+  key: string;
+  slug: string | null;
+  label: string;
+  count: number;
+  ewc: boolean;
+};
 
 function postHref(post: NewsPost, locale: Locale) {
   if (post.gameSlug) {
@@ -134,6 +144,33 @@ export async function NewsHubView({
   const gameCount = new Set(posts.map((post) => post.gameSlug).filter(Boolean)).size;
   const ewcCount = posts.filter((post) => post.ewc).length;
   const latestPost = posts.find((post) => post.publishedAt);
+  const coverageItems = Array.from(
+    posts
+      .reduce((map, post) => {
+        const key = post.gameSlug
+          ? `game:${post.gameSlug}`
+          : post.mediaSlug
+            ? `media:${post.mediaSlug}`
+            : "general";
+        const existing = map.get(key);
+        if (existing) {
+          existing.count += 1;
+          existing.ewc ||= post.ewc;
+          return map;
+        }
+        map.set(key, {
+          key,
+          slug: post.gameSlug ?? post.mediaSlug ?? "news",
+          label: labelForPost(post),
+          count: 1,
+          ewc: post.ewc,
+        });
+        return map;
+      }, new Map<string, CoverageItem>())
+      .values(),
+  )
+    .sort((a, b) => b.count - a.count || a.label.localeCompare(b.label))
+    .slice(0, 6);
   const heading = ewcOnly ? t.ewcTitle : t.title;
   const description = ewcOnly ? t.ewcDescription : t.description;
   const featuredCover = featured ? postCover(featured) : null;
@@ -203,6 +240,31 @@ export async function NewsHubView({
                 )}
               </p>
             </div>
+            {coverageItems.length ? (
+              <div className="rounded-2xl border bg-background/35 p-4 sm:col-span-2">
+                <p className="text-xs text-muted-foreground">{t.topCoverage}</p>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {coverageItems.map((item) => (
+                    <Badge
+                      key={item.key}
+                      variant="secondary"
+                      className="gap-2 rounded-full px-2.5 py-1"
+                    >
+                      <GameLogoMark
+                        slug={item.slug}
+                        label={item.label}
+                        className="size-5 rounded-none border-0 bg-transparent shadow-none"
+                        iconClassName="size-4"
+                      />
+                      {item.label}
+                      <span className="rounded-full bg-background/60 px-1.5 text-[0.65rem] text-muted-foreground">
+                        {numberFormatter.format(item.count)}
+                      </span>
+                    </Badge>
+                  ))}
+                </div>
+              </div>
+            ) : null}
           </div>
         </div>
       </section>
@@ -210,7 +272,7 @@ export async function NewsHubView({
       {featured ? (
         <section className="grid gap-4 lg:grid-cols-[1.2fr_0.8fr]">
           <Link href={postHref(featured, locale)} className="group block">
-            <Card className="h-full min-h-80 transition-all group-hover:-translate-y-0.5 group-hover:ring-primary/40">
+            <Card className="h-full min-h-80 overflow-hidden transition-all group-hover:-translate-y-0.5 group-hover:ring-primary/40">
               {featuredCover ? (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img
@@ -313,7 +375,7 @@ export async function NewsHubView({
       )}
 
       {remainingPosts.length ? (
-        <section className="flex flex-col gap-4">
+        <section className="flex flex-col gap-4 rounded-3xl border bg-card/25 p-4 shadow-sm shadow-black/10 sm:p-5">
           <div className="flex items-end justify-between gap-3">
             <div>
               <p className="text-xs text-muted-foreground">{t.allUpdates}</p>

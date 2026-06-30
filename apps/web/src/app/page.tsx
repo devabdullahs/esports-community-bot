@@ -61,7 +61,7 @@ export default async function Home() {
   const newsHref = localizedPath("/news", locale);
 
   const games = await listGamesCached();
-  const latestPosts = await listLatestPublishedNewsPostsCached(locale, 3);
+  const latestPosts = await listLatestPublishedNewsPostsCached(locale, 4);
   const gameTitleOf = (slug: string) => gameTitleForSlug(slug, games, locale);
   const featuredPost = latestPosts[0] ?? null;
   const secondaryPosts = latestPosts.slice(1);
@@ -93,8 +93,12 @@ export default async function Home() {
 
   return (
     <main className="flex-1">
-      <section className="border-b">
-        <div className="mx-auto grid max-w-6xl gap-10 px-5 py-14 sm:px-8 lg:grid-cols-[minmax(0,1fr)_24rem] lg:items-end lg:py-20">
+      <section className="border-b px-5 py-10 sm:px-8 lg:py-14">
+        <div className="relative mx-auto grid max-w-6xl gap-8 overflow-hidden rounded-3xl border bg-card/35 p-6 shadow-sm shadow-black/10 sm:p-8 lg:grid-cols-[minmax(0,1fr)_24rem] lg:items-end lg:gap-10">
+          <div
+            aria-hidden="true"
+            className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-primary/60 to-transparent"
+          />
           <div className="flex flex-col items-start gap-6">
             <Badge variant="outline" className="border-primary/35 bg-primary/10 text-primary">
               {text.home.eyebrow}
@@ -169,7 +173,7 @@ export default async function Home() {
           {live.length || upcoming.length ? (
             <>
               {live.length ? (
-                <div className="flex flex-col gap-6">
+                <div className="flex flex-col gap-6 rounded-3xl border bg-card/20 p-4 shadow-sm shadow-black/10 sm:p-5">
                   <SectionHeading
                     title={text.home.liveHeading}
                     description={text.home.liveSubtitle}
@@ -190,7 +194,7 @@ export default async function Home() {
                 </div>
               ) : null}
               {upcoming.length ? (
-                <div className="flex flex-col gap-6">
+                <div className="flex flex-col gap-6 rounded-3xl border bg-card/20 p-4 shadow-sm shadow-black/10 sm:p-5">
                   <SectionHeading
                     title={text.home.upcomingHeading}
                     description={text.home.upcomingSubtitle}
@@ -211,7 +215,7 @@ export default async function Home() {
               ) : null}
             </>
           ) : (
-            <div>
+            <div className="rounded-3xl border bg-card/20 p-6 shadow-sm shadow-black/10">
               <h2 className="flex items-center gap-2.5 text-2xl font-semibold leading-tight">
                 <span aria-hidden className="h-5 w-1 shrink-0 rounded-full bg-primary" />
                 {text.home.liveHeading}
@@ -232,7 +236,7 @@ export default async function Home() {
               actionHref={gamesHref}
               actionLabel={text.home.seeAll}
             />
-            <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-3">
+            <div className="grid gap-4 rounded-3xl border bg-card/20 p-4 shadow-sm shadow-black/10 sm:grid-cols-2 sm:p-5 md:grid-cols-3">
               {games.slice(0, 6).map((game) => (
                 <Link
                   key={game.slug}
@@ -280,7 +284,7 @@ export default async function Home() {
             actionLabel={text.home.seeAll}
           />
           {featuredPost ? (
-            <div className="grid gap-4 lg:grid-cols-[minmax(0,1.15fr)_minmax(18rem,0.85fr)]">
+            <div className="grid gap-4 rounded-3xl border bg-card/20 p-4 shadow-sm shadow-black/10 sm:p-5 lg:grid-cols-[minmax(0,1.15fr)_minmax(18rem,0.85fr)]">
               <Link href={newsPostHref(featuredPost)} className="group block">
                 <Card className="h-full overflow-hidden ring-1 ring-transparent transition-all group-hover:-translate-y-0.5 group-hover:border-primary/30 group-hover:shadow-md group-hover:shadow-black/15 group-hover:ring-primary/40">
                   {featuredPostCover ? (

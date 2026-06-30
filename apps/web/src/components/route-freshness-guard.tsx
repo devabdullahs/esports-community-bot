@@ -5,6 +5,7 @@ import { useCallback, useEffect, useRef } from "react";
 
 const MIN_ROUTE_REFRESH_GAP_MS = 250;
 const FOCUS_REFRESH_AFTER_MS = 30_000;
+const ROUTE_REVISIT_REFRESH_AFTER_MS = 10_000;
 
 export function RouteFreshnessGuard() {
   const router = useRouter();
@@ -12,6 +13,7 @@ export function RouteFreshnessGuard() {
   const searchParams = useSearchParams();
   const routeKey = `${pathname ?? ""}?${searchParams?.toString() ?? ""}`;
   const lastRouteKeyRef = useRef<string | null>(null);
+  const visitedRouteAtRef = useRef(new Map<string, number>());
   const lastRefreshAtRef = useRef(0);
   const lastHiddenAtRef = useRef<number | null>(null);
 
@@ -26,14 +28,25 @@ export function RouteFreshnessGuard() {
   );
 
   useEffect(() => {
+    const now = Date.now();
+    const previousRoute = lastRouteKeyRef.current;
+    const lastVisitedAt = visitedRouteAtRef.current.get(routeKey) ?? 0;
+    visitedRouteAtRef.current.set(routeKey, now);
+
+    if (visitedRouteAtRef.current.size > 50) {
+      const oldest = visitedRouteAtRef.current.keys().next().value;
+      if (typeof oldest === "string") visitedRouteAtRef.current.delete(oldest);
+    }
+
     if (lastRouteKeyRef.current === null) {
       lastRouteKeyRef.current = routeKey;
       return;
     }
 
-    if (lastRouteKeyRef.current !== routeKey) {
+    if (previousRoute !== routeKey) {
       lastRouteKeyRef.current = routeKey;
-      const timer = window.setTimeout(() => refreshRoute(), 0);
+      const force = !lastVisitedAt || now - lastVisitedAt >= ROUTE_REVISIT_REFRESH_AFTER_MS;
+      const timer = window.setTimeout(() => refreshRoute(force), 0);
       return () => window.clearTimeout(timer);
     }
 
@@ -50,6 +63,9 @@ export function RouteFreshnessGuard() {
     const onPageShow = (event: PageTransitionEvent) => {
       if (event.persisted) refreshRoute(true);
     };
+    const onPopState = () => {
+      window.setTimeout(() => refreshRoute(true), 0);
+    };
 
     const onFocus = () => refreshAfterLongPause();
     const onVisibilityChange = () => {
@@ -61,11 +77,13 @@ export function RouteFreshnessGuard() {
     };
 
     window.addEventListener("pageshow", onPageShow);
+    window.addEventListener("popstate", onPopState);
     window.addEventListener("focus", onFocus);
     document.addEventListener("visibilitychange", onVisibilityChange);
 
     return () => {
       window.removeEventListener("pageshow", onPageShow);
+      window.removeEventListener("popstate", onPopState);
       window.removeEventListener("focus", onFocus);
       document.removeEventListener("visibilitychange", onVisibilityChange);
     };
