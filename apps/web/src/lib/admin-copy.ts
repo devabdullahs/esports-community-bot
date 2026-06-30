@@ -41,6 +41,23 @@ const en = {
     inactiveTitle: "Admin access is not active",
     inactiveDescription:
       "Add Discord user IDs to EWC_DASHBOARD_ADMIN_DISCORD_IDS before enabling dashboard management tools.",
+    roleScoped: "Scoped admin",
+    quickNewPost: "New post",
+    quickComments: "Review comments",
+    quickGames: "Manage games",
+    workspaceTitle: "Workspace shortcuts",
+    workspaceDescription:
+      "Jump into the focused tools for content, moderation, game pages, and staff operations.",
+    stats: {
+      posts: "Posts",
+      postsDescription: "Updates visible to the staff member.",
+      published: "Published",
+      publishedDescription: "Public updates currently live.",
+      drafts: "Drafts",
+      draftsDescription: "Work that still needs review.",
+      games: "Games",
+      gamesDescription: "Game pages in this admin scope.",
+    },
     links: {
       gamesTitle: "Game pages",
       gamesDescription: "Edit the games you manage.",
@@ -79,6 +96,11 @@ const en = {
     draft: "Draft",
     empty: "No posts yet. Create your first community update.",
     deleteConfirm: "Delete this post? This cannot be undone.",
+    deleteTitle: "Delete this post?",
+    deleteDescription:
+      "This removes the post from the admin list and public pages. This action cannot be undone.",
+    deleteAction: "Delete post",
+    deleteSuccess: "Post deleted successfully.",
   },
   games: {
     title: "Game pages",
@@ -325,6 +347,23 @@ const ar: typeof en = {
     inactiveTitle: "صلاحية الإدارة غير مفعلة",
     inactiveDescription:
       "أضف معرفات مستخدمي ديسكورد إلى EWC_DASHBOARD_ADMIN_DISCORD_IDS قبل تفعيل أدوات إدارة اللوحة.",
+    roleScoped: "إداري مخصص",
+    quickNewPost: "منشور جديد",
+    quickComments: "مراجعة التعليقات",
+    quickGames: "إدارة الألعاب",
+    workspaceTitle: "اختصارات العمل",
+    workspaceDescription:
+      "انتقل بسرعة إلى أدوات المحتوى، الإشراف، صفحات الألعاب، وعمليات الفريق.",
+    stats: {
+      posts: "المنشورات",
+      postsDescription: "التحديثات التي تظهر لهذا الإداري.",
+      published: "منشور",
+      publishedDescription: "تحديثات منشورة للعامة حاليا.",
+      drafts: "مسودات",
+      draftsDescription: "أعمال ما زالت تحتاج مراجعة.",
+      games: "الألعاب",
+      gamesDescription: "صفحات الألعاب ضمن صلاحية هذا الإداري.",
+    },
     links: {
       gamesTitle: "صفحات الألعاب",
       gamesDescription: "عدّل الألعاب التي تديرها.",
@@ -363,6 +402,11 @@ const ar: typeof en = {
     draft: "مسودة",
     empty: "لا توجد منشورات بعد. أنشئ أول تحديث للمجتمع.",
     deleteConfirm: "هل تريد حذف هذا المنشور؟ لا يمكن التراجع عن هذا الإجراء.",
+    deleteTitle: "حذف هذا المنشور؟",
+    deleteDescription:
+      "سيتم حذف المنشور من لوحة الإدارة والصفحات العامة. لا يمكن التراجع عن هذا الإجراء.",
+    deleteAction: "حذف المنشور",
+    deleteSuccess: "تم حذف المنشور بنجاح.",
   },
   games: {
     title: "صفحات الألعاب",

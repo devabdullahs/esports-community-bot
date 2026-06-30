@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { PencilIcon, PlusIcon, Trash2Icon } from "lucide-react";
 import { LocalDateTime } from "@/components/local-date-time";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { localizeText } from "@/lib/community-content";
 import { getAdminCopy } from "@/lib/admin-copy";
 import type { GameRecord } from "@/lib/games";
@@ -43,15 +44,18 @@ export function NewsList({
       const game = games.find((g) => g.slug === post.gameSlug);
       return game ? localizeText(game.title, locale) : post.gameSlug;
     }
-    return "—";
+    return t.common.empty;
   };
   const [deletingId, setDeletingId] = useState<number | null>(null);
+  const [pendingDeleteId, setPendingDeleteId] = useState<number | null>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [deleteSuccess, setDeleteSuccess] = useState<string | null>(null);
 
   async function remove(id: number) {
-    if (!window.confirm(t.newsList.deleteConfirm)) return;
+    setPendingDeleteId(null);
     setDeletingId(id);
     setDeleteError(null);
+    setDeleteSuccess(null);
     try {
       const res = await fetch(`/api/admin/news/${id}`, { method: "DELETE" });
       if (!res.ok) {
@@ -60,6 +64,7 @@ export function NewsList({
         return;
       }
       setDeleteError(null);
+      setDeleteSuccess(t.newsList.deleteSuccess);
       router.refresh();
     } catch {
       setDeleteError(t.common.networkError);
@@ -74,6 +79,12 @@ export function NewsList({
         <Alert variant="destructive">
           <AlertTitle>{t.common.couldNotDelete}</AlertTitle>
           <AlertDescription>{deleteError}</AlertDescription>
+        </Alert>
+      ) : null}
+      {deleteSuccess ? (
+        <Alert>
+          <AlertTitle>{t.common.done}</AlertTitle>
+          <AlertDescription>{deleteSuccess}</AlertDescription>
         </Alert>
       ) : null}
       <div className="flex items-center justify-between gap-3">
@@ -145,7 +156,11 @@ export function NewsList({
                         aria-label={t.common.delete}
                         className="text-destructive"
                         disabled={deletingId === post.id}
-                        onClick={() => remove(post.id)}
+                        onClick={() => {
+                          setDeleteError(null);
+                          setDeleteSuccess(null);
+                          setPendingDeleteId(post.id);
+                        }}
                       >
                         <Trash2Icon />
                       </Button>
@@ -163,6 +178,24 @@ export function NewsList({
           </p>
         </div>
       )}
+      <ConfirmDialog
+        open={pendingDeleteId !== null}
+        onOpenChange={(open) => {
+          if (!open) setPendingDeleteId(null);
+        }}
+        title={t.newsList.deleteTitle}
+        description={t.newsList.deleteDescription}
+        cancelLabel={t.common.cancel}
+        actions={[
+          {
+            label: t.newsList.deleteAction,
+            variant: "destructive",
+            onClick: () => {
+              if (pendingDeleteId !== null) void remove(pendingDeleteId);
+            },
+          },
+        ]}
+      />
     </div>
   );
 }
