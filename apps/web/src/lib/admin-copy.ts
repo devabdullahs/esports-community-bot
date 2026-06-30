@@ -266,6 +266,66 @@ const en = {
     saveFailed: "Failed to save",
     removeConfirm: (name: string) => `Remove ${name} from the admin team?`,
   },
+  streams: {
+    addTitle: "Add co-streamer channels",
+    addDescription:
+      "Add Twitch, Kick, YouTube, and SOOP for one streamer in a single action. Pick which platform should be the default embed.",
+    couldNotSave: "Could not save",
+    platformError: (platform: string, status: number) => `Could not add ${platform} (${status}).`,
+    updateError: (label: string) => `Could not update ${label}.`,
+    networkError: "Network error. Try again.",
+    validation: {
+      platformRequired: "Add at least one platform handle or URL.",
+      labelRequired: "A display label is required when adding multiple platform channels for the same streamer.",
+      gameRequired: "Pick at least one game for a per-game channel.",
+    },
+    labels: {
+      streamer: "Streamer display label",
+      defaultPlatform: "Default embed platform",
+      platformPlaceholder: "Default platform",
+      handleOrUrl: (platform: string) => `${platform} handle or URL`,
+      scope: "Scope",
+      language: "Language (optional)",
+      team: "Team name",
+      matchExternalId: "Match external ID",
+      editLabel: "Edit label",
+      editLanguage: "Edit language",
+    },
+    placeholders: {
+      streamer: "OWBrain",
+      twitch: "owbrain or twitch.tv/owbrain",
+      channelUrl: (platform: string) => `${platform} channel URL`,
+      language: "en or ar",
+      team: "Twisted Minds",
+      matchExternalId: "sgg:104353062 or Match:ID_...",
+    },
+    embedHelp: "Embeds are available for Twitch and Kick. Other platforms are saved as links.",
+    games: "Games",
+    gameTagsOptional: "Game tags (optional)",
+    selectedCount: (count: number) => `${count} selected`,
+    gamePickerHelp:
+      "Pick with buttons instead of typing separators. One streamer can appear under multiple games.",
+    scopeLabels: {
+      ewc: "EWC official list",
+      game: "Per game",
+      team: "Per team",
+      match: "Per match",
+    },
+    addAction: "Add streamer",
+    channelsCount: (count: number) => `${count} channel${count === 1 ? "" : "s"}`,
+    inactive: "Inactive",
+    group: (key: string) => `Group: ${key}`,
+    setDefault: "Set default",
+    disable: "Disable",
+    enable: "Enable",
+    save: "Save",
+    cancel: "Cancel",
+    remove: "Remove",
+    empty: "No channels yet.",
+    removeTitle: "Remove co-stream channel?",
+    removeDescription: (platform: string, handle: string) =>
+      `This removes ${platform} / ${handle} from the co-stream registry.`,
+  },
   editor: {
     titleLabel: "Title",
     nameLabel: "Name",
@@ -570,6 +630,84 @@ const ar: typeof en = {
     addFailed: "فشلت إضافة الإداري",
     saveFailed: "فشل الحفظ",
     removeConfirm: (name: string) => `هل تريد إزالة ${name} من فريق الإدارة؟`,
+  },
+  streams: {
+    addTitle: "إضافة قنوات بث مصاحب",
+    addDescription:
+      "أضف تويتش وكيك ويوتيوب وسوب لنفس صانع المحتوى من إجراء واحد، وحدد المنصة الافتراضية التي تظهر في التضمين.",
+    couldNotSave: "تعذر الحفظ",
+    platformError: (platform: string, status: number) => `تعذرت إضافة ${platform} (${status}).`,
+    updateError: (label: string) => `تعذر تحديث ${label}.`,
+    networkError: "حدث خطأ في الاتصال. حاول مرة أخرى.",
+    validation: {
+      platformRequired: "أضف اسم مستخدم أو رابط منصة واحدة على الأقل.",
+      labelRequired: "اسم العرض مطلوب عند إضافة أكثر من منصة لنفس صانع المحتوى.",
+      gameRequired: "اختر لعبة واحدة على الأقل لقناة مرتبطة بلعبة.",
+    },
+    labels: {
+      streamer: "اسم صانع المحتوى",
+      defaultPlatform: "منصة التضمين الافتراضية",
+      platformPlaceholder: "المنصة الافتراضية",
+      handleOrUrl: (platform: string) => `اسم مستخدم أو رابط ${platform}`,
+      scope: "النطاق",
+      language: "اللغة (اختياري)",
+      team: "اسم الفريق",
+      matchExternalId: "معرّف المباراة الخارجي",
+      editLabel: "تعديل الاسم",
+      editLanguage: "تعديل اللغة",
+    },
+    placeholders: {
+      streamer: "OWBrain",
+      twitch: "owbrain أو twitch.tv/owbrain",
+      channelUrl: (platform: string) => `رابط قناة ${platform}`,
+      language: "ar أو en",
+      team: "Twisted Minds",
+      matchExternalId: "sgg:104353062 أو Match:ID_...",
+    },
+    embedHelp: "التضمين متاح لتويتش وكيك. بقية المنصات تحفظ كروابط.",
+    games: "الألعاب",
+    gameTagsOptional: "وسوم الألعاب (اختياري)",
+    selectedCount: (count: number) =>
+      count === 0
+        ? "لا توجد ألعاب محددة"
+        : count === 1
+          ? "لعبة واحدة محددة"
+          : count === 2
+            ? "لعبتان محددتان"
+            : count <= 10
+              ? `${count} ألعاب محددة`
+              : `${count} لعبة محددة`,
+    gamePickerHelp:
+      "اختر الألعاب بالأزرار بدل كتابة الفواصل. يمكن لصانع المحتوى الظهور تحت أكثر من لعبة.",
+    scopeLabels: {
+      ewc: "قائمة EWC الرسمية",
+      game: "حسب اللعبة",
+      team: "حسب الفريق",
+      match: "حسب المباراة",
+    },
+    addAction: "إضافة صانع محتوى",
+    channelsCount: (count: number) =>
+      count === 0
+        ? "لا توجد قنوات"
+        : count === 1
+          ? "قناة واحدة"
+          : count === 2
+            ? "قناتان"
+            : count <= 10
+              ? `${count} قنوات`
+              : `${count} قناة`,
+    inactive: "غير مفعلة",
+    group: (key: string) => `المجموعة: ${key}`,
+    setDefault: "اجعلها الافتراضية",
+    disable: "تعطيل",
+    enable: "تفعيل",
+    save: "حفظ",
+    cancel: "إلغاء",
+    remove: "إزالة",
+    empty: "لا توجد قنوات بعد.",
+    removeTitle: "إزالة قناة البث المصاحب؟",
+    removeDescription: (platform: string, handle: string) =>
+      `سيتم حذف ${platform} / ${handle} من سجل قنوات البث المصاحب.`,
   },
   editor: {
     titleLabel: "العنوان",

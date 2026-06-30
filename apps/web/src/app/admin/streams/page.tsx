@@ -32,7 +32,7 @@ export default async function AdminStreamsPage() {
       title={t.dashboard.links.streamsTitle}
       description={t.dashboard.links.streamsDescription}
     >
-      <StreamChannelsManager channels={channels} games={games} />
+      <StreamChannelsManager channels={channels} games={games} locale={locale} />
     </AdminPageShell>
   );
 }
