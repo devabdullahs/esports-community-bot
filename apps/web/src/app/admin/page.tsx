@@ -62,10 +62,10 @@ export default async function AdminPage() {
       : t.dashboard.eyebrow;
 
   return (
-    <main className="mx-auto flex w-full max-w-6xl flex-1 flex-col gap-8 px-5 py-10 sm:px-8">
+    <main className="mx-auto flex w-full max-w-6xl flex-1 flex-col gap-10 px-5 py-8 sm:px-8 lg:py-10">
       <section className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_22rem]">
-        <Card className="overflow-hidden">
-          <CardHeader className="gap-6">
+        <Card className="overflow-hidden border-border/70 bg-card/70 shadow-sm">
+          <CardHeader className="gap-7 border-b border-border/60 bg-muted/10 p-6 sm:p-7">
             <div className="flex flex-wrap items-center gap-2">
               <Badge variant="secondary" className="w-fit">
                 <SparklesIcon data-icon="inline-start" />
@@ -78,10 +78,10 @@ export default async function AdminPage() {
               ) : null}
             </div>
             <div className="max-w-3xl">
-              <CardTitle className="text-3xl leading-tight sm:text-4xl">
+              <CardTitle className="text-balance text-3xl leading-tight sm:text-4xl">
                 {t.dashboard.title}
               </CardTitle>
-              <CardDescription className="mt-3 text-base leading-7">
+              <CardDescription className="mt-3 text-sm leading-6 sm:text-base sm:leading-7">
                 {t.dashboard.description}
               </CardDescription>
             </div>
@@ -112,19 +112,21 @@ export default async function AdminPage() {
           </CardHeader>
         </Card>
 
-        <Card>
-          <CardHeader>
+        <Card className="border-border/70 bg-card/70 shadow-sm">
+          <CardHeader className="p-6 sm:p-7">
             <div className="flex items-start gap-3">
-              <ShieldIcon data-icon="inline-start" />
-              <div>
+              <span className="rounded-lg border border-primary/30 bg-primary/10 p-2 text-primary">
+                <ShieldIcon data-icon="inline-start" />
+              </span>
+              <div className="min-w-0">
                 <CardTitle>{t.dashboard.accessTitle}</CardTitle>
-                <CardDescription>
+                <CardDescription className="mt-2 leading-6">
                   {t.dashboard.accessDescription}
                 </CardDescription>
               </div>
             </div>
           </CardHeader>
-          <CardContent>
+          <CardContent className="px-6 pb-6 sm:px-7 sm:pb-7">
             {access.allowed ? (
               <Alert>
                 <AlertTitle>{t.dashboard.toolsTitle}</AlertTitle>
@@ -188,7 +190,7 @@ export default async function AdminPage() {
       ) : null}
 
       {access.allowed ? (
-        <section className="flex flex-col gap-4">
+        <section className="flex flex-col gap-4 rounded-xl border border-border/70 bg-card/40 p-5 shadow-sm sm:p-6">
           <div className="flex flex-col gap-1">
             <h2 className="text-xl font-semibold">{t.dashboard.workspaceTitle}</h2>
             <p className="text-sm text-muted-foreground">
@@ -251,7 +253,7 @@ export default async function AdminPage() {
       ) : null}
 
       {access.allowed ? (
-        <section className="flex flex-col gap-4">
+        <section className="flex flex-col gap-4 rounded-xl border border-border/70 bg-card/40 p-5 shadow-sm sm:p-6">
           <div>
             <h2 className="text-xl font-semibold">{t.dashboard.newsTitle}</h2>
             <p className="text-sm text-muted-foreground">
@@ -277,18 +279,18 @@ function StatCard({
   description: string;
 }) {
   return (
-    <Card>
-      <CardHeader className="gap-3">
+    <Card className="border-border/70 bg-card/70 shadow-sm transition-colors hover:bg-card">
+      <CardHeader className="gap-3 p-5">
         <div className="flex items-center justify-between gap-3">
-          <CardDescription>{label}</CardDescription>
-          <span className="rounded-md border bg-muted/40 p-2 text-muted-foreground">
+          <CardDescription className="font-medium">{label}</CardDescription>
+          <span className="rounded-lg border border-primary/20 bg-primary/10 p-2 text-primary">
             <Icon data-icon="inline-start" />
           </span>
         </div>
-        <CardTitle className="text-3xl">{value}</CardTitle>
+        <CardTitle className="text-3xl leading-none">{value}</CardTitle>
       </CardHeader>
-      <CardContent>
-        <p className="text-sm text-muted-foreground">{description}</p>
+      <CardContent className="px-5 pb-5 pt-0">
+        <p className="text-sm leading-6 text-muted-foreground">{description}</p>
       </CardContent>
     </Card>
   );
@@ -308,16 +310,16 @@ function ManageLink({
   return (
     <Link
       href={href}
-      className="group rounded-lg border bg-card p-4 transition-colors hover:bg-muted/50"
+      className="group rounded-xl border border-border/70 bg-card/70 p-4 shadow-sm transition-colors hover:bg-card"
     >
       <span className="flex items-start gap-3">
-        <span className="rounded-md border bg-muted/40 p-2 text-muted-foreground">
+        <span className="rounded-lg border border-primary/20 bg-primary/10 p-2 text-primary">
           <Icon data-icon="inline-start" />
         </span>
         <span className="min-w-0 flex-1">
           <span className="flex items-center gap-2 font-semibold">
             {title}
-            <ArrowRightIcon className="ms-auto size-4 text-muted-foreground transition-transform group-hover:translate-x-0.5 rtl:rotate-180" />
+            <ArrowRightIcon className="ms-auto size-4 text-muted-foreground transition-transform group-hover:translate-x-0.5 rtl:rotate-180 rtl:group-hover:-translate-x-0.5" />
           </span>
           <span className="mt-1 block text-sm leading-6 text-muted-foreground">
             {description}
