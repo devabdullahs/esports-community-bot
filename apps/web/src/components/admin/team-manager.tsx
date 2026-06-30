@@ -11,6 +11,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Field, FieldDescription, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 
@@ -85,6 +86,7 @@ export function TeamManager({
   const [editName, setEditName] = useState("");
   const [editGames, setEditGames] = useState<Set<string>>(new Set());
   const [editMedia, setEditMedia] = useState<Set<string>>(new Set());
+  const [removeTarget, setRemoveTarget] = useState<{ discordId: string; name: string } | null>(null);
 
   const labelOf = (opts: Opt[], slug: string) => opts.find((o) => o.slug === slug)?.label ?? slug;
   const toggle = (set: Set<string>, setFn: (s: Set<string>) => void, slug: string) => {
@@ -158,8 +160,7 @@ export function TeamManager({
     }
   }
 
-  async function remove(discordId: string, name: string) {
-    if (!window.confirm(t.team.removeConfirm(name || discordId))) return;
+  async function remove(discordId: string) {
     setBusy(true);
     try {
       const res = await fetch(`/api/admin/team/${discordId}`, { method: "DELETE" });
@@ -243,7 +244,10 @@ export function TeamManager({
                       title={t.common.remove}
                       aria-label={t.common.remove}
                       disabled={busy}
-                      onClick={() => remove(admin.discordId, admin.displayName)}
+                      onClick={() => setRemoveTarget({
+                        discordId: admin.discordId,
+                        name: admin.displayName || admin.discordId,
+                      })}
                     >
                       <Trash2Icon />
                     </Button>
@@ -293,6 +297,25 @@ export function TeamManager({
           </div>
         )}
       </div>
+      <ConfirmDialog
+        open={removeTarget !== null}
+        onOpenChange={(open) => {
+          if (!open) setRemoveTarget(null);
+        }}
+        title={removeTarget ? t.team.removeConfirm(removeTarget.name) : t.common.remove}
+        cancelLabel={t.common.cancel}
+        actions={[
+          {
+            label: t.common.remove,
+            variant: "destructive",
+            onClick: () => {
+              const target = removeTarget;
+              setRemoveTarget(null);
+        if (target) void remove(target.discordId);
+      },
+    },
+  ]}
+/>
     </div>
   );
 }
