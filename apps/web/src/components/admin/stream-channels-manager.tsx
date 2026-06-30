@@ -3,6 +3,8 @@
 import { useRouter } from "next/navigation";
 import { useMemo, useState, type FormEvent } from "react";
 import { CheckIcon, PencilIcon, PlusIcon, StarIcon, Trash2Icon } from "lucide-react";
+import { getAdminCopy } from "@/lib/admin-copy";
+import type { Locale } from "@/lib/i18n";
 import {
   STREAM_PLATFORMS,
   STREAM_SCOPES,
@@ -40,15 +42,9 @@ const PLATFORM_LABELS: Record<StreamPlatform, string> = {
   soop: "SOOP",
 };
 
-const SCOPE_LABELS: Record<StreamScope, string> = {
-  ewc: "EWC official list",
-  game: "Per game",
-  team: "Per team",
-  match: "Per match",
-};
-
 const SCOPE_ORDER: StreamScope[] = ["ewc", "game", "team", "match"];
 const EMBED_PLATFORMS: StreamPlatform[] = ["twitch", "kick"];
+type StreamManagerCopy = ReturnType<typeof getAdminCopy>["streams"];
 
 function scopeTarget(channel: StreamChannel): string | null {
   if (channel.scope === "game") return channel.gameSlugs.join(", ");
@@ -66,20 +62,22 @@ function GamePicker({
   selected,
   onChange,
   required,
+  copy,
 }: {
   games: GameOption[];
   selected: string[];
   onChange: (next: string[]) => void;
   required?: boolean;
+  copy: StreamManagerCopy;
 }) {
   const selectedSet = new Set(selected);
   return (
     <div className="flex flex-col gap-2 sm:col-span-2">
       <div className="flex items-center justify-between gap-3">
-        <Label>{required ? "Games" : "Game tags (optional)"}</Label>
-        <span className="text-xs text-muted-foreground">{selected.length} selected</span>
+        <Label>{required ? copy.games : copy.gameTagsOptional}</Label>
+        <span className="text-xs text-muted-foreground">{copy.selectedCount(selected.length)}</span>
       </div>
-      <div className="flex flex-wrap gap-2 rounded-md border p-2">
+      <div className="flex flex-wrap gap-2 rounded-lg border border-border/70 bg-background/40 p-2">
         {games.map((game) => {
           const active = selectedSet.has(game.slug);
           return (
@@ -98,9 +96,7 @@ function GamePicker({
           );
         })}
       </div>
-      <p className="text-xs text-muted-foreground">
-        Pick with buttons instead of typing separators. This also lets one streamer appear under multiple games.
-      </p>
+      <p className="text-xs text-muted-foreground">{copy.gamePickerHelp}</p>
     </div>
   );
 }
@@ -108,11 +104,14 @@ function GamePicker({
 export function StreamChannelsManager({
   channels,
   games,
+  locale,
 }: {
   channels: StreamChannel[];
   games: GameOption[];
+  locale: Locale;
 }) {
   const router = useRouter();
+  const copy = getAdminCopy(locale).streams;
   const [items, setItems] = useState<StreamChannel[]>(channels);
   const [scope, setScope] = useState<StreamScope>("ewc");
   const [handles, setHandles] = useState<Record<StreamPlatform, string>>({
@@ -158,15 +157,15 @@ export function StreamChannelsManager({
     setError(null);
     const entries = STREAM_PLATFORMS.map((p) => ({ platform: p, handle: handles[p].trim() })).filter((e) => e.handle);
     if (!entries.length) {
-      setError("Add at least one platform handle or URL.");
+      setError(copy.validation.platformRequired);
       return;
     }
     if (entries.length > 1 && !label.trim()) {
-      setError("A display label is required when adding multiple platform channels for the same streamer.");
+      setError(copy.validation.labelRequired);
       return;
     }
     if (scope === "game" && selectedGames.length === 0) {
-      setError("Pick at least one game for a per-game channel.");
+      setError(copy.validation.gameRequired);
       return;
     }
 
@@ -200,7 +199,7 @@ export function StreamChannelsManager({
         });
         const data = await res.json().catch(() => null);
         if (!res.ok) {
-          setError(data?.error || `Could not add ${PLATFORM_LABELS[entry.platform]} (${res.status}).`);
+          setError(data?.error || copy.platformError(PLATFORM_LABELS[entry.platform], res.status));
           return;
         }
         created.push(data as StreamChannel);
@@ -216,7 +215,7 @@ export function StreamChannelsManager({
       setMatchExternalId("");
       router.refresh();
     } catch {
-      setError("Network error — please try again.");
+      setError(copy.networkError);
     } finally {
       setBusy(false);
     }
@@ -241,7 +240,7 @@ export function StreamChannelsManager({
           });
         });
       } else {
-        setError(data?.error || `Could not update ${channel.label || channel.handle}.`);
+        setError(data?.error || copy.updateError(channel.label || channel.handle));
       }
     } finally {
       setBusy(false);
@@ -273,37 +272,35 @@ export function StreamChannelsManager({
 
   return (
     <div className="flex flex-col gap-8">
-      <form onSubmit={add} className="flex flex-col gap-4 rounded-lg border p-4">
+      <form onSubmit={add} className="flex flex-col gap-5 rounded-xl border border-border/70 bg-card/70 p-5 shadow-sm">
         <div>
-          <h2 className="text-lg font-semibold">Add co-streamer channels</h2>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Add Twitch, Kick, YouTube, and SOOP for one streamer in a single action. Pick which platform should be the default embed.
-          </p>
+          <h2 className="text-lg font-semibold">{copy.addTitle}</h2>
+          <p className="mt-1 max-w-3xl text-sm text-muted-foreground">{copy.addDescription}</p>
         </div>
         {error ? (
           <Alert variant="destructive">
-            <AlertTitle>Could not save</AlertTitle>
+            <AlertTitle>{copy.couldNotSave}</AlertTitle>
             <AlertDescription>{error}</AlertDescription>
           </Alert>
         ) : null}
 
         <div className="grid gap-4 sm:grid-cols-2">
           <div className="flex flex-col gap-1.5">
-            <Label htmlFor="stream-label">Streamer display label</Label>
+            <Label htmlFor="stream-label">{copy.labels.streamer}</Label>
             <Input
               id="stream-label"
               value={label}
               onChange={(e) => setLabel(e.target.value)}
-              placeholder="OWBrain"
+              placeholder={copy.placeholders.streamer}
               autoComplete="off"
             />
           </div>
 
           <div className="flex flex-col gap-1.5">
-            <Label>Default embed platform</Label>
+            <Label>{copy.labels.defaultPlatform}</Label>
             <Select value={defaultPlatform} onValueChange={(value) => setDefaultPlatform(value as StreamPlatform)}>
               <SelectTrigger className="w-full">
-                <SelectValue placeholder="Default platform" />
+                <SelectValue placeholder={copy.labels.platformPlaceholder} />
               </SelectTrigger>
               <SelectContent>
                 <SelectGroup>
@@ -315,33 +312,33 @@ export function StreamChannelsManager({
                 </SelectGroup>
               </SelectContent>
             </Select>
-            <p className="text-xs text-muted-foreground">Embeds are available for Twitch and Kick. Other platforms are saved as links.</p>
+            <p className="text-xs text-muted-foreground">{copy.embedHelp}</p>
           </div>
 
           {STREAM_PLATFORMS.map((p) => (
             <div key={p} className="flex flex-col gap-1.5">
-              <Label htmlFor={`stream-${p}`}>{PLATFORM_LABELS[p]} handle or URL</Label>
+              <Label htmlFor={`stream-${p}`}>{copy.labels.handleOrUrl(PLATFORM_LABELS[p])}</Label>
               <Input
                 id={`stream-${p}`}
                 value={handles[p]}
                 onChange={(e) => updateHandle(p, e.target.value)}
-                placeholder={p === "twitch" ? "owbrain · twitch.tv/owbrain" : `${PLATFORM_LABELS[p]} channel URL`}
+                placeholder={p === "twitch" ? copy.placeholders.twitch : copy.placeholders.channelUrl(PLATFORM_LABELS[p])}
                 autoComplete="off"
               />
             </div>
           ))}
 
           <div className="flex flex-col gap-1.5">
-            <Label>Scope</Label>
+            <Label>{copy.labels.scope}</Label>
             <Select value={scope} onValueChange={(value) => setScope(value as StreamScope)}>
               <SelectTrigger className="w-full">
-                <SelectValue placeholder="Scope" />
+                <SelectValue placeholder={copy.labels.scope} />
               </SelectTrigger>
               <SelectContent>
                 <SelectGroup>
                   {STREAM_SCOPES.map((s) => (
                     <SelectItem key={s} value={s}>
-                      {SCOPE_LABELS[s]}
+                      {copy.scopeLabels[s]}
                     </SelectItem>
                   ))}
                 </SelectGroup>
@@ -350,12 +347,12 @@ export function StreamChannelsManager({
           </div>
 
           <div className="flex flex-col gap-1.5">
-            <Label htmlFor="stream-language">Language (optional)</Label>
+            <Label htmlFor="stream-language">{copy.labels.language}</Label>
             <Input
               id="stream-language"
               value={language}
               onChange={(e) => setLanguage(e.target.value)}
-              placeholder="en · ar"
+              placeholder={copy.placeholders.language}
               autoComplete="off"
               maxLength={8}
             />
@@ -366,28 +363,29 @@ export function StreamChannelsManager({
             selected={selectedGames}
             onChange={setSelectedGames}
             required={scope === "game"}
+            copy={copy}
           />
 
           {scope === "team" ? (
             <div className="flex flex-col gap-1.5">
-              <Label htmlFor="stream-team">Team name</Label>
+              <Label htmlFor="stream-team">{copy.labels.team}</Label>
               <Input
                 id="stream-team"
                 value={team}
                 onChange={(e) => setTeam(e.target.value)}
-                placeholder="Twisted Minds"
+                placeholder={copy.placeholders.team}
                 autoComplete="off"
               />
             </div>
           ) : null}
           {scope === "match" ? (
             <div className="flex flex-col gap-1.5">
-              <Label htmlFor="stream-match">Match external id</Label>
+              <Label htmlFor="stream-match">{copy.labels.matchExternalId}</Label>
               <Input
                 id="stream-match"
                 value={matchExternalId}
                 onChange={(e) => setMatchExternalId(e.target.value)}
-                placeholder="sgg:104353062 · Match:ID_..."
+                placeholder={copy.placeholders.matchExternalId}
                 autoComplete="off"
               />
             </div>
@@ -396,7 +394,7 @@ export function StreamChannelsManager({
 
         <Button type="submit" disabled={busy} className="w-fit">
           <PlusIcon data-icon="inline-start" />
-          Add streamer
+          {copy.addAction}
         </Button>
       </form>
 
@@ -405,20 +403,22 @@ export function StreamChannelsManager({
         return (
           <section key={s} className="flex flex-col gap-3">
             <div className="flex items-baseline justify-between gap-3">
-              <h2 className="text-lg font-semibold">{SCOPE_LABELS[s]}</h2>
-              <span className="text-sm text-muted-foreground">{list.length} channel(s)</span>
+              <h2 className="text-lg font-semibold">{copy.scopeLabels[s]}</h2>
+              <Badge variant="secondary">{copy.channelsCount(list.length)}</Badge>
             </div>
             {list.length ? (
-              <div className="flex flex-col gap-2">
+              <div className="grid gap-3">
                 {list.map((channel) => {
                   const target = scopeTarget(channel);
                   const isEditing = editingId === channel.id;
                   return (
                     <div
                       key={channel.id}
-                      className={`flex flex-col gap-3 rounded-lg border p-3 ${channel.active ? "" : "opacity-60"}`}
+                      className={`flex flex-col gap-3 rounded-xl border border-border/70 bg-card/60 p-4 shadow-sm ${
+                        channel.active ? "" : "opacity-60"
+                      }`}
                     >
-                      <div className="flex items-center gap-3">
+                      <div className="flex flex-col gap-3 md:flex-row md:items-center">
                         <Badge variant={channel.isDefault ? "default" : "secondary"}>
                           {channel.isDefault ? <StarIcon data-icon="inline-start" /> : null}
                           {PLATFORM_LABELS[channel.platform]}
@@ -441,20 +441,27 @@ export function StreamChannelsManager({
                             )}
                             {target ? <Badge variant="outline">{target}</Badge> : null}
                             {channel.language ? <Badge variant="outline">{channel.language}</Badge> : null}
-                            {!channel.active ? <Badge variant="outline">inactive</Badge> : null}
+                            {!channel.active ? <Badge variant="outline">{copy.inactive}</Badge> : null}
                           </div>
-                          <p className="text-xs text-muted-foreground">Group: {channel.creatorKey}</p>
+                          <p className="text-xs text-muted-foreground">{copy.group(channel.creatorKey)}</p>
                         </div>
                         <div className="flex flex-wrap gap-1">
                           {!channel.isDefault && EMBED_PLATFORMS.includes(channel.platform) ? (
                             <Button variant="ghost" size="sm" disabled={busy} onClick={() => patchChannel(channel, { isDefault: true } as Partial<StreamChannel>)}>
-                              Set default
+                              {copy.setDefault}
                             </Button>
                           ) : null}
                           <Button variant="ghost" size="sm" disabled={busy} onClick={() => patchChannel(channel, { active: !channel.active } as Partial<StreamChannel>)}>
-                            {channel.active ? "Disable" : "Enable"}
+                            {channel.active ? copy.disable : copy.enable}
                           </Button>
-                          <Button variant="ghost" size="icon-sm" disabled={busy} onClick={() => startEdit(channel)} title="Edit" aria-label="Edit">
+                          <Button
+                            variant="ghost"
+                            size="icon-sm"
+                            disabled={busy}
+                            onClick={() => startEdit(channel)}
+                            title={copy.labels.editLabel}
+                            aria-label={copy.labels.editLabel}
+                          >
                             <PencilIcon />
                           </Button>
                           <Button
@@ -463,8 +470,8 @@ export function StreamChannelsManager({
                             className="text-destructive"
                             disabled={busy}
                             onClick={() => setRemoveTarget(channel)}
-                            title="Remove"
-                            aria-label="Remove"
+                            title={copy.remove}
+                            aria-label={copy.remove}
                           >
                             <Trash2Icon />
                           </Button>
@@ -472,22 +479,22 @@ export function StreamChannelsManager({
                       </div>
 
                       {isEditing ? (
-                        <div className="grid gap-3 rounded-md border bg-muted/30 p-3 sm:grid-cols-2">
+                        <div className="grid gap-3 rounded-lg border border-border/70 bg-muted/30 p-3 sm:grid-cols-2">
                           <div className="flex flex-col gap-1.5">
-                            <Label>Edit label</Label>
+                            <Label>{copy.labels.editLabel}</Label>
                             <Input value={editLabel} onChange={(e) => setEditLabel(e.target.value)} />
                           </div>
                           <div className="flex flex-col gap-1.5">
-                            <Label>Edit language</Label>
+                            <Label>{copy.labels.editLanguage}</Label>
                             <Input value={editLanguage} onChange={(e) => setEditLanguage(e.target.value)} maxLength={8} />
                           </div>
-                          <GamePicker games={games} selected={editGames} onChange={setEditGames} />
+                          <GamePicker games={games} selected={editGames} onChange={setEditGames} copy={copy} />
                           <div className="flex gap-2 sm:col-span-2">
                             <Button size="sm" disabled={busy} onClick={() => saveEdit(channel)}>
-                              Save
+                              {copy.save}
                             </Button>
                             <Button size="sm" variant="outline" disabled={busy} onClick={() => setEditingId(null)}>
-                              Cancel
+                              {copy.cancel}
                             </Button>
                           </div>
                         </div>
@@ -497,8 +504,8 @@ export function StreamChannelsManager({
                 })}
               </div>
             ) : (
-              <div className="rounded-md border border-dashed p-6 text-center">
-                <p className="text-sm text-muted-foreground">No channels yet.</p>
+              <div className="rounded-xl border border-dashed border-border/70 bg-muted/20 p-8 text-center">
+                <p className="text-sm text-muted-foreground">{copy.empty}</p>
               </div>
             )}
           </section>
@@ -510,16 +517,16 @@ export function StreamChannelsManager({
         onOpenChange={(open) => {
           if (!open) setRemoveTarget(null);
         }}
-        title="Remove co-stream channel?"
+        title={copy.removeTitle}
         description={
           removeTarget
-            ? `This removes ${PLATFORM_LABELS[removeTarget.platform]} / ${removeTarget.handle} from the co-stream registry.`
+            ? copy.removeDescription(PLATFORM_LABELS[removeTarget.platform], removeTarget.handle)
             : undefined
         }
-        cancelLabel="Cancel"
+        cancelLabel={copy.cancel}
         actions={[
           {
-            label: "Remove",
+            label: copy.remove,
             variant: "destructive",
             onClick: () => {
               if (removeTarget) void remove(removeTarget);
