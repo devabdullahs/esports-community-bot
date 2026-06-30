@@ -1,14 +1,22 @@
 "use client";
 
+import { useQueryClient } from "@tanstack/react-query";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useRef } from "react";
 
-const MIN_ROUTE_REFRESH_GAP_MS = 250;
-const FOCUS_REFRESH_AFTER_MS = 30_000;
-const ROUTE_REVISIT_REFRESH_AFTER_MS = 10_000;
+import {
+  canRefreshRoute,
+  pruneVisitedRoutes,
+  ROUTE_FRESHNESS_LIMITS,
+  shouldRefreshAfterHidden,
+  shouldRefreshOnRouteEnter,
+} from "@/lib/route-freshness";
+
+const ROUTE_REFRESH_DELAY_MS = 75;
 
 export function RouteFreshnessGuard() {
   const router = useRouter();
+  const queryClient = useQueryClient();
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const routeKey = `${pathname ?? ""}?${searchParams?.toString() ?? ""}`;
@@ -16,27 +24,36 @@ export function RouteFreshnessGuard() {
   const visitedRouteAtRef = useRef(new Map<string, number>());
   const lastRefreshAtRef = useRef(0);
   const lastHiddenAtRef = useRef<number | null>(null);
+  const pendingHistoryNavigationRef = useRef(false);
 
   const refreshRoute = useCallback(
     (force = false) => {
       const now = Date.now();
-      if (!force && now - lastRefreshAtRef.current < MIN_ROUTE_REFRESH_GAP_MS) return;
+      if (
+        !canRefreshRoute({
+          force,
+          lastRefreshAt: lastRefreshAtRef.current,
+          minGapMs: ROUTE_FRESHNESS_LIMITS.minRefreshGapMs,
+          now,
+        })
+      ) {
+        return;
+      }
       lastRefreshAtRef.current = now;
+      void queryClient.invalidateQueries({ refetchType: "active" });
       router.refresh();
     },
-    [router],
+    [queryClient, router],
   );
 
   useEffect(() => {
     const now = Date.now();
     const previousRoute = lastRouteKeyRef.current;
-    const lastVisitedAt = visitedRouteAtRef.current.get(routeKey) ?? 0;
+    const lastVisitedAt = visitedRouteAtRef.current.get(routeKey);
+    const historyNavigation = pendingHistoryNavigationRef.current;
+    pendingHistoryNavigationRef.current = false;
     visitedRouteAtRef.current.set(routeKey, now);
-
-    if (visitedRouteAtRef.current.size > 50) {
-      const oldest = visitedRouteAtRef.current.keys().next().value;
-      if (typeof oldest === "string") visitedRouteAtRef.current.delete(oldest);
-    }
+    pruneVisitedRoutes(visitedRouteAtRef.current, ROUTE_FRESHNESS_LIMITS.maxTrackedRoutes);
 
     if (lastRouteKeyRef.current === null) {
       lastRouteKeyRef.current = routeKey;
@@ -45,8 +62,16 @@ export function RouteFreshnessGuard() {
 
     if (previousRoute !== routeKey) {
       lastRouteKeyRef.current = routeKey;
-      const force = !lastVisitedAt || now - lastVisitedAt >= ROUTE_REVISIT_REFRESH_AFTER_MS;
-      const timer = window.setTimeout(() => refreshRoute(force), 0);
+      const shouldRefresh = shouldRefreshOnRouteEnter({
+        historyNavigation,
+        lastVisitedAt,
+        now,
+        previousRouteKey: previousRoute,
+        revisitAfterMs: ROUTE_FRESHNESS_LIMITS.routeRevisitRefreshAfterMs,
+        routeKey,
+      });
+      if (!shouldRefresh) return undefined;
+      const timer = window.setTimeout(() => refreshRoute(true), ROUTE_REFRESH_DELAY_MS);
       return () => window.clearTimeout(timer);
     }
 
@@ -57,14 +82,22 @@ export function RouteFreshnessGuard() {
     const refreshAfterLongPause = () => {
       const hiddenAt = lastHiddenAtRef.current;
       lastHiddenAtRef.current = null;
-      if (hiddenAt && Date.now() - hiddenAt >= FOCUS_REFRESH_AFTER_MS) refreshRoute();
+      if (
+        shouldRefreshAfterHidden({
+          hiddenAt,
+          now: Date.now(),
+          refreshAfterMs: ROUTE_FRESHNESS_LIMITS.focusRefreshAfterMs,
+        })
+      ) {
+        refreshRoute(true);
+      }
     };
 
     const onPageShow = (event: PageTransitionEvent) => {
-      if (event.persisted) refreshRoute(true);
+      if (event.persisted) window.setTimeout(() => refreshRoute(true), ROUTE_REFRESH_DELAY_MS);
     };
     const onPopState = () => {
-      window.setTimeout(() => refreshRoute(true), 0);
+      pendingHistoryNavigationRef.current = true;
     };
 
     const onFocus = () => refreshAfterLongPause();
