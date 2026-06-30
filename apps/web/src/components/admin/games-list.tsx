@@ -86,12 +86,12 @@ export function GamesList({
           <AlertDescription>{deleteError}</AlertDescription>
         </Alert>
       ) : null}
-      <div className="flex items-center justify-between gap-3">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <p className="text-sm text-muted-foreground">
           {t.games.count(items.length)}
         </p>
         {canManageGames ? (
-          <Button render={<Link href="/admin/games/new" />} nativeButton={false}>
+          <Button render={<Link href="/admin/games/new" />} nativeButton={false} className="w-full sm:w-auto">
             <PlusIcon data-icon="inline-start" />
             {t.games.newAction}
           </Button>
@@ -101,7 +101,7 @@ export function GamesList({
       {items.length ? (
         <div className="flex flex-col gap-2">
           {items.map((game, index) => (
-            <div key={game.slug} className="flex items-center gap-3 rounded-lg border p-3">
+            <div key={game.slug} className="flex items-start gap-3 rounded-lg border p-3 sm:items-center">
               {canManageGames ? (
                 <div className="flex flex-col">
                   <Button
@@ -135,7 +135,7 @@ export function GamesList({
                 </div>
                 <span className="font-mono text-xs text-muted-foreground">/games/{game.slug}</span>
               </div>
-              <div className="flex gap-1">
+              <div className="flex shrink-0 gap-1">
                 <Button
                   render={<Link href={`/admin/games/${game.slug}`} />}
                   nativeButton={false}
@@ -164,7 +164,7 @@ export function GamesList({
           ))}
         </div>
       ) : (
-        <div className="rounded-md border border-dashed p-8 text-center">
+        <div className="rounded-md border border-dashed p-5 text-center sm:p-8">
           <p className="text-sm text-muted-foreground">{t.games.empty}</p>
         </div>
       )}

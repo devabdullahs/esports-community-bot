@@ -26,7 +26,7 @@ export function PageBreadcrumb({ items }: { items: Crumb[] }) {
           const isLast = index === items.length - 1;
           return (
             <Fragment key={`${item.label}-${index}`}>
-              <BreadcrumbItem className="max-w-[16rem] truncate">
+              <BreadcrumbItem className="max-w-[calc(100vw-5rem)] truncate sm:max-w-[16rem]">
                 {isLast || !item.href ? (
                   <BreadcrumbPage dir="auto" className="truncate">
                     {item.label}

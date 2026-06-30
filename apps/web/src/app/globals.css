@@ -39,19 +39,19 @@
   --text-sm: 0.875rem;
   --text-sm--line-height: 1.375rem;
   --text-base: var(--type-body);
-  --text-base--line-height: 1.625rem;
+  --text-base--line-height: 1.6;
   --text-lg: 1.125rem;
-  --text-lg--line-height: 1.8125rem;
+  --text-lg--line-height: 1.55;
   --text-xl: var(--type-step-1);
-  --text-xl--line-height: 2rem;
+  --text-xl--line-height: 1.4;
   --text-2xl: var(--type-heading-2);
-  --text-2xl--line-height: 2.3125rem;
+  --text-2xl--line-height: 1.25;
   --text-3xl: var(--type-step-3);
-  --text-3xl--line-height: 2.5rem;
+  --text-3xl--line-height: 1.18;
   --text-4xl: var(--type-heading-1);
-  --text-4xl--line-height: 3rem;
+  --text-4xl--line-height: 1.12;
   --text-5xl: var(--type-display);
-  --text-5xl--line-height: 3.75rem;
+  --text-5xl--line-height: 1.08;
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -96,14 +96,14 @@
   --font-article-family: var(--font-system-sans);
   --font-system-mono: var(--font-system-sans);
   --type-ratio: 1.61803398875;
-  --type-body: 1rem;
-  --type-list: 0.875rem;
-  --type-callout: 0.875rem;
-  --type-step-1: 1.272rem;
-  --type-heading-2: calc(var(--type-body) * var(--type-ratio));
-  --type-step-3: 2rem;
-  --type-heading-1: calc(var(--type-heading-2) * var(--type-ratio));
-  --type-display: calc(var(--type-body) * var(--type-ratio) * 2);
+  --type-body: clamp(0.9375rem, 0.9rem + 0.2vw, 1rem);
+  --type-list: clamp(0.8125rem, 0.78rem + 0.15vw, 0.875rem);
+  --type-callout: clamp(0.8125rem, 0.78rem + 0.15vw, 0.875rem);
+  --type-step-1: clamp(1.125rem, 1.02rem + 0.55vw, 1.272rem);
+  --type-heading-2: clamp(1.375rem, 1.12rem + 1.2vw, 1.618rem);
+  --type-step-3: clamp(1.625rem, 1.28rem + 1.7vw, 2rem);
+  --type-heading-1: clamp(2rem, 1.52rem + 2.35vw, 2.618rem);
+  --type-display: clamp(2.375rem, 1.55rem + 4vw, 3.236rem);
   --type-leading: 1.625;
   --background: oklch(0.99 0.003 258);
   --foreground: oklch(0.22 0.02 262);
@@ -180,16 +180,19 @@
   html,
   body {
     min-height: 100%;
+    width: 100%;
+    max-width: 100%;
   }
   body {
     @apply bg-background text-foreground;
     font-size: var(--type-body);
     line-height: var(--type-leading);
+    min-width: 0;
     overflow-x: hidden;
     text-rendering: optimizeLegibility;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
-    /* Soft Royal Azure ambiance behind the top of every page — adds depth in
+    /* Soft Royal Azure ambiance behind the top of every page - adds depth in
        both themes without touching component backgrounds. */
     background-image: radial-gradient(
       ellipse 85% 48% at 50% -12%,
@@ -201,10 +204,22 @@
   main,
   section,
   article,
+  aside,
+  header,
+  footer,
+  form,
+  nav,
   [data-slot="card"],
   [data-slot="card-header"],
-  [data-slot="card-content"] {
+  [data-slot="card-content"],
+  [data-slot="card-footer"] {
     min-width: 0;
+  }
+  img,
+  svg,
+  video,
+  canvas {
+    max-width: 100%;
   }
   html {
     @apply font-sans;
@@ -428,6 +443,9 @@
     width: 100%;
     border-collapse: collapse;
     font-size: 0.9em;
+    display: block;
+    overflow-x: auto;
+    white-space: nowrap;
   }
   .post-body th,
   .post-body td {
@@ -443,5 +461,14 @@
   }
   .app-root {
     isolation: isolate;
+    min-width: 0;
+    width: 100%;
+  }
+}
+
+@media (min-width: 640px) {
+  .post-body table {
+    display: table;
+    white-space: normal;
   }
 }

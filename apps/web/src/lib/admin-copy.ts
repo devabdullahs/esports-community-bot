@@ -26,14 +26,14 @@ const en = {
   },
   dashboard: {
     eyebrow: "Private workspace",
-    title: "Admin publishing",
+    title: "Admin workspace",
     description:
-      "A focused staff experience for drafting game news, checking the public preview, and preparing updates before they go to the community.",
+      "A focused staff console for reviewing community activity, preparing updates, and checking public pages before changes go live.",
     accessTitle: "Access",
     accessDescription: "Staff controls are private and hidden from public navigation.",
     toolsTitle: "Admin tools enabled",
     toolsDescription:
-      "Create, edit, publish, and delete posts below. Published posts appear on the matching game page. Discord publishing can connect next.",
+      "Your account can use the private tools below. Every write action is scoped, recorded, and reflected on the matching public page.",
     signInTitle: "Sign in required",
     signInDescription:
       "Staff tools are not shown to public users. Sign in with Discord to access admin workflows.",
@@ -45,6 +45,35 @@ const en = {
     quickNewPost: "New post",
     quickComments: "Review comments",
     quickGames: "Manage games",
+    workflowEyebrow: "Daily flow",
+    workflowTitle: "Publish with fewer missed steps",
+    workflowDescription:
+      "Use the dashboard as a short loop: moderate, prepare, then verify the public view before the community sees the update.",
+    workflowItems: [
+      {
+        title: "Review the queue",
+        description:
+          "Clear pending comments and flagged links before new posts draw traffic.",
+      },
+      {
+        title: "Prepare the update",
+        description:
+          "Draft or edit the post with the correct game, media channel, and language.",
+      },
+      {
+        title: "Verify after publishing",
+        description:
+          "Check the public page, related cards, and audit log after the change goes live.",
+      },
+    ],
+    scopeTitle: "Your current scope",
+    scopeDescription:
+      "A quick read on what this account can manage right now.",
+    scope: {
+      posts: "Visible posts",
+      drafts: "Drafts waiting",
+      games: "Managed games",
+    },
     workspaceTitle: "Workspace shortcuts",
     workspaceDescription:
       "Jump into the focused tools for content, moderation, game pages, and staff operations.",
@@ -392,14 +421,14 @@ const ar: typeof en = {
   },
   dashboard: {
     eyebrow: "مساحة خاصة",
-    title: "نشر الإدارة",
+    title: "لوحة إدارة المحتوى",
     description:
-      "مساحة عمل مخصصة للفريق لصياغة أخبار الألعاب، مراجعة المعاينة العامة، وتجهيز التحديثات قبل نشرها للمجتمع.",
+      "لوحة مركزة للفريق لمراجعة نشاط المجتمع، وتجهيز التحديثات، والتحقق من الصفحات العامة قبل نشر أي تغيير.",
     accessTitle: "الصلاحيات",
     accessDescription: "أدوات الفريق خاصة ولا تظهر في التصفح العام.",
     toolsTitle: "أدوات الإدارة مفعلة",
     toolsDescription:
-      "يمكنك إنشاء المنشورات وتعديلها ونشرها وحذفها من هنا. المنشورات المنشورة تظهر في صفحة اللعبة المناسبة، ويمكن ربط النشر بديسكورد لاحقا.",
+      "يمكن لهذا الحساب استخدام الأدوات الخاصة أدناه. كل إجراء تعديل محدود بالصلاحيات، ومسجل، وينعكس على الصفحة العامة المناسبة.",
     signInTitle: "تسجيل الدخول مطلوب",
     signInDescription:
       "أدوات الفريق لا تظهر للمستخدمين العامين. سجل دخولك بديسكورد للوصول إلى أدوات الإدارة.",
@@ -411,6 +440,34 @@ const ar: typeof en = {
     quickNewPost: "منشور جديد",
     quickComments: "مراجعة التعليقات",
     quickGames: "إدارة الألعاب",
+    workflowEyebrow: "مسار العمل اليومي",
+    workflowTitle: "انشر التحديثات بدون خطوات ناقصة",
+    workflowDescription:
+      "استخدم اللوحة كمسار قصير: راجع، جهز، ثم تحقق من العرض العام قبل أن يرى المجتمع التحديث.",
+    workflowItems: [
+      {
+        title: "راجع قائمة الانتظار",
+        description:
+          "راجع التعليقات المعلقة والروابط التي تحتاج موافقة قبل أن يجذب أي منشور جديد الزوار.",
+      },
+      {
+        title: "جهز التحديث",
+        description:
+          "اكتب المنشور أو عدله مع اختيار اللعبة أو قناة الإعلام واللغة المناسبة.",
+      },
+      {
+        title: "تحقق بعد النشر",
+        description:
+          "راجع الصفحة العامة والبطاقات المرتبطة وسجل التدقيق بعد ظهور التغيير.",
+      },
+    ],
+    scopeTitle: "نطاق صلاحيتك الحالي",
+    scopeDescription: "نظرة سريعة على ما يمكن لهذا الحساب إدارته الآن.",
+    scope: {
+      posts: "المنشورات المرئية",
+      drafts: "المسودات المنتظرة",
+      games: "الألعاب المدارة",
+    },
     workspaceTitle: "اختصارات العمل",
     workspaceDescription:
       "انتقل بسرعة إلى أدوات المحتوى، الإشراف، صفحات الألعاب، وعمليات الفريق.",

@@ -921,7 +921,7 @@ export function NewsEditor({
 
               {/* Cover dropzone (X-Articles style) */}
               <Field>
-                <div className="flex items-center justify-between gap-2">
+                <div className="flex flex-wrap items-center justify-between gap-2">
                   <FieldLabel>{t.cover}</FieldLabel>
                   <span className="text-xs text-muted-foreground">{t.coverHint}</span>
                 </div>
@@ -1243,7 +1243,7 @@ export function NewsEditor({
                   onDragLeave={() => setBodyDragActive(false)}
                   onDrop={onBodyDrop}
                 />
-                <div className="flex items-center justify-between gap-3">
+                <div className="flex flex-wrap items-center justify-between gap-2">
                   <span className="text-xs text-muted-foreground">
                     {counterText(current.body.length, NEWS_BODY_MAX_LENGTH)}
                   </span>
@@ -1258,7 +1258,7 @@ export function NewsEditor({
 
         <Card className={mobileView === "edit" ? "hidden lg:flex" : undefined}>
           <CardHeader>
-            <div className="flex items-center justify-between gap-2">
+            <div className="flex flex-wrap items-center justify-between gap-2">
               <Badge variant="outline">
                 <EyeIcon data-icon="inline-start" />
                 {t.livePreview}

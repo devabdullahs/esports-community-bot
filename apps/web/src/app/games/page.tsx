@@ -92,7 +92,7 @@ export default async function GamesPage() {
 
   return (
     <main
-      className="mx-auto flex w-full max-w-7xl flex-1 flex-col gap-8 px-5 py-10 sm:px-8"
+      className="mx-auto flex w-full max-w-7xl flex-1 flex-col gap-8 px-4 py-8 sm:px-8 sm:py-10"
     >
       <PageBreadcrumb
         items={[
@@ -100,7 +100,7 @@ export default async function GamesPage() {
           { label: common.games },
         ]}
       />
-      <section className="overflow-hidden rounded-3xl border bg-card/35 p-6 shadow-sm sm:p-8">
+      <section className="overflow-hidden rounded-2xl border bg-card/35 p-5 shadow-sm sm:rounded-3xl sm:p-8">
         <div className="grid gap-8 lg:grid-cols-[1.15fr_0.85fr] lg:items-center">
           <div className="flex max-w-3xl flex-col items-start gap-4">
             <Badge variant="outline" className="border-primary/35 bg-primary/10 text-primary">
@@ -197,8 +197,8 @@ export default async function GamesPage() {
                     ))}
                   </div>
                 </div>
-                <div className="mt-auto flex items-center justify-between gap-3 border-t pt-4 text-xs text-muted-foreground">
-                  <span className="truncate">
+                <div className="mt-auto flex flex-wrap items-center justify-between gap-3 border-t pt-4 text-xs text-muted-foreground">
+                  <span className="min-w-0 truncate">
                     {ui.managedBy}: {localizeText(game.owner, locale)}
                   </span>
                   <span className="inline-flex shrink-0 items-center gap-1 font-medium text-primary">

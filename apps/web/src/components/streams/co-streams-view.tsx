@@ -129,7 +129,7 @@ export function CoStreamsView({
   }, [streams, selectedId]);
 
   return (
-    <main className="mx-auto flex w-full max-w-5xl flex-1 flex-col gap-6 px-5 py-10 sm:px-8">
+    <main className="mx-auto flex w-full max-w-5xl flex-1 flex-col gap-6 px-4 py-8 sm:px-8 sm:py-10">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <p className="text-sm text-muted-foreground">{t.eyebrow}</p>
@@ -181,7 +181,7 @@ export function CoStreamsView({
           {selected.liveTitle ? <p className="text-sm text-muted-foreground">{selected.liveTitle}</p> : null}
         </div>
       ) : (
-        <div className="rounded-lg border border-dashed p-10 text-center">
+        <div className="rounded-lg border border-dashed p-5 text-center sm:p-8">
           <RadioIcon className="mx-auto size-6 text-muted-foreground" />
           <p className="mt-2 text-sm text-muted-foreground">{t.none}</p>
         </div>
@@ -301,7 +301,7 @@ export function CoStreamsView({
           })}
         </div>
       ) : (
-        <div className="rounded-md border border-dashed p-8 text-center">
+        <div className="rounded-md border border-dashed p-5 text-center sm:p-8">
           <p className="text-sm text-muted-foreground">{streams.length ? t.noneFiltered : t.none}</p>
         </div>
       )}

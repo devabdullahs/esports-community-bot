@@ -87,18 +87,18 @@ export function NewsList({
           <AlertDescription>{deleteSuccess}</AlertDescription>
         </Alert>
       ) : null}
-      <div className="flex items-center justify-between gap-3">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <p className="text-sm text-muted-foreground">
           {t.newsList.postsCount(posts.length)}
         </p>
-        <Button render={<Link href={newPostHref} />} nativeButton={false}>
+        <Button render={<Link href={newPostHref} />} nativeButton={false} className="w-full sm:w-auto">
           <PlusIcon data-icon="inline-start" />
           {t.newsList.newPost}
         </Button>
       </div>
 
       {posts.length ? (
-        <div className="overflow-hidden rounded-md border">
+        <div className="rounded-md border">
           <Table>
             <TableHeader>
               <TableRow>
@@ -172,7 +172,7 @@ export function NewsList({
           </Table>
         </div>
       ) : (
-        <div className="rounded-md border border-dashed p-8 text-center">
+        <div className="rounded-md border border-dashed p-5 text-center sm:p-8">
           <p className="text-sm text-muted-foreground">
             {t.newsList.empty}
           </p>

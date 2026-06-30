@@ -41,7 +41,7 @@ export default async function EditNewsPostPage({
     const channel = await getMediaChannel(post.mediaSlug);
     if (!channel) notFound();
     return (
-      <main className="mx-auto flex w-full max-w-6xl flex-1 flex-col gap-6 px-5 py-10 sm:px-8">
+      <main className="mx-auto flex w-full max-w-6xl flex-1 flex-col gap-6 px-4 py-8 sm:px-8 sm:py-10">
         <Button
           render={<Link href={`/admin/media/${channel.slug}`} />}
           nativeButton={false}
@@ -73,7 +73,7 @@ export default async function EditNewsPostPage({
     access.games === "ALL" ? allGames : allGames.filter((g) => access.games.includes(g.slug));
 
   return (
-    <main className="mx-auto flex w-full max-w-6xl flex-1 flex-col gap-6 px-5 py-10 sm:px-8">
+    <main className="mx-auto flex w-full max-w-6xl flex-1 flex-col gap-6 px-4 py-8 sm:px-8 sm:py-10">
       <Button
         render={<Link href="/admin" />}
         nativeButton={false}

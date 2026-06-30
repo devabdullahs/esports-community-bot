@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Suspense } from "react";
 import { DeploymentUpdateAlert } from "@/components/deployment-update-alert";
 import { Providers } from "@/components/providers";
@@ -20,6 +20,12 @@ import {
   siteName,
 } from "@/lib/metadata";
 import "./globals.css";
+
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover",
+};
 
 export async function generateMetadata(): Promise<Metadata> {
   const locale = await getRequestLocale();

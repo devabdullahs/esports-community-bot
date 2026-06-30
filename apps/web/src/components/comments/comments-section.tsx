@@ -350,11 +350,11 @@ function Composer({
         onChange={(e) => setBody(e.target.value)}
         className="bidi-plaintext resize-y"
       />
-      <div className="flex items-center justify-between gap-2">
+      <div className="flex flex-wrap items-center justify-between gap-2">
         <span className={cn("text-xs text-muted-foreground", overLimit && "text-destructive")}>
           {body.length}/{COMMENT_MAX_LENGTH}
         </span>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           {onCancel ? (
             <Button variant="ghost" size="sm" onClick={onCancel} disabled={busy}>
               {t.cancel}

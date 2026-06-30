@@ -127,7 +127,7 @@ export function TournamentDirectory({
               </Link>
             ) : null}
           </div>
-          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 lg:w-[31rem]">
+          <div className="grid w-full grid-cols-2 gap-2 sm:grid-cols-4 lg:w-[31rem]">
             <StatPill icon={TrophyIcon} label={text.trackedTournaments} value={stats.tournaments} locale={locale} />
             <StatPill icon={Gamepad2Icon} label={text.trackedGames} value={stats.games} locale={locale} />
             <StatPill icon={RadioIcon} label={text.liveTournaments} value={stats.live} locale={locale} tone="live" />
@@ -305,7 +305,7 @@ function TournamentCard({
 
           {match ? (
             <div className="rounded-xl border bg-muted/20 p-3">
-              <div className="mb-3 flex items-center justify-between gap-3 text-xs text-muted-foreground">
+              <div className="mb-3 flex flex-wrap items-center justify-between gap-3 text-xs text-muted-foreground">
                 <span className="inline-flex items-center gap-1.5">
                   {primaryStatus === "live" ? (
                     <RadioIcon className="size-3.5 text-destructive" />
@@ -323,7 +323,7 @@ function TournamentCard({
                   />
                 ) : null}
               </div>
-              <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-3">
+              <div className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-3">
                 <TeamPreview name={match.team_a} logo={match.logo_a} />
                 <MatchCenter match={match} locale={locale} />
                 <TeamPreview name={match.team_b} logo={match.logo_b} align="end" />

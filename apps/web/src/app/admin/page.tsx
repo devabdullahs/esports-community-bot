@@ -1,8 +1,11 @@
 import {
+  ActivityIcon,
   ArrowRightIcon,
+  CheckCircle2Icon,
   ClipboardListIcon,
   FileTextIcon,
   Gamepad2Icon,
+  ListChecksIcon,
   type LucideIcon,
   MessagesSquareIcon,
   NewspaperIcon,
@@ -30,6 +33,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { Separator } from "@/components/ui/separator";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -62,10 +66,10 @@ export default async function AdminPage() {
       : t.dashboard.eyebrow;
 
   return (
-    <main className="mx-auto flex w-full max-w-6xl flex-1 flex-col gap-10 px-5 py-8 sm:px-8 lg:py-10">
+    <main className="mx-auto flex w-full max-w-6xl flex-1 flex-col gap-8 px-4 py-6 sm:px-6 lg:gap-10 lg:px-8 lg:py-10">
       <section className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_22rem]">
         <Card className="overflow-hidden border-border/70 bg-card/70 shadow-sm">
-          <CardHeader className="gap-7 border-b border-border/60 bg-muted/10 p-6 sm:p-7">
+          <CardHeader className="gap-6 border-b border-border/60 bg-muted/10 p-5 sm:gap-7 sm:p-7">
             <div className="flex flex-wrap items-center gap-2">
               <Badge variant="secondary" className="w-fit">
                 <SparklesIcon data-icon="inline-start" />
@@ -78,7 +82,7 @@ export default async function AdminPage() {
               ) : null}
             </div>
             <div className="max-w-3xl">
-              <CardTitle className="text-balance text-3xl leading-tight sm:text-4xl">
+              <CardTitle className="text-balance text-2xl leading-tight sm:text-4xl">
                 {t.dashboard.title}
               </CardTitle>
               <CardDescription className="mt-3 text-sm leading-6 sm:text-base sm:leading-7">
@@ -86,8 +90,12 @@ export default async function AdminPage() {
               </CardDescription>
             </div>
             {access.allowed ? (
-              <div className="flex flex-wrap gap-2">
-                <Button render={<Link href="/admin/news/new" />} nativeButton={false}>
+              <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:flex-wrap">
+                <Button
+                  render={<Link href="/admin/news/new" />}
+                  nativeButton={false}
+                  className="w-full sm:w-auto"
+                >
                   <PenLineIcon data-icon="inline-start" />
                   {t.dashboard.quickNewPost}
                 </Button>
@@ -95,6 +103,7 @@ export default async function AdminPage() {
                   render={<Link href="/admin/comments" />}
                   nativeButton={false}
                   variant="outline"
+                  className="w-full sm:w-auto"
                 >
                   <MessagesSquareIcon data-icon="inline-start" />
                   {t.dashboard.quickComments}
@@ -103,6 +112,7 @@ export default async function AdminPage() {
                   render={<Link href="/admin/games" />}
                   nativeButton={false}
                   variant="outline"
+                  className="w-full sm:w-auto"
                 >
                   <Gamepad2Icon data-icon="inline-start" />
                   {t.dashboard.quickGames}
@@ -113,7 +123,7 @@ export default async function AdminPage() {
         </Card>
 
         <Card className="border-border/70 bg-card/70 shadow-sm">
-          <CardHeader className="p-6 sm:p-7">
+          <CardHeader className="p-5 sm:p-7">
             <div className="flex items-start gap-3">
               <span className="rounded-lg border border-primary/30 bg-primary/10 p-2 text-primary">
                 <ShieldIcon data-icon="inline-start" />
@@ -126,7 +136,7 @@ export default async function AdminPage() {
               </div>
             </div>
           </CardHeader>
-          <CardContent className="px-6 pb-6 sm:px-7 sm:pb-7">
+          <CardContent className="px-5 pb-5 sm:px-7 sm:pb-7">
             {access.allowed ? (
               <Alert>
                 <AlertTitle>{t.dashboard.toolsTitle}</AlertTitle>
@@ -142,7 +152,7 @@ export default async function AdminPage() {
                   <Button
                     render={<Link href="/login?callbackURL=/admin" />}
                     nativeButton={false}
-                    className="w-fit"
+                    className="w-full sm:w-fit"
                   >
                     {t.dashboard.signInAction}
                   </Button>
@@ -190,7 +200,59 @@ export default async function AdminPage() {
       ) : null}
 
       {access.allowed ? (
-        <section className="flex flex-col gap-4 rounded-xl border border-border/70 bg-card/40 p-5 shadow-sm sm:p-6">
+        <section className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_22rem]">
+          <Card className="border-border/70 bg-card/70 shadow-sm">
+            <CardHeader className="gap-3 p-4 sm:p-6">
+              <Badge variant="secondary" className="w-fit">
+                <ListChecksIcon data-icon="inline-start" />
+                {t.dashboard.workflowEyebrow}
+              </Badge>
+              <div>
+                <CardTitle>{t.dashboard.workflowTitle}</CardTitle>
+                <CardDescription className="mt-2 leading-6">
+                  {t.dashboard.workflowDescription}
+                </CardDescription>
+              </div>
+            </CardHeader>
+            <CardContent className="grid gap-3 px-4 pb-4 pt-0 sm:px-6 sm:pb-6">
+              {t.dashboard.workflowItems.map((item, index) => (
+                <WorkflowStep
+                  key={item.title}
+                  index={index + 1}
+                  title={item.title}
+                  description={item.description}
+                />
+              ))}
+            </CardContent>
+          </Card>
+
+          <Card className="border-border/70 bg-card/70 shadow-sm">
+            <CardHeader className="gap-3 p-4 sm:p-6">
+              <div className="flex items-start gap-3">
+                <span className="rounded-lg border border-primary/20 bg-primary/10 p-2 text-primary">
+                  <ActivityIcon data-icon="inline-start" />
+                </span>
+                <div className="min-w-0">
+                  <CardTitle>{t.dashboard.scopeTitle}</CardTitle>
+                  <CardDescription className="mt-2 leading-6">
+                    {t.dashboard.scopeDescription}
+                  </CardDescription>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent className="grid gap-3 px-4 pb-4 pt-0 sm:px-6 sm:pb-6">
+              <ScopeMetric label={t.dashboard.scope.posts} value={posts.length} />
+              <Separator />
+              <ScopeMetric label={t.dashboard.scope.drafts} value={draftPosts} />
+              <Separator />
+              <ScopeMetric label={t.dashboard.scope.games} value={managedGames} />
+            </CardContent>
+          </Card>
+        </section>
+      ) : null}
+
+      {access.allowed ? (
+        <section className="flex flex-col gap-4 rounded-xl border border-border/70 bg-card/40 p-4 shadow-sm sm:p-6">
           <div className="flex flex-col gap-1">
             <h2 className="text-xl font-semibold">{t.dashboard.workspaceTitle}</h2>
             <p className="text-sm text-muted-foreground">
@@ -253,7 +315,7 @@ export default async function AdminPage() {
       ) : null}
 
       {access.allowed ? (
-        <section className="flex flex-col gap-4 rounded-xl border border-border/70 bg-card/40 p-5 shadow-sm sm:p-6">
+        <section className="flex flex-col gap-4 rounded-xl border border-border/70 bg-card/40 p-4 shadow-sm sm:p-6">
           <div>
             <h2 className="text-xl font-semibold">{t.dashboard.newsTitle}</h2>
             <p className="text-sm text-muted-foreground">
@@ -264,6 +326,47 @@ export default async function AdminPage() {
         </section>
       ) : null}
     </main>
+  );
+}
+
+function WorkflowStep({
+  index,
+  title,
+  description,
+}: {
+  index: number;
+  title: string;
+  description: string;
+}) {
+  return (
+    <div className="flex gap-3 rounded-xl border border-border/70 bg-muted/20 p-3 sm:p-4">
+      <span className="flex size-8 shrink-0 items-center justify-center rounded-lg border border-primary/25 bg-primary/10 text-sm font-semibold text-primary">
+        {index}
+      </span>
+      <span className="min-w-0">
+        <span className="flex items-start gap-2 font-semibold">
+          <CheckCircle2Icon
+            data-icon="inline-start"
+            className="size-4 text-primary"
+          />
+          {title}
+        </span>
+        <span className="mt-1 block text-sm leading-6 text-muted-foreground">
+          {description}
+        </span>
+      </span>
+    </div>
+  );
+}
+
+function ScopeMetric({ label, value }: { label: string; value: number }) {
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
+      <span className="text-muted-foreground">{label}</span>
+      <span className="rounded-md border border-border bg-muted px-2 py-1 font-semibold text-foreground">
+        {value}
+      </span>
+    </div>
   );
 }
 
@@ -280,16 +383,16 @@ function StatCard({
 }) {
   return (
     <Card className="border-border/70 bg-card/70 shadow-sm transition-colors hover:bg-card">
-      <CardHeader className="gap-3 p-5">
-        <div className="flex items-center justify-between gap-3">
+      <CardHeader className="gap-3 p-4 sm:p-5">
+        <div className="flex flex-wrap items-center justify-between gap-3">
           <CardDescription className="font-medium">{label}</CardDescription>
           <span className="rounded-lg border border-primary/20 bg-primary/10 p-2 text-primary">
             <Icon data-icon="inline-start" />
           </span>
         </div>
-        <CardTitle className="text-3xl leading-none">{value}</CardTitle>
+        <CardTitle className="text-2xl leading-none sm:text-3xl">{value}</CardTitle>
       </CardHeader>
-      <CardContent className="px-5 pb-5 pt-0">
+      <CardContent className="px-4 pb-4 pt-0 sm:px-5 sm:pb-5">
         <p className="text-sm leading-6 text-muted-foreground">{description}</p>
       </CardContent>
     </Card>
@@ -310,7 +413,7 @@ function ManageLink({
   return (
     <Link
       href={href}
-      className="group rounded-xl border border-border/70 bg-card/70 p-4 shadow-sm transition-colors hover:bg-card"
+      className="group min-w-0 rounded-xl border border-border/70 bg-card/70 p-3 shadow-sm transition-colors hover:bg-card sm:p-4"
     >
       <span className="flex items-start gap-3">
         <span className="rounded-lg border border-primary/20 bg-primary/10 p-2 text-primary">

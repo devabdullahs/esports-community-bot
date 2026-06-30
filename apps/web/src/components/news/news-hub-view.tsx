@@ -194,7 +194,7 @@ export async function NewsHubView({
   const featuredCover = featured ? postCover(featured) : null;
 
   return (
-    <main className="mx-auto flex w-full max-w-7xl flex-1 flex-col gap-8 px-5 py-10 sm:px-8">
+    <main className="mx-auto flex w-full max-w-7xl flex-1 flex-col gap-8 px-4 py-8 sm:px-8 sm:py-10">
       <PageBreadcrumb
         items={[
           { label: common.home, href: localizedPath("/", locale) },
@@ -202,7 +202,7 @@ export async function NewsHubView({
         ]}
       />
 
-      <section className="relative overflow-hidden rounded-3xl border bg-card/35 p-6 shadow-sm shadow-black/10 sm:p-8">
+      <section className="relative overflow-hidden rounded-2xl border bg-card/35 p-5 shadow-sm shadow-black/10 sm:rounded-3xl sm:p-8">
         <div
           aria-hidden="true"
           className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-primary/60 to-transparent"
@@ -214,18 +214,19 @@ export async function NewsHubView({
               {ewcOnly ? common.ewcNews : t.eyebrow}
             </Badge>
             <div className="flex flex-col gap-3">
-              <h1 className="text-4xl font-semibold leading-tight tracking-tight sm:text-5xl">
+              <h1 className="text-3xl font-semibold leading-tight tracking-tight sm:text-5xl">
                 {heading}
               </h1>
               <p className="max-w-2xl text-sm leading-6 text-muted-foreground sm:text-base">
                 {description}
               </p>
             </div>
-            <div className="flex flex-wrap gap-2">
+            <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:flex-wrap">
               <Button
                 render={<Link href={localizedPath("/news", locale)} />}
                 nativeButton={false}
                 variant={ewcOnly ? "outline" : "default"}
+                className="w-full sm:w-auto"
               >
                 {t.allNews}
               </Button>
@@ -233,6 +234,7 @@ export async function NewsHubView({
                 render={<Link href={localizedPath("/news/ewc", locale)} />}
                 nativeButton={false}
                 variant={ewcOnly ? "default" : "outline"}
+                className="w-full sm:w-auto"
               >
                 {t.ewcNews}
               </Button>
@@ -342,7 +344,7 @@ export async function NewsHubView({
           </Link>
 
           <div className="rounded-3xl border bg-card/25 p-4 shadow-sm shadow-black/10">
-            <div className="mb-3 flex items-center justify-between gap-3">
+            <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
               <div>
                 <p className="text-xs text-muted-foreground">{t.latestStory}</p>
                 <h2 className="font-semibold">{t.allUpdates}</h2>
@@ -382,7 +384,7 @@ export async function NewsHubView({
           </div>
         </section>
       ) : (
-        <section className="rounded-3xl border bg-card/25 p-8 text-center">
+        <section className="rounded-2xl border bg-card/25 p-5 text-center sm:rounded-3xl sm:p-8">
           <NewspaperIcon className="mx-auto size-10 text-primary/70" aria-hidden="true" />
           <h2 className="mt-4 text-xl font-semibold">{t.emptyTitle}</h2>
           <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-muted-foreground">
@@ -392,7 +394,7 @@ export async function NewsHubView({
       )}
 
       {remainingPosts.length ? (
-        <section className="flex flex-col gap-4 rounded-3xl border bg-card/25 p-4 shadow-sm shadow-black/10 sm:p-5">
+        <section className="flex flex-col gap-4 rounded-2xl border bg-card/25 p-4 shadow-sm shadow-black/10 sm:rounded-3xl sm:p-5">
           <div className="flex items-end justify-between gap-3">
             <div>
               <p className="text-xs text-muted-foreground">{t.allUpdates}</p>
@@ -461,12 +463,13 @@ export async function NewsHubView({
       ) : null}
 
       {current > 1 || hasNext ? (
-        <nav className="flex items-center justify-between gap-3">
+        <nav className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           {current > 1 ? (
             <Button
               render={<Link href={localizedPath(`${basePath}?page=${current - 1}`, locale)} />}
               nativeButton={false}
               variant="outline"
+              className="w-full sm:w-auto"
             >
               {common.newer}
             </Button>
@@ -478,6 +481,7 @@ export async function NewsHubView({
               render={<Link href={localizedPath(`${basePath}?page=${current + 1}`, locale)} />}
               nativeButton={false}
               variant="outline"
+              className="w-full sm:w-auto"
             >
               {common.older}
             </Button>

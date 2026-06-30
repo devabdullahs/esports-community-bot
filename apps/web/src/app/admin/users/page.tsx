@@ -135,17 +135,18 @@ export default async function AdminUsersPage({
       </Card>
 
       {totalPages > 1 ? (
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <Button
             render={<Link href={pageHref(page - 1)} />}
             nativeButton={false}
             variant="outline"
             size="sm"
             disabled={page <= 1}
+            className="w-full sm:w-auto"
           >
             {t.users.previous}
           </Button>
-          <span className="text-sm text-muted-foreground tabular-nums">
+          <span className="text-center text-sm text-muted-foreground tabular-nums">
             {page} / {totalPages}
           </span>
           <Button
@@ -154,6 +155,7 @@ export default async function AdminUsersPage({
             variant="outline"
             size="sm"
             disabled={page >= totalPages}
+            className="w-full sm:w-auto"
           >
             {t.users.next}
           </Button>
