@@ -1,37 +1,100 @@
 import Link from "next/link";
-import { NewspaperIcon } from "lucide-react";
+import {
+  ArrowUpRightIcon,
+  CalendarDaysIcon,
+  NewspaperIcon,
+  SparklesIcon,
+} from "lucide-react";
+
 import { DateTime } from "@/components/date-time";
+import { GameLogoMark } from "@/components/game-logo-mark";
 import { PageBreadcrumb } from "@/components/page-breadcrumb";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import {
   Card,
+  CardContent,
   CardDescription,
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { Separator } from "@/components/ui/separator";
 import { gameTitleForSlug, listGamesCached } from "@/lib/games";
 import { copy, localizedPath, type Locale } from "@/lib/i18n";
-import { listLatestPublishedNewsPostsCached } from "@/lib/news";
+import {
+  listLatestPublishedNewsPostsCached,
+  type NewsPost,
+} from "@/lib/news";
 import { safeUrlOrUndefined } from "@/lib/safe-url";
 
 const COPY = {
   en: {
-    eyebrow: "News",
+    eyebrow: "Newsroom",
     title: "Community news",
-    description: "The latest published posts from across every game in the community.",
-    ewcTitle: "EWC news",
-    ewcDescription: "The latest posts tagged for the Esports World Cup.",
-    empty: "No posts published yet — check back soon.",
+    description:
+      "Follow official updates, tournament stories, match notes, and game-specific coverage from the Esports Community staff.",
+    ewcTitle: "EWC newsroom",
+    ewcDescription:
+      "Follow Esports World Cup updates, prediction announcements, tournament notes, and community coverage.",
+    emptyTitle: "No posts published yet",
+    emptyDescription: "Fresh updates will appear here once the staff publishes them.",
+    featured: "Featured",
+    latestStory: "Latest story",
+    allUpdates: "All updates",
+    posts: "Published posts",
+    gamesCovered: "Games covered",
+    ewcPosts: "EWC posts",
+    latestUpdate: "Latest update",
+    readStory: "Read story",
+    allNews: "All news",
+    ewcNews: "EWC news",
+    page: "Page",
+    media: "Media",
+    general: "General",
   },
   ar: {
-    eyebrow: "الأخبار",
-    title: "أخبار المجتمع",
-    description: "أحدث المنشورات المنشورة من جميع الألعاب في المجتمع.",
-    ewcTitle: "أخبار EWC",
-    ewcDescription: "أحدث المنشورات الموسومة بكأس العالم للرياضات الإلكترونية.",
-    empty: "لا توجد منشورات منشورة بعد — تابعنا قريبًا.",
+    eyebrow: "\u063a\u0631\u0641\u0629 \u0627\u0644\u0623\u062e\u0628\u0627\u0631",
+    title: "\u0623\u062e\u0628\u0627\u0631 \u0627\u0644\u0645\u062c\u062a\u0645\u0639",
+    description:
+      "\u062a\u0627\u0628\u0639 \u0627\u0644\u062a\u062d\u062f\u064a\u062b\u0627\u062a \u0627\u0644\u0631\u0633\u0645\u064a\u0629\u060c \u0642\u0635\u0635 \u0627\u0644\u0628\u0637\u0648\u0644\u0627\u062a\u060c \u0645\u0644\u0627\u062d\u0638\u0627\u062a \u0627\u0644\u0645\u0628\u0627\u0631\u064a\u0627\u062a\u060c \u0648\u062a\u063a\u0637\u064a\u0629 \u0627\u0644\u0623\u0644\u0639\u0627\u0628 \u0645\u0646 \u0641\u0631\u064a\u0642 \u0645\u062c\u062a\u0645\u0639 \u0627\u0644\u0631\u064a\u0627\u0636\u0627\u062a \u0627\u0644\u0625\u0644\u0643\u062a\u0631\u0648\u0646\u064a\u0629.",
+    ewcTitle: "\u063a\u0631\u0641\u0629 \u0623\u062e\u0628\u0627\u0631 EWC",
+    ewcDescription:
+      "\u062a\u0627\u0628\u0639 \u0623\u062e\u0628\u0627\u0631 \u0643\u0623\u0633 \u0627\u0644\u0639\u0627\u0644\u0645 \u0644\u0644\u0631\u064a\u0627\u0636\u0627\u062a \u0627\u0644\u0625\u0644\u0643\u062a\u0631\u0648\u0646\u064a\u0629\u060c \u0625\u0639\u0644\u0627\u0646\u0627\u062a \u0627\u0644\u062a\u0648\u0642\u0639\u0627\u062a\u060c \u0645\u0644\u0627\u062d\u0638\u0627\u062a \u0627\u0644\u0628\u0637\u0648\u0644\u0627\u062a\u060c \u0648\u062a\u063a\u0637\u064a\u0629 \u0627\u0644\u0645\u062c\u062a\u0645\u0639.",
+    emptyTitle: "\u0644\u0627 \u062a\u0648\u062c\u062f \u0645\u0646\u0634\u0648\u0631\u0627\u062a \u062d\u062a\u0649 \u0627\u0644\u0622\u0646",
+    emptyDescription:
+      "\u0633\u062a\u0638\u0647\u0631 \u0627\u0644\u062a\u062d\u062f\u064a\u062b\u0627\u062a \u0647\u0646\u0627 \u0628\u0645\u062c\u0631\u062f \u0646\u0634\u0631\u0647\u0627 \u0645\u0646 \u0641\u0631\u064a\u0642 \u0627\u0644\u0625\u062f\u0627\u0631\u0629.",
+    featured: "\u0645\u0645\u064a\u0632",
+    latestStory: "\u0623\u062d\u062f\u062b \u062e\u0628\u0631",
+    allUpdates: "\u0643\u0644 \u0627\u0644\u062a\u062d\u062f\u064a\u062b\u0627\u062a",
+    posts: "\u0627\u0644\u0645\u0646\u0634\u0648\u0631\u0627\u062a",
+    gamesCovered: "\u0627\u0644\u0623\u0644\u0639\u0627\u0628 \u0627\u0644\u0645\u063a\u0637\u0627\u0629",
+    ewcPosts: "\u0623\u062e\u0628\u0627\u0631 EWC",
+    latestUpdate: "\u0622\u062e\u0631 \u062a\u062d\u062f\u064a\u062b",
+    readStory: "\u0642\u0631\u0627\u0621\u0629 \u0627\u0644\u062e\u0628\u0631",
+    allNews: "\u0643\u0644 \u0627\u0644\u0623\u062e\u0628\u0627\u0631",
+    ewcNews: "\u0623\u062e\u0628\u0627\u0631 EWC",
+    page: "\u0635\u0641\u062d\u0629",
+    media: "\u0627\u0644\u0625\u0639\u0644\u0627\u0645",
+    general: "\u0639\u0627\u0645",
   },
 } as const;
+
+const PAGE_SIZE = 20;
+const EWC_PAGE_SIZE = 50;
+
+function postHref(post: NewsPost, locale: Locale) {
+  if (post.gameSlug) {
+    return localizedPath(`/games/${post.gameSlug}/news/${post.id}`, locale);
+  }
+  if (post.mediaSlug) {
+    return localizedPath(`/media/${post.mediaSlug}/news/${post.id}`, locale);
+  }
+  return localizedPath("/news", locale);
+}
+
+function postCover(post: NewsPost) {
+  return safeUrlOrUndefined(post.coverImageUrl);
+}
 
 // Shared news grid. `ewcOnly` narrows to posts an admin tagged as EWC-related;
 // otherwise every published post (general + EWC-tagged) is shown.
@@ -46,107 +109,299 @@ export async function NewsHubView({
 }) {
   const t = COPY[locale];
   const common = copy[locale].common;
-  const PAGE_SIZE = ewcOnly ? 50 : 20;
+  const pageSize = ewcOnly ? EWC_PAGE_SIZE : PAGE_SIZE;
   const current = Math.max(1, page);
-  const offset = (current - 1) * PAGE_SIZE;
-  // Fetch one extra row to detect whether an "Older" page exists without a count query.
-  const fetched = await listLatestPublishedNewsPostsCached(locale, PAGE_SIZE + 1, ewcOnly, offset);
-  const hasNext = fetched.length > PAGE_SIZE;
-  const posts = fetched.slice(0, PAGE_SIZE);
+  const offset = (current - 1) * pageSize;
+  const fetched = await listLatestPublishedNewsPostsCached(
+    locale,
+    pageSize + 1,
+    ewcOnly,
+    offset,
+  );
+  const hasNext = fetched.length > pageSize;
+  const posts = fetched.slice(0, pageSize);
+  const featured = posts[0] ?? null;
+  const remainingPosts = posts.slice(1);
   const basePath = ewcOnly ? "/news/ewc" : "/news";
   const games = await listGamesCached();
   const gameTitleOf = (slug: string) => gameTitleForSlug(slug, games, locale);
-
+  const labelForPost = (post: NewsPost) => {
+    if (post.gameSlug) return gameTitleOf(post.gameSlug);
+    if (post.mediaSlug) return t.media;
+    return t.general;
+  };
+  const numberFormatter = new Intl.NumberFormat(locale === "ar" ? "ar-SA" : "en-US");
+  const gameCount = new Set(posts.map((post) => post.gameSlug).filter(Boolean)).size;
+  const ewcCount = posts.filter((post) => post.ewc).length;
+  const latestPost = posts.find((post) => post.publishedAt);
   const heading = ewcOnly ? t.ewcTitle : t.title;
+  const description = ewcOnly ? t.ewcDescription : t.description;
+  const featuredCover = featured ? postCover(featured) : null;
 
   return (
-    <main className="mx-auto flex w-full max-w-6xl flex-1 flex-col gap-8 px-5 py-10 sm:px-8">
+    <main className="mx-auto flex w-full max-w-7xl flex-1 flex-col gap-8 px-5 py-10 sm:px-8">
       <PageBreadcrumb
         items={[
           { label: common.home, href: localizedPath("/", locale) },
           { label: ewcOnly ? common.ewcNews : common.news },
         ]}
       />
-      <section className="flex max-w-3xl flex-col items-start gap-4">
-        <Badge variant="outline">
-          <NewspaperIcon data-icon="inline-start" />
-          {ewcOnly ? common.ewcNews : t.eyebrow}
-        </Badge>
-        <h1 className="text-3xl font-semibold leading-tight sm:text-4xl">{heading}</h1>
-        <p className="text-sm leading-6 text-muted-foreground sm:text-base">
-          {ewcOnly ? t.ewcDescription : t.description}
-        </p>
+
+      <section className="overflow-hidden rounded-3xl border bg-card/35 p-6 shadow-sm shadow-black/10 sm:p-8">
+        <div className="grid gap-8 lg:grid-cols-[1.15fr_0.85fr] lg:items-center">
+          <div className="flex max-w-3xl flex-col items-start gap-5">
+            <Badge variant="outline" className="border-primary/35 bg-primary/10 text-primary">
+              <NewspaperIcon data-icon="inline-start" />
+              {ewcOnly ? common.ewcNews : t.eyebrow}
+            </Badge>
+            <div className="flex flex-col gap-3">
+              <h1 className="text-4xl font-semibold leading-tight tracking-tight sm:text-5xl">
+                {heading}
+              </h1>
+              <p className="max-w-2xl text-sm leading-6 text-muted-foreground sm:text-base">
+                {description}
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Button
+                render={<Link href={localizedPath("/news", locale)} />}
+                nativeButton={false}
+                variant={ewcOnly ? "outline" : "default"}
+              >
+                {t.allNews}
+              </Button>
+              <Button
+                render={<Link href={localizedPath("/news/ewc", locale)} />}
+                nativeButton={false}
+                variant={ewcOnly ? "default" : "outline"}
+              >
+                {t.ewcNews}
+              </Button>
+            </div>
+          </div>
+
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div className="rounded-2xl border bg-background/35 p-4">
+              <p className="text-xs text-muted-foreground">{t.posts}</p>
+              <p className="mt-2 text-2xl font-semibold">{numberFormatter.format(posts.length)}</p>
+            </div>
+            <div className="rounded-2xl border bg-background/35 p-4">
+              <p className="text-xs text-muted-foreground">{t.gamesCovered}</p>
+              <p className="mt-2 text-2xl font-semibold">{numberFormatter.format(gameCount)}</p>
+            </div>
+            <div className="rounded-2xl border bg-background/35 p-4">
+              <p className="text-xs text-muted-foreground">{t.ewcPosts}</p>
+              <p className="mt-2 text-2xl font-semibold">{numberFormatter.format(ewcCount)}</p>
+            </div>
+            <div className="rounded-2xl border bg-background/35 p-4">
+              <p className="text-xs text-muted-foreground">{t.latestUpdate}</p>
+              <p className="mt-2 text-sm font-medium text-foreground">
+                {latestPost?.publishedAt ? (
+                  <DateTime value={latestPost.publishedAt} locale={locale} />
+                ) : (
+                  "\u2014"
+                )}
+              </p>
+            </div>
+          </div>
+        </div>
       </section>
 
-      {posts.length ? (
-        <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {posts.map((post) => {
-            const cover = safeUrlOrUndefined(post.coverImageUrl);
-            return (
-              <Link
-                key={post.id}
-                href={localizedPath(`/games/${post.gameSlug}/news/${post.id}`, locale)}
-                className="group block"
-              >
-                <Card
-                  size="sm"
-                  className="h-full overflow-hidden ring-1 ring-transparent transition-all group-hover:-translate-y-0.5 group-hover:border-primary/30 group-hover:shadow-md group-hover:ring-primary/40"
-                >
-                  {cover ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img src={cover} alt="" className="aspect-video w-full object-cover" />
+      {featured ? (
+        <section className="grid gap-4 lg:grid-cols-[1.2fr_0.8fr]">
+          <Link href={postHref(featured, locale)} className="group block">
+            <Card className="h-full min-h-80 transition-all group-hover:-translate-y-0.5 group-hover:ring-primary/40">
+              {featuredCover ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={featuredCover}
+                  alt=""
+                  className="aspect-[16/7] w-full object-cover"
+                />
+              ) : (
+                <div className="flex aspect-[16/7] items-center justify-center bg-muted/35">
+                  <NewspaperIcon className="size-12 text-primary/70" aria-hidden="true" />
+                </div>
+              )}
+              <CardHeader className="gap-4">
+                <div className="flex flex-wrap items-center gap-2">
+                  <Badge className="border-primary/35 bg-primary/10 text-primary">
+                    <SparklesIcon data-icon="inline-start" />
+                    {t.featured}
+                  </Badge>
+                  <Badge variant="secondary">{labelForPost(featured)}</Badge>
+                  {!ewcOnly && featured.ewc ? (
+                    <Badge variant="outline" className="border-primary/35 text-primary">
+                      {common.ewc}
+                    </Badge>
                   ) : null}
-                  <CardHeader>
-                    <div className="mb-2 flex flex-wrap items-center gap-1.5">
-                      <Badge variant="secondary" className="w-fit">
-                        {gameTitleOf(post.gameSlug ?? "")}
-                      </Badge>
-                      {!ewcOnly && post.ewc ? (
-                        <Badge className="w-fit border-primary/35 bg-primary/10 text-primary">
-                          {common.ewc}
-                        </Badge>
-                      ) : null}
-                    </div>
-                    <CardTitle dir="auto">{post.title}</CardTitle>
-                    {post.summary ? (
-                      <CardDescription dir="auto" className="article-copy line-clamp-2">
-                        {post.summary}
-                      </CardDescription>
-                    ) : null}
-                    {post.publishedAt ? (
-                      <p className="mt-1 text-xs text-muted-foreground">
-                        <DateTime value={post.publishedAt} locale={locale} />
-                      </p>
-                    ) : null}
-                  </CardHeader>
-                </Card>
-              </Link>
-            );
-          })}
+                </div>
+                <div className="flex flex-col gap-2">
+                  <CardTitle dir="auto" className="text-2xl sm:text-3xl">
+                    {featured.title}
+                  </CardTitle>
+                  {featured.summary ? (
+                    <CardDescription dir="auto" className="article-copy text-base leading-7">
+                      {featured.summary}
+                    </CardDescription>
+                  ) : null}
+                </div>
+                <div className="flex flex-wrap items-center justify-between gap-3 text-sm text-muted-foreground">
+                  {featured.publishedAt ? (
+                    <span className="inline-flex items-center gap-2">
+                      <CalendarDaysIcon className="size-4" aria-hidden="true" />
+                      <DateTime value={featured.publishedAt} locale={locale} />
+                    </span>
+                  ) : null}
+                  <span className="inline-flex items-center gap-1 font-medium text-primary">
+                    {t.readStory}
+                    <ArrowUpRightIcon className="size-4" aria-hidden="true" />
+                  </span>
+                </div>
+              </CardHeader>
+            </Card>
+          </Link>
+
+          <div className="rounded-3xl border bg-card/25 p-4">
+            <div className="mb-3 flex items-center justify-between gap-3">
+              <div>
+                <p className="text-xs text-muted-foreground">{t.latestStory}</p>
+                <h2 className="font-semibold">{t.allUpdates}</h2>
+              </div>
+              <Badge variant="outline">
+                {t.page} {numberFormatter.format(current)}
+              </Badge>
+            </div>
+            <Separator />
+            <div className="flex flex-col gap-2 py-3">
+              {posts.slice(0, 5).map((post) => (
+                <Link
+                  key={post.id}
+                  href={postHref(post, locale)}
+                  className="group flex items-center gap-3 rounded-2xl border border-transparent p-2 transition hover:border-primary/30 hover:bg-muted/35"
+                >
+                  <GameLogoMark
+                    slug={post.gameSlug}
+                    label={labelForPost(post)}
+                    className="size-10 rounded-xl"
+                    iconClassName="size-5"
+                  />
+                  <span className="min-w-0 flex-1">
+                    <span
+                      dir="auto"
+                      className="block truncate text-sm font-medium group-hover:text-primary"
+                    >
+                      {post.title}
+                    </span>
+                    <span className="mt-0.5 block text-xs text-muted-foreground">
+                      {labelForPost(post)}
+                    </span>
+                  </span>
+                </Link>
+              ))}
+            </div>
+          </div>
         </section>
       ) : (
-        <p className="text-sm text-muted-foreground">{t.empty}</p>
+        <section className="rounded-3xl border bg-card/25 p-8 text-center">
+          <NewspaperIcon className="mx-auto size-10 text-primary/70" aria-hidden="true" />
+          <h2 className="mt-4 text-xl font-semibold">{t.emptyTitle}</h2>
+          <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-muted-foreground">
+            {t.emptyDescription}
+          </p>
+        </section>
       )}
+
+      {remainingPosts.length ? (
+        <section className="flex flex-col gap-4">
+          <div className="flex items-end justify-between gap-3">
+            <div>
+              <p className="text-xs text-muted-foreground">{t.allUpdates}</p>
+              <h2 className="text-2xl font-semibold">{ewcOnly ? common.ewcNews : common.news}</h2>
+            </div>
+            <Badge variant="outline">
+              {numberFormatter.format(remainingPosts.length)} {t.posts}
+            </Badge>
+          </div>
+          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+            {remainingPosts.map((post) => {
+              const cover = postCover(post);
+              return (
+                <Link key={post.id} href={postHref(post, locale)} className="group block">
+                  <Card
+                    size="sm"
+                    className="h-full ring-1 ring-transparent transition-all group-hover:-translate-y-0.5 group-hover:border-primary/30 group-hover:shadow-md group-hover:shadow-black/15 group-hover:ring-primary/40"
+                  >
+                    {cover ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={cover} alt="" className="aspect-video w-full object-cover" />
+                    ) : null}
+                    <CardHeader>
+                      <div className="mb-2 flex flex-wrap items-center gap-1.5">
+                        <Badge variant="secondary" className="w-fit">
+                          <GameLogoMark
+                            slug={post.gameSlug}
+                            label={labelForPost(post)}
+                            className="size-4 rounded-none border-0 bg-transparent shadow-none"
+                            iconClassName="size-3"
+                          />
+                          {labelForPost(post)}
+                        </Badge>
+                        {!ewcOnly && post.ewc ? (
+                          <Badge className="w-fit border-primary/35 bg-primary/10 text-primary">
+                            {common.ewc}
+                          </Badge>
+                        ) : null}
+                      </div>
+                      <CardTitle dir="auto" className="line-clamp-2">
+                        {post.title}
+                      </CardTitle>
+                      {post.summary ? (
+                        <CardDescription dir="auto" className="article-copy line-clamp-2">
+                          {post.summary}
+                        </CardDescription>
+                      ) : null}
+                      {post.publishedAt ? (
+                        <p className="mt-1 text-xs text-muted-foreground">
+                          <DateTime value={post.publishedAt} locale={locale} />
+                        </p>
+                      ) : null}
+                    </CardHeader>
+                    <CardContent className="mt-auto pt-0">
+                      <span className="inline-flex items-center gap-1 text-xs font-medium text-primary">
+                        {t.readStory}
+                        <ArrowUpRightIcon className="size-3.5" aria-hidden="true" />
+                      </span>
+                    </CardContent>
+                  </Card>
+                </Link>
+              );
+            })}
+          </div>
+        </section>
+      ) : null}
 
       {current > 1 || hasNext ? (
         <nav className="flex items-center justify-between gap-3">
           {current > 1 ? (
-            <Link
-              href={localizedPath(`${basePath}?page=${current - 1}`, locale)}
-              className="text-sm font-medium text-primary hover:underline"
+            <Button
+              render={<Link href={localizedPath(`${basePath}?page=${current - 1}`, locale)} />}
+              nativeButton={false}
+              variant="outline"
             >
               {common.newer}
-            </Link>
+            </Button>
           ) : (
             <span />
           )}
           {hasNext ? (
-            <Link
-              href={localizedPath(`${basePath}?page=${current + 1}`, locale)}
-              className="text-sm font-medium text-primary hover:underline"
+            <Button
+              render={<Link href={localizedPath(`${basePath}?page=${current + 1}`, locale)} />}
+              nativeButton={false}
+              variant="outline"
             >
               {common.older}
-            </Link>
+            </Button>
           ) : (
             <span />
           )}
