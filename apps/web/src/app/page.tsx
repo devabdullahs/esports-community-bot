@@ -2,11 +2,13 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import {
   ArrowRightIcon,
+  ArrowUpRightIcon,
   CalendarDaysIcon,
   ClockIcon,
   Gamepad2Icon,
   NewspaperIcon,
   RadioIcon,
+  SparklesIcon,
   TrophyIcon,
   UserRoundIcon,
 } from "lucide-react";
@@ -23,7 +25,7 @@ import { DateTime } from "@/components/date-time";
 import { GameLogoMark } from "@/components/game-logo-mark";
 import { localizeText } from "@/lib/community-content";
 import { gameTitleForSlug, listGamesCached } from "@/lib/games";
-import { listLatestPublishedNewsPostsCached } from "@/lib/news";
+import { listLatestPublishedNewsPostsCached, type NewsPost } from "@/lib/news";
 import { listTournamentSummariesCached, type TournamentSummary } from "@/lib/tournaments";
 import {
   copy,
@@ -61,6 +63,24 @@ export default async function Home() {
   const games = await listGamesCached();
   const latestPosts = await listLatestPublishedNewsPostsCached(locale, 3);
   const gameTitleOf = (slug: string) => gameTitleForSlug(slug, games, locale);
+  const featuredPost = latestPosts[0] ?? null;
+  const secondaryPosts = latestPosts.slice(1);
+  const featuredPostCover = featuredPost ? safeUrlOrUndefined(featuredPost.coverImageUrl) : null;
+  const newsPostHref = (post: NewsPost) => {
+    if (post.gameSlug) {
+      return localizedPath(`/games/${post.gameSlug}/news/${post.id}`, locale);
+    }
+    if (post.mediaSlug) {
+      return localizedPath(`/media/${post.mediaSlug}/news/${post.id}`, locale);
+    }
+    return newsHref;
+  };
+  const newsPostLabel = (post: NewsPost) => {
+    if (post.gameSlug) return gameTitleOf(post.gameSlug);
+    if (post.mediaSlug) return text.common.media;
+    return text.common.news;
+  };
+  const newsPostLogoSlug = (post: NewsPost) => post.gameSlug ?? post.mediaSlug ?? "news";
 
   const summaries = await listTournamentSummariesCached();
   const live = summaries.filter((t) => t.matchCounts.running > 0);
@@ -259,55 +279,107 @@ export default async function Home() {
             actionHref={newsHref}
             actionLabel={text.home.seeAll}
           />
-          {latestPosts.length ? (
-            <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-3">
-              {latestPosts.map((post) => {
-                const cover = safeUrlOrUndefined(post.coverImageUrl);
-                return (
-                  <Link
-                    key={post.id}
-                    href={localizedPath(`/games/${post.gameSlug}/news/${post.id}`, locale)}
-                    className="group block"
-                  >
-                    <Card
-                      size="sm"
-                      className="h-full overflow-hidden ring-1 ring-transparent transition-all group-hover:-translate-y-0.5 group-hover:border-primary/30 group-hover:shadow-md group-hover:ring-primary/40"
-                    >
-                      {cover ? (
-                        // eslint-disable-next-line @next/next/no-img-element -- external/admin URL, validated http(s)
-                        <img src={cover} alt="" className="aspect-video w-full object-cover" />
+          {featuredPost ? (
+            <div className="grid gap-4 lg:grid-cols-[minmax(0,1.15fr)_minmax(18rem,0.85fr)]">
+              <Link href={newsPostHref(featuredPost)} className="group block">
+                <Card className="h-full overflow-hidden ring-1 ring-transparent transition-all group-hover:-translate-y-0.5 group-hover:border-primary/30 group-hover:shadow-md group-hover:shadow-black/15 group-hover:ring-primary/40">
+                  {featuredPostCover ? (
+                    // eslint-disable-next-line @next/next/no-img-element -- external/admin URL, validated http(s)
+                    <img
+                      src={featuredPostCover}
+                      alt=""
+                      className="aspect-[16/7] w-full object-cover"
+                    />
+                  ) : (
+                    <div className="flex aspect-[16/7] items-center justify-center bg-muted/35">
+                      <NewspaperIcon className="size-12 text-primary/70" aria-hidden="true" />
+                    </div>
+                  )}
+                  <CardHeader className="gap-4">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Badge className="border-primary/35 bg-primary/10 text-primary">
+                        <SparklesIcon data-icon="inline-start" />
+                        {text.home.featuredNews}
+                      </Badge>
+                      <Badge variant="secondary">{newsPostLabel(featuredPost)}</Badge>
+                      {featuredPost.ewc ? (
+                        <Badge variant="outline" className="border-primary/35 text-primary">
+                          {text.common.ewc}
+                        </Badge>
                       ) : null}
-                      <CardHeader>
-                        <div className="mb-2 flex items-center gap-2">
-                          <GameLogoMark
-                            slug={post.gameSlug}
-                            label={gameTitleOf(post.gameSlug ?? "")}
-                            className="size-8 rounded-xl"
-                            iconClassName="size-5"
-                          />
-                          <Badge variant="secondary" className="w-fit">
-                            <NewspaperIcon data-icon="inline-start" />
-                            {gameTitleOf(post.gameSlug ?? "")}
-                          </Badge>
-                        </div>
-                        <CardTitle dir="auto" className="line-clamp-2">
-                          {post.title}
-                        </CardTitle>
-                        {post.summary ? (
-                          <CardDescription dir="auto" className="article-copy line-clamp-2">
-                            {post.summary}
-                          </CardDescription>
-                        ) : null}
-                        {post.publishedAt ? (
-                          <p className="mt-1 text-xs text-muted-foreground">
-                            <DateTime value={post.publishedAt} locale={locale} />
-                          </p>
-                        ) : null}
-                      </CardHeader>
-                    </Card>
-                  </Link>
-                );
-              })}
+                    </div>
+                    <div className="flex flex-col gap-2">
+                      <CardTitle dir="auto" className="line-clamp-2 text-2xl sm:text-3xl">
+                        {featuredPost.title}
+                      </CardTitle>
+                      {featuredPost.summary ? (
+                        <CardDescription dir="auto" className="article-copy line-clamp-3 text-base leading-7">
+                          {featuredPost.summary}
+                        </CardDescription>
+                      ) : null}
+                    </div>
+                    <div className="flex flex-wrap items-center justify-between gap-3 text-sm text-muted-foreground">
+                      {featuredPost.publishedAt ? (
+                        <span className="inline-flex items-center gap-2">
+                          <CalendarDaysIcon className="size-4" aria-hidden="true" />
+                          <DateTime value={featuredPost.publishedAt} locale={locale} />
+                        </span>
+                      ) : null}
+                      <span className="inline-flex items-center gap-1 font-medium text-primary">
+                        {text.home.readStory}
+                        <ArrowUpRightIcon className="size-4" aria-hidden="true" />
+                      </span>
+                    </div>
+                  </CardHeader>
+                </Card>
+              </Link>
+
+              {secondaryPosts.length ? (
+                <div className="rounded-3xl border bg-card/25 p-4">
+                  <div className="mb-3 flex items-center justify-between gap-3">
+                    <div>
+                      <p className="text-xs text-muted-foreground">{text.home.newsHeading}</p>
+                      <h3 className="font-semibold">{text.home.moreNews}</h3>
+                    </div>
+                    <Badge variant="outline">
+                      {formatNumber(secondaryPosts.length, locale)}
+                    </Badge>
+                  </div>
+                  <div className="flex flex-col gap-2">
+                    {secondaryPosts.map((post) => (
+                      <Link
+                        key={post.id}
+                        href={newsPostHref(post)}
+                        className="group flex items-center gap-3 rounded-2xl border border-transparent p-2 transition hover:border-primary/30 hover:bg-muted/35"
+                      >
+                        <GameLogoMark
+                          slug={newsPostLogoSlug(post)}
+                          label={newsPostLabel(post)}
+                          className="size-10 rounded-xl"
+                          iconClassName="size-5"
+                        />
+                        <span className="min-w-0 flex-1">
+                          <span
+                            dir="auto"
+                            className="block truncate text-sm font-medium group-hover:text-primary"
+                          >
+                            {post.title}
+                          </span>
+                          <span className="mt-0.5 flex items-center gap-2 text-xs text-muted-foreground">
+                            {newsPostLabel(post)}
+                            {post.publishedAt ? (
+                              <>
+                                <span aria-hidden>-</span>
+                                <DateTime value={post.publishedAt} locale={locale} />
+                              </>
+                            ) : null}
+                          </span>
+                        </span>
+                      </Link>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
             </div>
           ) : (
             <p className="text-sm text-muted-foreground">{text.home.newsEmpty}</p>
