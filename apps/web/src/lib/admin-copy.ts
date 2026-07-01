@@ -342,18 +342,25 @@ const en = {
     },
     addAction: "Add streamer",
     channelsCount: (count: number) => `${count} channel${count === 1 ? "" : "s"}`,
+    streamersCount: (count: number) => `${count} streamer${count === 1 ? "" : "s"}`,
+    platformsCount: (count: number) => `${count} platform${count === 1 ? "" : "s"}`,
     inactive: "Inactive",
     group: (key: string) => `Group: ${key}`,
+    defaultBadge: "Default",
     setDefault: "Set default",
     disable: "Disable",
     enable: "Enable",
     save: "Save",
     cancel: "Cancel",
     remove: "Remove",
+    removeStreamer: "Remove streamer",
     empty: "No channels yet.",
     removeTitle: "Remove co-stream channel?",
     removeDescription: (platform: string, handle: string) =>
       `This removes ${platform} / ${handle} from the co-stream registry.`,
+    removeStreamerTitle: "Remove streamer?",
+    removeStreamerDescription: (label: string, count: number) =>
+      `This removes all ${count} platform channel${count === 1 ? "" : "s"} for ${label} from this scope.`,
   },
   editor: {
     titleLabel: "Title",
@@ -753,18 +760,35 @@ const ar: typeof en = {
             : count <= 10
               ? `${count} قنوات`
               : `${count} قناة`,
+    streamersCount: (count: number) =>
+      count === 0
+        ? "لا يوجد صناع محتوى"
+        : count === 1
+          ? "صانع محتوى واحد"
+          : count === 2
+            ? "صانعا محتوى"
+            : count <= 10
+              ? `${count} صناع محتوى`
+              : `${count} صانع محتوى`,
+    platformsCount: (count: number) =>
+      count === 1 ? "منصة واحدة" : count === 2 ? "منصتان" : `${count} منصات`,
     inactive: "غير مفعلة",
     group: (key: string) => `المجموعة: ${key}`,
+    defaultBadge: "الافتراضية",
     setDefault: "اجعلها الافتراضية",
     disable: "تعطيل",
     enable: "تفعيل",
     save: "حفظ",
     cancel: "إلغاء",
     remove: "إزالة",
+    removeStreamer: "إزالة صانع المحتوى",
     empty: "لا توجد قنوات بعد.",
     removeTitle: "إزالة قناة البث المصاحب؟",
     removeDescription: (platform: string, handle: string) =>
       `سيتم حذف ${platform} / ${handle} من سجل قنوات البث المصاحب.`,
+    removeStreamerTitle: "إزالة صانع المحتوى؟",
+    removeStreamerDescription: (label: string, count: number) =>
+      `سيتم حذف جميع قنوات ${label} (${count === 1 ? "قناة واحدة" : count === 2 ? "قناتان" : `${count} قنوات`}) من هذا النطاق.`,
   },
   editor: {
     titleLabel: "العنوان",
