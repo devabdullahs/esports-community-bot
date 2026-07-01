@@ -116,9 +116,11 @@ function NewsMetricCard({
 }) {
   return (
     <Card size="sm" className="bg-background/40 shadow-none">
-      <CardContent className="p-4">
+      <CardContent className="p-3 sm:p-4">
         <p className="text-xs text-muted-foreground">{label}</p>
-        <div className="mt-2 text-2xl font-semibold leading-none text-foreground">{value}</div>
+        <div className="mt-2 text-xl font-semibold leading-none text-foreground sm:text-2xl">
+          {value}
+        </div>
       </CardContent>
     </Card>
   );
@@ -194,7 +196,7 @@ export async function NewsHubView({
   const featuredCover = featured ? postCover(featured) : null;
 
   return (
-    <main className="mx-auto flex w-full max-w-7xl flex-1 flex-col gap-8 px-4 py-8 sm:px-8 sm:py-10">
+    <main className="mx-auto flex w-full max-w-7xl flex-1 flex-col gap-6 overflow-hidden px-4 py-8 sm:gap-8 sm:px-8 sm:py-10">
       <PageBreadcrumb
         items={[
           { label: common.home, href: localizedPath("/", locale) },
@@ -202,19 +204,19 @@ export async function NewsHubView({
         ]}
       />
 
-      <section className="relative overflow-hidden rounded-2xl border bg-card/35 p-5 shadow-sm shadow-black/10 sm:rounded-3xl sm:p-8">
+      <section className="relative overflow-hidden rounded-2xl border bg-card/35 p-4 shadow-sm shadow-black/10 sm:rounded-3xl sm:p-8">
         <div
           aria-hidden="true"
           className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-primary/60 to-transparent"
         />
-        <div className="relative grid gap-8 lg:grid-cols-[1.15fr_0.85fr] lg:items-center">
-          <div className="flex max-w-3xl flex-col items-start gap-5">
+        <div className="relative grid min-w-0 gap-6 lg:grid-cols-[1.15fr_0.85fr] lg:items-center xl:gap-8">
+          <div className="flex min-w-0 max-w-3xl flex-col items-start gap-4 sm:gap-5">
             <Badge variant="outline" className="border-primary/35 bg-primary/10 text-primary">
               <NewspaperIcon data-icon="inline-start" />
               {ewcOnly ? common.ewcNews : t.eyebrow}
             </Badge>
             <div className="flex flex-col gap-3">
-              <h1 className="text-3xl font-semibold leading-tight tracking-tight sm:text-5xl">
+              <h1 className="text-2xl font-semibold leading-tight tracking-tight sm:text-5xl">
                 {heading}
               </h1>
               <p className="max-w-2xl text-sm leading-6 text-muted-foreground sm:text-base">
@@ -241,7 +243,7 @@ export async function NewsHubView({
             </div>
           </div>
 
-          <div className="grid gap-3 sm:grid-cols-2">
+          <div className="grid min-w-0 gap-3 sm:grid-cols-2">
             <NewsMetricCard label={t.posts} value={numberFormatter.format(posts.length)} />
             <NewsMetricCard label={t.gamesCovered} value={numberFormatter.format(gameCount)} />
             <NewsMetricCard label={t.ewcPosts} value={numberFormatter.format(ewcCount)} />
@@ -289,23 +291,23 @@ export async function NewsHubView({
       </section>
 
       {featured ? (
-        <section className="grid gap-4 lg:grid-cols-[1.2fr_0.8fr]">
-          <Link href={postHref(featured, locale)} className="group block">
-            <Card className="h-full min-h-80 overflow-hidden bg-card/70 transition-all group-hover:-translate-y-0.5 group-hover:ring-primary/40">
+        <section className="grid min-w-0 gap-4 lg:grid-cols-[1.2fr_0.8fr]">
+          <Link href={postHref(featured, locale)} className="group block min-w-0">
+            <Card className="h-full min-h-0 min-w-0 overflow-hidden rounded-2xl bg-card/70 transition-all group-hover:-translate-y-0.5 group-hover:ring-primary/40 sm:min-h-80 sm:rounded-3xl">
               {featuredCover ? (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img
                   src={featuredCover}
                   alt=""
-                  className="aspect-[16/7] w-full object-cover"
+                  className="aspect-[16/10] w-full object-cover sm:aspect-[16/7]"
                 />
               ) : (
-                <div className="flex aspect-[16/7] items-center justify-center bg-muted/35">
+                <div className="flex aspect-[16/10] items-center justify-center bg-muted/35 sm:aspect-[16/7]">
                   <NewspaperIcon className="size-12 text-primary/70" aria-hidden="true" />
                 </div>
               )}
-              <CardHeader className="gap-4">
-                <div className="flex flex-wrap items-center gap-2">
+              <CardHeader className="gap-3 p-4 sm:gap-4 sm:p-6">
+                <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
                   <Badge className="border-primary/35 bg-primary/10 text-primary">
                     <SparklesIcon data-icon="inline-start" />
                     {t.featured}
@@ -318,16 +320,19 @@ export async function NewsHubView({
                   ) : null}
                 </div>
                 <div className="flex flex-col gap-2">
-                  <CardTitle dir="auto" className="text-2xl sm:text-3xl">
+                  <CardTitle dir="auto" className="line-clamp-2 text-xl sm:text-3xl">
                     {featured.title}
                   </CardTitle>
                   {featured.summary ? (
-                    <CardDescription dir="auto" className="article-copy text-base leading-7">
+                    <CardDescription
+                      dir="auto"
+                      className="article-copy line-clamp-2 text-sm leading-6 sm:line-clamp-3 sm:text-base sm:leading-7"
+                    >
                       {featured.summary}
                     </CardDescription>
                   ) : null}
                 </div>
-                <div className="flex flex-wrap items-center justify-between gap-3 text-sm text-muted-foreground">
+                <div className="flex flex-wrap items-center justify-between gap-3 text-xs text-muted-foreground sm:text-sm">
                   {featured.publishedAt ? (
                     <span className="inline-flex items-center gap-2">
                       <CalendarDaysIcon className="size-4" aria-hidden="true" />
@@ -343,7 +348,7 @@ export async function NewsHubView({
             </Card>
           </Link>
 
-          <div className="rounded-3xl border bg-card/25 p-4 shadow-sm shadow-black/10">
+          <div className="min-w-0 rounded-2xl border bg-card/25 p-3 shadow-sm shadow-black/10 sm:rounded-3xl sm:p-4">
             <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
               <div>
                 <p className="text-xs text-muted-foreground">{t.latestStory}</p>
@@ -359,22 +364,22 @@ export async function NewsHubView({
                 <Link
                   key={post.id}
                   href={postHref(post, locale)}
-                  className="group flex items-center gap-3 rounded-2xl border border-transparent p-2 transition hover:border-primary/30 hover:bg-muted/35"
+                  className="group flex min-w-0 items-center gap-3 rounded-2xl border border-transparent p-2 transition hover:border-primary/30 hover:bg-muted/35"
                 >
                   <GameLogoMark
                     slug={post.gameSlug}
                     label={labelForPost(post)}
-                    className="size-10 rounded-xl"
-                    iconClassName="size-5"
+                    className="size-9 rounded-xl sm:size-10"
+                    iconClassName="size-[1.125rem] sm:size-5"
                   />
                   <span className="min-w-0 flex-1">
                     <span
                       dir="auto"
-                      className="block truncate text-sm font-medium group-hover:text-primary"
+                      className="line-clamp-2 text-sm font-medium leading-5 group-hover:text-primary"
                     >
                       {post.title}
                     </span>
-                    <span className="mt-0.5 block text-xs text-muted-foreground">
+                    <span className="mt-1 block text-xs text-muted-foreground">
                       {labelForPost(post)}
                     </span>
                   </span>
@@ -395,12 +400,14 @@ export async function NewsHubView({
 
       {remainingPosts.length ? (
         <section className="flex flex-col gap-4 rounded-2xl border bg-card/25 p-4 shadow-sm shadow-black/10 sm:rounded-3xl sm:p-5">
-          <div className="flex items-end justify-between gap-3">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
             <div>
               <p className="text-xs text-muted-foreground">{t.allUpdates}</p>
-              <h2 className="text-2xl font-semibold">{ewcOnly ? common.ewcNews : common.news}</h2>
+              <h2 className="text-xl font-semibold sm:text-2xl">
+                {ewcOnly ? common.ewcNews : common.news}
+              </h2>
             </div>
-            <Badge variant="outline">
+            <Badge variant="outline" className="w-fit">
               {numberFormatter.format(remainingPosts.length)} {t.posts}
             </Badge>
           </div>

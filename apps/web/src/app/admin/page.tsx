@@ -66,8 +66,8 @@ export default async function AdminPage() {
       : t.dashboard.eyebrow;
 
   return (
-    <main className="mx-auto flex w-full max-w-6xl flex-1 flex-col gap-8 px-4 py-6 sm:px-6 lg:gap-10 lg:px-8 lg:py-10">
-      <section className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_22rem]">
+    <main className="mx-auto flex w-full max-w-6xl flex-1 flex-col gap-8 overflow-hidden px-4 py-6 sm:px-6 lg:gap-10 lg:px-8 lg:py-10">
+      <section className="grid min-w-0 gap-4 lg:grid-cols-[minmax(0,1fr)_22rem]">
         <Card className="overflow-hidden border-border/70 bg-card/70 shadow-sm">
           <CardHeader className="gap-6 border-b border-border/60 bg-muted/10 p-5 sm:gap-7 sm:p-7">
             <div className="flex flex-wrap items-center gap-2">
@@ -122,7 +122,7 @@ export default async function AdminPage() {
           </CardHeader>
         </Card>
 
-        <Card className="border-border/70 bg-card/70 shadow-sm">
+        <Card className="min-w-0 border-border/70 bg-card/70 shadow-sm">
           <CardHeader className="p-5 sm:p-7">
             <div className="flex items-start gap-3">
               <span className="rounded-lg border border-primary/30 bg-primary/10 p-2 text-primary">
@@ -171,7 +171,7 @@ export default async function AdminPage() {
       </section>
 
       {access.allowed ? (
-        <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <section className="grid min-w-0 gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <StatCard
             icon={NewspaperIcon}
             label={t.dashboard.stats.posts}
@@ -200,8 +200,8 @@ export default async function AdminPage() {
       ) : null}
 
       {access.allowed ? (
-        <section className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_22rem]">
-          <Card className="border-border/70 bg-card/70 shadow-sm">
+        <section className="grid min-w-0 gap-4 lg:grid-cols-[minmax(0,1fr)_22rem]">
+          <Card className="min-w-0 border-border/70 bg-card/70 shadow-sm">
             <CardHeader className="gap-3 p-4 sm:p-6">
               <Badge variant="secondary" className="w-fit">
                 <ListChecksIcon data-icon="inline-start" />
@@ -226,7 +226,7 @@ export default async function AdminPage() {
             </CardContent>
           </Card>
 
-          <Card className="border-border/70 bg-card/70 shadow-sm">
+          <Card className="min-w-0 border-border/70 bg-card/70 shadow-sm">
             <CardHeader className="gap-3 p-4 sm:p-6">
               <div className="flex items-start gap-3">
                 <span className="rounded-lg border border-primary/20 bg-primary/10 p-2 text-primary">
@@ -252,7 +252,7 @@ export default async function AdminPage() {
       ) : null}
 
       {access.allowed ? (
-        <section className="flex flex-col gap-4 rounded-xl border border-border/70 bg-card/40 p-4 shadow-sm sm:p-6">
+        <section className="flex min-w-0 flex-col gap-4 rounded-xl border border-border/70 bg-card/40 p-4 shadow-sm sm:p-6">
           <div className="flex flex-col gap-1">
             <h2 className="text-xl font-semibold">{t.dashboard.workspaceTitle}</h2>
             <p className="text-sm text-muted-foreground">
@@ -315,7 +315,7 @@ export default async function AdminPage() {
       ) : null}
 
       {access.allowed ? (
-        <section className="flex flex-col gap-4 rounded-xl border border-border/70 bg-card/40 p-4 shadow-sm sm:p-6">
+        <section className="flex min-w-0 flex-col gap-4 overflow-hidden rounded-xl border border-border/70 bg-card/40 p-4 shadow-sm sm:p-6">
           <div>
             <h2 className="text-xl font-semibold">{t.dashboard.newsTitle}</h2>
             <p className="text-sm text-muted-foreground">
