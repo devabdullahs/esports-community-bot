@@ -286,7 +286,7 @@ export default async function Home() {
 
       {/* Latest news */}
       <section className="border-t">
-        <div className="mx-auto flex max-w-6xl flex-col gap-6 px-4 py-8 sm:px-8 sm:py-10">
+        <div className="mx-auto flex max-w-6xl flex-col gap-6 overflow-hidden px-4 py-8 sm:px-8 sm:py-10">
           <SectionHeading
             title={text.home.newsHeading}
             description={text.home.newsSubtitle}
@@ -294,23 +294,23 @@ export default async function Home() {
             actionLabel={text.home.seeAll}
           />
           {featuredPost ? (
-            <div className="grid gap-4 rounded-3xl border bg-card/20 p-4 shadow-sm shadow-black/10 sm:p-5 lg:grid-cols-[minmax(0,1.15fr)_minmax(18rem,0.85fr)]">
-              <Link href={newsPostHref(featuredPost)} className="group block">
-                <Card className="h-full overflow-hidden ring-1 ring-transparent transition-all group-hover:-translate-y-0.5 group-hover:border-primary/30 group-hover:shadow-md group-hover:shadow-black/15 group-hover:ring-primary/40">
+            <div className="grid min-w-0 gap-3 overflow-hidden rounded-2xl border bg-card/20 p-3 shadow-sm shadow-black/10 sm:gap-4 sm:rounded-3xl sm:p-5 lg:grid-cols-[minmax(0,1.15fr)_minmax(18rem,0.85fr)]">
+              <Link href={newsPostHref(featuredPost)} className="group block min-w-0">
+                <Card className="h-full min-w-0 overflow-hidden ring-1 ring-transparent transition-all group-hover:-translate-y-0.5 group-hover:border-primary/30 group-hover:shadow-md group-hover:shadow-black/15 group-hover:ring-primary/40">
                   {featuredPostCover ? (
                     // eslint-disable-next-line @next/next/no-img-element -- external/admin URL, validated http(s)
                     <img
                       src={featuredPostCover}
                       alt=""
-                      className="aspect-[16/7] w-full object-cover"
+                      className="aspect-[16/10] w-full object-cover sm:aspect-[16/7]"
                     />
                   ) : (
-                    <div className="flex aspect-[16/7] items-center justify-center bg-muted/35">
+                    <div className="flex aspect-[16/10] items-center justify-center bg-muted/35 sm:aspect-[16/7]">
                       <NewspaperIcon className="size-12 text-primary/70" aria-hidden="true" />
                     </div>
                   )}
-                  <CardHeader className="gap-4">
-                    <div className="flex flex-wrap items-center gap-2">
+                  <CardHeader className="gap-3 p-4 sm:gap-4 sm:p-6">
+                    <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
                       <Badge className="border-primary/35 bg-primary/10 text-primary">
                         <SparklesIcon data-icon="inline-start" />
                         {text.home.featuredNews}
@@ -323,16 +323,19 @@ export default async function Home() {
                       ) : null}
                     </div>
                     <div className="flex flex-col gap-2">
-                      <CardTitle dir="auto" className="line-clamp-2 text-2xl sm:text-3xl">
+                      <CardTitle dir="auto" className="line-clamp-2 text-xl sm:text-3xl">
                         {featuredPost.title}
                       </CardTitle>
                       {featuredPost.summary ? (
-                        <CardDescription dir="auto" className="article-copy line-clamp-3 text-base leading-7">
+                        <CardDescription
+                          dir="auto"
+                          className="article-copy line-clamp-2 text-sm leading-6 sm:line-clamp-3 sm:text-base sm:leading-7"
+                        >
                           {featuredPost.summary}
                         </CardDescription>
                       ) : null}
                     </div>
-                    <div className="flex flex-wrap items-center justify-between gap-3 text-sm text-muted-foreground">
+                    <div className="flex flex-wrap items-center justify-between gap-3 text-xs text-muted-foreground sm:text-sm">
                       {featuredPost.publishedAt ? (
                         <span className="inline-flex items-center gap-2">
                           <CalendarDaysIcon className="size-4" aria-hidden="true" />
@@ -349,7 +352,7 @@ export default async function Home() {
               </Link>
 
               {secondaryPosts.length ? (
-                <div className="rounded-3xl border bg-card/25 p-4">
+                <div className="min-w-0 rounded-2xl border bg-card/25 p-3 sm:rounded-3xl sm:p-4">
                   <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
                     <div>
                       <p className="text-xs text-muted-foreground">{text.home.newsHeading}</p>
@@ -364,22 +367,22 @@ export default async function Home() {
                       <Link
                         key={post.id}
                         href={newsPostHref(post)}
-                        className="group flex items-center gap-3 rounded-2xl border border-transparent p-2 transition hover:border-primary/30 hover:bg-muted/35"
+                        className="group flex min-w-0 items-center gap-3 rounded-2xl border border-transparent p-2 transition hover:border-primary/30 hover:bg-muted/35"
                       >
                         <GameLogoMark
                           slug={newsPostLogoSlug(post)}
                           label={newsPostLabel(post)}
-                          className="size-10 rounded-xl"
-                          iconClassName="size-5"
+                          className="size-9 rounded-xl sm:size-10"
+                          iconClassName="size-[1.125rem] sm:size-5"
                         />
                         <span className="min-w-0 flex-1">
                           <span
                             dir="auto"
-                            className="block truncate text-sm font-medium group-hover:text-primary"
+                            className="line-clamp-2 text-sm font-medium leading-5 group-hover:text-primary"
                           >
                             {post.title}
                           </span>
-                          <span className="mt-0.5 flex items-center gap-2 text-xs text-muted-foreground">
+                          <span className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
                             {newsPostLabel(post)}
                             {post.publishedAt ? (
                               <>
@@ -421,12 +424,12 @@ function HomeStat({
 }) {
   return (
     <Card size="sm" className="bg-background/40 shadow-none">
-      <CardContent className="flex items-center gap-4 p-4">
-        <span className="inline-flex size-10 shrink-0 items-center justify-center rounded-2xl border bg-muted text-primary">
+      <CardContent className="flex items-center gap-3 p-3 sm:gap-4 sm:p-4">
+        <span className="inline-flex size-9 shrink-0 items-center justify-center rounded-xl border bg-muted text-primary sm:size-10 sm:rounded-2xl">
           <Icon data-icon className="size-5" />
         </span>
         <div className="min-w-0">
-          <p className="text-2xl font-semibold leading-none">{formatNumber(value, locale)}</p>
+          <p className="text-xl font-semibold leading-none sm:text-2xl">{formatNumber(value, locale)}</p>
           <p className="mt-1 truncate text-xs text-muted-foreground">{label}</p>
         </div>
         {live ? (
@@ -449,9 +452,9 @@ function SectionHeading({
   actionLabel: string;
 }) {
   return (
-    <div className="flex items-end justify-between gap-3">
+    <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
       <div className="min-w-0">
-        <h2 className="flex items-center gap-2.5 text-balance text-2xl font-semibold leading-tight">
+        <h2 className="flex items-center gap-2.5 text-balance text-xl font-semibold leading-tight sm:text-2xl">
           <span aria-hidden className="h-5 w-1 shrink-0 rounded-full bg-primary" />
           {title}
         </h2>
@@ -462,7 +465,7 @@ function SectionHeading({
         nativeButton={false}
         variant="ghost"
         size="sm"
-        className="shrink-0"
+        className="w-fit shrink-0"
       >
         {actionLabel}
         <ArrowRightIcon data-icon="inline-end" className="rtl:rotate-180" />
