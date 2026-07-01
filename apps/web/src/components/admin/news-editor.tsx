@@ -690,7 +690,9 @@ export function NewsEditor({
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error || t.saveFailed);
       setStatus(targetStatus);
-      router.push("/admin");
+      // Media posts return to their channel page (where the flow started), not
+      // the general admin dashboard.
+      router.push(isMedia ? `/admin/media/${mediaChannel!.slug}` : "/admin");
       router.refresh();
     } catch (err) {
       setError((err as Error).message);
@@ -714,7 +716,7 @@ export function NewsEditor({
       const res = await fetch(`/api/admin/news/${post.id}`, { method: "DELETE" });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error || t.deleteFailed);
-      router.push("/admin");
+      router.push(isMedia ? `/admin/media/${mediaChannel!.slug}` : "/admin");
       router.refresh();
     } catch (err) {
       setError((err as Error).message);
@@ -723,6 +725,66 @@ export function NewsEditor({
   }
 
   const words = wordCount(current.body);
+
+  // Unsaved-changes tracking. Content fields snapshot against the first render;
+  // authors snapshot against the resolved list (the eligible-authors fetch injects
+  // a default author on create, which must not count as a user edit).
+  const contentSnapshot = JSON.stringify({
+    gameSlug,
+    contentMode,
+    defaultLocale,
+    translations,
+    coverImageUrl,
+    coverPlacement,
+    ewc,
+  });
+  const contentBaselineRef = useRef(contentSnapshot);
+  const authorsSnapshot = JSON.stringify([...selectedAuthorIds].sort());
+  const authorsBaselineRef = useRef<string | null>(null);
+  const authorsFetchStartedRef = useRef(false);
+  useEffect(() => {
+    // Capture the baseline only after the eligible-authors fetch resolves (its
+    // default-author injection must not count as a user edit). authorsLoading
+    // starts false, so wait for the true -> false transition.
+    if (authorsLoading) {
+      authorsFetchStartedRef.current = true;
+      return;
+    }
+    if (authorsFetchStartedRef.current && authorsBaselineRef.current === null) {
+      authorsBaselineRef.current = JSON.stringify([...selectedAuthorIds].sort());
+    }
+  }, [authorsLoading, selectedAuthorIds]);
+  const isDirty =
+    contentSnapshot !== contentBaselineRef.current ||
+    (authorsBaselineRef.current !== null && authorsSnapshot !== authorsBaselineRef.current);
+
+  // Warn before losing unsaved work on tab close / hard navigation. Client-side
+  // router.push after a successful save does not trigger beforeunload.
+  useEffect(() => {
+    if (!isDirty || busy !== null) return;
+    const handler = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+    };
+    window.addEventListener("beforeunload", handler);
+    return () => window.removeEventListener("beforeunload", handler);
+  }, [isDirty, busy]);
+
+  // Ctrl/Cmd+S saves a draft. The handler reads through a ref so the listener
+  // doesn't need to re-bind on every state change persist() closes over.
+  const saveShortcutRef = useRef<() => void>(() => {});
+  saveShortcutRef.current = () => {
+    if (canSave && busy === null) persist("draft", "draft");
+  };
+  useEffect(() => {
+    const handler = (event: KeyboardEvent) => {
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "s") {
+        event.preventDefault();
+        saveShortcutRef.current();
+      }
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, []);
 
   return (
     <div className="flex flex-col gap-6" dir={isRtl ? "rtl" : "ltr"}>
@@ -739,18 +801,6 @@ export function NewsEditor({
           else handleBodyFile(file);
         }}
       />
-      {error ? (
-        <Alert variant="destructive">
-          <AlertTitle>{t.couldNotSave}</AlertTitle>
-          <AlertDescription>{error}</AlertDescription>
-        </Alert>
-      ) : null}
-      {notice ? (
-        <Alert>
-          <AlertDescription>{notice}</AlertDescription>
-        </Alert>
-      ) : null}
-
       <div className="flex gap-2 lg:hidden">
         <Button
           variant={mobileView === "edit" ? "default" : "outline"}
@@ -1312,37 +1362,66 @@ export function NewsEditor({
         </Card>
       </div>
 
-      <div className="flex flex-wrap items-center gap-2">
-        <Button
-          onClick={() => persist("draft", "draft")}
-          disabled={!canSave || busy !== null}
-          variant="outline"
-        >
-          <SaveIcon data-icon="inline-start" />
-          {mode === "edit" && status === "published" ? t.saveAsDraft : t.saveDraft}
-        </Button>
-        <Button onClick={() => persist("published", "publish")} disabled={!canPublish || busy !== null}>
-          <SendIcon data-icon="inline-start" />
-          {mode === "edit" && status === "published" ? t.updatePublished : t.publish}
-        </Button>
-        {mode === "edit" && status === "published" ? (
-          <Button onClick={() => persist("draft", "unpublish")} disabled={busy !== null} variant="outline">
-            <EyeOffIcon data-icon="inline-start" />
-            {t.unpublish}
-          </Button>
+      {/* Sticky action bar: the form is tall, so the save/publish controls and any
+          save error stay visible without scrolling to the bottom. */}
+      <div className="sticky bottom-0 z-20 -mx-1 flex flex-col gap-3 rounded-t-xl border border-b-0 bg-background/95 p-3 shadow-[0_-8px_24px_-12px_rgb(0_0_0/0.4)] backdrop-blur supports-[backdrop-filter]:bg-background/85 sm:mx-0">
+        {error ? (
+          <Alert variant="destructive">
+            <AlertTitle>{t.couldNotSave}</AlertTitle>
+            <AlertDescription>{error}</AlertDescription>
+          </Alert>
         ) : null}
-        <div className="ms-auto">
-          {mode === "edit" ? (
-            <Button
-              onClick={remove}
-              disabled={busy !== null}
-              variant="ghost"
-              className={cn("text-destructive")}
-            >
-              <Trash2Icon data-icon="inline-start" />
-              {t.delete}
+        {notice ? (
+          <Alert>
+            <AlertDescription>{notice}</AlertDescription>
+          </Alert>
+        ) : null}
+        <div className="flex flex-wrap items-center gap-2">
+          <Button
+            onClick={() => persist("draft", "draft")}
+            disabled={!canSave || busy !== null}
+            variant="outline"
+          >
+            {busy === "draft" ? (
+              <Loader2Icon data-icon="inline-start" className="animate-spin" />
+            ) : (
+              <SaveIcon data-icon="inline-start" />
+            )}
+            {mode === "edit" && status === "published" ? t.saveAsDraft : t.saveDraft}
+          </Button>
+          <Button onClick={() => persist("published", "publish")} disabled={!canPublish || busy !== null}>
+            {busy === "publish" ? (
+              <Loader2Icon data-icon="inline-start" className="animate-spin" />
+            ) : (
+              <SendIcon data-icon="inline-start" />
+            )}
+            {mode === "edit" && status === "published" ? t.updatePublished : t.publish}
+          </Button>
+          {mode === "edit" && status === "published" ? (
+            <Button onClick={() => persist("draft", "unpublish")} disabled={busy !== null} variant="outline">
+              <EyeOffIcon data-icon="inline-start" />
+              {t.unpublish}
             </Button>
           ) : null}
+          {isDirty && busy === null ? (
+            <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
+              <span aria-hidden className="size-1.5 rounded-full bg-amber-500" />
+              {t.unsavedChanges}
+            </span>
+          ) : null}
+          <div className="ms-auto">
+            {mode === "edit" ? (
+              <Button
+                onClick={remove}
+                disabled={busy !== null}
+                variant="ghost"
+                className={cn("text-destructive")}
+              >
+                <Trash2Icon data-icon="inline-start" />
+                {t.delete}
+              </Button>
+            ) : null}
+          </div>
         </div>
       </div>
 

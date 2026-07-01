@@ -33,8 +33,8 @@ const { addTournament } = await import('../src/db/tournaments.js');
 const { upsertMatch } = await import('../src/db/matches.js');
 
 // 1) Trigger the built-in default seeds for games + media channels.
-const games = listEwcGames();
-const media = listEwcMediaChannels();
+const games = await listEwcGames();
+const media = await listEwcMediaChannels();
 console.log(`games seeded: ${games.length}, media seeded: ${media.length}`);
 const gameSlugs = games.map((g) => g.slug);
 const pick = (i) => gameSlugs[i % gameSlugs.length] || 'valorant';
@@ -114,12 +114,12 @@ const posts = [
 ];
 let newsCount = 0;
 for (const p of posts) {
-  try { createEwcNewsPost(p); newsCount += 1; } catch (e) { console.warn('news skip:', e.message); }
+  try { await createEwcNewsPost(p); newsCount += 1; } catch (e) { console.warn('news skip:', e.message); }
 }
 console.log(`news posts created: ${newsCount}`);
 
 // 3) EWC prediction season + two scored weekly rounds + a leaderboard of members.
-upsertEwcSeason({ guildId: GUILD, season: SEASON, label: 'EWC 2026', topSize: 10, createdBy: 'seed' });
+await upsertEwcSeason({ guildId: GUILD, season: SEASON, label: 'EWC 2026', topSize: 10, createdBy: 'seed' });
 
 const CLUBS = ['Team Falcons', 'Team Vitality', 'Team Liquid', 'Gen.G', 'T1', 'FaZe Clan', 'Natus Vincere', 'G2 Esports', 'Cloud9', 'Fnatic'];
 const standings = (order) => order.map((team, i) => ({ team, rank: i + 1, points: (order.length - i) * 100 }));
@@ -132,8 +132,8 @@ const weeks = [
 ];
 const weekRows = [];
 for (const w of weeks) {
-  const row = upsertEwcWeek({ guildId: GUILD, season: SEASON, weekKey: w.key, label: w.label, createdBy: 'seed' });
-  setEwcWeekSnapshot(row.id, 'baseline', baselineStandings);
+  const row = await upsertEwcWeek({ guildId: GUILD, season: SEASON, weekKey: w.key, label: w.label, createdBy: 'seed' });
+  await setEwcWeekSnapshot(row.id, 'baseline', baselineStandings);
   weekRows.push(row);
 }
 
@@ -150,21 +150,21 @@ const members = [
 ];
 const picksFor = (offset) => [CLUBS[offset % CLUBS.length], CLUBS[(offset + 1) % CLUBS.length], CLUBS[(offset + 2) % CLUBS.length]];
 
-members.forEach((m, mi) => {
+for (const [mi, m] of members.entries()) {
   // Season prediction (top-10 ordering) + score.
   const seasonPicks = [...CLUBS.slice(mi % 3), ...CLUBS.slice(0, mi % 3)];
-  upsertSeasonPrediction({ guildId: GUILD, season: SEASON, userId: m.id, picks: seasonPicks });
-  saveSeasonPredictionScore(GUILD, SEASON, m.id, m.season, { picks: seasonPicks.map((team) => ({ pick: team })) });
+  await upsertSeasonPrediction({ guildId: GUILD, season: SEASON, userId: m.id, picks: seasonPicks });
+  await saveSeasonPredictionScore(GUILD, SEASON, m.id, m.season, { picks: seasonPicks.map((team) => ({ pick: team })) });
   // Weekly predictions + scores.
-  weekRows.forEach((row, wi) => {
+  for (const [wi, row] of weekRows.entries()) {
     const picks = picksFor(mi + wi);
-    upsertWeeklyPrediction({ guildId: GUILD, weekId: row.id, userId: m.id, picks });
-    saveWeeklyPredictionScore(GUILD, row.id, m.id, m.weekly[wi], { picks: picks.map((team) => ({ pick: team })) });
-  });
-});
+    await upsertWeeklyPrediction({ guildId: GUILD, weekId: row.id, userId: m.id, picks });
+    await saveWeeklyPredictionScore(GUILD, row.id, m.id, m.weekly[wi], { picks: picks.map((team) => ({ pick: team })) });
+  }
+}
 
 // Mark weeks scored with the final standings.
-for (const row of weekRows) markEwcWeekScored(row.id, finalStandings);
+for (const row of weekRows) await markEwcWeekScored(row.id, finalStandings);
 console.log(`season + ${weekRows.length} weeks scored for ${members.length} members`);
 
 // 3b) One tracked tournament + a few matches so /tournaments has data to render.
@@ -191,8 +191,8 @@ for (const m of tMatches) {
 console.log(`tournament seeded: ${tournament.name} (#${tournament.id}) with ${matchCount} matches`);
 
 // 4) Link the dev auth user to this guild/season so /me resolves automatically.
-upsertEwcProfileLink({ authUserId: DEV_AUTH_USER, discordUserId: DEV_DISCORD_ID, guildId: GUILD, season: SEASON });
-markEwcProfileLinkSynced(DEV_DISCORD_ID);
+await upsertEwcProfileLink({ authUserId: DEV_AUTH_USER, discordUserId: DEV_DISCORD_ID, guildId: GUILD, season: SEASON });
+await markEwcProfileLinkSynced(DEV_DISCORD_ID);
 console.log(`profile link created for dev user ${DEV_DISCORD_ID} → guild ${GUILD}`);
 
 closeDb();

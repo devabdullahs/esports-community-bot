@@ -334,8 +334,6 @@ db.exec(`
 
   CREATE INDEX IF NOT EXISTS idx_ewc_news_posts_game_status
     ON ewc_news_posts(game_slug, status, published_at DESC);
-  CREATE INDEX IF NOT EXISTS idx_ewc_news_posts_media_status
-    ON ewc_news_posts(media_slug, status, published_at DESC);
   CREATE INDEX IF NOT EXISTS idx_ewc_news_posts_status_updated
     ON ewc_news_posts(status, updated_at DESC);
 
@@ -584,6 +582,11 @@ ensureColumns('ewc_news_posts', [
   // becomes an optional related-game tag). NULL = a normal game post.
   ['media_slug', 'TEXT'],
 ]);
+// Must run AFTER the media_slug ensureColumns above: on a DB created before the
+// media feature the table exists without the column, so creating this index in
+// the main schema exec would fail the whole boot ("no such column: media_slug").
+db.exec(`CREATE INDEX IF NOT EXISTS idx_ewc_news_posts_media_status
+  ON ewc_news_posts(media_slug, status, published_at DESC)`);
 // Per-game Discord news channel (nullable; falls back to the guild-level news channel).
 ensureColumns('ewc_games', [['discord_channel_id', 'TEXT']]);
 // Media channels: optional Discord channel to auto-announce the entry to, and an
