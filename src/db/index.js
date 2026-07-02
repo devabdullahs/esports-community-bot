@@ -618,6 +618,54 @@ db.exec(`
   FROM ewc_news_posts;
 `);
 
+// Follows + notifications. A member (by Discord id) follows games / tournaments /
+// teams / players; match transitions fan out one notification row per follower.
+// The notifications table is BOTH the site inbox and the Discord-DM outbox
+// (dm_status tracks delivery). entity_key semantics per type:
+//   game        -> game slug
+//   tournament  -> tournaments.id as text
+//   team        -> normalizeTeamName(team name)  (matches store names, not ids)
+//   player      -> players.id as text            (resolved via current team at fan-out)
+db.exec(`
+  CREATE TABLE IF NOT EXISTS user_follows (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    discord_user_id TEXT NOT NULL,
+    entity_type     TEXT NOT NULL CHECK (entity_type IN ('game','tournament','team','player')),
+    entity_key      TEXT NOT NULL,
+    entity_label    TEXT NOT NULL DEFAULT '',
+    entity_ref      TEXT NOT NULL DEFAULT '',
+    created_at      TEXT NOT NULL DEFAULT (datetime('now')),
+    UNIQUE (discord_user_id, entity_type, entity_key)
+  );
+  CREATE INDEX IF NOT EXISTS idx_user_follows_entity ON user_follows(entity_type, entity_key);
+  CREATE INDEX IF NOT EXISTS idx_user_follows_user   ON user_follows(discord_user_id);
+
+  CREATE TABLE IF NOT EXISTS user_notification_prefs (
+    discord_user_id     TEXT PRIMARY KEY,
+    dm_enabled          INTEGER NOT NULL DEFAULT 1,
+    notify_match_start  INTEGER NOT NULL DEFAULT 1,
+    notify_match_result INTEGER NOT NULL DEFAULT 1,
+    updated_at          TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+
+  CREATE TABLE IF NOT EXISTS user_notifications (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    discord_user_id TEXT NOT NULL,
+    type            TEXT NOT NULL CHECK (type IN ('match_start','match_result')),
+    match_id        INTEGER,
+    title           TEXT NOT NULL,
+    body            TEXT NOT NULL DEFAULT '',
+    url             TEXT NOT NULL DEFAULT '',
+    dedupe_key      TEXT NOT NULL,
+    read_at         TEXT,
+    dm_status       TEXT NOT NULL DEFAULT 'skipped' CHECK (dm_status IN ('pending','sent','skipped','failed')),
+    created_at      TEXT NOT NULL DEFAULT (datetime('now')),
+    UNIQUE (discord_user_id, dedupe_key)
+  );
+  CREATE INDEX IF NOT EXISTS idx_user_notifications_user ON user_notifications(discord_user_id, created_at DESC);
+  CREATE INDEX IF NOT EXISTS idx_user_notifications_dm   ON user_notifications(dm_status);
+`);
+
 // Canonicalize old game keys after slug changes. Keep this tiny and explicit so existing
 // per-game boards continue to work without creating duplicate alias rows later.
 function canonicalizeGameKey(table, oldGame, newGame) {

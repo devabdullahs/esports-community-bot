@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowLeftIcon, ExternalLinkIcon, RadioIcon } from "lucide-react";
+import { FollowButton } from "@/components/follows/follow-button";
 import { TournamentMark } from "@/components/tournaments/tournament-directory";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -9,6 +10,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { LiquipediaAttribution } from "@/components/tournaments/liquipedia-attribution";
 import { TournamentMatchList } from "@/components/tournaments/tournament-match-list";
 import { copy, formatNumber, localizedPath } from "@/lib/i18n";
+import { getViewerFollowState } from "@/lib/follows";
 import { gameTitleForSlug, listGamesCached } from "@/lib/games";
 import { getRequestLocale } from "@/lib/request-locale";
 import { safeUrlOrUndefined } from "@/lib/safe-url";
@@ -58,6 +60,7 @@ export default async function TournamentDetailPage({
   if (!data) notFound();
 
   const { tournament } = data;
+  const followState = await getViewerFollowState("tournament", String(tournament.id));
   const sourceUrl = safeUrlOrUndefined(tournament.url);
   const isLive = data.matches.running.length > 0;
   const gameTitle = tournament.game
@@ -96,18 +99,30 @@ export default async function TournamentDetailPage({
               <h1 className="text-3xl font-semibold leading-tight sm:text-4xl" dir="auto">
                 {tournament.name || `#${formatNumber(tournament.id, locale)}`}
               </h1>
-              {sourceUrl ? (
-                <Button
-                  render={<a href={sourceUrl} target="_blank" rel="noopener noreferrer nofollow" />}
-                  nativeButton={false}
-                  variant="outline"
-                  size="sm"
-                  className="w-fit"
-                >
-                  {text.openSource}
-                  <ExternalLinkIcon data-icon="inline-end" />
-                </Button>
-              ) : null}
+              <div className="flex flex-wrap items-center gap-2">
+                <FollowButton
+                  entityType="tournament"
+                  entityKey={String(tournament.id)}
+                  entityLabel={tournament.name || `#${tournament.id}`}
+                  entityRef={`/tournaments/${tournament.id}`}
+                  signedIn={followState.signedIn}
+                  initialFollowing={followState.following}
+                  locale={locale}
+                  callbackPath={localizedPath(`/tournaments/${tournament.id}`, locale)}
+                />
+                {sourceUrl ? (
+                  <Button
+                    render={<a href={sourceUrl} target="_blank" rel="noopener noreferrer nofollow" />}
+                    nativeButton={false}
+                    variant="outline"
+                    size="sm"
+                    className="w-fit"
+                  >
+                    {text.openSource}
+                    <ExternalLinkIcon data-icon="inline-end" />
+                  </Button>
+                ) : null}
+              </div>
             </div>
           </div>
           <Card className="min-w-0 bg-background/35 py-0 lg:w-80">

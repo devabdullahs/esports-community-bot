@@ -4,12 +4,14 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowLeftIcon, ArrowRightIcon, MapPinIcon, ShieldIcon, UserIcon } from "lucide-react";
 import { DateTime } from "@/components/date-time";
+import { FollowButton } from "@/components/follows/follow-button";
 import { PageBreadcrumb } from "@/components/page-breadcrumb";
 import { ProfileAvatar } from "@/components/profiles/profile-avatar";
 import { GameIcon } from "@/components/tournaments/tournament-directory";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { flagEmoji } from "@/lib/country";
+import { getViewerFollowState } from "@/lib/follows";
 import { gameTitleForSlug, listGamesCached } from "@/lib/games";
 import { copy, localizedPath } from "@/lib/i18n";
 import { buildPageMetadata } from "@/lib/metadata";
@@ -78,6 +80,7 @@ export default async function PlayerProfilePage({
   ]);
   if (!player) notFound();
 
+  const followState = await getViewerFollowState("player", String(player.id));
   const common = copy[locale].common;
   const text = copy[locale].profiles;
   const imageUrl = safeUrlOrUndefined(player.image_url) ?? null;
@@ -139,6 +142,16 @@ export default async function PlayerProfilePage({
                   </>
                 ) : null}
               </div>
+              <FollowButton
+                entityType="player"
+                entityKey={String(player.id)}
+                entityLabel={player.name}
+                entityRef={`/players/${player.id}`}
+                signedIn={followState.signedIn}
+                initialFollowing={followState.following}
+                locale={locale}
+                callbackPath={localizedPath(`/players/${player.id}`, locale)}
+              />
             </div>
           </div>
 

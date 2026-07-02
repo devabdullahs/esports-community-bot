@@ -4,6 +4,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowLeftIcon, MapPinIcon, ShieldIcon, UsersIcon } from "lucide-react";
 import { DateTime } from "@/components/date-time";
+import { FollowButton } from "@/components/follows/follow-button";
 import { PageBreadcrumb } from "@/components/page-breadcrumb";
 import { ProfileAvatar } from "@/components/profiles/profile-avatar";
 import { GameIcon } from "@/components/tournaments/tournament-directory";
@@ -11,6 +12,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { flagEmoji } from "@/lib/country";
+import { getViewerFollowState } from "@/lib/follows";
 import { gameTitleForSlug, listGamesCached } from "@/lib/games";
 import { copy, formatNumber, localizedPath, type Locale } from "@/lib/i18n";
 import { buildPageMetadata } from "@/lib/metadata";
@@ -108,6 +110,7 @@ export default async function TeamProfilePage({
   ]);
   if (!team) notFound();
 
+  const followState = await getViewerFollowState("team", team.name);
   const common = copy[locale].common;
   const text = copy[locale].profiles;
   const imageUrl = safeUrlOrUndefined(team.image_url) ?? null;
@@ -158,6 +161,16 @@ export default async function TeamProfilePage({
                   {team.acronym || team.slug}
                 </p>
               ) : null}
+              <FollowButton
+                entityType="team"
+                entityKey={team.name}
+                entityLabel={team.name}
+                entityRef={`/teams/${team.id}`}
+                signedIn={followState.signedIn}
+                initialFollowing={followState.following}
+                locale={locale}
+                callbackPath={localizedPath(`/teams/${team.id}`, locale)}
+              />
             </div>
           </div>
 
