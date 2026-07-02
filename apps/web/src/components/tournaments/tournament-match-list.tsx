@@ -2,6 +2,7 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { RadioIcon } from "lucide-react";
+import Link from "next/link";
 import { Fragment, useState, useSyncExternalStore } from "react";
 import {
   Card,
@@ -18,7 +19,7 @@ import {
 } from "@/components/ui/table";
 import { LocalDateTime } from "@/components/local-date-time";
 import { PlatformIcon } from "@/components/platform-icon";
-import { copy, directionForLocale, type Locale } from "@/lib/i18n";
+import { copy, directionForLocale, localizedPath, type Locale } from "@/lib/i18n";
 import { logoProxyUrl } from "@/lib/logo-url";
 import { safeUrlOrUndefined } from "@/lib/safe-url";
 
@@ -31,6 +32,8 @@ type MatchRow = {
   name: string | null;
   team_a: string | null;
   team_b: string | null;
+  team_a_id?: number | null;
+  team_b_id?: number | null;
   logo_a: string | null;
   logo_b: string | null;
   score_a: number | null;
@@ -143,9 +146,36 @@ function MatchTime({ value, locale, fallback }: { value: number | null; locale: 
   return <LocalDateTime value={new Date(value * 1000).toISOString()} locale={locale} />;
 }
 
+// Team label that links to the team's profile page when the server resolved an
+// unambiguous PandaScore team id for the name; plain text otherwise.
+function TeamName({
+  label,
+  teamId,
+  locale,
+  bold,
+}: {
+  label: string;
+  teamId?: number | null;
+  locale: Locale;
+  bold?: boolean;
+}) {
+  const className = `min-w-0 truncate ${bold ? "font-bold text-foreground" : ""}`;
+  if (!teamId) return <bdi className={className}>{label}</bdi>;
+  return (
+    <Link
+      href={localizedPath(`/teams/${teamId}`, locale)}
+      className={`${className} underline-offset-4 hover:text-primary hover:underline`}
+    >
+      <bdi>{label}</bdi>
+    </Link>
+  );
+}
+
 function MatchText({
   a,
   b,
+  aId,
+  bId,
   logoA,
   logoB,
   locale,
@@ -155,6 +185,8 @@ function MatchText({
 }: {
   a: string | null;
   b: string | null;
+  aId?: number | null;
+  bId?: number | null;
   logoA?: string | null;
   logoB?: string | null;
   locale: Locale;
@@ -168,11 +200,11 @@ function MatchText({
     <span dir={directionForLocale(locale)} className="flex max-w-full items-center gap-2 text-start">
       <span className="flex min-w-0 items-center gap-1.5">
         <Logo url={logoA ?? null} alt={aLabel} />
-        <bdi className={`min-w-0 truncate ${winner === "a" ? "font-bold text-foreground" : ""}`}>{aLabel}</bdi>
+        <TeamName label={aLabel} teamId={aId} locale={locale} bold={winner === "a"} />
       </span>
       <span className="shrink-0 text-muted-foreground">{vs}</span>
       <span className="flex min-w-0 items-center gap-1.5">
-        <bdi className={`min-w-0 truncate ${winner === "b" ? "font-bold text-foreground" : ""}`}>{bLabel}</bdi>
+        <TeamName label={bLabel} teamId={bId} locale={locale} bold={winner === "b"} />
         <Logo url={logoB ?? null} alt={bLabel} />
       </span>
     </span>
@@ -277,17 +309,13 @@ export function TournamentMatchList({
             {running.map((m) => (
               <Card key={m.id} size="sm" className="flex flex-col">
                 <CardContent className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-3 py-1">
-                  <div className="flex min-w-0 items-center gap-2">
+                  <div className="flex min-w-0 items-center gap-2 text-sm font-medium" dir="auto">
                     <Logo url={m.logo_a} alt={teamLabel(m.team_a, tbd)} />
-                    <span className="truncate text-sm font-medium" dir="auto">
-                      {teamLabel(m.team_a, tbd)}
-                    </span>
+                    <TeamName label={teamLabel(m.team_a, tbd)} teamId={m.team_a_id} locale={locale} />
                   </div>
                   <ScoreText a={m.score_a} b={m.score_b} />
-                  <div className="flex min-w-0 items-center justify-end gap-2">
-                    <span className="truncate text-sm font-medium" dir="auto">
-                      {teamLabel(m.team_b, tbd)}
-                    </span>
+                  <div className="flex min-w-0 items-center justify-end gap-2 text-sm font-medium" dir="auto">
+                    <TeamName label={teamLabel(m.team_b, tbd)} teamId={m.team_b_id} locale={locale} />
                     <Logo url={m.logo_b} alt={teamLabel(m.team_b, tbd)} />
                   </div>
                 </CardContent>
@@ -355,6 +383,8 @@ export function TournamentMatchList({
                         <MatchText
                           a={m.team_a}
                           b={m.team_b}
+                          aId={m.team_a_id}
+                          bId={m.team_b_id}
                           logoA={m.logo_a}
                           logoB={m.logo_b}
                           locale={locale}
@@ -401,6 +431,8 @@ export function TournamentMatchList({
                           <MatchText
                             a={m.team_a}
                             b={m.team_b}
+                            aId={m.team_a_id}
+                            bId={m.team_b_id}
                             logoA={m.logo_a}
                             logoB={m.logo_b}
                             locale={locale}

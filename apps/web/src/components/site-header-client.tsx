@@ -16,6 +16,7 @@ import {
   TrophyIcon,
   Tv2Icon,
   UserRoundIcon,
+  UsersIcon,
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
@@ -122,6 +123,7 @@ export function SiteHeaderClient({
     { href: "/news", label: text.common.news, icon: NewspaperIcon },
     { href: "/media", label: text.common.media, icon: Tv2Icon },
     { href: "/tournaments", label: text.common.tournaments, icon: TrophyIcon },
+    { href: "/teams", label: text.common.teams, icon: UsersIcon },
   ];
   const ewcLinks: Destination[] = [
     { href: "/news/ewc", label: text.common.ewcNews, icon: NewspaperIcon },
