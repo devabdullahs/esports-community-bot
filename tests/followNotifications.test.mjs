@@ -211,3 +211,56 @@ test('prefs default sensibly for users with no row', async () => {
   assert.equal(prefs.notify_match_start, 1);
   assert.equal(prefs.notify_match_result, 1);
 });
+
+test('a non-numeric player follow key never breaks or joins the fan-out', async () => {
+  const BAD_FAN = '200000000000000006';
+  await upsertFollow({ discordUserId: BAD_FAN, entityType: 'player', entityKey: 'abc' });
+  const ids = await listFollowerIdsForMatch({
+    game: 'valorant',
+    tournamentId: tournament.id,
+    teamA: 'Team Liquid',
+    teamB: 'Karmine Corp',
+  });
+  assert.ok(ids.length > 0); // fan-out survives the bad row
+  assert.ok(!ids.includes(BAD_FAN));
+  await deleteFollow({ discordUserId: BAD_FAN, entityType: 'player', entityKey: 'abc' });
+});
+
+test('player follows are game-gated: same team name in another game does not notify', async () => {
+  const CROSS_FAN = '200000000000000007';
+  const otherTeam = await upsertTeam({ game: 'dota2', pandascore_id: 502, name: 'Karmine Corp' });
+  const otherPlayer = await upsertPlayer({
+    game: 'dota2',
+    pandascore_id: 602,
+    name: 'DotaPlayer',
+    current_team_id: otherTeam.id,
+    current_team_pandascore_id: 502,
+    current_team_name: 'Karmine Corp',
+  });
+  await upsertFollow({ discordUserId: CROSS_FAN, entityType: 'player', entityKey: String(otherPlayer.id) });
+
+  const valorantIds = await listFollowerIdsForMatch({
+    game: 'valorant',
+    tournamentId: tournament.id,
+    teamA: 'Team Liquid',
+    teamB: 'Karmine Corp',
+  });
+  assert.ok(!valorantIds.includes(CROSS_FAN)); // dota2 player, valorant match
+
+  const dotaIds = await listFollowerIdsForMatch({
+    game: 'dota2',
+    tournamentId: 999998,
+    teamA: 'Karmine Corp',
+    teamB: 'Someone Else',
+  });
+  assert.ok(dotaIds.includes(CROSS_FAN)); // their own game still notifies
+});
+
+test('partial pref patches never clobber the other fields', async () => {
+  const PREF_USER = '200000000000000008';
+  await upsertNotificationPrefs(PREF_USER, { dmEnabled: false });
+  const after = await upsertNotificationPrefs(PREF_USER, { notifyMatchStart: false });
+  assert.equal(after.dm_enabled, 0); // survived the second, unrelated patch
+  assert.equal(after.notify_match_start, 0);
+  assert.equal(after.notify_match_result, 1);
+});

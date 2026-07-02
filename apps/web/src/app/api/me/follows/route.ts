@@ -46,8 +46,15 @@ export async function POST(request: Request) {
   if (!isFollowEntityType(entityType) || !entityKey) {
     return NextResponse.json({ error: "Invalid follow target." }, { status: 400 });
   }
+  // Player/tournament keys are row ids; a non-numeric key would never match and
+  // (worse) poison the Postgres fan-out join. Reject at the boundary.
+  if ((entityType === "player" || entityType === "tournament") && !/^\d{1,15}$/.test(entityKey)) {
+    return NextResponse.json({ error: "Invalid follow target." }, { status: 400 });
+  }
   const entityRef = cleanText(body.entityRef, MAX_REF);
-  if (entityRef && !entityRef.startsWith("/")) {
+  // Single leading slash only: "//host" is a protocol-relative external URL and
+  // must never come back out of the follow list as a link.
+  if (entityRef && !/^\/(?!\/)/.test(entityRef)) {
     return NextResponse.json({ error: "Invalid entity ref." }, { status: 400 });
   }
 

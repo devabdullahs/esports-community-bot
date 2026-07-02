@@ -65,6 +65,7 @@ export async function getFollow({ discordUserId, entityType, entityKey }) {
 // single-guild small, so the extra query is cheap.
 export async function listFollowerIdsForMatch({ game, tournamentId, teamA, teamB }) {
   const teamKeys = [normalizeTeamName(teamA), normalizeTeamName(teamB)].filter(Boolean);
+  const matchGame = textOrEmpty(game).toLowerCase();
   const ids = new Set();
 
   const direct = await all(
@@ -72,19 +73,27 @@ export async function listFollowerIdsForMatch({ game, tournamentId, teamA, teamB
      WHERE (entity_type = 'game' AND entity_key = $1)
         OR (entity_type = 'tournament' AND entity_key = $2)
         OR (entity_type = 'team' AND entity_key IN ($3, $4))`,
-    [textOrEmpty(game), String(tournamentId ?? ''), teamKeys[0] || '', teamKeys[1] || teamKeys[0] || ''],
+    [matchGame, String(tournamentId ?? ''), teamKeys[0] || '', teamKeys[1] || teamKeys[0] || ''],
   );
   for (const row of direct) ids.add(row.discord_user_id);
 
+  // Join by casting the trusted integer id to TEXT — never the untrusted key to
+  // INTEGER, which on Postgres throws on any non-numeric key and would kill the
+  // whole fan-out. Game-gated in JS (lenient: only exclude on a definite
+  // mismatch) so a Valorant player's followers don't get pinged when a
+  // same-named team plays in another game.
   const playerFollows = await all(
-    `SELECT f.discord_user_id, p.current_team_name
+    `SELECT f.discord_user_id, p.current_team_name, p.game
      FROM user_follows f
-     JOIN players p ON p.id = CAST(f.entity_key AS INTEGER)
+     JOIN players p ON CAST(p.id AS TEXT) = f.entity_key
      WHERE f.entity_type = 'player' AND p.current_team_name IS NOT NULL`,
     [],
   );
   for (const row of playerFollows) {
-    if (teamKeys.includes(normalizeTeamName(row.current_team_name))) ids.add(row.discord_user_id);
+    if (!teamKeys.includes(normalizeTeamName(row.current_team_name))) continue;
+    const playerGame = textOrEmpty(row.game).toLowerCase();
+    if (matchGame && playerGame && playerGame !== matchGame) continue;
+    ids.add(row.discord_user_id);
   }
 
   return [...ids];

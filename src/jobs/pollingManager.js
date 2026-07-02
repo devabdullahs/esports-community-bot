@@ -208,7 +208,10 @@ async function pollOnce(match, tournament) {
     // refresh so the card is dropped and the upcoming-matches card takes its place.
     await markFinishedByExternalId(match.source, match.external_id);
     clearWatcher(match.external_id);
-    onUpdate('finished', { ...match, status: 'finished' });
+    // Deliberately 'update', not 'finished': this is a synthetic timeout-finish with
+    // no real result. Emitting 'finished' would DM followers a scoreless "result" AND
+    // burn the dedupe key so the genuine result could never notify.
+    onUpdate('update', { ...match, status: 'finished' });
     logger.info(`[poll] stop ${match.external_id} (gone, max runtime — marked finished)`);
   }
 }

@@ -12,24 +12,34 @@ export async function getNotificationPrefs(discordUserId) {
 }
 
 export async function upsertNotificationPrefs(discordUserId, patch = {}) {
-  const current = await getNotificationPrefs(discordUserId);
-  const next = {
-    dm_enabled: patch.dmEnabled !== undefined ? (patch.dmEnabled ? 1 : 0) : current.dm_enabled,
-    notify_match_start:
-      patch.notifyMatchStart !== undefined ? (patch.notifyMatchStart ? 1 : 0) : current.notify_match_start,
-    notify_match_result:
-      patch.notifyMatchResult !== undefined ? (patch.notifyMatchResult ? 1 : 0) : current.notify_match_result,
+  // The INSERT values fall back to current/default state, but ON CONFLICT only
+  // updates the columns actually present in the patch — so two concurrent
+  // single-field PATCHes can't clobber each other's field with a stale read.
+  const columnPatch = {
+    dm_enabled: patch.dmEnabled,
+    notify_match_start: patch.notifyMatchStart,
+    notify_match_result: patch.notifyMatchResult,
   };
+  const current = await getNotificationPrefs(discordUserId);
+  const insertValues = {};
+  const updates = [];
+  for (const [column, value] of Object.entries(columnPatch)) {
+    insertValues[column] = value !== undefined ? (value ? 1 : 0) : current[column];
+    if (value !== undefined) updates.push(`${column} = excluded.${column}`);
+  }
+  updates.push('updated_at = excluded.updated_at');
   return get(
     `INSERT INTO user_notification_prefs (discord_user_id, dm_enabled, notify_match_start, notify_match_result, updated_at)
      VALUES ($1, $2, $3, $4, $5)
-     ON CONFLICT (discord_user_id) DO UPDATE SET
-       dm_enabled          = excluded.dm_enabled,
-       notify_match_start  = excluded.notify_match_start,
-       notify_match_result = excluded.notify_match_result,
-       updated_at          = excluded.updated_at
+     ON CONFLICT (discord_user_id) DO UPDATE SET ${updates.join(', ')}
      RETURNING *`,
-    [discordUserId, next.dm_enabled, next.notify_match_start, next.notify_match_result, nowText()],
+    [
+      discordUserId,
+      insertValues.dm_enabled,
+      insertValues.notify_match_start,
+      insertValues.notify_match_result,
+      nowText(),
+    ],
   );
 }
 
