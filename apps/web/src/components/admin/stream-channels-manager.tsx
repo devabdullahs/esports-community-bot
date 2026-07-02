@@ -53,6 +53,20 @@ function scopeTarget(channel: StreamChannel): string | null {
   return channel.gameSlugs.length ? channel.gameSlugs.join(", ") : null;
 }
 
+type CreatorGroup = {
+  key: string;
+  scope: StreamScope;
+  channels: StreamChannel[];
+};
+
+function groupLabel(group: CreatorGroup): string {
+  return group.channels.find((c) => c.label)?.label || group.channels[0]?.handle || "";
+}
+
+function groupTargets(group: CreatorGroup): string[] {
+  return [...new Set(group.channels.map(scopeTarget).filter((t): t is string => Boolean(t)))];
+}
+
 function firstHandle(handles: Record<StreamPlatform, string>): string {
   return STREAM_PLATFORMS.map((platform) => handles[platform].trim()).find(Boolean) ?? "";
 }
@@ -126,18 +140,44 @@ export function StreamChannelsManager({
   const [team, setTeam] = useState("");
   const [matchExternalId, setMatchExternalId] = useState("");
   const [language, setLanguage] = useState("");
-  const [editingId, setEditingId] = useState<number | null>(null);
+  const [editingKey, setEditingKey] = useState<string | null>(null);
   const [editLabel, setEditLabel] = useState("");
   const [editLanguage, setEditLanguage] = useState("");
   const [editGames, setEditGames] = useState<string[]>([]);
   const [removeTarget, setRemoveTarget] = useState<StreamChannel | null>(null);
+  const [removeGroupTarget, setRemoveGroupTarget] = useState<CreatorGroup | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // One card per streamer: within each scope, collapse the per-platform rows
+  // sharing a creator_key (the server already propagates label/language/game
+  // edits across those siblings). Platforms render as compact rows inside.
   const grouped = useMemo(() => {
-    const map = new Map<StreamScope, StreamChannel[]>();
+    const map = new Map<StreamScope, CreatorGroup[]>();
     for (const s of SCOPE_ORDER) map.set(s, []);
-    for (const channel of items) map.get(channel.scope)?.push(channel);
+    const byKey = new Map<string, CreatorGroup>();
+    for (const channel of items) {
+      const key = `${channel.scope}:${channel.creatorKey || channel.label.toLowerCase() || channel.handle}`;
+      let group = byKey.get(key);
+      if (!group) {
+        group = { key, scope: channel.scope, channels: [] };
+        byKey.set(key, group);
+        map.get(channel.scope)?.push(group);
+      }
+      group.channels.push(channel);
+    }
+    const platformRank = (p: StreamPlatform) => STREAM_PLATFORMS.indexOf(p);
+    for (const groups of map.values()) {
+      for (const group of groups) {
+        group.channels.sort((a, b) => platformRank(a.platform) - platformRank(b.platform));
+      }
+      groups.sort((a, b) => {
+        const orderA = Math.min(...a.channels.map((c) => c.sortOrder));
+        const orderB = Math.min(...b.channels.map((c) => c.sortOrder));
+        if (orderA !== orderB) return orderA - orderB;
+        return groupLabel(a).localeCompare(groupLabel(b));
+      });
+    }
     return map;
   }, [items]);
 
@@ -145,10 +185,12 @@ export function StreamChannelsManager({
     setHandles((prev) => ({ ...prev, [platform]: value }));
   }
 
-  function startEdit(channel: StreamChannel) {
-    setEditingId(channel.id);
-    setEditLabel(channel.label);
-    setEditLanguage(channel.language ?? "");
+  function startEdit(group: CreatorGroup) {
+    const channel = group.channels[0];
+    if (!channel) return;
+    setEditingKey(group.key);
+    setEditLabel(groupLabel(group));
+    setEditLanguage(group.channels.find((c) => c.language)?.language ?? "");
     setEditGames(channel.gameSlugs);
   }
 
@@ -247,14 +289,43 @@ export function StreamChannelsManager({
     }
   }
 
-  async function saveEdit(channel: StreamChannel) {
-    await patchChannel(channel, {
-      label: editLabel,
-      language: editLanguage,
-      gameSlugs: editGames,
-      creatorKey: channel.creatorKey,
-    } as Partial<StreamChannel>);
-    setEditingId(null);
+  async function saveEdit(group: CreatorGroup) {
+    const channel = group.channels[0];
+    if (!channel) return;
+    setBusy(true);
+    try {
+      const res = await fetch(`/api/admin/streams/${channel.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          label: editLabel,
+          language: editLanguage,
+          gameSlugs: editGames,
+          creatorKey: channel.creatorKey,
+        }),
+      });
+      const data = await res.json().catch(() => null);
+      if (res.ok && data) {
+        const updated = data as StreamChannel;
+        // The server propagates label/language/games to the creator's sibling
+        // rows (same creator_key + scope); mirror that locally so every
+        // platform row in the card reflects the edit without a refetch.
+        setItems((prev) =>
+          prev.map((c) => {
+            if (c.id === updated.id) return updated;
+            if (c.creatorKey === updated.creatorKey && c.scope === updated.scope) {
+              return { ...c, label: updated.label, language: updated.language, gameSlugs: updated.gameSlugs };
+            }
+            return c;
+          }),
+        );
+        setEditingKey(null);
+      } else {
+        setError(data?.error || copy.updateError(channel.label || channel.handle));
+      }
+    } finally {
+      setBusy(false);
+    }
   }
 
   async function remove(channel: StreamChannel) {
@@ -265,6 +336,27 @@ export function StreamChannelsManager({
         setItems((prev) => prev.filter((c) => c.id !== channel.id));
         setRemoveTarget(null);
       }
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  // Removes every platform row of a streamer within the scope in one action.
+  async function removeGroup(group: CreatorGroup) {
+    setBusy(true);
+    try {
+      const removed: number[] = [];
+      for (const channel of group.channels) {
+        const res = await fetch(`/api/admin/streams/${channel.id}`, { method: "DELETE" });
+        if (!res.ok) break;
+        removed.push(channel.id);
+      }
+      if (removed.length) {
+        const ids = new Set(removed);
+        setItems((prev) => prev.filter((c) => !ids.has(c.id)));
+      }
+      if (removed.length === group.channels.length) setRemoveGroupTarget(null);
+      else setError(copy.updateError(groupLabel(group)));
     } finally {
       setBusy(false);
     }
@@ -399,66 +491,45 @@ export function StreamChannelsManager({
       </form>
 
       {SCOPE_ORDER.map((s) => {
-        const list = grouped.get(s) ?? [];
+        const creators = grouped.get(s) ?? [];
         return (
           <section key={s} className="flex flex-col gap-3">
             <div className="flex items-baseline justify-between gap-3">
               <h2 className="text-lg font-semibold">{copy.scopeLabels[s]}</h2>
-              <Badge variant="secondary">{copy.channelsCount(list.length)}</Badge>
+              <Badge variant="secondary">{copy.streamersCount(creators.length)}</Badge>
             </div>
-            {list.length ? (
+            {creators.length ? (
               <div className="grid gap-3">
-                {list.map((channel) => {
-                  const target = scopeTarget(channel);
-                  const isEditing = editingId === channel.id;
+                {creators.map((group) => {
+                  const label = groupLabel(group);
+                  const targets = groupTargets(group);
+                  const language = group.channels.find((c) => c.language)?.language ?? null;
+                  const allInactive = group.channels.every((c) => !c.active);
+                  const isEditing = editingKey === group.key;
                   return (
                     <div
-                      key={channel.id}
+                      key={group.key}
                       className={`flex flex-col gap-3 rounded-xl border border-border/70 bg-card/60 p-4 shadow-sm ${
-                        channel.active ? "" : "opacity-60"
+                        allInactive ? "opacity-60" : ""
                       }`}
                     >
-                      <div className="flex flex-col gap-3 md:flex-row md:items-center">
-                        <Badge variant={channel.isDefault ? "default" : "secondary"}>
-                          {channel.isDefault ? <StarIcon data-icon="inline-start" /> : null}
-                          {PLATFORM_LABELS[channel.platform]}
-                        </Badge>
-                        <div className="flex flex-1 flex-col gap-0.5">
-                          <div className="flex flex-wrap items-center gap-2">
-                            <span className="font-medium">{channel.label || channel.handle}</span>
-                            {channel.url ? (
-                              <a
-                                href={channel.url}
-                                target="_blank"
-                                rel="noreferrer"
-                                className="inline-flex items-center gap-1 font-mono text-xs text-muted-foreground hover:text-foreground"
-                              >
-                                {channel.handle}
-                                <PlatformIcon platform={channel.platform} className="size-3" />
-                              </a>
-                            ) : (
-                              <span className="font-mono text-xs text-muted-foreground">{channel.handle}</span>
-                            )}
-                            {target ? <Badge variant="outline">{target}</Badge> : null}
-                            {channel.language ? <Badge variant="outline">{channel.language}</Badge> : null}
-                            {!channel.active ? <Badge variant="outline">{copy.inactive}</Badge> : null}
-                          </div>
-                          <p className="text-xs text-muted-foreground">{copy.group(channel.creatorKey)}</p>
-                        </div>
-                        <div className="flex flex-wrap gap-1">
-                          {!channel.isDefault && EMBED_PLATFORMS.includes(channel.platform) ? (
-                            <Button variant="ghost" size="sm" disabled={busy} onClick={() => patchChannel(channel, { isDefault: true } as Partial<StreamChannel>)}>
-                              {copy.setDefault}
-                            </Button>
-                          ) : null}
-                          <Button variant="ghost" size="sm" disabled={busy} onClick={() => patchChannel(channel, { active: !channel.active } as Partial<StreamChannel>)}>
-                            {channel.active ? copy.disable : copy.enable}
-                          </Button>
+                      {/* Streamer header: one identity line + creator-level actions. */}
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="text-base font-semibold" dir="auto">{label}</span>
+                        <span className="text-xs text-muted-foreground">
+                          {copy.platformsCount(group.channels.length)}
+                        </span>
+                        {targets.map((target) => (
+                          <Badge key={target} variant="outline">{target}</Badge>
+                        ))}
+                        {language ? <Badge variant="outline">{language}</Badge> : null}
+                        {allInactive ? <Badge variant="outline">{copy.inactive}</Badge> : null}
+                        <div className="ms-auto flex flex-wrap gap-1">
                           <Button
                             variant="ghost"
                             size="icon-sm"
                             disabled={busy}
-                            onClick={() => startEdit(channel)}
+                            onClick={() => (isEditing ? setEditingKey(null) : startEdit(group))}
                             title={copy.labels.editLabel}
                             aria-label={copy.labels.editLabel}
                           >
@@ -469,13 +540,68 @@ export function StreamChannelsManager({
                             size="icon-sm"
                             className="text-destructive"
                             disabled={busy}
-                            onClick={() => setRemoveTarget(channel)}
-                            title={copy.remove}
-                            aria-label={copy.remove}
+                            onClick={() => setRemoveGroupTarget(group)}
+                            title={copy.removeStreamer}
+                            aria-label={copy.removeStreamer}
                           >
                             <Trash2Icon />
                           </Button>
                         </div>
+                      </div>
+
+                      {/* One compact row per platform. */}
+                      <div className="flex flex-col divide-y divide-border/60 rounded-lg border border-border/60 bg-background/40">
+                        {group.channels.map((channel) => (
+                          <div
+                            key={channel.id}
+                            className={`flex flex-wrap items-center gap-2 px-3 py-2 ${channel.active ? "" : "opacity-55"}`}
+                          >
+                            <span className="inline-flex w-24 items-center gap-1.5 text-sm font-medium">
+                              <PlatformIcon platform={channel.platform} className="size-3.5" />
+                              {PLATFORM_LABELS[channel.platform]}
+                            </span>
+                            {channel.url ? (
+                              <a
+                                href={channel.url}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="font-mono text-xs text-muted-foreground hover:text-foreground"
+                              >
+                                {channel.handle}
+                              </a>
+                            ) : (
+                              <span className="font-mono text-xs text-muted-foreground">{channel.handle}</span>
+                            )}
+                            {channel.isDefault ? (
+                              <Badge>
+                                <StarIcon data-icon="inline-start" />
+                                {copy.defaultBadge}
+                              </Badge>
+                            ) : null}
+                            {!channel.active ? <Badge variant="outline">{copy.inactive}</Badge> : null}
+                            <div className="ms-auto flex flex-wrap gap-1">
+                              {!channel.isDefault && EMBED_PLATFORMS.includes(channel.platform) ? (
+                                <Button variant="ghost" size="sm" disabled={busy} onClick={() => patchChannel(channel, { isDefault: true } as Partial<StreamChannel>)}>
+                                  {copy.setDefault}
+                                </Button>
+                              ) : null}
+                              <Button variant="ghost" size="sm" disabled={busy} onClick={() => patchChannel(channel, { active: !channel.active } as Partial<StreamChannel>)}>
+                                {channel.active ? copy.disable : copy.enable}
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="icon-sm"
+                                className="text-destructive"
+                                disabled={busy}
+                                onClick={() => setRemoveTarget(channel)}
+                                title={copy.remove}
+                                aria-label={copy.remove}
+                              >
+                                <Trash2Icon />
+                              </Button>
+                            </div>
+                          </div>
+                        ))}
                       </div>
 
                       {isEditing ? (
@@ -490,10 +616,10 @@ export function StreamChannelsManager({
                           </div>
                           <GamePicker games={games} selected={editGames} onChange={setEditGames} copy={copy} />
                           <div className="flex gap-2 sm:col-span-2">
-                            <Button size="sm" disabled={busy} onClick={() => saveEdit(channel)}>
+                            <Button size="sm" disabled={busy} onClick={() => saveEdit(group)}>
                               {copy.save}
                             </Button>
-                            <Button size="sm" variant="outline" disabled={busy} onClick={() => setEditingId(null)}>
+                            <Button size="sm" variant="outline" disabled={busy} onClick={() => setEditingKey(null)}>
                               {copy.cancel}
                             </Button>
                           </div>
@@ -530,6 +656,29 @@ export function StreamChannelsManager({
             variant: "destructive",
             onClick: () => {
               if (removeTarget) void remove(removeTarget);
+            },
+          },
+        ]}
+      />
+
+      <ConfirmDialog
+        open={Boolean(removeGroupTarget)}
+        onOpenChange={(open) => {
+          if (!open) setRemoveGroupTarget(null);
+        }}
+        title={copy.removeStreamerTitle}
+        description={
+          removeGroupTarget
+            ? copy.removeStreamerDescription(groupLabel(removeGroupTarget), removeGroupTarget.channels.length)
+            : undefined
+        }
+        cancelLabel={copy.cancel}
+        actions={[
+          {
+            label: copy.removeStreamer,
+            variant: "destructive",
+            onClick: () => {
+              if (removeGroupTarget) void removeGroup(removeGroupTarget);
             },
           },
         ]}
