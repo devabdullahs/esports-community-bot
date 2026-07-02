@@ -32,7 +32,16 @@ const ARM_LOOKAHEAD_SECONDS = Math.max(
 const watchers = new Map(); // external_id -> { armTimer?, pollTimer? }
 const tournamentPolls = new Map(); // tournament.id -> Promise<parsed matches>
 
-function isPlaceholderTeam(value) {
+// The refresh handler ignores the type; the notifier keys on 'started'/'finished'.
+// A row first seen already running still counts as started (mid-match discovery),
+// but a first-seen finished row does not (bulk schedule import, not an event).
+function transitionType(before, row) {
+  if (row.status === 'running' && (!before || before.status !== 'running')) return 'started';
+  if (before && before.status !== 'finished' && row.status === 'finished') return 'finished';
+  return 'update';
+}
+
+export function isPlaceholderTeam(value) {
   const name = String(value ?? '').trim();
   return (
     !name ||
@@ -154,7 +163,7 @@ async function pollOnce(match, tournament) {
       before.status !== row.status ||
       before.logo_a !== row.logo_a ||
       before.logo_b !== row.logo_b;
-    if (changed) onUpdate('update', row);
+    if (changed) onUpdate(transitionType(before, row), row);
     if (!watchers.has(row.external_id) && row.status !== 'finished') armMatch(row, tournament);
     if (fresh.externalId === match.external_id) polled = row;
   }
@@ -181,7 +190,7 @@ async function pollOnce(match, tournament) {
         before.score_a !== row.score_a ||
         before.score_b !== row.score_b ||
         before.status !== row.status;
-      if (changed) onUpdate('update', row);
+      if (changed) onUpdate(transitionType(before, row), row);
       polled = row;
     }
   }
@@ -199,7 +208,7 @@ async function pollOnce(match, tournament) {
     // refresh so the card is dropped and the upcoming-matches card takes its place.
     await markFinishedByExternalId(match.source, match.external_id);
     clearWatcher(match.external_id);
-    onUpdate('update', { ...match, status: 'finished' });
+    onUpdate('finished', { ...match, status: 'finished' });
     logger.info(`[poll] stop ${match.external_id} (gone, max runtime — marked finished)`);
   }
 }

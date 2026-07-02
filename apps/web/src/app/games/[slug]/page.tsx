@@ -8,6 +8,7 @@ import {
   NewspaperIcon,
   ShieldCheckIcon,
 } from "lucide-react";
+import { FollowButton } from "@/components/follows/follow-button";
 import { PageBreadcrumb } from "@/components/page-breadcrumb";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -21,6 +22,7 @@ import {
 import { DateTime } from "@/components/date-time";
 import { Separator } from "@/components/ui/separator";
 import { localizeText } from "@/lib/community-content";
+import { getViewerFollowState } from "@/lib/follows";
 import { getGameCached } from "@/lib/games";
 import {
   copy,
@@ -64,6 +66,7 @@ export default async function GamePage({
   const common = copy[locale].common;
   const access = await getAdminAccess();
   const posts = await listPublishedNewsPostsCached(slug, locale);
+  const followState = await getViewerFollowState("game", slug);
 
   return (
     <main
@@ -100,6 +103,16 @@ export default async function GamePage({
               {localizeText(game.description, locale)}
             </p>
           </div>
+          <FollowButton
+            entityType="game"
+            entityKey={slug}
+            entityLabel={localizeText(game.title, locale)}
+            entityRef={`/games/${slug}`}
+            signedIn={followState.signedIn}
+            initialFollowing={followState.following}
+            locale={locale}
+            callbackPath={localizedPath(`/games/${slug}`, locale)}
+          />
           {canManageGame(access, slug) ? (
             <Button
               render={<Link href={localizedPath("/admin", locale)} />}

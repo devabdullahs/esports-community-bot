@@ -11,6 +11,7 @@ import { startMediaAnnouncer } from '../jobs/mediaAnnouncer.js';
 import { startStreamStatusJob } from '../jobs/streamStatus.js';
 import { startPandaScoreProfileCache } from '../jobs/pandascoreProfiles.js';
 import { startLogoWarmup } from '../jobs/logoWarmup.js';
+import { notifyMatchEvent, startNotifier } from '../jobs/notifier.js';
 import { primeEwcClubCache } from '../lib/ewcClubCache.js';
 
 // NOTE: in discord.js 14.26 this event's string is "clientReady" — always use the enum.
@@ -42,10 +43,12 @@ export function execute(client) {
     logger.debug(`generateInvite fallback: ${e.message}`);
   }
 
-  // When a match's score/status changes, refresh that guild's leaderboard + voice channel.
-  setUpdateHandler((type, match) =>
-    onMatchUpdate(client, type, match).catch((e) => logger.error(`[refresh] match update failed: ${e.message}`)),
-  );
+  // When a match's score/status changes, refresh that guild's leaderboard + voice
+  // channel, and fan genuine start/finish transitions out to followers.
+  setUpdateHandler((type, match) => {
+    onMatchUpdate(client, type, match).catch((e) => logger.error(`[refresh] match update failed: ${e.message}`));
+    notifyMatchEvent(client, type, match).catch((e) => logger.error(`[notify] match event failed: ${e.message}`));
+  });
 
   startMorningSync(client);
   resumePolling().catch((e) => logger.error(`[poll] resume failed: ${e.message}`)); // re-arm matches still pending/running from before a restart
@@ -58,5 +61,6 @@ export function execute(client) {
   startStreamStatusJob(); // Poll Twitch/Kick for which tracked co-stream channels are live
   startPandaScoreProfileCache(); // Quiet-hours team/player profile cache.
   startLogoWarmup(); // Pre-download tracked-match crests so the web logo proxy can serve them.
+  startNotifier(client); // Deliver follower notifications (site inbox rows -> Discord DMs).
   primeEwcClubCache(); // Warm autocomplete without blocking startup.
 }

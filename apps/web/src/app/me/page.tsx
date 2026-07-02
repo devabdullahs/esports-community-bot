@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { ProfileDashboard } from "@/components/dashboard/profile-dashboard";
 import { SignOutButton } from "@/components/dashboard/sign-out-button";
+import { FollowCenter } from "@/components/follows/follow-center";
 import { DEFAULT_SEASON } from "@/lib/env";
 import { copy, localizedPath } from "@/lib/i18n";
 import { getRequestLocale } from "@/lib/request-locale";
@@ -46,6 +47,7 @@ export default async function MePage({
         />
       </div>
       <ProfileDashboard guildId={params.guildId} season={params.season || DEFAULT_SEASON} locale={locale} />
+      <FollowCenter locale={locale} />
     </main>
   );
 }
