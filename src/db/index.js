@@ -46,7 +46,9 @@ db.exec(`
   CREATE TABLE IF NOT EXISTS teams (
     id             INTEGER PRIMARY KEY AUTOINCREMENT,
     game           TEXT,
-    pandascore_id  INTEGER NOT NULL UNIQUE,
+    -- Nullable: PandaScore-sourced rows carry their id; Liquipedia-only rows
+    -- (battle-royale games, TFT, ... - games PandaScore does not cover) don't.
+    pandascore_id  INTEGER UNIQUE,
     name           TEXT NOT NULL,
     slug           TEXT,
     acronym        TEXT,
@@ -55,6 +57,10 @@ db.exec(`
     location       TEXT,
     modified_at    TEXT,
     raw_json       TEXT,
+    liquipedia_url       TEXT,
+    liquipedia_raw       TEXT,
+    liquipedia_facts     TEXT,
+    liquipedia_parsed_at TEXT,
     last_seen_at   TEXT NOT NULL DEFAULT (datetime('now')),
     created_at     TEXT NOT NULL DEFAULT (datetime('now')),
     updated_at     TEXT NOT NULL DEFAULT (datetime('now'))
@@ -66,7 +72,7 @@ db.exec(`
   CREATE TABLE IF NOT EXISTS players (
     id                          INTEGER PRIMARY KEY AUTOINCREMENT,
     game                        TEXT,
-    pandascore_id               INTEGER NOT NULL UNIQUE,
+    pandascore_id               INTEGER UNIQUE,
     name                        TEXT NOT NULL,
     slug                        TEXT,
     first_name                  TEXT,
@@ -79,6 +85,10 @@ db.exec(`
     current_team_name           TEXT,
     modified_at                 TEXT,
     raw_json                    TEXT,
+    liquipedia_url              TEXT,
+    liquipedia_raw              TEXT,
+    liquipedia_facts            TEXT,
+    liquipedia_parsed_at        TEXT,
     last_seen_at                TEXT NOT NULL DEFAULT (datetime('now')),
     created_at                  TEXT NOT NULL DEFAULT (datetime('now')),
     updated_at                  TEXT NOT NULL DEFAULT (datetime('now'))
@@ -154,6 +164,10 @@ ensureColumns('teams', [
   ['location', 'TEXT'],
   ['modified_at', 'TEXT'],
   ['raw_json', 'TEXT'],
+  ['liquipedia_url', 'TEXT'],
+  ['liquipedia_raw', 'TEXT'],
+  ['liquipedia_facts', 'TEXT'],
+  ['liquipedia_parsed_at', 'TEXT'],
   ['last_seen_at', 'TEXT'],
   ['created_at', 'TEXT'],
   ['updated_at', 'TEXT'],
@@ -172,6 +186,10 @@ ensureColumns('players', [
   ['current_team_name', 'TEXT'],
   ['modified_at', 'TEXT'],
   ['raw_json', 'TEXT'],
+  ['liquipedia_url', 'TEXT'],
+  ['liquipedia_raw', 'TEXT'],
+  ['liquipedia_facts', 'TEXT'],
+  ['liquipedia_parsed_at', 'TEXT'],
   ['last_seen_at', 'TEXT'],
   ['created_at', 'TEXT'],
   ['updated_at', 'TEXT'],
@@ -180,6 +198,46 @@ ensureColumns('players', [
 ensureColumns('tournaments', [
   ['archived_at', 'INTEGER'],
 ]);
+
+// Migration: pandascore_id used to be NOT NULL; Liquipedia-only entities (games
+// PandaScore doesn't cover: battle royale, TFT, ...) need it nullable. SQLite
+// can't relax a NOT NULL in place, so rebuild the table once on old dev DBs.
+// FKs are toggled off for the swap (players.current_team_id references teams).
+function relaxNotNull(table) {
+  const info = db.prepare(`PRAGMA table_info(${table})`).all();
+  const col = info.find((c) => c.name === 'pandascore_id');
+  if (!col || !col.notnull) return;
+  const columns = info.map((c) => c.name).join(', ');
+  const create = db
+    .prepare(`SELECT sql FROM sqlite_master WHERE type = 'table' AND name = ?`)
+    .get(table)?.sql;
+  if (!create) return;
+  const relaxed = create
+    .replace(new RegExp(`\\b${table}\\b`), `${table}_new`)
+    .replace(/pandascore_id\s+INTEGER\s+NOT\s+NULL\s+UNIQUE/i, 'pandascore_id  INTEGER UNIQUE');
+  const indexes = db
+    .prepare(`SELECT sql FROM sqlite_master WHERE type = 'index' AND tbl_name = ? AND sql IS NOT NULL`)
+    .all(table)
+    .map((row) => row.sql);
+  db.pragma('foreign_keys = OFF');
+  try {
+    db.exec('BEGIN');
+    db.exec(relaxed);
+    db.exec(`INSERT INTO ${table}_new (${columns}) SELECT ${columns} FROM ${table}`);
+    db.exec(`DROP TABLE ${table}`);
+    db.exec(`ALTER TABLE ${table}_new RENAME TO ${table}`);
+    for (const sql of indexes) db.exec(sql);
+    db.exec('COMMIT');
+    logger.info(`[db] relaxed ${table}.pandascore_id NOT NULL (rebuild migration)`);
+  } catch (e) {
+    db.exec('ROLLBACK');
+    throw e;
+  } finally {
+    db.pragma('foreign_keys = ON');
+  }
+}
+relaxNotNull('teams');
+relaxNotNull('players');
 
 // Per-game leaderboard boards (a guild can have one board per game, plus the combined board
 // stored in guild_settings). scope here is the game slug.

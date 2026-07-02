@@ -229,6 +229,22 @@ export async function searchPages(game, query, limit = 6) {
   return promise;
 }
 
+// Like searchPages, but reports whether the (possibly empty) result came from a
+// SUCCESSFUL search. Successful searches cache their results — including empty
+// ones — while every failure path (backoff, HTTP error, full queue) returns
+// uncached. ok=false therefore means "transient, retry later"; ok=true with no
+// results means "this name genuinely has no matches" and may be TTL-stamped.
+export async function searchPagesStrict(game, query, limit = 6) {
+  const results = await searchPages(game, query, limit);
+  if (results.length) return { ok: true, results };
+  const q = String(query ?? '').trim().replace(/\s+/g, ' ');
+  if (!game || !q) return { ok: true, results: [] };
+  const normalizedLimit = Math.max(1, Math.min(50, Number(limit) || 6));
+  const key = `${game}:${q.toLowerCase()}:${normalizedLimit}`;
+  const cached = searchCache.get(key);
+  return { ok: Boolean(cached && Date.now() - cached.at < SEARCH_CACHE_TTL_MS), results };
+}
+
 // A plain Liquipedia search-results URL (zero API calls) — used as a fallback when opensearch
 // finds nothing or is unavailable.
 export function searchPageUrl(game, query) {

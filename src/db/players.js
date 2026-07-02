@@ -1,4 +1,5 @@
-import { all, get } from './client.js';
+import { all, get, run } from './client.js';
+import { normalizeTeamName } from '../lib/render.js';
 
 function nowText() {
   return new Date().toISOString().slice(0, 19).replace('T', ' ');
@@ -27,6 +28,15 @@ export async function upsertPlayer(row) {
   const name = textOrNull(row?.name);
   if (!pandascoreId) throw new Error('upsertPlayer requires a finite pandascore_id.');
   if (!name) throw new Error('upsertPlayer requires a non-empty name.');
+
+  // Adopt a Liquipedia-only row (slug = normalized nick) so a later PandaScore
+  // sync enriches it in place instead of creating a duplicate identity.
+  await run(
+    `UPDATE players SET pandascore_id = $1
+     WHERE pandascore_id IS NULL AND game = $2 AND slug = $3
+       AND NOT EXISTS (SELECT 1 FROM players p2 WHERE p2.pandascore_id = $1)`,
+    [pandascoreId, textOrNull(row.game), normalizeTeamName(name)],
+  );
 
   const now = nowText();
   return get(
@@ -144,5 +154,64 @@ export async function listPlayersForTeam(teamId) {
      WHERE current_team_id = $1
      ORDER BY lower(name) ASC, id ASC`,
     [teamId],
+  );
+}
+
+// --- Liquipedia enrichment -------------------------------------------------
+
+export async function createLiquipediaPlayer({ game, name, slug, currentTeamId = null, currentTeamName = null }) {
+  const now = nowText();
+  return get(
+    `INSERT INTO players (game, pandascore_id, name, slug, current_team_id, current_team_name, last_seen_at, created_at, updated_at)
+     VALUES ($1, NULL, $2, $3, $4, $5, $6, $6, $6)
+     RETURNING *`,
+    [textOrNull(game), textOrNull(name), textOrNull(slug), currentTeamId, textOrNull(currentTeamName), now],
+  );
+}
+
+// Persist a parsed Liquipedia player page. Bio fields fill gaps only; the
+// PandaScore sync keeps ownership of anything it already provides.
+export async function savePlayerLiquipedia(
+  id,
+  { url = null, raw = null, facts = null, image = null, nationality = null, role = null, firstName = null, lastName = null },
+) {
+  const now = nowText();
+  return get(
+    `UPDATE players SET
+       liquipedia_url       = COALESCE($1, liquipedia_url),
+       liquipedia_raw       = $2,
+       liquipedia_facts     = $3,
+       liquipedia_parsed_at = $4,
+       image_url            = COALESCE(image_url, $5),
+       nationality          = COALESCE(nationality, $6),
+       role                 = COALESCE(role, $7),
+       first_name           = COALESCE(first_name, $8),
+       last_name            = COALESCE(last_name, $9),
+       updated_at           = $4
+     WHERE id = $10
+     RETURNING *`,
+    [
+      textOrNull(url), raw, facts ? JSON.stringify(facts) : null, now,
+      textOrNull(image), textOrNull(nationality), textOrNull(role), textOrNull(firstName), textOrNull(lastName), id,
+    ],
+  );
+}
+
+// name+page pairs for one game - lets the enrichment job match existing rows
+// (PandaScore or previously created) before creating anything.
+export async function listPlayerNamesForGame(game) {
+  return all('SELECT id, name, liquipedia_parsed_at FROM players WHERE game = $1 ORDER BY id ASC', [game]);
+}
+
+export async function stampPlayerLiquipedia(id, { url = null } = {}) {
+  const now = nowText();
+  return get(
+    `UPDATE players SET
+       liquipedia_url       = COALESCE($1, liquipedia_url),
+       liquipedia_parsed_at = $2,
+       updated_at           = $2
+     WHERE id = $3
+     RETURNING *`,
+    [textOrNull(url), now, id],
   );
 }

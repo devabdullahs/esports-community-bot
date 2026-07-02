@@ -10,7 +10,7 @@ import { getPlayerById as _getPlayerById } from "@bot/db/players.js";
 export type TeamProfile = {
   id: number;
   game: string | null;
-  pandascore_id: number;
+  pandascore_id: number | null;
   name: string;
   slug: string | null;
   acronym: string | null;
@@ -18,6 +18,8 @@ export type TeamProfile = {
   image_url: string | null;
   location: string | null;
   modified_at: string | null;
+  liquipedia_url: string | null;
+  liquipedia_parsed_at: string | null;
   last_seen_at: string | null;
   created_at: string;
   updated_at: string;
@@ -26,7 +28,7 @@ export type TeamProfile = {
 export type PlayerProfile = {
   id: number;
   game: string | null;
-  pandascore_id: number;
+  pandascore_id: number | null;
   name: string;
   slug: string | null;
   first_name: string | null;
@@ -38,6 +40,8 @@ export type PlayerProfile = {
   current_team_pandascore_id: number | null;
   current_team_name: string | null;
   modified_at: string | null;
+  liquipedia_url: string | null;
+  liquipedia_parsed_at: string | null;
   last_seen_at: string | null;
   created_at: string;
   updated_at: string;

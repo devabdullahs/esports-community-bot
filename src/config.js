@@ -74,6 +74,14 @@ export const config = {
       'LIQUIPEDIA_USER_AGENT',
       'EsportsCommunityBot/0.1 (set LIQUIPEDIA_USER_AGENT with a contact email)',
     ),
+    // Team/player entity enrichment (quiet-hours, capped, tracked-scene scope).
+    // The budget counts EVERY Liquipedia request the run makes (searches AND
+    // parses), so it truly bounds queue occupancy: 12 requests ~= <=6 min.
+    enrichEnabled: get('LIQUIPEDIA_ENRICH_ENABLED', 'false') === 'true',
+    enrichCron: get('LIQUIPEDIA_ENRICH_CRON', '45 4 * * *'),
+    enrichTimezone: get('LIQUIPEDIA_ENRICH_TIMEZONE', 'Asia/Riyadh'),
+    enrichMaxParses: Math.max(1, Number(get('LIQUIPEDIA_ENRICH_MAX_PARSES', 12)) || 12),
+    enrichTtlDays: Math.max(1, Number(get('LIQUIPEDIA_ENRICH_TTL_DAYS', 30)) || 30),
   },
   lpdb: {
     // LiquipediaDB API (optional). When LPDB_API_KEY is set it's preferred over HTML parsing.
