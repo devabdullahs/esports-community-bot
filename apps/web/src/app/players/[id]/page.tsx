@@ -6,6 +6,7 @@ import { ArrowLeftIcon, ArrowRightIcon, MapPinIcon, ShieldIcon, UserIcon } from 
 import { DateTime } from "@/components/date-time";
 import { FollowButton } from "@/components/follows/follow-button";
 import { PageBreadcrumb } from "@/components/page-breadcrumb";
+import { LiquipediaAttribution } from "@/components/tournaments/liquipedia-attribution";
 import { ProfileAvatar } from "@/components/profiles/profile-avatar";
 import { GameIcon } from "@/components/tournaments/tournament-directory";
 import { Badge } from "@/components/ui/badge";
@@ -221,7 +222,22 @@ export default async function PlayerProfilePage({
             </span>
           </>
         ) : null}
+        {safeUrlOrUndefined(player.liquipedia_url) ? (
+          <>
+            <span aria-hidden>·</span>
+            <a
+              href={safeUrlOrUndefined(player.liquipedia_url)}
+              target="_blank"
+              rel="noopener noreferrer nofollow"
+              className="underline-offset-4 hover:underline"
+            >
+              Liquipedia
+            </a>
+          </>
+        ) : null}
       </p>
+      {/* CC-BY-SA attribution is required whenever Liquipedia-sourced facts render. */}
+      {player.liquipedia_parsed_at ? <LiquipediaAttribution locale={locale} /> : null}
     </main>
   );
 }

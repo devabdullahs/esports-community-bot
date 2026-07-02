@@ -12,6 +12,7 @@ import { startStreamStatusJob } from '../jobs/streamStatus.js';
 import { startPandaScoreProfileCache } from '../jobs/pandascoreProfiles.js';
 import { startLogoWarmup } from '../jobs/logoWarmup.js';
 import { notifyMatchEvent, startNotifier } from '../jobs/notifier.js';
+import { startLiquipediaEnrichment } from '../jobs/liquipediaEnrichment.js';
 import { primeEwcClubCache } from '../lib/ewcClubCache.js';
 
 // NOTE: in discord.js 14.26 this event's string is "clientReady" — always use the enum.
@@ -62,5 +63,6 @@ export function execute(client) {
   startPandaScoreProfileCache(); // Quiet-hours team/player profile cache.
   startLogoWarmup(); // Pre-download tracked-match crests so the web logo proxy can serve them.
   startNotifier(client); // Deliver follower notifications (site inbox rows -> Discord DMs).
+  startLiquipediaEnrichment(); // Quiet-hours team/player enrichment from Liquipedia.
   primeEwcClubCache(); // Warm autocomplete without blocking startup.
 }

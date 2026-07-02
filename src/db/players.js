@@ -146,3 +146,49 @@ export async function listPlayersForTeam(teamId) {
     [teamId],
   );
 }
+
+// --- Liquipedia enrichment -------------------------------------------------
+
+export async function createLiquipediaPlayer({ game, name, slug, currentTeamId = null, currentTeamName = null }) {
+  const now = nowText();
+  return get(
+    `INSERT INTO players (game, pandascore_id, name, slug, current_team_id, current_team_name, last_seen_at, created_at, updated_at)
+     VALUES ($1, NULL, $2, $3, $4, $5, $6, $6, $6)
+     RETURNING *`,
+    [textOrNull(game), textOrNull(name), textOrNull(slug), currentTeamId, textOrNull(currentTeamName), now],
+  );
+}
+
+// Persist a parsed Liquipedia player page. Bio fields fill gaps only; the
+// PandaScore sync keeps ownership of anything it already provides.
+export async function savePlayerLiquipedia(
+  id,
+  { url = null, raw = null, facts = null, image = null, nationality = null, role = null, firstName = null, lastName = null },
+) {
+  const now = nowText();
+  return get(
+    `UPDATE players SET
+       liquipedia_url       = COALESCE($1, liquipedia_url),
+       liquipedia_raw       = $2,
+       liquipedia_facts     = $3,
+       liquipedia_parsed_at = $4,
+       image_url            = COALESCE(image_url, $5),
+       nationality          = COALESCE(nationality, $6),
+       role                 = COALESCE(role, $7),
+       first_name           = COALESCE(first_name, $8),
+       last_name            = COALESCE(last_name, $9),
+       updated_at           = $4
+     WHERE id = $10
+     RETURNING *`,
+    [
+      textOrNull(url), raw, facts ? JSON.stringify(facts) : null, now,
+      textOrNull(image), textOrNull(nationality), textOrNull(role), textOrNull(firstName), textOrNull(lastName), id,
+    ],
+  );
+}
+
+// name+page pairs for one game - lets the enrichment job match existing rows
+// (PandaScore or previously created) before creating anything.
+export async function listPlayerNamesForGame(game) {
+  return all('SELECT id, name, liquipedia_parsed_at FROM players WHERE game = $1 ORDER BY id ASC', [game]);
+}
