@@ -112,6 +112,20 @@ export async function countTeams({ game = null, q = null } = {}) {
   return Number(row?.count || 0);
 }
 
+// id+name pairs for one game - powers the web's match-name -> team-page linking.
+export async function listTeamNamesForGame(game) {
+  return all('SELECT id, name FROM teams WHERE game = $1 ORDER BY id ASC', [game]);
+}
+
+// Distinct games that actually have synced teams - drives the directory's game filter.
+export async function listTeamGames() {
+  const rows = await all(
+    "SELECT DISTINCT game FROM teams WHERE game IS NOT NULL AND game <> '' ORDER BY game ASC",
+    [],
+  );
+  return rows.map((row) => row.game);
+}
+
 export async function listTeamPlayers(teamId) {
   return all(
     `SELECT * FROM players

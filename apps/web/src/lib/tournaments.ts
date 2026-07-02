@@ -2,6 +2,8 @@ import "server-only";
 
 import { all } from "@bot/db/client.js";
 import { dedupeMatches as _dedupeMatches } from "@bot/db/matches.js";
+import { listTeamNamesForGame as _listTeamNamesForGame } from "@bot/db/teams.js";
+import { normalizeTeamName as _normalizeTeamName } from "@bot/lib/render.js";
 import {
   getTournamentById as _getById,
   listActiveTournaments as _listActive,
@@ -62,6 +64,9 @@ export type MatchRow = {
   name: string | null;
   team_a: string | null;
   team_b: string | null;
+  /** PandaScore team-profile ids, linked only on an unambiguous name match. */
+  team_a_id?: number | null;
+  team_b_id?: number | null;
   logo_a: string | null;
   logo_b: string | null;
   score_a: number | null;
@@ -161,6 +166,34 @@ function publicMatch(row: MatchRow): MatchRow {
   };
 }
 
+const listTeamNamesForGame = _listTeamNamesForGame as (
+  game: string,
+) => Promise<Array<{ id: number; name: string }>>;
+const normalizeTeamName = _normalizeTeamName as (value: string | null | undefined) => string;
+
+// Map a tournament's synced team names -> profile ids for linking. Only
+// unambiguous matches link: two teams sharing a normalized name map to null
+// rather than guessing. Matches store Liquipedia/start.gg names while profiles
+// store PandaScore names, so normalization is what makes them meet.
+async function teamIdResolver(game: string | null): Promise<(name: string | null) => number | null> {
+  if (!game) return () => null;
+  const pairs = await listTeamNamesForGame(game);
+  const byName = new Map<string, number | null>();
+  for (const pair of pairs) {
+    const key = normalizeTeamName(pair.name);
+    if (!key) continue;
+    byName.set(key, byName.has(key) ? null : pair.id);
+  }
+  return (name) => {
+    const key = normalizeTeamName(name);
+    return key ? (byName.get(key) ?? null) : null;
+  };
+}
+
+function withTeamIds(match: MatchRow, resolve: (name: string | null) => number | null): MatchRow {
+  return { ...match, team_a_id: resolve(match.team_a), team_b_id: resolve(match.team_b) };
+}
+
 async function dedupedTournamentMatches(tournament: TournamentRow): Promise<MatchRow[]> {
   const rows = ((await all(MATCHES_SQL, [tournament.id])) as MatchRow[]).map((row) => ({
     ...row,
@@ -250,14 +283,22 @@ export async function getTournamentMatches(
   if (!tournament || tournament.guild_id !== guildId || tournament.active !== 1) return null;
 
   const rows = await dedupedTournamentMatches(tournament);
+  const resolveTeamId = await teamIdResolver(tournament.game);
   const rawRunning = rows.filter((m) => m.status === "running");
   const coStreamMap = await liveCoStreamsByMatch(rawRunning, {
     gameSlug: tournament.game,
     includeEwc: isEwcTournament(tournament),
   });
-  const running = rawRunning.map((m) => ({ ...publicMatch(m), coStreams: coStreamMap.get(m.id) }));
-  const scheduled = rows.filter((m) => m.status === "scheduled").map(publicMatch);
-  const finishedAll = rows.filter((m) => m.status === "finished").map(publicMatch);
+  const running = rawRunning.map((m) => ({
+    ...withTeamIds(publicMatch(m), resolveTeamId),
+    coStreams: coStreamMap.get(m.id),
+  }));
+  const scheduled = rows
+    .filter((m) => m.status === "scheduled")
+    .map((m) => withTeamIds(publicMatch(m), resolveTeamId));
+  const finishedAll = rows
+    .filter((m) => m.status === "finished")
+    .map((m) => withTeamIds(publicMatch(m), resolveTeamId));
   const finished = finishedAll.slice(offset, offset + limit);
 
   return {
