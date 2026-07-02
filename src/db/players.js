@@ -1,4 +1,5 @@
-import { all, get } from './client.js';
+import { all, get, run } from './client.js';
+import { normalizeTeamName } from '../lib/render.js';
 
 function nowText() {
   return new Date().toISOString().slice(0, 19).replace('T', ' ');
@@ -27,6 +28,15 @@ export async function upsertPlayer(row) {
   const name = textOrNull(row?.name);
   if (!pandascoreId) throw new Error('upsertPlayer requires a finite pandascore_id.');
   if (!name) throw new Error('upsertPlayer requires a non-empty name.');
+
+  // Adopt a Liquipedia-only row (slug = normalized nick) so a later PandaScore
+  // sync enriches it in place instead of creating a duplicate identity.
+  await run(
+    `UPDATE players SET pandascore_id = $1
+     WHERE pandascore_id IS NULL AND game = $2 AND slug = $3
+       AND NOT EXISTS (SELECT 1 FROM players p2 WHERE p2.pandascore_id = $1)`,
+    [pandascoreId, textOrNull(row.game), normalizeTeamName(name)],
+  );
 
   const now = nowText();
   return get(
@@ -191,4 +201,17 @@ export async function savePlayerLiquipedia(
 // (PandaScore or previously created) before creating anything.
 export async function listPlayerNamesForGame(game) {
   return all('SELECT id, name, liquipedia_parsed_at FROM players WHERE game = $1 ORDER BY id ASC', [game]);
+}
+
+export async function stampPlayerLiquipedia(id, { url = null } = {}) {
+  const now = nowText();
+  return get(
+    `UPDATE players SET
+       liquipedia_url       = COALESCE($1, liquipedia_url),
+       liquipedia_parsed_at = $2,
+       updated_at           = $2
+     WHERE id = $3
+     RETURNING *`,
+    [textOrNull(url), now, id],
+  );
 }

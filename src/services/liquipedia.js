@@ -33,3 +33,17 @@ export {
   fetchValveRegionalStandings,
   resolveTournamentTitle,
 } from './liquipedia/fetchers.js';
+
+export {
+  fetchPlayerEntity,
+  fetchTeamEntity,
+  pageFromUrl,
+  resolveEntityPage,
+  wikiForGame,
+} from './liquipedia/entityFetchers.js';
+
+export {
+  normalizeEntityFacts,
+  parseEntityInfobox,
+  parseTeamRoster,
+} from './liquipedia/entityParsers.js';

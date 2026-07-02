@@ -75,7 +75,8 @@ export const config = {
       'EsportsCommunityBot/0.1 (set LIQUIPEDIA_USER_AGENT with a contact email)',
     ),
     // Team/player entity enrichment (quiet-hours, capped, tracked-scene scope).
-    // The parse budget bounds queue occupancy: 12 parses x >=30s gap ~= 6 min.
+    // The budget counts EVERY Liquipedia request the run makes (searches AND
+    // parses), so it truly bounds queue occupancy: 12 requests ~= <=6 min.
     enrichEnabled: get('LIQUIPEDIA_ENRICH_ENABLED', 'false') === 'true',
     enrichCron: get('LIQUIPEDIA_ENRICH_CRON', '45 4 * * *'),
     enrichTimezone: get('LIQUIPEDIA_ENRICH_TIMEZONE', 'Asia/Riyadh'),

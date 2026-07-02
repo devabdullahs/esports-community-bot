@@ -8,11 +8,13 @@ import {
   createLiquipediaTeam,
   listTeamNamesForGame,
   saveTeamLiquipedia,
+  stampTeamLiquipedia,
 } from '../db/teams.js';
 import {
   createLiquipediaPlayer,
   listPlayerNamesForGame,
   savePlayerLiquipedia,
+  stampPlayerLiquipedia,
 } from '../db/players.js';
 import * as defaultLiquipedia from '../services/liquipedia.js';
 import { isPlaceholderTeam } from './pollingManager.js';
@@ -96,22 +98,36 @@ export async function runLiquipediaEnrichment({
           continue;
         }
 
-        const resolved = await liquipedia.resolveEntityPage(wiki, teamName);
-        if (!resolved) {
-          // Stamp the miss so the name isn't re-searched every run.
-          await saveTeamLiquipedia(team.id, {});
-          summary.misses += 1;
-          continue;
+        // Refreshes reuse the stored page URL and skip the search round-trip;
+        // only never-resolved names spend a search. EVERY Liquipedia request
+        // (search or parse) costs one budget unit, so the cap truly bounds the
+        // run's queue occupancy.
+        let page = liquipedia.pageFromUrl?.(team.liquipedia_url) ?? null;
+        let url = team.liquipedia_url ?? null;
+        if (!page) {
+          const resolved = await liquipedia.resolveEntityPage(wiki, teamName);
+          budget -= 1;
+          if (resolved.status === 'transient') continue; // backoff/queue-full: retry next run, no stamp
+          if (resolved.status !== 'ok') {
+            // Durable miss (search worked, nothing matched): stamp WITHOUT
+            // touching any previously stored raw/facts.
+            await stampTeamLiquipedia(team.id, {});
+            summary.misses += 1;
+            continue;
+          }
+          page = resolved.page;
+          url = resolved.url;
         }
-        const entity = await liquipedia.fetchTeamEntity(wiki, resolved.page);
+        if (budget <= 0) break;
+        const entity = await liquipedia.fetchTeamEntity(wiki, page);
         budget -= 1;
         if (!entity) {
-          await saveTeamLiquipedia(team.id, { url: resolved.url });
+          await stampTeamLiquipedia(team.id, { url });
           summary.misses += 1;
           continue;
         }
         await saveTeamLiquipedia(team.id, {
-          url: resolved.url,
+          url,
           raw: entity.raw,
           facts: entity.facts,
           image: entity.image,
@@ -155,7 +171,7 @@ export async function runLiquipediaEnrichment({
           const entity = await liquipedia.fetchPlayerEntity(wiki, member.page);
           budget -= 1;
           if (!entity) {
-            await savePlayerLiquipedia(player.id, {});
+            await stampPlayerLiquipedia(player.id, {});
             summary.misses += 1;
             continue;
           }

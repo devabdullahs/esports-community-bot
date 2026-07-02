@@ -19,14 +19,20 @@ const { runLiquipediaEnrichment } = await import('../src/jobs/liquipediaEnrichme
 
 const GUILD = 'guild-lp';
 
-function mockLiquipedia({ resolveCalls = [], parseCalls = [] } = {}) {
+function mockLiquipedia({ resolveCalls = [], parseCalls = [], transientNames = [] } = {}) {
   return {
     wikiForGame: (game) => (['rocketleague', 'tft', 'valorant'].includes(game) ? game : null),
+    pageFromUrl: (url) => {
+      if (!url) return null;
+      const segments = String(url).split('/').filter(Boolean);
+      return segments.length >= 3 ? segments.slice(3).join('/') : null;
+    },
     resolveEntityPage: async (wiki, name) => {
       resolveCalls.push({ wiki, name });
-      if (name === 'Unknown Squad') return null; // unresolvable
+      if (transientNames.includes(name)) return { status: 'transient' };
+      if (name === 'Unknown Squad') return { status: 'no-match' };
       const page = name.replace(/ /g, '_');
-      return { title: name, page, url: `https://liquipedia.net/${wiki}/${page}` };
+      return { status: 'ok', title: name, page, url: `https://liquipedia.net/${wiki}/${page}` };
     },
     fetchTeamEntity: async (wiki, page) => {
       parseCalls.push({ kind: 'team', wiki, page });
@@ -136,14 +142,61 @@ test('fresh entities are skipped on the next run (TTL)', async () => {
   assert.ok(!resolveCalls.some((c) => c.name === 'Unknown Squad'));
 });
 
-test('the parse budget caps a run', async () => {
+test('the request budget caps a run (refreshes reuse the stored page, no search)', async () => {
   const parseCalls = [];
-  // Expired TTL forces re-parsing everything; budget 1 stops after one parse.
+  const resolveCalls = [];
+  // Expired TTL forces refreshing everything; already-resolved teams have a
+  // stored liquipedia_url, so the refresh skips the search and budget 1 buys
+  // exactly one parse.
   const summary = await runLiquipediaEnrichment({
-    liquipedia: mockLiquipedia({ parseCalls }),
+    liquipedia: mockLiquipedia({ parseCalls, resolveCalls }),
     maxParses: 1,
     ttlMs: 0,
   });
   assert.equal(parseCalls.length, 1);
   assert.equal(summary.teamsParsed + summary.playersParsed, 1);
+  assert.ok(!resolveCalls.some((c) => c.name === 'Twisted Minds')); // refresh went straight to parse
+});
+
+test('transient search failures are never stamped as misses', async () => {
+  // New team whose search hits a backoff/queue-full empty result.
+  const rl2 = await addTournament({
+    source: 'liquipedia', external_id: 'rl/minor', game: 'rocketleague',
+    name: 'RL Minor', url: 'https://liquipedia.net/rocketleague/Minor', guild_id: GUILD,
+  });
+  await upsertMatch({
+    tournament_id: rl2.id, source: 'liquipedia', external_id: 'Match:rl-3',
+    team_a: 'Flaky Team', team_b: 'TBD', status: 'scheduled',
+  });
+
+  await runLiquipediaEnrichment({
+    liquipedia: mockLiquipedia({ transientNames: ['Flaky Team'] }),
+    maxParses: 50,
+    ttlMs: 0,
+  });
+  const teams = await listTeams({ game: 'rocketleague', q: 'flaky', limit: 10 });
+  assert.equal(teams.length, 1);
+  assert.equal(teams[0].liquipedia_parsed_at, null); // NOT stamped — retried next run
+
+  // Next run without the transient failure resolves it normally.
+  const resolveCalls = [];
+  await runLiquipediaEnrichment({ liquipedia: mockLiquipedia({ resolveCalls }), maxParses: 50, ttlMs: 0 });
+  assert.ok(resolveCalls.some((c) => c.name === 'Flaky Team'));
+});
+
+test('a later PandaScore sync adopts the Liquipedia-only row instead of duplicating', async () => {
+  // "Twisted Minds" exists as a Liquipedia-only rocketleague row (pandascore_id NULL,
+  // slug = normalized name). A PandaScore upsert for the same team must claim it.
+  const adopted = await upsertTeam({
+    game: 'rocketleague',
+    pandascore_id: 4242,
+    name: 'Twisted Minds',
+    slug: 'twisted-minds-rl',
+    image_url: 'https://cdn.pandascore.co/tm.png',
+  });
+  const rlTeams = await listTeams({ game: 'rocketleague', q: 'twisted', limit: 10 });
+  assert.equal(rlTeams.length, 1); // still ONE identity
+  assert.equal(rlTeams[0].id, adopted.id);
+  assert.equal(rlTeams[0].pandascore_id, 4242);
+  assert.ok(rlTeams[0].liquipedia_parsed_at); // Liquipedia enrichment preserved
 });

@@ -37,7 +37,7 @@ export function wikiForGame(game) {
   return GAME_WIKIS[String(game ?? '').trim().toLowerCase()] ?? null;
 }
 
-function pageFromUrl(url) {
+export function pageFromUrl(url) {
   try {
     const path = new URL(url).pathname;
     const segments = path.split('/').filter(Boolean);
@@ -49,14 +49,23 @@ function pageFromUrl(url) {
 
 // Conservative name -> page resolution: only an exact normalized-title match
 // wins (the spike measured 15/15 on real tracked LoL teams with exactly this
-// rule). Ambiguity or no hit returns null — the job just skips the entity.
+// rule). The status matters to the caller: 'no-match' is durable (search worked,
+// nothing matched — stamp it), while 'transient' means searchPages returned
+// empty, which is ALSO what it returns on rate-limit backoff / a full queue —
+// never stamp that as a 30-day miss, just retry next run.
 export async function resolveEntityPage(wiki, name) {
   const target = normalizeTeamName(name);
-  if (!wiki || !target) return null;
+  if (!wiki || !target) return { status: 'no-match' };
   const results = await searchPages(wiki, name, 6);
+  if (!results.length) return { status: 'transient' };
   const hit = results.find((r) => normalizeTeamName(r.title) === target);
-  if (!hit) return null;
-  return { title: hit.title, page: pageFromUrl(hit.url) ?? hit.title.replace(/ /g, '_'), url: hit.url };
+  if (!hit) return { status: 'no-match' };
+  return {
+    status: 'ok',
+    title: hit.title,
+    page: pageFromUrl(hit.url) ?? hit.title.replace(/ /g, '_'),
+    url: hit.url,
+  };
 }
 
 async function loadEntityPage(wiki, page) {
