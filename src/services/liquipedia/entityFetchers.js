@@ -4,7 +4,7 @@
 
 import * as cheerio from 'cheerio';
 import { normalizeTeamName } from '../../lib/render.js';
-import { parsePage, searchPages } from './client.js';
+import { parsePage, searchPagesStrict } from './client.js';
 import { normalizeEntityFacts, parseEntityInfobox, parseTeamRoster } from './entityParsers.js';
 
 // Tournament game slug -> Liquipedia wiki. Only listed games are enriched; the
@@ -49,15 +49,15 @@ export function pageFromUrl(url) {
 
 // Conservative name -> page resolution: only an exact normalized-title match
 // wins (the spike measured 15/15 on real tracked LoL teams with exactly this
-// rule). The status matters to the caller: 'no-match' is durable (search worked,
-// nothing matched — stamp it), while 'transient' means searchPages returned
-// empty, which is ALSO what it returns on rate-limit backoff / a full queue —
-// never stamp that as a 30-day miss, just retry next run.
+// rule). The status matters to the caller: 'no-match' is durable (the search
+// SUCCEEDED and nothing matched — stamp it for the TTL), while 'transient'
+// means the search itself failed (rate-limit backoff, HTTP error, full queue)
+// — never stamp that as a 30-day miss, just retry next run.
 export async function resolveEntityPage(wiki, name) {
   const target = normalizeTeamName(name);
   if (!wiki || !target) return { status: 'no-match' };
-  const results = await searchPages(wiki, name, 6);
-  if (!results.length) return { status: 'transient' };
+  const { ok, results } = await searchPagesStrict(wiki, name, 6);
+  if (!ok) return { status: 'transient' };
   const hit = results.find((r) => normalizeTeamName(r.title) === target);
   if (!hit) return { status: 'no-match' };
   return {
