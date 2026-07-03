@@ -179,7 +179,8 @@ export function PartnerInquiryForm({ locale }: { locale: Locale }) {
           <FieldLabel>{t.interest}</FieldLabel>
           <Select value={interest} onValueChange={(value) => setInterest(value as PartnerInterest)}>
             <SelectTrigger className="w-full">
-              <SelectValue />
+              {/* base-ui SelectValue renders the raw value by default; map it to the label. */}
+              <SelectValue>{(value) => (value ? t.interests[value as PartnerInterest] : "")}</SelectValue>
             </SelectTrigger>
             <SelectContent>
               <SelectGroup>

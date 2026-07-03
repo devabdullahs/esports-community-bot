@@ -19,12 +19,14 @@ const COPY = {
     title: "Support the open-source community project.",
     description:
       "Partner recognition is curated, clearly labeled, and designed to help cover hosting, development, and future community events without interrupting the site.",
-    sponsorGithub: "GitHub Sponsors",
+    sponsorGithub: "Sponsor on GitHub",
     activePartners: "Active partners",
+    activePartnersDescription: "The brands and creators currently supporting the project.",
     noPartners: "No active partners yet.",
+    principlesTitle: "Our commitments",
     formTitle: "Apply to become a community partner",
     formDescription:
-      "Tell us what you want to support. We review every inquiry manually, then send the cleanest payment path through GitHub Sponsors or a private fallback when needed.",
+      "Tell us what you'd like to support. We review every request by hand and reply with the simplest way to help — usually GitHub Sponsors, or a private option if that suits you better.",
     principles: [
       "No third-party ad network or tracking scripts.",
       "Sponsor links are labeled and use sponsored/nofollow attributes.",
@@ -37,12 +39,14 @@ const COPY = {
     title: "ادعم مشروع المجتمع مفتوح المصدر.",
     description:
       "ظهور الشركاء منسق وواضح ومصمم للمساعدة في تغطية الاستضافة والتطوير وفعاليات المجتمع المستقبلية دون إزعاج تجربة الموقع.",
-    sponsorGithub: "GitHub Sponsors",
+    sponsorGithub: "ادعمنا عبر GitHub",
     activePartners: "الشركاء النشطون",
+    activePartnersDescription: "العلامات والصنّاع الذين يدعمون المشروع حالياً.",
     noPartners: "لا يوجد شركاء نشطون حالياً.",
-    formTitle: "تقدم لتصبح شريكاً للمجتمع",
+    principlesTitle: "التزاماتنا",
+    formTitle: "قدّم طلبك لتصبح شريكاً للمجتمع",
     formDescription:
-      "أخبرنا بما تريد دعمه. نراجع كل طلب يدوياً ثم نرسل أنسب مسار دفع عبر GitHub Sponsors أو خيار خاص عند الحاجة.",
+      "أخبرنا بما ترغب بدعمه. نراجع كل طلب بأنفسنا ونردّ عليك بأبسط طريقة للمساهمة — غالباً عبر GitHub Sponsors أو بخيار خاص إن كان أنسب لك.",
     principles: [
       "لا توجد شبكات إعلانية خارجية أو سكربتات تتبع.",
       "روابط الشركاء واضحة وتستخدم سمات sponsored/nofollow.",
@@ -89,7 +93,7 @@ export default async function PartnersPage() {
           <Card>
             <CardHeader>
               <CardTitle>{t.activePartners}</CardTitle>
-              <CardDescription>{t.description}</CardDescription>
+              <CardDescription>{t.activePartnersDescription}</CardDescription>
             </CardHeader>
             <CardContent className="flex flex-col gap-3">
               {partners.length ? (
@@ -129,7 +133,7 @@ export default async function PartnersPage() {
           </Card>
           <Card>
             <CardHeader>
-              <CardTitle>{t.eyebrow}</CardTitle>
+              <CardTitle>{t.principlesTitle}</CardTitle>
             </CardHeader>
             <CardContent>
               <ul className="flex list-disc flex-col gap-2 ps-5 text-sm leading-6 text-muted-foreground">

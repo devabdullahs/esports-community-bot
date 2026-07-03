@@ -449,7 +449,7 @@ export function PartnersManager({
                   <FieldLabel>{t.status}</FieldLabel>
                   <Select value={partnerForm.status} onValueChange={(value) => setPartnerForm((p) => ({ ...p, status: value as PartnerStatus }))}>
                     <SelectTrigger className="w-full">
-                      <SelectValue />
+                      <SelectValue>{(v) => (v ? t.labels[v as keyof typeof t.labels] : "")}</SelectValue>
                     </SelectTrigger>
                     <SelectContent>
                       <SelectGroup>
@@ -521,7 +521,9 @@ export function PartnersManager({
                     <FieldLabel>{t.partner}</FieldLabel>
                     <Select value={String(campaignForm.partnerId || "")} onValueChange={(value) => setCampaignForm((p) => ({ ...p, partnerId: Number(value) }))}>
                       <SelectTrigger className="w-full">
-                        <SelectValue placeholder={t.partner} />
+                        <SelectValue placeholder={t.partner}>
+                          {(v) => partners.find((p) => String(p.id) === v)?.name ?? t.partner}
+                        </SelectValue>
                       </SelectTrigger>
                       <SelectContent>
                         <SelectGroup>
@@ -536,7 +538,7 @@ export function PartnersManager({
                     <FieldLabel>{t.placement}</FieldLabel>
                     <Select value={campaignForm.kind} onValueChange={(value) => setCampaignForm((p) => ({ ...p, kind: value as PartnerCampaignKind }))}>
                       <SelectTrigger className="w-full">
-                        <SelectValue />
+                        <SelectValue>{(v) => (v ? t.labels[v as keyof typeof t.labels] : "")}</SelectValue>
                       </SelectTrigger>
                       <SelectContent>
                         <SelectGroup>
@@ -556,7 +558,7 @@ export function PartnersManager({
                     <FieldLabel>{t.status}</FieldLabel>
                     <Select value={campaignForm.status} onValueChange={(value) => setCampaignForm((p) => ({ ...p, status: value as PartnerCampaignStatus }))}>
                       <SelectTrigger className="w-full">
-                        <SelectValue />
+                        <SelectValue>{(v) => (v ? t.labels[v as keyof typeof t.labels] : "")}</SelectValue>
                       </SelectTrigger>
                       <SelectContent>
                         <SelectGroup>
@@ -587,7 +589,7 @@ export function PartnersManager({
                     <FieldLabel>{t.paymentMethod}</FieldLabel>
                     <Select value={campaignForm.paymentMethod} onValueChange={(value) => setCampaignForm((p) => ({ ...p, paymentMethod: value as PartnerPaymentMethod }))}>
                       <SelectTrigger className="w-full">
-                        <SelectValue />
+                        <SelectValue>{(v) => (v ? t.labels[v as keyof typeof t.labels] : "")}</SelectValue>
                       </SelectTrigger>
                       <SelectContent>
                         <SelectGroup>
@@ -602,7 +604,7 @@ export function PartnersManager({
                     <FieldLabel>{t.paymentStatus}</FieldLabel>
                     <Select value={campaignForm.paymentStatus} onValueChange={(value) => setCampaignForm((p) => ({ ...p, paymentStatus: value as PartnerPaymentStatus }))}>
                       <SelectTrigger className="w-full">
-                        <SelectValue />
+                        <SelectValue>{(v) => (v ? t.labels[v as keyof typeof t.labels] : "")}</SelectValue>
                       </SelectTrigger>
                       <SelectContent>
                         <SelectGroup>
@@ -685,7 +687,7 @@ export function PartnersManager({
                 <FieldLabel>{t.status}</FieldLabel>
                 <Select value={inquiry.status} onValueChange={(value) => void updateInquiryStatus(inquiry.id, value as PartnerInquiryStatus)}>
                   <SelectTrigger className="w-full">
-                    <SelectValue />
+                    <SelectValue>{(v) => (v ? t.labels[v as keyof typeof t.labels] : "")}</SelectValue>
                   </SelectTrigger>
                   <SelectContent>
                     <SelectGroup>

@@ -244,7 +244,7 @@ export function MediaEditor({
                           }
                         >
                           <SelectTrigger className="w-40 shrink-0">
-                            <SelectValue />
+                            <SelectValue>{(v) => (v ? PLATFORM_LABELS[v as MediaPlatform] : "")}</SelectValue>
                           </SelectTrigger>
                           <SelectContent>
                             <SelectGroup>

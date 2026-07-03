@@ -676,7 +676,7 @@ function ReportForm({
         <span className="text-xs font-medium">{t.reportReasonLabel}</span>
         <Select value={reason} onValueChange={(v) => setReason(v as CommentReportReason)}>
           <SelectTrigger className="h-8 w-full max-w-xs text-sm">
-            <SelectValue />
+            <SelectValue>{(v) => (v ? t.reasons[v as CommentReportReason] : "")}</SelectValue>
           </SelectTrigger>
           <SelectContent>
             {COMMENT_REPORT_REASONS.map((r) => (
