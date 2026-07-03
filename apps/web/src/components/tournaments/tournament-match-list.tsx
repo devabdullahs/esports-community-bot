@@ -579,7 +579,10 @@ function StandingsSection({
                 <TableRow key={row.id}>
                   <TableCell className="tabular-nums text-muted-foreground">{row.rank}</TableCell>
                   <TableCell className="text-start">
-                    <span className="flex min-w-0 items-center gap-2 text-sm font-medium" dir="auto">
+                    <span
+                      className="flex w-full min-w-0 items-center gap-2 text-sm font-medium"
+                      dir={directionForLocale(locale)}
+                    >
                       <Logo url={row.logo} alt={row.team} />
                       <TeamName label={row.team} teamId={row.team_id} locale={locale} />
                     </span>
