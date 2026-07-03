@@ -144,6 +144,12 @@ describe("auto-hide + moderator inline view", () => {
     expect(held).toBeDefined();
     expect(held.status).toBe("pending");
     expect(held.reportCount).toBe(3);
+
+    // Now that it's held (non-visible), a new reporter can no longer report it.
+    mockAdmin.mockResolvedValue(nonAdmin());
+    mockMember.mockResolvedValue(verified("reporter-4") as never);
+    const late = await reportRoute(reportReq(commentId, { reason: "spam" }), ctx({ id: String(commentId) }));
+    expect(late.status).toBe(404);
   });
 
   test("a moderator restore clears the open reports; the reported queue empties", async () => {

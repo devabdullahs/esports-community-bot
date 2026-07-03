@@ -9,6 +9,7 @@ import {
   autoApproveDueComments as _autoApprove,
   listCommentsForModeration as _listMod,
   countCommentsByStatus as _counts,
+  holdVisibleCommentForReports as _holdVisible,
 } from "@bot/db/postComments.js";
 import {
   setPostLike as _setPostLike,
@@ -91,6 +92,7 @@ const listMod = _listMod as (q: {
   offset?: number;
 }) => Promise<CommentRecord[]>;
 const countsByStatus = _counts as () => Promise<Record<string, number>>;
+const holdVisibleForReports = _holdVisible as (id: number) => Promise<boolean>;
 const recordModeration = _recordMod as (i: {
   commentId: number;
   moderatorDiscordId: string;
@@ -355,8 +357,16 @@ export function getCommentById(id: number): Promise<CommentRecord | null> {
   return getComment(id);
 }
 
-export function softDeleteComment(id: number, deletedByDiscordId: string): Promise<CommentRecord | null> {
-  return setCommentStatus(id, "deleted", { deletedBy: deletedByDiscordId });
+export async function softDeleteComment(
+  id: number,
+  deletedByDiscordId: string,
+): Promise<CommentRecord | null> {
+  const updated = await setCommentStatus(id, "deleted", { deletedBy: deletedByDiscordId });
+  // The content is gone, so any open reports on it are moot — close them out so
+  // they don't linger in the reported queue (an author can delete a comment that
+  // was reported below the auto-hide threshold).
+  if (updated) await resolveReports(id, "dismissed").catch(() => {});
+  return updated;
 }
 
 const ACTION_TO_STATUS: Record<string, CommentStatus> = {
@@ -422,9 +432,10 @@ export async function reportPostComment(
 
   const threshold = autoHideThreshold();
   if (created && threshold > 0 && openCount >= threshold) {
-    const current = await getComment(commentId);
-    if (current && current.status === "visible") {
-      await setCommentStatus(commentId, "pending");
+    // Atomic conditional transition: no-op unless the comment is still visible,
+    // so a racing moderator/author decision can't be clobbered back to pending.
+    const held = await holdVisibleForReports(commentId);
+    if (held) {
       await recordModeration({
         commentId,
         moderatorDiscordId: "system",

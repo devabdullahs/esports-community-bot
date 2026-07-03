@@ -79,6 +79,7 @@ export async function listReportedComments({ limit = 100, offset = 0 } = {}) {
          SELECT comment_id, COUNT(*) AS open_count
            FROM comment_reports WHERE status = 'open' GROUP BY comment_id
        ) r ON r.comment_id = c.id
+      WHERE c.status <> 'deleted'
       ORDER BY r.open_count DESC, c.created_at DESC
       LIMIT $1 OFFSET $2`,
     [lim, off],
@@ -109,7 +110,13 @@ export async function resolveReportsForComment(commentId, status = 'resolved') {
 
 export async function countCommentsWithOpenReports() {
   const row = await get(
-    "SELECT COUNT(DISTINCT comment_id) AS c FROM comment_reports WHERE status = 'open'",
+    `SELECT COUNT(*) AS c FROM (
+       SELECT r.comment_id
+         FROM comment_reports r
+         JOIN post_comments c ON c.id = r.comment_id
+        WHERE r.status = 'open' AND c.status <> 'deleted'
+        GROUP BY r.comment_id
+     ) t`,
   );
   return Number(row?.c || 0);
 }

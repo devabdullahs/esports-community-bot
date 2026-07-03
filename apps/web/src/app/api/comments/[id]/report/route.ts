@@ -32,9 +32,11 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
   const detail = typeof body?.detail === "string" ? body.detail.slice(0, COMMENT_REPORT_DETAIL_MAX) : "";
 
   const comment = await getCommentById(id);
-  // Only report something you can actually see: a live (non-deleted) comment
-  // that isn't your own.
-  if (!comment || comment.status === "deleted") {
+  // Only report something you can actually see: a currently-VISIBLE comment.
+  // Non-visible ids (pending/hidden/rejected/deleted, or missing) all return 404
+  // so a guessed id can't be used as an existence oracle or to seed reports on
+  // comments the public can't see.
+  if (!comment || comment.status !== "visible") {
     return NextResponse.json({ error: "Comment not found" }, { status: 404 });
   }
   if (comment.discordUserId === member.discordUserId) {

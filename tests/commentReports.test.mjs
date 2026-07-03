@@ -13,7 +13,7 @@ process.env.DISCORD_CLIENT_ID = 'test-client-id';
 const { closeDb } = await import('../src/db/index.js');
 const { createEwcGame } = await import('../src/db/ewcGames.js');
 const { createEwcNewsPost } = await import('../src/db/ewcNewsPosts.js');
-const { createComment } = await import('../src/db/postComments.js');
+const { createComment, setCommentStatus } = await import('../src/db/postComments.js');
 const {
   createCommentReport,
   countOpenReportsForComment,
@@ -91,4 +91,12 @@ test('resolving closes open reports so the comment leaves the queue', async () =
   assert.equal(again.created, true);
   assert.equal(again.openCount, 1);
   assert.equal((await listReportedComments({})).length, 1);
+});
+
+test('deleted comments are excluded from the reported queue and count', async () => {
+  // commentId still has one open report (r3) from the previous test.
+  assert.equal(await countCommentsWithOpenReports(), 1);
+  await setCommentStatus(commentId, 'deleted', { deletedBy: 'mod-1' });
+  assert.equal(await countCommentsWithOpenReports(), 0); // deleted -> not counted
+  assert.equal((await listReportedComments({})).length, 0);
 });

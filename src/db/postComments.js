@@ -200,6 +200,19 @@ export async function setCommentStatus(id, status, { deletedBy = null } = {}) {
   return getComment(id);
 }
 
+// Atomically hold a still-visible comment for review (report auto-hide). The
+// `status = 'visible'` guard makes this a no-op if a moderator or the author
+// already moved the comment, so a racing report can't clobber that decision.
+// Returns true only when this call performed the transition.
+export async function holdVisibleCommentForReports(id) {
+  const now = nowText();
+  const info = await run(
+    "UPDATE post_comments SET status = 'pending', updated_at = $1 WHERE id = $2 AND status = 'visible'",
+    [now, id],
+  );
+  return (info?.changes ?? info?.rowCount ?? 0) > 0;
+}
+
 // Auto-approve link-only pending comments whose timer elapsed. Profanity-flagged
 // comments have auto_approve_at = NULL and are never touched here — a moderator
 // must act on those.
