@@ -102,10 +102,38 @@ export function parseEventStandings($) {
   return [...parseBattleRoyaleStandings($), ...parseGroupTableStandings($)];
 }
 
-// Whether the page contains ANY recognized standings container (before TBD
-// filtering). Distinguishes "recognized tables that were all TBD" (safe to
-// clear stored rows) from "no standings structure found at all" (possibly a
-// transient/partial page or a DOM change — callers should preserve stored rows).
-export function hasStandingsTables($) {
-  return $('.panel-table').length + $('.group-table').length > 0;
+// Whether the page yields at least one PARSEABLE standings row (a team cell we
+// can read — TBD counts, since a TBD row is still a recognized standings row).
+// This is the clear-vs-preserve confidence signal: it stays true for an all-TBD
+// unseeded event (safe to clear stored rows) but goes false the moment the DOM
+// shape changes — an empty or restructured table, or renamed row/cell classes,
+// extracts nothing, so callers preserve stored rows rather than wipe good data.
+// It mirrors the exact team-cell extraction the parsers use above.
+export function hasStandingsRows($) {
+  let found = false;
+  $('.panel-table')
+    .find('.panel-table__row')
+    .not('.row--header')
+    .each((_, row) => {
+      const cell = $(row).find('.cell--team').first();
+      const team =
+        cleanText(cell.attr('data-sort-val')) || cleanText(cell.find('.block-team .name').first().text());
+      if (team) {
+        found = true;
+        return false;
+      }
+      return undefined;
+    });
+  if (found) return true;
+  $('.group-table')
+    .find('.group-table-result-row')
+    .each((_, row) => {
+      const entry = $(row).find('.group-table-entry').first();
+      if (cleanText(entry.attr('aria-label')) || cleanText(entry.text())) {
+        found = true;
+        return false;
+      }
+      return undefined;
+    });
+  return found;
 }

@@ -38,18 +38,18 @@ export async function runStandingsSync({ liquipedia = defaultLiquipedia } = {}) 
     );
     for (const tournament of tournaments) {
       try {
-        const { sections, hadTables } = await liquipedia.fetchEventStandings(tournament);
+        const { sections, hadRows } = await liquipedia.fetchEventStandings(tournament);
         summary.tournaments += 1;
         if (!sections.length) {
           summary.empty += 1;
-          // Clear stored rows ONLY when the page had recognized standings tables
+          // Clear stored rows ONLY when the page yielded parseable standings rows
           // that were all-TBD (an unseeded event) — standings are re-derived each
-          // run, so that keeps the directory's hasStandings flag accurate. If the
-          // page had NO standings structure at all (hadTables false), that could
-          // be a transient/partial page or a DOM change, so leave rows intact
-          // rather than risk wiping good data. A fetch FAILURE throws and is
-          // handled below, also leaving rows intact.
-          if (hadTables) await replaceTournamentStandings(tournament.id, []);
+          // run, so that keeps the directory's hasStandings flag accurate. If we
+          // parsed NO rows (hadRows false), that could be a transient/partial page
+          // or a DOM change, so leave rows intact rather than risk wiping good
+          // data. A fetch FAILURE throws and is handled below, also leaving rows
+          // intact.
+          if (hadRows) await replaceTournamentStandings(tournament.id, []);
           continue;
         }
         summary.rows += await replaceTournamentStandings(tournament.id, sections);

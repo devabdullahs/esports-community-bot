@@ -50,7 +50,7 @@ test('sync fetches ONLY standings-format events and stores rows', async () => {
       fetchEventStandings: async (t) => {
         fetched.push(t.external_id);
         return {
-          hadTables: true,
+          hadRows: true,
           sections: [
             { title: 'Group Stage', entries: [
               { rank: 1, team: 'Twisted Minds', points: '87', logo: 'https://liquipedia.net/img/tm.png' },
@@ -81,17 +81,17 @@ test('refresh replaces wholesale (no stale rows)', async () => {
   assert.equal(rows[0].team, 'New Leader');
 });
 
-test('an all-TBD page (tables recognized, no real teams) clears stale rows', async () => {
-  // pubgEvent has rows from the previous test. An all-TBD page has recognized
-  // standings tables but no confirmed teams, so sections is empty AND
-  // hadTables is true — the sync must clear the stale rows so hasStandings goes false.
+test('an all-TBD page (rows parsed, no real teams) clears stale rows', async () => {
+  // pubgEvent has rows from the previous test. An all-TBD page yields parseable
+  // rows but no confirmed teams, so sections is empty AND hadRows is true — the
+  // sync must clear the stale rows so hasStandings goes false.
   await replaceTournamentStandings(pubgEvent.id, [
     { title: 'Group Stage', entries: [{ rank: 1, team: 'Leftover', points: '10' }] },
   ]);
   assert.equal((await listStandingsForTournament(pubgEvent.id)).length, 1);
 
   const summary = await runStandingsSync({
-    liquipedia: { fetchEventStandings: async () => ({ sections: [], hadTables: true }) },
+    liquipedia: { fetchEventStandings: async () => ({ sections: [], hadRows: true }) },
   });
   assert.equal(summary.empty, 1);
   assert.equal((await listStandingsForTournament(pubgEvent.id)).length, 0); // cleared
@@ -102,7 +102,7 @@ test('an empty parse with NO recognized tables preserves stored rows (transient/
     { title: 'Group Stage', entries: [{ rank: 1, team: 'Keep Me', points: '5' }] },
   ]);
   const summary = await runStandingsSync({
-    liquipedia: { fetchEventStandings: async () => ({ sections: [], hadTables: false }) },
+    liquipedia: { fetchEventStandings: async () => ({ sections: [], hadRows: false }) },
   });
   assert.equal(summary.empty, 1);
   const rows = await listStandingsForTournament(pubgEvent.id);
@@ -120,7 +120,7 @@ test('a fetch failure on one event never blocks the others', async () => {
       fetchEventStandings: async (t) => {
         if (t.game === 'pubg') throw new Error('boom');
         return {
-          hadTables: true,
+          hadRows: true,
           sections: [{ title: 'Group A', entries: [{ rank: 1, team: 'Weibo Gaming', points: '2–0', extra: '4–1' }] }],
         };
       },

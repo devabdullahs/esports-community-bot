@@ -6,6 +6,7 @@ import test from 'node:test';
 import * as cheerio from 'cheerio';
 
 import {
+  hasStandingsRows,
   parseBattleRoyaleStandings,
   parseEventStandings,
   parseGroupTableStandings,
@@ -69,4 +70,21 @@ test('an all-TBD table (unseeded event) yields no section', () => {
     </div>`);
   assert.deepEqual(parseBattleRoyaleStandings(allTbd$), []);
   assert.deepEqual(parseEventStandings(allTbd$), []);
+  // But rows WERE parsed — this is the clear-vs-preserve confidence signal.
+  assert.equal(hasStandingsRows(allTbd$), true);
+});
+
+test('hasStandingsRows is false when the DOM has no parseable rows (preserve guard)', () => {
+  // A real page yields rows; the fixture has Twisted Minds etc.
+  assert.equal(hasStandingsRows(br$), true);
+  assert.equal(hasStandingsRows(group$), true);
+  // A table container whose rows/cells changed shape yields nothing — the sync
+  // must PRESERVE stored rows in this case, not wipe them.
+  const shapeChanged$ = cheerio.load(
+    '<div class="panel-table"><div class="some-new-row"><div class="some-new-team">Twisted Minds</div></div></div>',
+  );
+  assert.equal(hasStandingsRows(shapeChanged$), false);
+  const emptyTable$ = cheerio.load('<div class="panel-table"></div>');
+  assert.equal(hasStandingsRows(emptyTable$), false);
+  assert.equal(hasStandingsRows(cheerio.load('<div><p>no standings</p></div>')), false);
 });
