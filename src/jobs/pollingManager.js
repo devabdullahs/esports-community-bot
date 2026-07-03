@@ -57,7 +57,10 @@ export function isPlaceholderTeam(value) {
 }
 
 function isNonPollableMatch(match) {
-  return match.source === 'startgg' && startgg.isPreviewExternalId?.(match.external_id);
+  return (
+    (match.source === 'startgg' && startgg.isPreviewExternalId?.(match.external_id)) ||
+    (match.source === 'liquipedia' && /^.+:br-schedule:/i.test(match.external_id || ''))
+  );
 }
 
 // Hook for the (next-phase) leaderboard embed + live voice-channel updaters.

@@ -12,6 +12,7 @@ db.exec(`
     url          TEXT,
     guild_id     TEXT    NOT NULL,
     added_by     TEXT,
+    ewc          INTEGER NOT NULL DEFAULT 0,
     active       INTEGER NOT NULL DEFAULT 1,
     archived_at  INTEGER,
     created_at   TEXT    NOT NULL DEFAULT (datetime('now')),
@@ -201,6 +202,7 @@ ensureColumns('players', [
 
 ensureColumns('tournaments', [
   ['archived_at', 'INTEGER'],
+  ['ewc', 'INTEGER NOT NULL DEFAULT 0'],
 ]);
 
 // Migration: pandascore_id used to be NOT NULL; Liquipedia-only entities (games

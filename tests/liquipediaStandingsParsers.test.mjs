@@ -6,6 +6,8 @@ import test from 'node:test';
 import * as cheerio from 'cheerio';
 
 import {
+  parseBattleRoyaleParticipantGroups,
+  parseBattleRoyaleSchedules,
   hasStandingsRows,
   parseBattleRoyaleStandings,
   parseEventStandings,
@@ -31,6 +33,95 @@ test('battle-royale panel-table parses rank/team/points with section title', () 
   // TBD rows are kept (they become real once qualifiers finish) with a fallback rank.
   assert.equal(tbd.team, 'TBD');
   assert.equal(tbd.rank, 3);
+});
+
+test('battle-royale group draw wins over all-zero lobby standings before results start', () => {
+  const $ = cheerio.load(`
+    <h2><span class="mw-headline">Group Draw</span></h2>
+    <table class="wikitable">
+      <tr><th>Group A</th><th>Group B</th></tr>
+      <tr>
+        <td>
+          <span class="flag"><img src="/commons/images/flag.png"></span>
+          <span data-highlightingclass="ZETA DIVISION">
+            <span class="team-template-image-icon"><img src="/commons/images/zeta.png"></span>
+            <span class="team-template-text">ZETA</span>
+          </span>
+        </td>
+        <td><span data-highlightingclass="Wolves Esports">Wolves</span></td>
+      </tr>
+      <tr>
+        <td><span data-highlightingclass="JD Gaming">JDG</span></td>
+        <td><span data-highlightingclass="Virtus.pro">VP</span></td>
+      </tr>
+    </table>
+    <div class="tabs-dynamic">
+      <div class="navigation-tabs__list-item">A vs B</div>
+      <div class="panel-content">
+        <div class="panel-table">
+          <div class="panel-table__row row--header"></div>
+          <div class="panel-table__row">
+            <div class="cell--rank" data-sort-val="1"></div>
+            <div class="cell--team" data-sort-val="ZETA DIVISION"></div>
+            <div class="cell--total-points" data-sort-val="0"></div>
+          </div>
+          <div class="panel-table__row">
+            <div class="cell--rank" data-sort-val="2"></div>
+            <div class="cell--team" data-sort-val="Wolves Esports"></div>
+            <div class="cell--total-points" data-sort-val="0"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  `);
+
+  const groups = parseBattleRoyaleParticipantGroups($);
+  assert.equal(groups.length, 2);
+  assert.equal(groups[0].title, 'Group A');
+  assert.equal(groups[0].entries[0].team, 'ZETA DIVISION');
+  assert.match(groups[0].entries[0].logo, /zeta/);
+
+  const sections = parseEventStandings($);
+  assert.equal(sections.length, 2);
+  assert.equal(sections[0].title, 'Group A');
+  assert.deepEqual(sections[0].entries.map((entry) => entry.team), ['ZETA DIVISION', 'JD Gaming']);
+  assert.deepEqual(sections[1].entries.map((entry) => entry.team), ['Wolves Esports', 'Virtus.pro']);
+});
+
+test('battle-royale schedule rows parse as lobby calendar items', () => {
+  const futureTs = Math.floor(Date.now() / 1000) + 24 * 3600;
+  const $ = cheerio.load(`
+    <div class="tabs-dynamic">
+      <div class="navigation-tabs__list-item">A vs B</div>
+      <div class="panel-content">
+        <div class="panel-content__collapsible">
+          <h5><span>Schedule</span></h5>
+          <ul class="panel-content__game-schedule">
+            <li class="panel-content__game-schedule__list-item">
+              <span class="panel-content__game-schedule__title">Game 1:</span>
+              <span class="timer-object" data-timestamp="${futureTs}">Soon</span>
+            </li>
+          </ul>
+        </div>
+        <div class="panel-table">
+          <div class="panel-table__row row--header"></div>
+          <div class="panel-table__row">
+            <div class="cell--rank" data-sort-val="1"></div>
+            <div class="cell--team" data-sort-val="ZETA DIVISION"></div>
+            <div class="cell--total-points" data-sort-val="0"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  `);
+
+  const [match] = parseBattleRoyaleSchedules($, 'apexlegends', 'Apex/Page/Group_Stage', 'Group Stage');
+  assert.equal(match.name, 'Group Stage - A vs B - Game 1');
+  assert.equal(match.teamA, 'Group Stage - A vs B - Game 1');
+  assert.equal(match.teamB, 'Lobby');
+  assert.equal(match.scheduledAt, futureTs);
+  assert.equal(match.status, 'scheduled');
+  assert.match(match.externalId, /^apexlegends:br-schedule:/);
 });
 
 test('group-table parses group title, aria-label team, match + game scores', () => {

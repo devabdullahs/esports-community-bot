@@ -7,10 +7,20 @@
 //    team in the entry cell's aria-label, match score + game score columns.
 // No client imports; callers pass a cheerio $.
 
-import { normalizeImageUrl } from './parsers.js';
+import { deriveStatus, imageSrc, normalizeImageUrl, teamName } from './parsers.js';
 
 function cleanText(value) {
   return String(value ?? '').replace(/\s+/g, ' ').trim();
+}
+
+function hasNumericResult(value) {
+  return /[1-9]/.test(String(value ?? ''));
+}
+
+function rowsHaveResults(sections) {
+  return sections.some((section) =>
+    (section.entries ?? []).some((entry) => hasNumericResult(entry.points) || hasNumericResult(entry.extra)),
+  );
 }
 
 // A "TBD" row is an unfilled bracket slot (qualifier not yet decided). We keep
@@ -36,6 +46,80 @@ function nearestHeading($, el) {
     : '';
 }
 
+function battleRoyalePanelTitle($, table) {
+  const panel = $(table).closest('.panel-content');
+  const tabs = $(table).closest('.tabs-dynamic');
+  if (panel.length && tabs.length) {
+    const panels = tabs
+      .find('.panel-content')
+      .toArray()
+      .filter((el) => $(el).find('.panel-table').length > 0);
+    const labels = tabs
+      .find('.navigation-tabs__list-item')
+      .map((_, el) => cleanText($(el).text()))
+      .get()
+      .filter(Boolean);
+    const index = panels.indexOf(panel[0]);
+    if (index >= 0 && labels[index]) return labels[index];
+  }
+
+  const detail = $(table).closest('.panel-content').find('.standings-ffa-detail').first();
+  return cleanText(detail.text()) || nearestHeading($, table);
+}
+
+function groupDrawLogo($, cell) {
+  const imgs = $(cell).find('.team-template-image-icon img, .team-template-logo img, img').toArray();
+  for (const img of imgs) {
+    if ($(img).closest('.flag').length) continue;
+    const url = normalizeImageUrl(imageSrc($(img)));
+    if (url) return url;
+  }
+  return null;
+}
+
+function groupDrawHeaders($, row) {
+  return $(row)
+    .children('th,td')
+    .map((_, cell) => cleanText($(cell).text()))
+    .get();
+}
+
+// Seeded participant groups shown before BR results exist (for example Apex's
+// "Group Draw"). These are better for pre-event pages than six all-zero lobby
+// standings where the same teams repeat across A-vs-B, C-vs-D, etc.
+export function parseBattleRoyaleParticipantGroups($) {
+  const sections = [];
+  $('table.wikitable').each((_, table) => {
+    const rows = $(table).find('tr').toArray();
+    if (rows.length < 2) return;
+    const headers = groupDrawHeaders($, rows[0]);
+    if (headers.length < 2 || !headers.every((header) => /^group\s+[A-Z0-9]+$/i.test(header))) return;
+
+    const byGroup = headers.map((title) => ({ title, entries: [] }));
+    for (const row of rows.slice(1)) {
+      const cells = $(row).children('td,th').toArray();
+      for (let i = 0; i < byGroup.length; i += 1) {
+        const cell = cells[i];
+        if (!cell) continue;
+        const team = teamName($, cell);
+        if (!team) continue;
+        byGroup[i].entries.push({
+          rank: byGroup[i].entries.length + 1,
+          team,
+          points: '',
+          extra: '',
+          logo: groupDrawLogo($, cell),
+        });
+      }
+    }
+
+    for (const group of byGroup) {
+      if (hasRealTeam(group.entries)) sections.push(group);
+    }
+  });
+  return sections;
+}
+
 // Battle-royale panel-table(s). Returns one section per table:
 // { title, entries: [{ rank, team, points, logo }] }. TBD rows are kept (they
 // become real teams as qualifiers finish) but rows with no team text at all are
@@ -52,6 +136,7 @@ export function parseBattleRoyaleStandings($) {
         const rankCell = $(row).find('.cell--rank').first();
         const teamCell = $(row).find('.cell--team').first();
         const pointsCell = $(row).find('.cell--total-points').first();
+        const extraCell = $(row).find('.cell--total-kills, .cell--kills').first();
         const team =
           cleanText(teamCell.attr('data-sort-val')) ||
           cleanText(teamCell.find('.block-team .name').first().text());
@@ -61,12 +146,59 @@ export function parseBattleRoyaleStandings($) {
           rank: Number.isFinite(rank) ? rank : entries.length + 1,
           team,
           points: cleanText(pointsCell.attr('data-sort-val')) || cleanText(pointsCell.text()),
+          extra: cleanText(extraCell.attr('data-sort-val')) || cleanText(extraCell.text()),
           logo: normalizeImageUrl(teamCell.find('img').first().attr('src')),
         });
       });
-    if (hasRealTeam(entries)) sections.push({ title: nearestHeading($, table), entries });
+    if (hasRealTeam(entries)) sections.push({ title: battleRoyalePanelTitle($, table), entries });
   });
   return sections;
+}
+
+function scheduleExternalId(game, page, section, label) {
+  const key = [page, section, label]
+    .map((part) =>
+      cleanText(part)
+        .toLowerCase()
+        .replace(/[^a-z0-9/_-]+/g, '-')
+        .replace(/-+/g, '-')
+        .replace(/^-|-$/g, ''),
+    )
+    .filter(Boolean)
+    .join(':');
+  return `${game}:br-schedule:${key}`;
+}
+
+export function parseBattleRoyaleSchedules($, game, page, stageTitle = '') {
+  const matches = [];
+  $('.panel-table').each((_, table) => {
+    const section = battleRoyalePanelTitle($, table);
+    if (!section && !stageTitle) return;
+    const panel = $(table).closest('.panel-content');
+    if (!panel.length) return;
+    panel.find('.panel-content__game-schedule__list-item').each((_, item) => {
+      const label = cleanText($(item).find('.panel-content__game-schedule__title').first().text()).replace(/:$/, '');
+      const scheduledAt = Number($(item).find('[data-timestamp]').first().attr('data-timestamp')) || null;
+      if (!label || !scheduledAt) return;
+      const parts = [stageTitle, section, label].filter(Boolean);
+      const name = parts.join(' - ');
+      matches.push({
+        source: 'liquipedia',
+        externalId: scheduleExternalId(game, page, stageTitle || section, `${section}:${label}`),
+        name,
+        teamA: name,
+        teamB: 'Lobby',
+        logoA: null,
+        logoB: null,
+        scoreA: null,
+        scoreB: null,
+        bestOf: null,
+        scheduledAt,
+        status: deriveStatus({ scheduledAt }),
+      });
+    });
+  });
+  return matches;
 }
 
 // Round-robin group tables. Returns one section per group:
@@ -99,7 +231,13 @@ export function parseGroupTableStandings($) {
 
 // Every standings section on a tournament page, in page order per format.
 export function parseEventStandings($) {
-  return [...parseBattleRoyaleStandings($), ...parseGroupTableStandings($)];
+  const battleRoyale = parseBattleRoyaleStandings($);
+  const participantGroups = parseBattleRoyaleParticipantGroups($);
+  const battleRoyaleSections =
+    battleRoyale.length && !rowsHaveResults(battleRoyale) && participantGroups.length
+      ? participantGroups
+      : battleRoyale;
+  return [...battleRoyaleSections, ...parseGroupTableStandings($)];
 }
 
 // Whether the page yields at least one PARSEABLE standings row (a team cell we
@@ -135,5 +273,23 @@ export function hasStandingsRows($) {
       }
       return undefined;
     });
+  if (found) return true;
+  $('table.wikitable').each((_, table) => {
+    const rows = $(table).find('tr').toArray();
+    if (rows.length < 2) return;
+    const headers = groupDrawHeaders($, rows[0]);
+    if (headers.length < 2 || !headers.every((header) => /^group\s+[A-Z0-9]+$/i.test(header))) return;
+    for (const row of rows.slice(1)) {
+      const cells = $(row).children('td,th').toArray();
+      for (const cell of cells) {
+        if (teamName($, cell)) {
+          found = true;
+          return false;
+        }
+      }
+      if (found) return false;
+    }
+    return undefined;
+  });
   return found;
 }

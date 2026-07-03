@@ -18,11 +18,12 @@ import {
   parseEwcPlayerList,
   parseEwcEventPlacements,
   parseEwcEventSchedule,
+  parseTournamentEwcAffiliation,
   VRS_REGIONS,
   normalizeValveRankingRegion,
   parseValveRankingTable,
 } from './parsers.js';
-import { hasStandingsRows, parseEventStandings } from './standingsParsers.js';
+import { hasStandingsRows, parseBattleRoyaleSchedules, parseEventStandings } from './standingsParsers.js';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -32,6 +33,56 @@ function cleanDisplayTitle(title) {
   if (!title) return null;
   const text = /</.test(title) ? cheerio.load(`<main>${title}</main>`)('main').text() : title;
   return text.replace(/\s+/g, ' ').trim() || null;
+}
+
+function titleFromPageSegment(page) {
+  const segment = String(page ?? '').split('/').filter(Boolean).pop() || '';
+  return segment.replaceAll('_', ' ').replace(/\s+/g, ' ').trim();
+}
+
+const CHILD_STAGE_SEGMENTS = new Set([
+  'Group_Stage',
+  'Survivor_Stage',
+  'Finals',
+  'Playoffs',
+  'Last_Chance',
+  'Swiss_Stage',
+]);
+
+function childStagePages($, game, page) {
+  const prefix = `/${game}/${page.replace(/^\/+|\/+$/g, '')}/`;
+  const out = [];
+  const seen = new Set();
+  $('a[href]').each((_, link) => {
+    const href = String($(link).attr('href') ?? '').split(/[?#]/)[0];
+    if (!href.startsWith(prefix)) return;
+    const child = href.slice(`/${game}/`.length).replace(/^\/+|\/+$/g, '');
+    const rest = child.slice(page.length + 1);
+    if (!rest || rest.includes('/')) return;
+    if (!CHILD_STAGE_SEGMENTS.has(rest)) return;
+    if (seen.has(child)) return;
+    seen.add(child);
+    out.push(child);
+  });
+  return out;
+}
+
+async function loadTournamentPage(game, page) {
+  const data = await parsePage(game, page);
+  const html = data?.parse?.text?.['*'];
+  if (!html) return null;
+  return {
+    data,
+    $: cheerio.load(html),
+  };
+}
+
+function prefixSections(sections, prefix) {
+  if (!prefix) return sections;
+  return sections.map((section) => ({
+    ...section,
+    title: section.title ? `${prefix}: ${section.title}` : prefix,
+  }));
 }
 
 // ---------------------------------------------------------------------------
@@ -46,6 +97,14 @@ export async function resolveTournamentTitle(tournament) {
   const data = await parsePage(game, page);
   const title = cleanDisplayTitle(data?.parse?.displaytitle) || cleanDisplayTitle(data?.parse?.title);
   return title && !title.includes('/') ? title : formatLiquipediaPageTitle(page);
+}
+
+export async function resolveTournamentEwc(tournament) {
+  const [game, ...rest] = tournament.external_id.split('/');
+  const page = rest.join('/');
+  if (!game || !page) return false;
+  const loaded = await loadTournamentPage(game, page);
+  return loaded ? parseTournamentEwcAffiliation(loaded.$) : false;
 }
 
 // ---------------------------------------------------------------------------
@@ -84,10 +143,9 @@ export async function fetchSchedule(tournament) {
     }
   }
 
-  const data = await parsePage(game, page);
-  const html = data?.parse?.text?.['*'];
-  if (!html) return [];
-  const $ = cheerio.load(html);
+  const loaded = await loadTournamentPage(game, page);
+  if (!loaded) return [];
+  const { $ } = loaded;
 
   const out = [];
   const seenIds = new Set();
@@ -151,6 +209,22 @@ export async function fetchSchedule(tournament) {
     pairIndex.set(key, m);
     out.push(m);
   });
+
+  const addScheduleMatches = (matches) => {
+    for (const m of matches) {
+      if (!m || seenIds.has(m.externalId)) continue;
+      seenIds.add(m.externalId);
+      out.push(m);
+    }
+  };
+
+  addScheduleMatches(parseBattleRoyaleSchedules($, game, page));
+
+  for (const child of childStagePages($, game, page)) {
+    const childLoaded = await loadTournamentPage(game, child);
+    if (!childLoaded) continue;
+    addScheduleMatches(parseBattleRoyaleSchedules(childLoaded.$, game, child, titleFromPageSegment(child)));
+  }
 
   return out;
 }
@@ -312,9 +386,19 @@ export async function fetchEventStandings(tournament) {
   const [game, ...rest] = tournament.external_id.split('/');
   const page = rest.join('/');
   if (!game || !page) return { sections: [], hadRows: false };
-  const data = await parsePage(game, page);
-  const html = data?.parse?.text?.['*'];
-  if (!html) return { sections: [], hadRows: false };
-  const $ = cheerio.load(html);
-  return { sections: parseEventStandings($), hadRows: hasStandingsRows($) };
+  const loaded = await loadTournamentPage(game, page);
+  if (!loaded) return { sections: [], hadRows: false };
+
+  const sections = parseEventStandings(loaded.$);
+  let hadRows = hasStandingsRows(loaded.$);
+
+  for (const child of childStagePages(loaded.$, game, page)) {
+    const childLoaded = await loadTournamentPage(game, child);
+    if (!childLoaded) continue;
+    const prefix = titleFromPageSegment(child);
+    sections.push(...prefixSections(parseEventStandings(childLoaded.$), prefix));
+    hadRows = hasStandingsRows(childLoaded.$) || hadRows;
+  }
+
+  return { sections, hadRows };
 }

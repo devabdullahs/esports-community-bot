@@ -33,6 +33,7 @@ function ctx(id: string) {
 }
 
 let tournamentId: number;
+let organizerTaggedTournamentId: number;
 let archivedTournamentId: number;
 let newestArchivedTournamentId: number;
 
@@ -42,7 +43,7 @@ async function seed(): Promise<void> {
   // so nothing else in this test would create the tables — mirror the bot-side ported
   // tests that import index.js up front (e.g. tests/ewcRateLimits.test.mjs).
   await import("@bot/db/index.js");
-  const { addTournament, archiveTournament } = await import("@bot/db/tournaments.js");
+  const { addTournament, archiveTournament, updateTournamentEwc } = await import("@bot/db/tournaments.js");
   const { upsertMatch } = await import("@bot/db/matches.js");
 
   const tournament = (await addTournament({
@@ -54,6 +55,17 @@ async function seed(): Promise<void> {
     guild_id: GUILD_ID,
   })) as { id: number };
   tournamentId = tournament.id;
+
+  const organizerTagged = (await addTournament({
+    source: "liquipedia",
+    external_id: `apexlegends/Apex_Legends_Global_Series/2026/Split_1/Playoffs-${Date.now()}`,
+    game: "apexlegends",
+    name: "Apex Legends Global Series: 2026 Split 1 Playoffs",
+    url: "https://liquipedia.net/apexlegends/Apex_Legends_Global_Series/2026/Split_1/Playoffs",
+    guild_id: GUILD_ID,
+  })) as { id: number };
+  organizerTaggedTournamentId = organizerTagged.id;
+  await updateTournamentEwc(organizerTaggedTournamentId, true);
 
   const base = { tournament_id: tournamentId, source: "liquipedia" };
   // 1 running, 2 scheduled, 5 finished, plus one parser duplicate that should be hidden by public reads.
@@ -122,6 +134,15 @@ describe("GET /api/tournaments", () => {
     expect(res.status).toBe(200);
     const body = await res.json();
     expect(body.tournaments.some((row: { id: number }) => row.id === archivedTournamentId)).toBe(false);
+  });
+
+  test("uses stored organizer-based EWC flag for non-EWC page names", async () => {
+    const res = await listGET();
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    const t = body.tournaments.find((row: { id: number }) => row.id === organizerTaggedTournamentId);
+    expect(t).toBeTruthy();
+    expect(t.ewc).toBe(true);
   });
 });
 

@@ -5,6 +5,7 @@ import {
   archiveTournament,
   listActiveTournaments,
   listEndedTournaments,
+  updateTournamentEwc,
   updateTournamentGame,
   updateTournamentName,
 } from '../db/tournaments.js';
@@ -54,6 +55,18 @@ export async function syncTournament(client, t) {
       }
     } catch (e) {
       logger.debug(`[sync] game lookup failed for ${t.source}:${t.external_id}: ${e.message}`);
+    }
+  }
+
+  if (service.resolveTournamentEwc) {
+    try {
+      const ewc = await service.resolveTournamentEwc(t);
+      if (Number(t.ewc || 0) !== (ewc ? 1 : 0)) {
+        await updateTournamentEwc(t.id, ewc);
+        t = { ...t, ewc: ewc ? 1 : 0 };
+      }
+    } catch (e) {
+      logger.debug(`[sync] EWC lookup failed for ${t.source}:${t.external_id}: ${e.message}`);
     }
   }
 
