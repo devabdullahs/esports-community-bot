@@ -45,6 +45,17 @@ type MatchRow = {
   coStreams?: { platform: string; handle: string; label: string; url: string | null }[];
 };
 
+type StandingRow = {
+  id: number;
+  section: string;
+  rank: number;
+  team: string;
+  team_id?: number | null;
+  logo: string | null;
+  points: string;
+  extra: string;
+};
+
 export type TournamentMatchesPayload = {
   tournament: {
     id: number;
@@ -54,6 +65,7 @@ export type TournamentMatchesPayload = {
     url: string | null;
   };
   matches: { running: MatchRow[]; scheduled: MatchRow[]; finished: MatchRow[] };
+  standings?: StandingRow[];
   total: number;
 };
 
@@ -293,12 +305,22 @@ export function TournamentMatchList({
   });
 
   const { running, scheduled, finished } = query.data.matches;
+  const standings = query.data.standings ?? [];
   const scheduledGroups = groupMatchesByLocalDay(scheduled, locale, text, hasHydrated);
   const finishedGroups = groupMatchesByLocalDay(finished, locale, text, hasHydrated);
   const tbd = text.tbd;
+  // Standings-format events (battle royale, TFT groups) often have zero
+  // head-to-head matches; the standings ARE the tournament, so skip the empty
+  // match sections instead of stacking three "no matches" placeholders.
+  const standingsOnly = standings.length > 0 && query.data.total === 0;
 
   return (
     <div className="flex flex-col gap-8">
+      {standings.length ? <StandingsSection standings={standings} locale={locale} text={text} /> : null}
+
+      {standingsOnly ? null : (
+        <>
+      {standings.length ? <Separator /> : null}
       <section className="flex flex-col gap-3">
         <h2 className="flex items-center gap-2 text-lg font-semibold">
           <RadioIcon className="size-4 text-primary" />
@@ -465,6 +487,76 @@ export function TournamentMatchList({
       {query.data.total === 0 ? (
         <p className="text-sm text-muted-foreground">{text.noMatches}</p>
       ) : null}
+        </>
+      )}
     </div>
+  );
+}
+
+// Section-grouped standings tables (battle-royale point tables, TFT groups).
+// Section titles come from the Liquipedia page headings ("Group A", stage
+// names); a single untitled section renders as one plain table.
+function StandingsSection({
+  standings,
+  locale,
+  text,
+}: {
+  standings: StandingRow[];
+  locale: Locale;
+  text: TournamentCopy;
+}) {
+  const sections = new Map<string, StandingRow[]>();
+  for (const row of standings) {
+    const key = row.section ?? "";
+    const current = sections.get(key);
+    if (current) current.push(row);
+    else sections.set(key, [row]);
+  }
+  const hasExtra = standings.some((row) => row.extra);
+
+  return (
+    <section className="flex flex-col gap-4">
+      <h2 className="text-lg font-semibold">{text.standings}</h2>
+      {[...sections.entries()].map(([section, rows]) => (
+        <div key={section || "main"} className="flex flex-col gap-1">
+          {section ? (
+            <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+              {section}
+            </span>
+          ) : null}
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead className="w-14">{text.rank}</TableHead>
+                <TableHead>{text.team}</TableHead>
+                <TableHead className="text-end">{text.points}</TableHead>
+                {hasExtra ? <TableHead className="text-end">{text.score}</TableHead> : null}
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {rows.map((row) => (
+                <TableRow key={row.id}>
+                  <TableCell className="tabular-nums text-muted-foreground">{row.rank}</TableCell>
+                  <TableCell className="text-start">
+                    <span className="flex min-w-0 items-center gap-2 text-sm font-medium" dir="auto">
+                      <Logo url={row.logo} alt={row.team} />
+                      <TeamName label={row.team} teamId={row.team_id} locale={locale} />
+                    </span>
+                  </TableCell>
+                  <TableCell className="text-end tabular-nums font-semibold">
+                    {row.points || "-"}
+                  </TableCell>
+                  {hasExtra ? (
+                    <TableCell className="text-end tabular-nums text-muted-foreground">
+                      {row.extra || "-"}
+                    </TableCell>
+                  ) : null}
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
+      ))}
+    </section>
   );
 }

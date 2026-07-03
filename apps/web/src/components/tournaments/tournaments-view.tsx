@@ -26,13 +26,16 @@ export async function TournamentsView({
 
   // Keep finished-only tournaments visible too. Some sources, especially
   // start.gg event brackets, may have no real upcoming rows once projected sets
-  // are filtered out, but their result pages should remain reachable.
+  // are filtered out, but their result pages should remain reachable. Standings
+  // events (battle royale, TFT groups) have zero matches by design — their
+  // standings rows are what makes them worth listing.
   const scoped = ewcOnly ? tournaments.filter((t) => t.ewc) : tournaments;
   const active = scoped.filter(
     (t) =>
       t.matchCounts.running > 0 ||
       t.matchCounts.scheduled > 0 ||
-      t.matchCounts.finished > 0,
+      t.matchCounts.finished > 0 ||
+      t.hasStandings,
   );
   const directoryItems: TournamentDirectoryItem[] = active.map((tournament) => {
     const game = tournament.game ?? "other";

@@ -83,6 +83,14 @@ export const config = {
     enrichMaxParses: Math.max(1, Number(get('LIQUIPEDIA_ENRICH_MAX_PARSES', 12)) || 12),
     enrichTtlDays: Math.max(1, Number(get('LIQUIPEDIA_ENRICH_TTL_DAYS', 30)) || 30),
   },
+  standings: {
+    // Standings tracking for battle-royale / TFT events (no matches to poll).
+    // One parse per active event per sweep, through the shared queue.
+    enabled: get('STANDINGS_SYNC_ENABLED', 'true') === 'true',
+    cron: get('STANDINGS_SYNC_CRON', '10 */3 * * *'),
+    timezone: get('STANDINGS_SYNC_TIMEZONE', 'Asia/Riyadh'),
+    bootDelayMs: Math.max(0, Number(get('STANDINGS_SYNC_BOOT_DELAY_MS', 45000)) || 0),
+  },
   lpdb: {
     // LiquipediaDB API (optional). When LPDB_API_KEY is set it's preferred over HTML parsing.
     apiKey: get('LPDB_API_KEY'),

@@ -83,6 +83,7 @@ db.exec(`
     current_team_id             INTEGER REFERENCES teams(id) ON DELETE SET NULL,
     current_team_pandascore_id  INTEGER,
     current_team_name           TEXT,
+    current_team_verified_at    TEXT,
     modified_at                 TEXT,
     raw_json                    TEXT,
     liquipedia_url              TEXT,
@@ -184,6 +185,9 @@ ensureColumns('players', [
   ['current_team_id', 'INTEGER REFERENCES teams(id) ON DELETE SET NULL'],
   ['current_team_pandascore_id', 'INTEGER'],
   ['current_team_name', 'TEXT'],
+  // Set when a successfully parsed Liquipedia roster confirmed the player's
+  // team. While present, PandaScore syncs must not overwrite current_team_*.
+  ['current_team_verified_at', 'TEXT'],
   ['modified_at', 'TEXT'],
   ['raw_json', 'TEXT'],
   ['liquipedia_url', 'TEXT'],
@@ -675,6 +679,29 @@ db.exec(`
     updated_at
   FROM ewc_news_posts;
 `);
+
+// Standings for tournaments whose Liquipedia format has no head-to-head matches
+// (battle-royale events, TFT groups): one row per team per section, replaced
+// wholesale on each refresh. points/extra are display text (BR total points,
+// or group match-score + game-score).
+db.exec(`
+  CREATE TABLE IF NOT EXISTS tournament_standings (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    tournament_id INTEGER NOT NULL REFERENCES tournaments(id) ON DELETE CASCADE,
+    section       TEXT NOT NULL DEFAULT '',
+    section_order INTEGER NOT NULL DEFAULT 0,
+    rank          INTEGER NOT NULL,
+    team          TEXT NOT NULL,
+    logo          TEXT,
+    points        TEXT NOT NULL DEFAULT '',
+    extra         TEXT NOT NULL DEFAULT '',
+    updated_at    TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+  CREATE INDEX IF NOT EXISTS idx_tournament_standings_tournament
+    ON tournament_standings(tournament_id, section_order, rank);
+`);
+
+ensureColumns('tournament_standings', [['section_order', 'INTEGER NOT NULL DEFAULT 0']]);
 
 // Follows + notifications. A member (by Discord id) follows games / tournaments /
 // teams / players; match transitions fan out one notification row per follower.

@@ -27,7 +27,8 @@ test('team infobox parses name, image, and normalized label facts', () => {
 });
 
 test('team roster takes the ACTIVE roster card only, with page links', () => {
-  const roster = parseTeamRoster(team$);
+  const { players: roster, truncated } = parseTeamRoster(team$);
+  assert.equal(truncated, false);
   assert.equal(roster.length, 2); // OldGuy (Former table) excluded
   assert.deepEqual(roster[0], { name: 'M0nkey M00n', page: 'M0nkey_M00n', role: null });
   assert.equal(roster[1].name, 'Extra');
@@ -50,5 +51,5 @@ test('player infobox parses bio facts', () => {
 test('pages without an infobox return null instead of garbage', () => {
   const empty$ = cheerio.load('<div class="mw-parser-output"><p>Disambiguation.</p></div>');
   assert.equal(parseEntityInfobox(empty$), null);
-  assert.deepEqual(parseTeamRoster(empty$), []);
+  assert.deepEqual(parseTeamRoster(empty$), { players: [], truncated: false });
 });

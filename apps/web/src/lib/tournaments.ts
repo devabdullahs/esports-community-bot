@@ -3,6 +3,10 @@ import "server-only";
 import { all } from "@bot/db/client.js";
 import { dedupeMatches as _dedupeMatches } from "@bot/db/matches.js";
 import { listTeamNamesForGame as _listTeamNamesForGame } from "@bot/db/teams.js";
+import {
+  listStandingsCounts as _listStandingsCounts,
+  listStandingsForTournament as _listStandingsForTournament,
+} from "@bot/db/tournamentStandings.js";
 import { normalizeTeamName as _normalizeTeamName } from "@bot/lib/render.js";
 import {
   getTournamentById as _getById,
@@ -52,6 +56,8 @@ export type TournamentSummary = {
   created_at: string;
   ewc: boolean;
   matchCounts: MatchCounts;
+  /** Standings-format events (battle royale, TFT groups) have rows here instead of matches. */
+  hasStandings: boolean;
   featuredMatch: MatchRow | null;
 };
 
@@ -82,6 +88,19 @@ export type MatchRow = {
   coStreams?: MatchCoStream[];
 };
 
+export type StandingRow = {
+  id: number;
+  tournament_id: number;
+  section: string;
+  rank: number;
+  team: string;
+  team_id?: number | null;
+  logo: string | null;
+  points: string;
+  extra: string;
+  updated_at: string;
+};
+
 export type TournamentMatches = {
   tournament: {
     id: number;
@@ -91,6 +110,7 @@ export type TournamentMatches = {
     url: string | null;
   };
   matches: { running: MatchRow[]; scheduled: MatchRow[]; finished: MatchRow[] };
+  standings: StandingRow[];
   total: number;
 };
 
@@ -169,6 +189,12 @@ function publicMatch(row: MatchRow): MatchRow {
 const listTeamNamesForGame = _listTeamNamesForGame as (
   game: string,
 ) => Promise<Array<{ id: number; name: string }>>;
+const listStandingsForTournament = _listStandingsForTournament as (
+  tournamentId: number,
+) => Promise<StandingRow[]>;
+const listStandingsCounts = _listStandingsCounts as () => Promise<
+  Array<{ tournament_id: number; count: number }>
+>;
 const normalizeTeamName = _normalizeTeamName as (value: string | null | undefined) => string;
 
 // Map a tournament's synced team names -> profile ids for linking. Only
@@ -221,7 +247,15 @@ function featuredMatchFromRows(rows: MatchRow[]): MatchRow | null {
   );
 }
 
-async function tournamentSummary(t: TournamentRow): Promise<TournamentSummary> {
+async function standingsTournamentIds(): Promise<Set<number>> {
+  const counts = await listStandingsCounts();
+  return new Set(counts.filter((c) => c.count > 0).map((c) => c.tournament_id));
+}
+
+async function tournamentSummary(
+  t: TournamentRow,
+  withStandings: Set<number>,
+): Promise<TournamentSummary> {
   const rows = await dedupedTournamentMatches(t);
   const featuredMatch = featuredMatchFromRows(rows);
   return {
@@ -236,6 +270,7 @@ async function tournamentSummary(t: TournamentRow): Promise<TournamentSummary> {
     created_at: t.created_at,
     ewc: isEwcTournament(t),
     matchCounts: countsFromRows(rows),
+    hasStandings: withStandings.has(t.id),
     featuredMatch: featuredMatch ? publicMatch(featuredMatch) : null,
   };
 }
@@ -247,8 +282,11 @@ export async function listTournamentSummaries(): Promise<TournamentSummary[]> {
   // shows. The only gap was the guild id, now DB-derived.
   const guildId = await resolveDefaultGuildId();
   if (!guildId) return [];
-  const tournaments = await listActive(guildId);
-  return Promise.all(tournaments.map(tournamentSummary));
+  const [tournaments, withStandings] = await Promise.all([
+    listActive(guildId),
+    standingsTournamentIds(),
+  ]);
+  return Promise.all(tournaments.map((t) => tournamentSummary(t, withStandings)));
 }
 
 /** Archived tournaments for the configured guild, newest finished first. */
@@ -263,8 +301,11 @@ export async function listArchivedTournamentSummaries({
 } = {}): Promise<TournamentSummary[]> {
   const guildId = await resolveDefaultGuildId();
   if (!guildId) return [];
-  const rows = await listArchived(guildId, { limit, offset });
-  const summaries = await Promise.all(rows.map(tournamentSummary));
+  const [rows, withStandings] = await Promise.all([
+    listArchived(guildId, { limit, offset }),
+    standingsTournamentIds(),
+  ]);
+  const summaries = await Promise.all(rows.map((t) => tournamentSummary(t, withStandings)));
   return ewcOnly ? summaries.filter((t) => t.ewc) : summaries;
 }
 
@@ -284,6 +325,10 @@ export async function getTournamentMatches(
 
   const rows = await dedupedTournamentMatches(tournament);
   const resolveTeamId = await teamIdResolver(tournament.game);
+  const standings = (await listStandingsForTournament(tournament.id)).map((row) => ({
+    ...row,
+    team_id: resolveTeamId(row.team),
+  }));
   const rawRunning = rows.filter((m) => m.status === "running");
   const coStreamMap = await liveCoStreamsByMatch(rawRunning, {
     gameSlug: tournament.game,
@@ -310,6 +355,7 @@ export async function getTournamentMatches(
       url: tournament.url,
     },
     matches: { running, scheduled, finished },
+    standings,
     total: running.length + scheduled.length + finishedAll.length,
   };
 }

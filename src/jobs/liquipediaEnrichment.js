@@ -11,9 +11,11 @@ import {
   stampTeamLiquipedia,
 } from '../db/teams.js';
 import {
+  clearDroppedRosterPlayers,
   createLiquipediaPlayer,
   listPlayerNamesForGame,
   savePlayerLiquipedia,
+  setPlayerVerifiedTeam,
   stampPlayerLiquipedia,
 } from '../db/players.js';
 import * as defaultLiquipedia from '../services/liquipedia.js';
@@ -79,6 +81,15 @@ export async function runLiquipediaEnrichment({
         if (key && !byName.has(key)) byName.set(key, row);
       }
 
+      // Player rows by normalized nick, shared by roster verification (below)
+      // and the bio-parse queue — matched before creating to avoid duplicates.
+      const existingPlayers = await listPlayerNamesForGame(game);
+      const playersByName = new Map();
+      for (const row of existingPlayers) {
+        const key = normalizeTeamName(row.name);
+        if (key && !playersByName.has(key)) playersByName.set(key, row);
+      }
+
       const playerQueue = [];
       const trackedNames = await listTrackedTeamNamesForGame(game);
       for (const teamName of trackedNames) {
@@ -134,36 +145,46 @@ export async function runLiquipediaEnrichment({
           location: entity.normalized.location,
         });
         summary.teamsParsed += 1;
-        for (const member of entity.roster) {
-          if (member.page) playerQueue.push({ ...member, teamId: team.id, teamName: teamName });
-        }
-      }
 
-      // Roster players: their pages came straight from the team page links, so
-      // no search round-trip is needed - just a parse each, budget permitting.
-      if (playerQueue.length && budget > 0) {
-        const existingPlayers = await listPlayerNamesForGame(game);
-        const playersByName = new Map();
-        for (const row of existingPlayers) {
-          const key = normalizeTeamName(row.name);
-          if (key && !playersByName.has(key)) playersByName.set(key, row);
-        }
-        for (const member of playerQueue) {
-          if (budget <= 0) break;
-          const key = normalizeTeamName(member.name);
-          if (!key) continue;
-          let player = playersByName.get(key);
+        // Roster precedence: the parsed active roster is the source of truth
+        // for who plays here — PandaScore's current_team can lag transfers by
+        // months. Verify every member (existing rows included, no budget cost),
+        // then clear players our DB still places on this team but who are gone
+        // from the roster. Absence is only meaningful when the roster parse was
+        // COMPLETE: an empty roster (pageless stub) or a truncated one (parser
+        // row cap hit) must never clear anyone.
+        const confirmedIds = [];
+        for (const member of entity.roster) {
+          const memberKey = normalizeTeamName(member.name);
+          if (!memberKey) continue;
+          let player = playersByName.get(memberKey);
           if (!player) {
             player = await createLiquipediaPlayer({
               game,
               name: member.name,
-              slug: key,
-              currentTeamId: member.teamId,
-              currentTeamName: member.teamName,
+              slug: memberKey,
+              currentTeamId: team.id,
+              currentTeamName: teamName,
             });
-            playersByName.set(key, player);
+            playersByName.set(memberKey, player);
             summary.created += 1;
           }
+          await setPlayerVerifiedTeam(player.id, { teamId: team.id, teamName });
+          confirmedIds.push(player.id);
+          if (member.page) playerQueue.push({ ...member, player });
+        }
+        if (confirmedIds.length && !entity.rosterTruncated) {
+          await clearDroppedRosterPlayers(game, team.id, confirmedIds);
+        }
+      }
+
+      // Roster players: their rows were created/verified during the roster
+      // pass above, and their pages came straight from the team page links, so
+      // no search round-trip is needed - just a parse each, budget permitting.
+      if (playerQueue.length && budget > 0) {
+        for (const member of playerQueue) {
+          if (budget <= 0) break;
+          const player = member.player;
           if (isFresh(player.liquipedia_parsed_at, ttlMs, now)) {
             summary.skippedFresh += 1;
             continue;
