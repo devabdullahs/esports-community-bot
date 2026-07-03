@@ -182,10 +182,11 @@ export function listActivePartnerCampaigns(filter: {
 
 // Cached public-read variant for the placement components (footer renders on
 // EVERY page, so an uncached read would hit the DB on every request). Tag
-// `cms-partners` lets the admin partner/campaign routes bust it immediately on
-// edit; the 5-minute revalidate is the fallback for time-based start/end windows.
-// `now` is intentionally omitted from the args so it isn't part of the cache key
-// (it defaults per execution, i.e. per cache miss).
+// `cms-partners` lets the admin partner/campaign routes mark it stale on edit
+// (revalidateTag → stale-while-revalidate); the 5-minute revalidate is the
+// fallback for time-based start/end windows. `now` is intentionally omitted from
+// the args so it isn't part of the cache key (it defaults per execution, i.e.
+// per cache miss).
 export const listActivePartnerCampaignsCached = unstable_cache(
   (filter: { kind: PartnerCampaignKind; target?: string; limit?: number }) =>
     listActiveCampaignRecords(filter),

@@ -38,6 +38,10 @@ import { POST as newsIdStatusPOST } from "@/app/api/admin/news/[id]/status/route
 import { POST as partnersPOST } from "@/app/api/admin/partners/route";
 import { PATCH as partnerIdPATCH, DELETE as partnerIdDELETE } from "@/app/api/admin/partners/[id]/route";
 import { POST as campaignsPOST } from "@/app/api/admin/partners/campaigns/route";
+import {
+  PATCH as campaignIdPATCH,
+  DELETE as campaignIdDELETE,
+} from "@/app/api/admin/partners/campaigns/[id]/route";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -314,9 +318,33 @@ describe("admin mutation routes call revalidateTag on success", () => {
     expect(spyRevalidateTag).toHaveBeenCalledWith("cms-partners", "default");
   });
 
+  async function seedCampaign(): Promise<{ id: number }> {
+    const partner = await seedPartner();
+    const { createPartnerCampaign } = await import("@bot/db/partners.js");
+    return (await createPartnerCampaign({ partnerId: partner.id, kind: "footer" })) as { id: number };
+  }
+
   test("POST /api/admin/partners/campaigns → revalidateTag(cms-partners)", async () => {
     const partner = await seedPartner();
     const res = await campaignsPOST(req("POST", { partnerId: partner.id, kind: "footer" }));
+    expect(res.status).toBe(200);
+    expect(spyRevalidateTag).toHaveBeenCalledWith("cms-partners", "default");
+  });
+
+  test("PATCH /api/admin/partners/campaigns/[id] → revalidateTag(cms-partners)", async () => {
+    const campaign = await seedCampaign();
+    const partner = await seedPartner();
+    const res = await campaignIdPATCH(
+      req("PATCH", { partnerId: partner.id, kind: "homepage" }),
+      ctx({ id: String(campaign.id) }),
+    );
+    expect(res.status).toBe(200);
+    expect(spyRevalidateTag).toHaveBeenCalledWith("cms-partners", "default");
+  });
+
+  test("DELETE /api/admin/partners/campaigns/[id] → revalidateTag(cms-partners)", async () => {
+    const campaign = await seedCampaign();
+    const res = await campaignIdDELETE(req("DELETE"), ctx({ id: String(campaign.id) }));
     expect(res.status).toBe(200);
     expect(spyRevalidateTag).toHaveBeenCalledWith("cms-partners", "default");
   });
