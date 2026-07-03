@@ -6,6 +6,7 @@ import {
   stripLocalePrefix,
   type Locale,
 } from "@/lib/i18n";
+import { isProxiableLogoUrl, logoProxyUrl } from "@/lib/logo-url";
 import { safeUrlOrUndefined } from "@/lib/safe-url";
 
 // Centralized public-page metadata: canonical URL + OpenGraph + Twitter so shared
@@ -68,6 +69,14 @@ export function alternateLanguages(path = "/") {
   };
 }
 
+// Liquipedia forbids hotlinking, and og:image is fetched by social crawlers, so
+// a Liquipedia entity image must be served through our caching proxy as an
+// absolute URL. PandaScore CDN images (and any other host) pass through as-is.
+function ogImageUrl(raw: string | undefined): string | undefined {
+  if (!raw) return undefined;
+  return isProxiableLogoUrl(raw) ? absoluteUrl(logoProxyUrl(raw)) : raw;
+}
+
 export function buildPageMetadata(input: {
   title: string;
   description?: string | null;
@@ -78,7 +87,7 @@ export function buildPageMetadata(input: {
 }): Metadata {
   const locale = input.locale ?? localeFromPathname(input.path ?? "") ?? "en";
   const url = absoluteUrl(input.path);
-  const image = safeUrlOrUndefined(input.image ?? undefined);
+  const image = ogImageUrl(safeUrlOrUndefined(input.image ?? undefined));
   const description = input.description?.trim() || siteDescription(locale);
   const name = siteName(locale);
   return {

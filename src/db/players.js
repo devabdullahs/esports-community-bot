@@ -253,6 +253,17 @@ export async function clearDroppedRosterPlayers(game, teamId, keepIds) {
   return result?.changes ?? 0;
 }
 
+// Player photos hosted on Liquipedia - warmed into the shared logo cache so the
+// web proxy can serve them (Liquipedia hotlinking is not allowed). PandaScore
+// CDN photos are excluded (served directly, not proxied).
+export async function listLiquipediaPlayerLogos() {
+  const rows = await all(
+    "SELECT DISTINCT image_url FROM players WHERE LOWER(image_url) LIKE 'https://liquipedia.net/%'",
+    [],
+  );
+  return rows.map((row) => row.image_url).filter(Boolean);
+}
+
 export async function stampPlayerLiquipedia(id, { url = null } = {}) {
   const now = nowText();
   return get(

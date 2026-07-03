@@ -46,6 +46,22 @@ export async function listStandingsForTournament(tournamentId) {
   );
 }
 
+// Distinct standings crest URLs across active, non-archived tournaments. All
+// standings come from Liquipedia, so the logo-warmup job pre-downloads these
+// into the shared cache; the web logo proxy never fetches Liquipedia upstream
+// on a public page view (hotlinking Liquipedia images is not allowed).
+export async function listStandingsLogos() {
+  const rows = await all(
+    `SELECT DISTINCT s.logo
+       FROM tournament_standings s
+       JOIN tournaments t ON t.id = s.tournament_id
+      WHERE t.active = 1 AND t.archived_at IS NULL
+        AND s.logo IS NOT NULL AND s.logo <> ''`,
+    [],
+  );
+  return rows.map((row) => row.logo).filter(Boolean);
+}
+
 // tournament_id -> row count, for cheap "does this event have standings" checks
 // across a whole listing (the directory must not hide match-less BR events).
 export async function listStandingsCounts() {

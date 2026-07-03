@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, test, vi } from "vitest";
 import { loadLogoBytes } from "@bot/lib/logoSource.js";
 import { GET as logoGET } from "@/app/api/logo/route";
-import { logoProxyUrl } from "@/lib/logo-url";
+import { displayImageUrl, logoProxyUrl } from "@/lib/logo-url";
 
 vi.mock("@bot/lib/logoSource.js", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@bot/lib/logoSource.js")>();
@@ -33,6 +33,32 @@ describe("logoProxyUrl", () => {
     expect(logoProxyUrl(" https://liquipedia.net/commons/images/a/a5/BetBoom Team.png ")).toBe(
       "/api/logo?url=https%3A%2F%2Fliquipedia.net%2Fcommons%2Fimages%2Fa%2Fa5%2FBetBoom%20Team.png",
     );
+  });
+});
+
+describe("displayImageUrl", () => {
+  test("routes Liquipedia images through the caching proxy (no hotlinking)", () => {
+    expect(displayImageUrl("https://liquipedia.net/commons/images/a/a5/Team.png")).toBe(
+      "/api/logo?url=https%3A%2F%2Fliquipedia.net%2Fcommons%2Fimages%2Fa%2Fa5%2FTeam.png",
+    );
+  });
+
+  test("passes PandaScore CDN images through unchanged (hotlinking allowed there)", () => {
+    const cdn = "https://cdn.pandascore.co/images/team/image/123/logo.png";
+    expect(displayImageUrl(cdn)).toBe(cdn);
+  });
+
+  test("leaves non-absolute values untouched", () => {
+    expect(displayImageUrl("/local/asset.png")).toBe("/local/asset.png");
+  });
+
+  test("does not proxy hosts the cache rejects (subdomains, http) — would 400 otherwise", () => {
+    // The cache/proxy allowlist is https on the exact liquipedia.net host only,
+    // so anything else must pass through rather than be rewritten to /api/logo.
+    const subdomain = "https://commons.liquipedia.net/foo.png";
+    const insecure = "http://liquipedia.net/commons/images/x.png";
+    expect(displayImageUrl(subdomain)).toBe(subdomain);
+    expect(displayImageUrl(insecure)).toBe(insecure);
   });
 });
 

@@ -2,23 +2,51 @@ import cron from 'node-cron';
 import { config } from '../config.js';
 import { logger } from '../lib/logger.js';
 import { listTrackedMatchLogos } from '../db/matches.js';
+import { listStandingsLogos } from '../db/tournamentStandings.js';
+import { listLiquipediaTeamLogos } from '../db/teams.js';
+import { listLiquipediaPlayerLogos } from '../db/players.js';
 import { loadLogoBytes as defaultLoadLogoBytes } from '../lib/logoSource.js';
 
 let task = null;
 let bootTimer = null;
 let running = false;
 
-// Pre-download tracked-match crests into the shared on-disk cache. The web logo
-// proxy serves only crests already in that cache — it deliberately refuses to
-// fetch upstream on public page views (rate-limit / SSRF guard) — so without
-// this the tournament directory shows initials for any crest the bot has not
-// happened to render on a match card yet. Downloads go through logoSource's
-// serial, 10s-paced, back-off-protected queue, so a run is naturally throttled;
-// we additionally cap fresh downloads per run so a single run stays bounded and
-// load spreads across the day. Already-cached crests are near-instant.
+// Every Liquipedia-hosted image the site renders, warmed into the shared cache
+// so the web proxy can serve them without ever hotlinking Liquipedia. Match
+// crests come first (most time-sensitive); standings crests and entity crests/
+// photos follow. Order matters because the per-run cap counts fresh downloads
+// only — cached URLs skip cheaply, so over successive runs the whole set warms.
+async function listWarmableLogos() {
+  const [matches, standings, teams, players] = await Promise.all([
+    listTrackedMatchLogos(),
+    listStandingsLogos(),
+    listLiquipediaTeamLogos(),
+    listLiquipediaPlayerLogos(),
+  ]);
+  const seen = new Set();
+  const ordered = [];
+  for (const url of [...matches, ...standings, ...teams, ...players]) {
+    if (url && !seen.has(url)) {
+      seen.add(url);
+      ordered.push(url);
+    }
+  }
+  return ordered;
+}
+
+// Pre-download every Liquipedia-hosted image the site renders (match crests,
+// standings crests, team/player entity images) into the shared on-disk cache.
+// The web logo proxy serves only images already in that cache — it deliberately
+// refuses to fetch upstream on public page views (rate-limit / SSRF guard) — so
+// without this the directory, standings tables and profile pages show initials
+// for any Liquipedia image the bot has not happened to cache yet. Downloads go
+// through logoSource's serial, 10s-paced, back-off-protected queue, so a run is
+// naturally throttled; we additionally cap fresh downloads per run so a single
+// run stays bounded and load spreads across the day. Already-cached images are
+// near-instant and do not count against the cap.
 export async function warmTrackedMatchLogos({
   load = defaultLoadLogoBytes,
-  listLogos = listTrackedMatchLogos,
+  listLogos = listWarmableLogos,
   maxDownloads = config.logoWarmup.maxDownloadsPerRun,
 } = {}) {
   if (running) {
