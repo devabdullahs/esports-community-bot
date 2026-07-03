@@ -6,7 +6,7 @@ import {
   stripLocalePrefix,
   type Locale,
 } from "@/lib/i18n";
-import { logoProxyUrl } from "@/lib/logo-url";
+import { isProxiableLogoUrl, logoProxyUrl } from "@/lib/logo-url";
 import { safeUrlOrUndefined } from "@/lib/safe-url";
 
 // Centralized public-page metadata: canonical URL + OpenGraph + Twitter so shared
@@ -74,15 +74,7 @@ export function alternateLanguages(path = "/") {
 // absolute URL. PandaScore CDN images (and any other host) pass through as-is.
 function ogImageUrl(raw: string | undefined): string | undefined {
   if (!raw) return undefined;
-  try {
-    const host = new URL(raw).hostname.toLowerCase();
-    if (host === "liquipedia.net" || host.endsWith(".liquipedia.net")) {
-      return absoluteUrl(logoProxyUrl(raw));
-    }
-  } catch {
-    return undefined;
-  }
-  return raw;
+  return isProxiableLogoUrl(raw) ? absoluteUrl(logoProxyUrl(raw)) : raw;
 }
 
 export function buildPageMetadata(input: {

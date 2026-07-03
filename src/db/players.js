@@ -258,7 +258,7 @@ export async function clearDroppedRosterPlayers(game, teamId, keepIds) {
 // CDN photos are excluded (served directly, not proxied).
 export async function listLiquipediaPlayerLogos() {
   const rows = await all(
-    "SELECT DISTINCT image_url FROM players WHERE image_url LIKE 'https://liquipedia.net/%'",
+    "SELECT DISTINCT image_url FROM players WHERE LOWER(image_url) LIKE 'https://liquipedia.net/%'",
     [],
   );
   return rows.map((row) => row.image_url).filter(Boolean);

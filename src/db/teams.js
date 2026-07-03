@@ -135,7 +135,7 @@ export async function listTeamNamesForGame(game) {
 // served directly and are not cacheable through the Liquipedia-only proxy.
 export async function listLiquipediaTeamLogos() {
   const rows = await all(
-    "SELECT DISTINCT image_url FROM teams WHERE image_url LIKE 'https://liquipedia.net/%'",
+    "SELECT DISTINCT image_url FROM teams WHERE LOWER(image_url) LIKE 'https://liquipedia.net/%'",
     [],
   );
   return rows.map((row) => row.image_url).filter(Boolean);

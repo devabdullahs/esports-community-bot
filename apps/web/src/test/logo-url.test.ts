@@ -51,6 +51,15 @@ describe("displayImageUrl", () => {
   test("leaves non-absolute values untouched", () => {
     expect(displayImageUrl("/local/asset.png")).toBe("/local/asset.png");
   });
+
+  test("does not proxy hosts the cache rejects (subdomains, http) — would 400 otherwise", () => {
+    // The cache/proxy allowlist is https on the exact liquipedia.net host only,
+    // so anything else must pass through rather than be rewritten to /api/logo.
+    const subdomain = "https://commons.liquipedia.net/foo.png";
+    const insecure = "http://liquipedia.net/commons/images/x.png";
+    expect(displayImageUrl(subdomain)).toBe(subdomain);
+    expect(displayImageUrl(insecure)).toBe(insecure);
+  });
 });
 
 describe("GET /api/logo", () => {
