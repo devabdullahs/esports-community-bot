@@ -150,8 +150,9 @@ export async function runLiquipediaEnrichment({
         // for who plays here — PandaScore's current_team can lag transfers by
         // months. Verify every member (existing rows included, no budget cost),
         // then clear players our DB still places on this team but who are gone
-        // from the roster. An empty roster parses fine on pageless team stubs,
-        // so only a non-empty roster is allowed to clear anyone.
+        // from the roster. Absence is only meaningful when the roster parse was
+        // COMPLETE: an empty roster (pageless stub) or a truncated one (parser
+        // row cap hit) must never clear anyone.
         const confirmedIds = [];
         for (const member of entity.roster) {
           const memberKey = normalizeTeamName(member.name);
@@ -172,7 +173,9 @@ export async function runLiquipediaEnrichment({
           confirmedIds.push(player.id);
           if (member.page) playerQueue.push({ ...member, player });
         }
-        if (confirmedIds.length) await clearDroppedRosterPlayers(game, team.id, confirmedIds);
+        if (confirmedIds.length && !entity.rosterTruncated) {
+          await clearDroppedRosterPlayers(game, team.id, confirmedIds);
+        }
       }
 
       // Roster players: their rows were created/verified during the roster

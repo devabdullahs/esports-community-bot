@@ -45,13 +45,14 @@ export function parseEntityInfobox($) {
 // the active squad first; "Former" squads come in later tables/sections). Each
 // row links the player's wiki page — that link is what lets the enrichment job
 // walk team -> players without any name guessing.
+// Returns { players, truncated }: `truncated` means the cap cut real rows off,
+// so the caller must NOT treat absence from `players` as "left the team".
 export function parseTeamRoster($, { limit = 20 } = {}) {
   const table = $('table.roster-card').first();
-  if (!table.length) return [];
+  if (!table.length) return { players: [], truncated: false };
 
   const players = [];
   table.find('tr').each((_, row) => {
-    if (players.length >= limit) return false;
     const idCell = $(row).find('td.ID').first();
     const link = idCell.find('a').filter((_, a) => {
       const href = $(a).attr('href') || '';
@@ -67,7 +68,7 @@ export function parseTeamRoster($, { limit = 20 } = {}) {
       role: position ? position.replace(/^position:?\s*/i, '') || null : null,
     });
   });
-  return players;
+  return { players: players.slice(0, limit), truncated: players.length > limit };
 }
 
 // Normalized conveniences pulled out of the raw facts dictionary. Everything

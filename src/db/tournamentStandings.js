@@ -11,15 +11,18 @@ export async function replaceTournamentStandings(tournamentId, sections) {
   return transaction(async (tx) => {
     await tx.run('DELETE FROM tournament_standings WHERE tournament_id = $1', [tournamentId]);
     let inserted = 0;
+    let sectionOrder = 0;
     for (const section of sections ?? []) {
+      sectionOrder += 1;
       for (const entry of section.entries ?? []) {
         if (!entry?.team) continue;
         await tx.run(
-          `INSERT INTO tournament_standings (tournament_id, section, rank, team, logo, points, extra, updated_at)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+          `INSERT INTO tournament_standings (tournament_id, section, section_order, rank, team, logo, points, extra, updated_at)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
           [
             tournamentId,
             String(section.title ?? ''),
+            sectionOrder,
             Number(entry.rank) || 0,
             String(entry.team),
             entry.logo ?? null,
@@ -38,7 +41,7 @@ export async function replaceTournamentStandings(tournamentId, sections) {
 export async function listStandingsForTournament(tournamentId) {
   return all(
     `SELECT * FROM tournament_standings WHERE tournament_id = $1
-     ORDER BY section ASC, rank ASC, id ASC`,
+     ORDER BY section_order ASC, rank ASC, id ASC`,
     [tournamentId],
   );
 }

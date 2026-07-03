@@ -689,6 +689,7 @@ db.exec(`
     id            INTEGER PRIMARY KEY AUTOINCREMENT,
     tournament_id INTEGER NOT NULL REFERENCES tournaments(id) ON DELETE CASCADE,
     section       TEXT NOT NULL DEFAULT '',
+    section_order INTEGER NOT NULL DEFAULT 0,
     rank          INTEGER NOT NULL,
     team          TEXT NOT NULL,
     logo          TEXT,
@@ -697,8 +698,10 @@ db.exec(`
     updated_at    TEXT NOT NULL DEFAULT (datetime('now'))
   );
   CREATE INDEX IF NOT EXISTS idx_tournament_standings_tournament
-    ON tournament_standings(tournament_id, section, rank);
+    ON tournament_standings(tournament_id, section_order, rank);
 `);
+
+ensureColumns('tournament_standings', [['section_order', 'INTEGER NOT NULL DEFAULT 0']]);
 
 // Follows + notifications. A member (by Discord id) follows games / tournaments /
 // teams / players; match transitions fan out one notification row per follower.

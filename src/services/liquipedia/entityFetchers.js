@@ -84,7 +84,7 @@ export async function fetchTeamEntity(wiki, page) {
   if (!$) return null;
   const infobox = parseEntityInfobox($);
   if (!infobox) return null;
-  const roster = parseTeamRoster($);
+  const { players: roster, truncated: rosterTruncated } = parseTeamRoster($);
   const raw = [
     $.html($('.fo-nttax-infobox').first()),
     $.html($('table.roster-card').first()),
@@ -95,6 +95,7 @@ export async function fetchTeamEntity(wiki, page) {
     facts: infobox.facts,
     normalized: normalizeEntityFacts(infobox.facts),
     roster,
+    rosterTruncated,
     raw,
   };
 }

@@ -63,6 +63,9 @@ export default async function TournamentDetailPage({
   const followState = await getViewerFollowState("tournament", String(tournament.id));
   const sourceUrl = safeUrlOrUndefined(tournament.url);
   const isLive = data.matches.running.length > 0;
+  // Standings-format events (battle royale, TFT groups) have no head-to-head
+  // matches; a 0/0/0 metric card would read like empty data.
+  const standingsOnly = data.standings.length > 0 && data.total === 0;
   const gameTitle = tournament.game
     ? gameTitleForSlug(tournament.game, games, locale)
     : text.allGames;
@@ -126,11 +129,17 @@ export default async function TournamentDetailPage({
             </div>
           </div>
           <Card className="min-w-0 bg-background/35 py-0 lg:w-80">
-            <CardContent className="grid grid-cols-3 gap-2 p-3">
-              <DetailMetric label={text.live} value={data.matches.running.length} locale={locale} live />
-              <DetailMetric label={text.upcoming} value={data.matches.scheduled.length} locale={locale} />
-              <DetailMetric label={text.results} value={data.matches.finished.length} locale={locale} />
-            </CardContent>
+            {standingsOnly ? (
+              <CardContent className="grid grid-cols-1 gap-2 p-3">
+                <DetailMetric label={text.standings} value={data.standings.length} locale={locale} />
+              </CardContent>
+            ) : (
+              <CardContent className="grid grid-cols-3 gap-2 p-3">
+                <DetailMetric label={text.live} value={data.matches.running.length} locale={locale} live />
+                <DetailMetric label={text.upcoming} value={data.matches.scheduled.length} locale={locale} />
+                <DetailMetric label={text.results} value={data.matches.finished.length} locale={locale} />
+              </CardContent>
+            )}
           </Card>
         </div>
       </header>

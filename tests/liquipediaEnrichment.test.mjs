@@ -236,6 +236,24 @@ test('a parsed roster verifies existing players and clears dropped ones (Liquipe
   assert.equal(starAfter.current_team_name, 'Nova Esports');
 });
 
+test('a truncated roster parse never clears players (absence is only meaningful when complete)', async () => {
+  // The parser caps roster rows; a capped parse means "these players are on the
+  // team", not "everyone else left". Nova_Esports Two is verified on the team
+  // from the previous run — a truncated re-parse that omits him must keep him.
+  const lp = mockLiquipedia();
+  const fullFetch = lp.fetchTeamEntity;
+  lp.fetchTeamEntity = async (wiki, page) => {
+    const entity = await fullFetch(wiki, page);
+    return { ...entity, roster: entity.roster.slice(0, 1), rosterTruncated: true };
+  };
+  await runLiquipediaEnrichment({ liquipedia: lp, maxParses: 50, ttlMs: 0 });
+
+  const tftPlayers = await listPlayers({ game: 'tft', limit: 50 });
+  const two = tftPlayers.find((p) => p.name === 'Nova_Esports Two');
+  assert.ok(two, 'roster player exists from the previous complete parse');
+  assert.ok(two.current_team_id, 'still on the team despite the truncated parse');
+});
+
 test('a later PandaScore sync adopts the Liquipedia-only row instead of duplicating', async () => {
   // "Twisted Minds" exists as a Liquipedia-only rocketleague row (pandascore_id NULL,
   // slug = normalized name). A PandaScore upsert for the same team must claim it.
