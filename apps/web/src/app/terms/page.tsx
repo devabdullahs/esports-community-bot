@@ -29,7 +29,7 @@ export async function generateMetadata(): Promise<Metadata> {
   });
 }
 
-const LAST_UPDATED = "2026-06-12";
+const LAST_UPDATED = "2026-07-03";
 
 const CONTENT = {
   en: {
@@ -39,15 +39,15 @@ const CONTENT = {
       {
         heading: "1. Service Description",
         body: [
-          "Esports Community Bot is a free, non-commercial community project that provides a Discord bot and web dashboard for esports fans. The service includes live tournament tracking, bilingual community news (English and Arabic), a media directory, EWC prediction boards, public leaderboards, and Discord profile showcase sync.",
-          "The service is provided at no charge and is operated as a hobby project by community volunteers. There are no paid tiers, advertisements, or monetised features.",
+          "Esports Community Bot is a free-to-use community project that provides a Discord bot and web dashboard for esports fans. The service includes live tournament tracking, bilingual community news (English and Arabic), a media directory, EWC prediction boards, public leaderboards, partner recognition, and Discord profile showcase sync.",
+          "The service may show curated sponsor or community partner recognition to help cover hosting, development, and future community events. These placements are labeled and do not use third-party ad networks, tracking pixels, or automated ad targeting.",
         ],
       },
       {
         heading: "2. Predictions — For Entertainment Only",
         body: [
           "The prediction system is a community entertainment feature only. Participants pick teams or club results each week and accumulate points on a public leaderboard.",
-          "There are no monetary prizes, cash rewards, or anything of financial value associated with prediction scores or leaderboard standings. The platform does not facilitate, enable, or encourage betting or gambling of any kind. Predictions are purely for fun and community engagement.",
+          "Predictions are free to enter and do not provide any paid advantage. The platform does not facilitate, enable, or encourage betting or gambling of any kind. If sponsor-funded prizes or community event rewards are introduced later, they will use separate published rules, no-purchase-required entry, and eligibility terms before they go live.",
         ],
       },
       {
@@ -114,15 +114,15 @@ const CONTENT = {
       {
         heading: "١. وصف الخدمة",
         body: [
-          "بوت مجتمع الرياضات الإلكترونية مشروع مجتمعي مجاني وغير تجاري يوفّر بوت ديسكورد ولوحة ويب لمحبّي الرياضات الإلكترونية. تشمل الخدمة متابعة البطولات المباشرة، وأخباراً مجتمعية ثنائية اللغة (العربية والإنجليزية)، ودليلاً إعلامياً، ولوحات توقعات EWC، وجداول صدارة عامة، ومزامنة عرض ملف ديسكورد.",
-          "تُقدَّم الخدمة مجاناً وتُدار كمشروع هواية من قِبل متطوعي المجتمع. لا توجد اشتراكات مدفوعة أو إعلانات أو ميزات مموّلة.",
+          "بوت مجتمع الرياضات الإلكترونية مشروع مجتمعي مجاني الاستخدام يوفّر بوت ديسكورد ولوحة ويب لمحبّي الرياضات الإلكترونية. تشمل الخدمة متابعة البطولات المباشرة، وأخباراً مجتمعية ثنائية اللغة (العربية والإنجليزية)، ودليلاً إعلامياً، ولوحات توقعات EWC، وجداول صدارة عامة، وظهوراً للشركاء، ومزامنة عرض ملف ديسكورد.",
+          "قد تعرض الخدمة ظهوراً منسقاً للرعاة أو شركاء المجتمع للمساعدة في تغطية الاستضافة والتطوير وفعاليات المجتمع المستقبلية. تكون هذه المواضع واضحة التسمية ولا تستخدم شبكات إعلانية خارجية أو بكسلات تتبع أو استهدافاً إعلانياً آلياً.",
         ],
       },
       {
         heading: "٢. التوقعات — للترفيه فقط",
         body: [
           "نظام التوقعات ميزة ترفيهية مجتمعية بحتة. يختار المشاركون الفرق أو نتائج الأندية أسبوعياً ويتراكمون نقاطاً في جدول الصدارة العام.",
-          "لا توجد جوائز مالية أو مكافآت نقدية أو أي قيمة مادية مرتبطة بنقاط التوقعات أو مراكز جدول الصدارة. لا تُسهّل المنصة أو تدعم المراهنة أو القمار بأي شكل من الأشكال. التوقعات للمتعة والتفاعل المجتمعي حصراً.",
+          "التوقعات مجانية الدخول ولا تمنح أي أفضلية مدفوعة. لا تُسهّل المنصة أو تدعم المراهنة أو القمار بأي شكل من الأشكال. إذا أُضيفت لاحقاً جوائز ممولة من رعاة أو مكافآت لفعاليات المجتمع، فستُنشر لها قواعد منفصلة ودخول بلا شراء وشروط أهلية قبل تفعيلها.",
         ],
       },
       {

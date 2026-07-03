@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { LiquipediaAttribution } from "@/components/tournaments/liquipedia-attribution";
+import { PartnerPlacement } from "@/components/partners/partner-placement";
 import { TournamentMatchList } from "@/components/tournaments/tournament-match-list";
 import { copy, formatNumber, localizedPath } from "@/lib/i18n";
 import { getViewerFollowState } from "@/lib/follows";
@@ -143,6 +144,8 @@ export default async function TournamentDetailPage({
           </Card>
         </div>
       </header>
+
+      <PartnerPlacement kind="tournament" target={`tournament:${tournament.id}`} locale={locale} />
 
       <TournamentMatchList tournamentId={tournament.id} locale={locale} initialData={data} />
 

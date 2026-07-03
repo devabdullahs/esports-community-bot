@@ -23,6 +23,7 @@ import {
 } from "@/components/ui/card";
 import { DateTime } from "@/components/date-time";
 import { GameLogoMark } from "@/components/game-logo-mark";
+import { PartnerPlacement } from "@/components/partners/partner-placement";
 import { localizeText } from "@/lib/community-content";
 import { gameTitleForSlug, listGamesCached } from "@/lib/games";
 import { listLatestPublishedNewsPostsCached, type NewsPost } from "@/lib/news";
@@ -232,6 +233,8 @@ export default async function Home() {
           )}
         </div>
       </section>
+
+      <PartnerPlacement kind="homepage" locale={locale} />
 
       {/* Games the community follows */}
       {games.length ? (

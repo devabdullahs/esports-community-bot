@@ -537,6 +537,56 @@ db.exec(`
     created_at      TEXT NOT NULL DEFAULT (datetime('now'))
   );
 
+  CREATE TABLE IF NOT EXISTS partner_inquiries (
+    id                INTEGER PRIMARY KEY AUTOINCREMENT,
+    organization_name TEXT NOT NULL,
+    contact_name      TEXT NOT NULL,
+    email             TEXT NOT NULL,
+    website_url       TEXT,
+    interest          TEXT NOT NULL CHECK (interest IN ('open_source_partner','prediction_partner','event_prize_later','other')),
+    message           TEXT NOT NULL DEFAULT '',
+    status            TEXT NOT NULL DEFAULT 'new' CHECK (status IN ('new','contacted','approved','declined','converted')),
+    created_at        TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at        TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+  CREATE INDEX IF NOT EXISTS idx_partner_inquiries_status
+    ON partner_inquiries(status, created_at DESC);
+
+  CREATE TABLE IF NOT EXISTS partners (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    slug        TEXT NOT NULL UNIQUE,
+    name        TEXT NOT NULL,
+    logo_url    TEXT,
+    website_url TEXT,
+    summary     TEXT NOT NULL DEFAULT '',
+    status      TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active','inactive')),
+    created_at  TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at  TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+  CREATE INDEX IF NOT EXISTS idx_partners_status
+    ON partners(status, name);
+
+  CREATE TABLE IF NOT EXISTS partner_campaigns (
+    id                INTEGER PRIMARY KEY AUTOINCREMENT,
+    partner_id        INTEGER NOT NULL REFERENCES partners(id) ON DELETE CASCADE,
+    kind              TEXT NOT NULL CHECK (kind IN ('homepage','footer','predictions','leaderboard','tournament')),
+    target            TEXT NOT NULL DEFAULT '',
+    title             TEXT NOT NULL DEFAULT '',
+    note              TEXT NOT NULL DEFAULT '',
+    start_at          INTEGER,
+    end_at            INTEGER,
+    status            TEXT NOT NULL DEFAULT 'draft' CHECK (status IN ('draft','active','paused','ended')),
+    payment_method    TEXT NOT NULL DEFAULT 'github_sponsors' CHECK (payment_method IN ('github_sponsors','bank_transfer','paypal','other','waived')),
+    payment_status    TEXT NOT NULL DEFAULT 'unpaid' CHECK (payment_status IN ('unpaid','pending','paid')),
+    payment_reference TEXT,
+    created_at        TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at        TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+  CREATE INDEX IF NOT EXISTS idx_partner_campaigns_active
+    ON partner_campaigns(kind, target, status, start_at, end_at);
+  CREATE INDEX IF NOT EXISTS idx_partner_campaigns_partner
+    ON partner_campaigns(partner_id);
+
   CREATE TABLE IF NOT EXISTS ewc_admins (
     discord_id   TEXT PRIMARY KEY,
     display_name TEXT NOT NULL DEFAULT '',

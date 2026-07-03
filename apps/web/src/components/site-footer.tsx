@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { TrophyIcon } from "lucide-react";
 import { DiscordIcon } from "@/components/discord-icon";
+import { PartnerPlacement } from "@/components/partners/partner-placement";
 import { Button } from "@/components/ui/button";
 import { DISCORD_INVITE_URL } from "@/lib/community-links";
 import { copy, localizedPath } from "@/lib/i18n";
@@ -15,6 +16,7 @@ export async function SiteFooter() {
     { href: "/news", label: text.common.news },
     { href: "/media", label: text.common.media },
     { href: "/predictions", label: text.common.predictions },
+    { href: "/partners", label: text.common.partners },
     { href: "/terms", label: text.common.termsOfService },
     { href: "/privacy", label: text.common.privacyPolicy },
   ];
@@ -60,6 +62,7 @@ export async function SiteFooter() {
             ))}
           </nav>
         </div>
+        <PartnerPlacement kind="footer" locale={locale} />
         <p className="text-xs text-muted-foreground">{text.footer.brand}</p>
       </div>
     </footer>

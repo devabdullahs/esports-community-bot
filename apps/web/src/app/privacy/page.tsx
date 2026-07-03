@@ -29,7 +29,7 @@ export async function generateMetadata(): Promise<Metadata> {
   });
 }
 
-const LAST_UPDATED = "2026-06-14";
+const LAST_UPDATED = "2026-07-03";
 
 const CONTENT = {
   en: {
@@ -39,7 +39,7 @@ const CONTENT = {
       {
         heading: "1. Who We Are",
         body: [
-          "Esports Community Bot is a free, non-commercial community project. There are no advertisements, no paid subscriptions, and no personal data is sold or traded for commercial benefit. The service is operated by volunteer community staff.",
+          "Esports Community Bot is a free-to-use community project. The site may show curated sponsor or community partner recognition to help cover hosting, development, and future community events. There are no third-party ad networks, tracking pixels, or paid subscriptions, and personal data is not sold or traded.",
         ],
       },
       {
@@ -77,7 +77,14 @@ const CONTENT = {
         ],
       },
       {
-        heading: "5. Cookies and Local Preferences",
+        heading: "5. Partner Inquiries",
+        body: [
+          "If you submit a partner inquiry, we store the organization name, contact name, email address, optional website URL, selected partnership interest, message, status, and timestamps. This data is used only to review the inquiry, contact you, and manage partner recognition if approved.",
+          "Partner payments are handled outside the app through GitHub Sponsors or a private manual payment path. The app does not collect card or bank details.",
+        ],
+      },
+      {
+        heading: "6. Cookies and Local Preferences",
         body: [
           "The following cookies are set by this service:",
         ],
@@ -86,58 +93,58 @@ const CONTENT = {
           "Better Auth session cookies — HttpOnly, with Secure flag enabled in production, used to maintain your login session.",
         ],
         after: [
-          "No third-party tracking cookies or analytics scripts are used.",
+          "No third-party tracking cookies, ad-network scripts, or analytics scripts are used.",
         ],
       },
       {
-        heading: "6. Image Uploads",
+        heading: "7. Image Uploads",
         body: [
           "Cover images for news posts are optionally uploaded to Cloudflare R2 object storage. Uploaded files are stored under a news/ key prefix. This storage is operated by the same community operators and is subject to Cloudflare's data processing terms.",
         ],
       },
       {
-        heading: "7. Discord Profile Showcase (Role Connection)",
+        heading: "8. Discord Profile Showcase (Role Connection)",
         body: [
           "If you use /ewc_predict link or the dashboard's Sync profile button, your prediction summary is pushed to Discord's Application Role Connection API. This allows your Discord profile to display your EWC prediction rank and points.",
           "This is a user-initiated action. You can remove the showcase at any time by using the Unlink button on your /me profile page or by running /ewc_predict unlink in Discord.",
         ],
       },
       {
-        heading: "8. Infrastructure and Data Processors",
+        heading: "9. Infrastructure and Data Processors",
         body: [
           "All persistent data is stored in a managed PostgreSQL database hosted on cloud infrastructure in the MENA (Saudi Arabia) region. No third-party analytics or advertising service holds your data.",
           "Public web traffic is routed through Cloudflare, which provides TLS termination and DDoS protection. Cloudflare may process request metadata (IP addresses, headers) in accordance with its own privacy policy.",
-          "The service does not share your personal data with any other third party beyond the processors listed here (Discord, the managed database host, and Cloudflare).",
+          "The service does not share your personal data with any other third party beyond the processors listed here (Discord, the managed database host, Cloudflare, and GitHub Sponsors only if you choose to sponsor through GitHub).",
         ],
       },
       {
-        heading: "9. Discord Bot Data",
+        heading: "10. Discord Bot Data",
         body: [
           "The Discord bot stores guild and channel configuration (which channels are designated for leaderboards, match cards, voice status, etc.). It tracks tournaments and match data sourced from Liquipedia (CC-BY-SA 3.0). Members' weekly and season prediction picks are stored as described above.",
           "The bot does not read, log, or store the content of any Discord messages. It only responds to explicit slash command interactions.",
         ],
       },
       {
-        heading: "10. Data Retention",
+        heading: "11. Data Retention",
         body: [
-          "Account and prediction-link data is retained until you unlink your profile or request deletion. Session records are subject to Better Auth's default session expiry.",
+          "Account and prediction-link data is retained until you unlink your profile or request deletion. Partner inquiries are retained while they are being reviewed and for a reasonable recordkeeping period after follow-up. Session records are subject to Better Auth's default session expiry.",
           "To request deletion of your data, use the Unlink button on your /me profile page and then contact the community server administrators on Discord. They will remove remaining account records on request.",
         ],
       },
       {
-        heading: "11. Minimum Age",
+        heading: "12. Minimum Age",
         body: [
           "Use of this service requires a Discord account. You must meet Discord's minimum age requirement (13 years old, or the higher minimum in your country where applicable) to use this service.",
         ],
       },
       {
-        heading: "12. Changes to This Policy",
+        heading: "13. Changes to This Policy",
         body: [
           "This policy may be updated from time to time. The date at the top of this page reflects the most recent revision. Significant changes will be announced in the community Discord server.",
         ],
       },
       {
-        heading: "13. Contact",
+        heading: "14. Contact",
         body: [
           "For privacy-related questions or data deletion requests, contact the community server administrators on Discord or open an issue in the GitHub repository.",
         ],
@@ -151,7 +158,7 @@ const CONTENT = {
       {
         heading: "١. من نحن",
         body: [
-          "بوت مجتمع الرياضات الإلكترونية مشروع مجتمعي مجاني وغير تجاري. لا توجد إعلانات أو اشتراكات مدفوعة، ولا تُباع البيانات الشخصية أو تُتداول لأغراض تجارية. تُدار الخدمة من قِبل متطوعي المجتمع.",
+          "بوت مجتمع الرياضات الإلكترونية مشروع مجتمعي مجاني الاستخدام. قد يعرض الموقع ظهوراً منسقاً للرعاة أو شركاء المجتمع للمساعدة في تغطية الاستضافة والتطوير وفعاليات المجتمع المستقبلية. لا توجد شبكات إعلانية خارجية أو بكسلات تتبع أو اشتراكات مدفوعة، ولا تُباع البيانات الشخصية أو تُتداول.",
         ],
       },
       {
@@ -189,7 +196,14 @@ const CONTENT = {
         ],
       },
       {
-        heading: "٥. ملفات تعريف الارتباط والتفضيلات المحلية",
+        heading: "٥. طلبات الشراكة",
+        body: [
+          "إذا أرسلت طلب شراكة، نخزن اسم الجهة واسم مسؤول التواصل والبريد الإلكتروني ورابط الموقع الاختياري ونوع الشراكة والرسالة والحالة والطوابع الزمنية. تُستخدم هذه البيانات فقط لمراجعة الطلب والتواصل معك وإدارة ظهور الشريك إذا تمت الموافقة.",
+          "تتم مدفوعات الشركاء خارج التطبيق عبر GitHub Sponsors أو مسار دفع يدوي خاص. لا يجمع التطبيق بيانات البطاقات أو الحسابات البنكية.",
+        ],
+      },
+      {
+        heading: "٦. ملفات تعريف الارتباط والتفضيلات المحلية",
         body: [
           "تضع هذه الخدمة ملفات تعريف الارتباط التالية:",
         ],
@@ -198,58 +212,58 @@ const CONTENT = {
           "ملفات تعريف ارتباط الجلسة لـ Better Auth — HttpOnly مع علامة Secure في الإنتاج، تُستخدم للحفاظ على جلسة تسجيل دخولك.",
         ],
         after: [
-          "لا تُستخدم ملفات تعريف ارتباط التتبع أو سكريبتات التحليلات الخارجية.",
+          "لا تُستخدم ملفات تعريف ارتباط تتبع أو سكريبتات شبكات إعلانية أو تحليلات خارجية.",
         ],
       },
       {
-        heading: "٦. رفع الصور",
+        heading: "٧. رفع الصور",
         body: [
           "تُرفع صور الغلاف للمنشورات الإخبارية اختيارياً إلى تخزين الكائنات Cloudflare R2. تُخزَّن الملفات المرفوعة تحت بادئة news/. يُدار هذا التخزين من قِبل مشغّلي المجتمع ذاتهم ويخضع لشروط معالجة البيانات لدى Cloudflare.",
         ],
       },
       {
-        heading: "٧. عرض ملف ديسكورد الشخصي (ربط الأدوار)",
+        heading: "٨. عرض ملف ديسكورد الشخصي (ربط الأدوار)",
         body: [
           "إن استخدمت /ewc_predict link أو زر \"مزامنة الملف\" في اللوحة، يُرسَل ملخص توقعاتك إلى واجهة Application Role Connection في ديسكورد. يتيح ذلك لملفك الشخصي على ديسكورد عرض رتبة ونقاط توقعات EWC.",
           "هذا إجراء يبادر به المستخدم. يمكنك إزالة العرض في أي وقت عبر زر \"فصل الربط\" في صفحة ملفك /me أو بتشغيل /ewc_predict unlink في ديسكورد.",
         ],
       },
       {
-        heading: "٨. البنية التحتية ومعالجو البيانات",
+        heading: "٩. البنية التحتية ومعالجو البيانات",
         body: [
           "تُخزَّن جميع البيانات الدائمة في قاعدة بيانات PostgreSQL مُدارة على بنية تحتية سحابية في منطقة الشرق الأوسط وشمال أفريقيا (المملكة العربية السعودية). لا تحتفظ أي خدمة تحليلات أو إعلانات خارجية ببياناتك.",
           "تمر حركة مرور الويب العامة عبر Cloudflare الذي يوفّر إنهاء TLS والحماية من هجمات DDoS. قد تعالج Cloudflare بيانات تعريف الطلبات (عناوين IP والرؤوس) وفق سياسة خصوصيتها.",
-          "لا تشارك الخدمة بياناتك الشخصية مع أي طرف ثالث آخر غير المعالجين المذكورين هنا (ديسكورد، ومضيف قاعدة البيانات المُدارة، وCloudflare).",
+          "لا تشارك الخدمة بياناتك الشخصية مع أي طرف ثالث آخر غير المعالجين المذكورين هنا (ديسكورد، ومضيف قاعدة البيانات المُدارة، وCloudflare، وGitHub Sponsors فقط إذا اخترت الرعاية عبر GitHub).",
         ],
       },
       {
-        heading: "٩. بيانات بوت ديسكورد",
+        heading: "١٠. بيانات بوت ديسكورد",
         body: [
           "يخزّن بوت ديسكورد إعدادات السيرفر والقنوات (القنوات المخصصة لجداول الصدارة وبطاقات المباريات وحالة القناة الصوتية وما إلى ذلك). كما يتتبع البطولات وبيانات المباريات المصدرة من Liquipedia (CC-BY-SA 3.0). تُخزَّن اختيارات توقعات الأعضاء الأسبوعية والموسمية كما هو موضح أعلاه.",
           "لا يقرأ البوت محتوى رسائل ديسكورد ولا يسجّلها ولا يخزّنها. يستجيب فقط للتفاعلات الصريحة عبر أوامر الشرطة المائلة (slash commands).",
         ],
       },
       {
-        heading: "١٠. مدة الاحتفاظ بالبيانات",
+        heading: "١١. مدة الاحتفاظ بالبيانات",
         body: [
-          "تُحتفَظ ببيانات الحساب والربط بالملف الشخصي إلى حين فصل ربط ملفك أو طلب الحذف. تخضع سجلات الجلسات لانتهاء صلاحية الجلسة الافتراضية في Better Auth.",
+          "تُحتفَظ ببيانات الحساب والربط بالملف الشخصي إلى حين فصل ربط ملفك أو طلب الحذف. تُحتفظ طلبات الشراكة أثناء المراجعة ولمدة معقولة بعد المتابعة لأغراض السجلات. تخضع سجلات الجلسات لانتهاء صلاحية الجلسة الافتراضية في Better Auth.",
           "لطلب حذف بياناتك، استخدم زر \"فصل الربط\" في صفحة ملفك /me ثم تواصل مع مشرفي سيرفر المجتمع على ديسكورد. سيقومون بحذف سجلات الحساب المتبقية بناءً على طلبك.",
         ],
       },
       {
-        heading: "١١. الحد الأدنى للعمر",
+        heading: "١٢. الحد الأدنى للعمر",
         body: [
           "يستلزم استخدام هذه الخدمة امتلاك حساب ديسكورد. يجب أن تستوفي متطلب الحد الأدنى للعمر لدى ديسكورد (13 عاماً، أو الحد الأعلى في بلدك حيثما ينطبق) لاستخدام هذه الخدمة.",
         ],
       },
       {
-        heading: "١٢. التعديلات على هذه السياسة",
+        heading: "١٣. التعديلات على هذه السياسة",
         body: [
           "قد تُحدَّث هذه السياسة من وقت لآخر. يعكس التاريخ في أعلى هذه الصفحة آخر مراجعة. سيُعلن عن التعديلات الجوهرية في سيرفر ديسكورد المجتمعي.",
         ],
       },
       {
-        heading: "١٣. التواصل",
+        heading: "١٤. التواصل",
         body: [
           "للاستفسارات المتعلقة بالخصوصية أو طلبات حذف البيانات، تواصل مع مشرفي سيرفر المجتمع على ديسكورد أو افتح طلباً (issue) في مستودع GitHub.",
         ],

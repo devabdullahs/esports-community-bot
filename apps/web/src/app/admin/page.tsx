@@ -5,6 +5,7 @@ import {
   ClipboardListIcon,
   FileTextIcon,
   Gamepad2Icon,
+  HandshakeIcon,
   ListChecksIcon,
   type LucideIcon,
   MessagesSquareIcon,
@@ -284,6 +285,14 @@ export default async function AdminPage() {
                 icon={UsersIcon}
                 title={t.dashboard.links.usersTitle}
                 description={t.dashboard.links.usersDescription}
+              />
+            ) : null}
+            {access.isSuper ? (
+              <ManageLink
+                href="/admin/partners"
+                icon={HandshakeIcon}
+                title={t.dashboard.links.partnersTitle}
+                description={t.dashboard.links.partnersDescription}
               />
             ) : null}
             {access.isSuper ? (
