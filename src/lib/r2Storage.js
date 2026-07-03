@@ -29,8 +29,16 @@ const PUBLIC_BASE_URL = normalizeBaseUrl(process.env.R2_PUBLIC_BASE_URL);
 // shared bucket (the configured bucket may be reused across projects).
 const KEY_PREFIX = String(process.env.R2_LOGO_PREFIX || 'esports-logo-cache').replace(/^\/+|\/+$/g, '');
 
-const READ_TIMEOUT_MS = 8000;
+// Kept short: this read sits on the web proxy's public path, and up to a few
+// URL candidates are tried per logo, so a slow/unreachable R2 must not add many
+// seconds before the proxy falls back to initials.
+const READ_TIMEOUT_MS = Math.max(1000, Number(process.env.R2_READ_TIMEOUT_MS || 4000));
+const WRITE_TIMEOUT_MS = Math.max(2000, Number(process.env.R2_WRITE_TIMEOUT_MS || 15000));
 const MAX_LOGO_BYTES = Math.max(64_000, Number(process.env.LOGO_MAX_BYTES || 4 * 1024 * 1024));
+
+// Keys are always a sha256 hex of the source URL; enforce that so a caller can
+// never build an arbitrary object key/path from the public base URL.
+const HASH_RE = /^[a-f0-9]{64}$/;
 
 export function isR2Configured() {
   return Boolean(ACCOUNT_ID && ACCESS_KEY_ID && SECRET_ACCESS_KEY && BUCKET && PUBLIC_BASE_URL);
@@ -43,7 +51,7 @@ export function r2LogoKey(hash) {
 // Fetch cached logo bytes from R2's public URL. Returns a Buffer or null (miss,
 // not configured, or any error). Never throws — a cold R2 must not break serving.
 export async function r2GetLogo(hash) {
-  if (!isR2Configured() || !hash) return null;
+  if (!isR2Configured() || !HASH_RE.test(String(hash))) return null;
   const url = `${PUBLIC_BASE_URL}/${r2LogoKey(hash)}`;
   try {
     const { data } = await axios.get(url, {
@@ -75,7 +83,7 @@ async function s3() {
 // on any error (best-effort — a failed upload just means the next reader
 // re-downloads and re-uploads). Never throws.
 export async function r2PutLogo(hash, bytes, contentType) {
-  if (!isR2Configured() || !hash) return false;
+  if (!isR2Configured() || !HASH_RE.test(String(hash))) return false;
   try {
     const { PutObjectCommand } = await import('@aws-sdk/client-s3');
     const body = Buffer.isBuffer(bytes) ? bytes : Buffer.from(bytes);
@@ -89,6 +97,8 @@ export async function r2PutLogo(hash, bytes, contentType) {
         // Cache hard at the edge: the key is a content hash, so bytes never change.
         CacheControl: 'public, max-age=31536000, immutable',
       }),
+      // Bound the upload so a stalled R2 can never hang the caller indefinitely.
+      { abortSignal: AbortSignal.timeout(WRITE_TIMEOUT_MS) },
     );
     return true;
   } catch (e) {

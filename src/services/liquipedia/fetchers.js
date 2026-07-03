@@ -22,7 +22,7 @@ import {
   normalizeValveRankingRegion,
   parseValveRankingTable,
 } from './parsers.js';
-import { parseEventStandings } from './standingsParsers.js';
+import { hasStandingsTables, parseEventStandings } from './standingsParsers.js';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -304,13 +304,17 @@ export async function fetchValveRegionalStandings(region = 'global') {
 
 // Standings sections for a tournament page. Used for formats that produce no
 // head-to-head matches (BR events, TFT groups). external_id = "game/Page/Path".
+// Returns { sections, hadTables }: hadTables tells the caller whether the page
+// actually contained standings containers, so an empty `sections` from an
+// all-TBD event (hadTables true) can be told apart from a page that had no
+// standings structure at all (hadTables false — could be transient).
 export async function fetchEventStandings(tournament) {
   const [game, ...rest] = tournament.external_id.split('/');
   const page = rest.join('/');
-  if (!game || !page) return [];
+  if (!game || !page) return { sections: [], hadTables: false };
   const data = await parsePage(game, page);
   const html = data?.parse?.text?.['*'];
-  if (!html) return [];
+  if (!html) return { sections: [], hadTables: false };
   const $ = cheerio.load(html);
-  return parseEventStandings($);
+  return { sections: parseEventStandings($), hadTables: hasStandingsTables($) };
 }

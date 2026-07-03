@@ -247,8 +247,10 @@ async function downloadLogo(url, file, channel) {
   const rasterType = rasterLogoContentType(bytes);
   if (!rasterType) throw new Error('unexpected logo image format');
   await writeFile(file, bytes);
-  // Persist to R2 so this crest survives the next container wipe (best-effort).
-  await r2PutLogo(logoHash(url), bytes, rasterType);
+  // Persist to R2 so this crest survives the next container wipe. Fire-and-forget
+  // (r2PutLogo swallows its own errors and self-bounds with a timeout) so a slow
+  // upload never occupies the serialized download queue behind later crests.
+  r2PutLogo(logoHash(url), bytes, rasterType).catch(() => {});
   return bytes;
 }
 

@@ -101,3 +101,11 @@ export function parseGroupTableStandings($) {
 export function parseEventStandings($) {
   return [...parseBattleRoyaleStandings($), ...parseGroupTableStandings($)];
 }
+
+// Whether the page contains ANY recognized standings container (before TBD
+// filtering). Distinguishes "recognized tables that were all TBD" (safe to
+// clear stored rows) from "no standings structure found at all" (possibly a
+// transient/partial page or a DOM change — callers should preserve stored rows).
+export function hasStandingsTables($) {
+  return $('.panel-table').length + $('.group-table').length > 0;
+}
