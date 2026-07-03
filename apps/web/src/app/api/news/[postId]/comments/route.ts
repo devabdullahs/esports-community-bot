@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { getAdminAccess } from "@/lib/admin";
 import { getCommunityMember, requireVerifiedMember, sameOriginOr403, clientIp } from "@/lib/community";
 import {
   createPostComment,
@@ -25,10 +26,13 @@ export async function GET(request: Request, context: { params: Promise<{ postId:
     return NextResponse.json({ error: "Post not found" }, { status: 404 });
   }
 
-  const { session, member } = await getCommunityMember();
+  const [{ session, member }, access] = await Promise.all([getCommunityMember(), getAdminAccess()]);
   const viewerDiscordId = member?.discordUserId ?? null;
+  // A moderator (super or scoped admin) sees hidden/rejected/reported comments
+  // inline with report counts and can act on them without leaving the page.
+  const canModerate = Boolean(access.allowed && access.discordUserId);
   const [comments, postLike] = await Promise.all([
-    getPostCommentsView(postId, viewerDiscordId),
+    getPostCommentsView(postId, viewerDiscordId, { moderator: canModerate }),
     getPostLikeSummary(postId, viewerDiscordId),
   ]);
 
@@ -39,6 +43,7 @@ export async function GET(request: Request, context: { params: Promise<{ postId:
       signedIn: Boolean(session),
       verified: Boolean(member?.isVerified),
       inGuild: Boolean(member?.inGuild),
+      canModerate,
       discordUserId: viewerDiscordId,
       displayName: member?.displayName ?? null,
       avatarUrl: member?.avatarUrl ?? null,

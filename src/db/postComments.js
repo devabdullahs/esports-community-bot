@@ -47,6 +47,12 @@ export async function getComment(id) {
   return hydrate(await get('SELECT * FROM post_comments WHERE id = $1', [id]));
 }
 
+// Shared hydrator for post_comments rows, so sibling modules (e.g. commentReports)
+// can return comments in the same shape without duplicating the mapping.
+export function hydrateComment(row) {
+  return hydrate(row);
+}
+
 /**
  * Insert a comment. For a reply, `parentCommentId` is the comment the user
  * clicked reply on; the real thread root is resolved here (a reply-to-a-reply
@@ -124,13 +130,17 @@ export async function createComment({
 // Comments shown on the public post page: the latest `limit` root threads
 // (default 100, hard max 200) plus all their replies.
 // Deleted roots are included so the service can keep a placeholder for threads
-// that still have live replies.
-export async function listCommentsForPost(postId, limit = 100) {
+// that still have live replies. `includeAllStatuses` widens the set to hidden +
+// rejected too — the moderator inline view, which shows and can act on those.
+export async function listCommentsForPost(postId, limit = 100, { includeAllStatuses = false } = {}) {
   const cap = Math.max(1, Math.min(200, Number(limit) || 100));
+  const statuses = includeAllStatuses
+    ? "('visible','pending','hidden','rejected','deleted')"
+    : "('visible','pending','deleted')";
   // Fetch the most recent N root comments first.
   const roots = await all(
     `SELECT * FROM post_comments
-     WHERE post_id = $1 AND root_comment_id IS NULL AND status IN ('visible','pending','deleted')
+     WHERE post_id = $1 AND root_comment_id IS NULL AND status IN ${statuses}
      ORDER BY created_at DESC, id DESC
      LIMIT $2`,
     [postId, cap],
@@ -141,7 +151,7 @@ export async function listCommentsForPost(postId, limit = 100) {
   const placeholders = rootIds.map((_, i) => `$${i + 2}`).join(',');
   const replies = await all(
     `SELECT * FROM post_comments
-     WHERE post_id = $1 AND root_comment_id IN (${placeholders}) AND status IN ('visible','pending','deleted')
+     WHERE post_id = $1 AND root_comment_id IN (${placeholders}) AND status IN ${statuses}
      ORDER BY created_at ASC, id ASC`,
     [postId, ...rootIds],
   );
