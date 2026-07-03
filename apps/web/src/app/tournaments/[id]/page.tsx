@@ -65,8 +65,12 @@ export default async function TournamentDetailPage({
   const sourceUrl = safeUrlOrUndefined(tournament.url);
   const isLive = data.matches.running.length > 0;
   // Standings-format events (battle royale, TFT groups) have no head-to-head
-  // matches; a 0/0/0 metric card would read like empty data.
+  // matches; a 0/0/0 metric card would read like empty data. Before any results
+  // land the rows are a seeded participants list rather than real standings.
   const standingsOnly = data.standings.length > 0 && data.total === 0;
+  const standingsHaveResults = data.standings.some(
+    (s) => /[1-9]/.test(String(s.points ?? "")) || /[1-9]/.test(String(s.extra ?? "")),
+  );
   const gameTitle = tournament.game
     ? gameTitleForSlug(tournament.game, games, locale)
     : text.allGames;
@@ -132,7 +136,11 @@ export default async function TournamentDetailPage({
           <Card className="min-w-0 bg-background/35 py-0 lg:w-80">
             {standingsOnly ? (
               <CardContent className="grid grid-cols-1 gap-2 p-3">
-                <DetailMetric label={text.standings} value={data.standings.length} locale={locale} />
+                <DetailMetric
+                  label={standingsHaveResults ? text.standings : text.participants}
+                  value={data.standings.length}
+                  locale={locale}
+                />
               </CardContent>
             ) : (
               <CardContent className="grid grid-cols-3 gap-2 p-3">

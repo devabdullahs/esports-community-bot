@@ -493,9 +493,18 @@ export function TournamentMatchList({
   );
 }
 
-// Section-grouped standings tables (battle-royale point tables, TFT groups).
-// Section titles come from the Liquipedia page headings ("Group A", stage
-// names); a single untitled section renders as one plain table.
+// True when a points/score cell carries an actual result (any non-zero digit),
+// so "0", "0-0", "0–0", "-", and "" all count as no result yet.
+function hasNumericResult(value: string | null | undefined): boolean {
+  return /[1-9]/.test(String(value ?? ""));
+}
+
+// Section-grouped standings (battle-royale point tables, TFT groups). Section
+// titles come from the Liquipedia page headings ("Group A", stage names).
+// Before any matches are played every row is 0–0, so a ranked table with
+// points columns would read like final results that don't exist yet — in that
+// case we render a seeded PARTICIPANTS list (no points columns) instead, and
+// only switch to the full standings table once real results land.
 function StandingsSection({
   standings,
   locale,
@@ -512,11 +521,14 @@ function StandingsSection({
     if (current) current.push(row);
     else sections.set(key, [row]);
   }
-  const hasExtra = standings.some((row) => row.extra);
+  const hasResults = standings.some(
+    (row) => hasNumericResult(row.points) || hasNumericResult(row.extra),
+  );
+  const hasExtra = hasResults && standings.some((row) => row.extra);
 
   return (
     <section className="flex flex-col gap-4">
-      <h2 className="text-lg font-semibold">{text.standings}</h2>
+      <h2 className="text-lg font-semibold">{hasResults ? text.standings : text.participants}</h2>
       {[...sections.entries()].map(([section, rows]) => (
         <div key={section || "main"} className="flex flex-col gap-1">
           {section ? (
@@ -527,9 +539,9 @@ function StandingsSection({
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead className="w-14">{text.rank}</TableHead>
+                <TableHead className="w-14">{hasResults ? text.rank : text.seed}</TableHead>
                 <TableHead>{text.team}</TableHead>
-                <TableHead className="text-end">{text.points}</TableHead>
+                {hasResults ? <TableHead className="text-end">{text.points}</TableHead> : null}
                 {hasExtra ? <TableHead className="text-end">{text.score}</TableHead> : null}
               </TableRow>
             </TableHeader>
@@ -543,9 +555,11 @@ function StandingsSection({
                       <TeamName label={row.team} teamId={row.team_id} locale={locale} />
                     </span>
                   </TableCell>
-                  <TableCell className="text-end tabular-nums font-semibold">
-                    {row.points || "-"}
-                  </TableCell>
+                  {hasResults ? (
+                    <TableCell className="text-end tabular-nums font-semibold">
+                      {row.points || "-"}
+                    </TableCell>
+                  ) : null}
                   {hasExtra ? (
                     <TableCell className="text-end tabular-nums text-muted-foreground">
                       {row.extra || "-"}
