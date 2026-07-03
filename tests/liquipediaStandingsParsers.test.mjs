@@ -51,3 +51,22 @@ test('parseEventStandings combines both formats and empty pages yield []', () =>
   const empty$ = cheerio.load('<div class="mw-parser-output"><p>Nothing here.</p></div>');
   assert.deepEqual(parseEventStandings(empty$), []);
 });
+
+test('an all-TBD table (unseeded event) yields no section', () => {
+  // PUBG / PUBG Mobile / early Apex events list every slot as TBD until their
+  // qualifiers finish — storing that would be a page of "1. TBD, 2. TBD, ...".
+  const allTbd$ = cheerio.load(`
+    <div class="panel-table">
+      <div class="panel-table__row row--header"><div class="cell--rank">#</div></div>
+      <div class="panel-table__row">
+        <div class="cell--rank" data-sort-val="1">1</div>
+        <div class="cell--team" data-sort-val="TBD"><div class="block-team"><span class="name">TBD</span></div></div>
+      </div>
+      <div class="panel-table__row">
+        <div class="cell--rank" data-sort-val="2">2</div>
+        <div class="cell--team" data-sort-val="TBD"><div class="block-team"><span class="name">TBD</span></div></div>
+      </div>
+    </div>`);
+  assert.deepEqual(parseBattleRoyaleStandings(allTbd$), []);
+  assert.deepEqual(parseEventStandings(allTbd$), []);
+});

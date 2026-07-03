@@ -13,6 +13,20 @@ function cleanText(value) {
   return String(value ?? '').replace(/\s+/g, ' ').trim();
 }
 
+// A "TBD" row is an unfilled bracket slot (qualifier not yet decided). We keep
+// TBD rows inside a section that has real teams (they fill in as the event
+// progresses), but a section with NOTHING but TBD is an unseeded event — storing
+// it would show a page of "1. TBD, 2. TBD, ..." and mark the event as having
+// standings when it has no content yet.
+function isRealTeam(name) {
+  const text = cleanText(name);
+  return Boolean(text) && !/^tbd$/i.test(text);
+}
+
+function hasRealTeam(entries) {
+  return entries.some((entry) => isRealTeam(entry.team));
+}
+
 function nearestHeading($, el) {
   const heading = $(el).prevAll('h2, h3, h4').first();
   if (heading.length) return cleanText(heading.find('.mw-headline').text() || heading.text());
@@ -25,7 +39,8 @@ function nearestHeading($, el) {
 // Battle-royale panel-table(s). Returns one section per table:
 // { title, entries: [{ rank, team, points, logo }] }. TBD rows are kept (they
 // become real teams as qualifiers finish) but rows with no team text at all are
-// dropped.
+// dropped, and a table that is ENTIRELY TBD (an unseeded event) yields no
+// section at all.
 export function parseBattleRoyaleStandings($) {
   const sections = [];
   $('.panel-table').each((_, table) => {
@@ -49,7 +64,7 @@ export function parseBattleRoyaleStandings($) {
           logo: normalizeImageUrl(teamCell.find('img').first().attr('src')),
         });
       });
-    if (entries.length) sections.push({ title: nearestHeading($, table), entries });
+    if (hasRealTeam(entries)) sections.push({ title: nearestHeading($, table), entries });
   });
   return sections;
 }
@@ -77,7 +92,7 @@ export function parseGroupTableStandings($) {
           logo: normalizeImageUrl(entryCell.find('img').first().attr('src')),
         });
       });
-    if (entries.length) sections.push({ title, entries });
+    if (hasRealTeam(entries)) sections.push({ title, entries });
   });
   return sections;
 }

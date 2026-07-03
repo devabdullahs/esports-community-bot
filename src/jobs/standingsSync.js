@@ -40,8 +40,14 @@ export async function runStandingsSync({ liquipedia = defaultLiquipedia } = {}) 
       try {
         const sections = await liquipedia.fetchEventStandings(tournament);
         summary.tournaments += 1;
+        // Standings are wholly re-derived from the live page each run, so a
+        // SUCCESSFUL empty parse (no standings, or an all-TBD unseeded event)
+        // means the event has nothing to show right now — clear any stale rows
+        // so the directory's hasStandings flag stays accurate. A fetch FAILURE
+        // throws instead and is handled below, leaving existing rows intact.
         if (!sections.length) {
           summary.empty += 1;
+          await replaceTournamentStandings(tournament.id, []);
           continue;
         }
         summary.rows += await replaceTournamentStandings(tournament.id, sections);

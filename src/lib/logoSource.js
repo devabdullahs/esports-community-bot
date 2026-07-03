@@ -4,6 +4,7 @@ import { readFile, unlink, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import axios from 'axios';
 import { logger } from './logger.js';
+import { r2GetLogo, r2PutLogo } from './r2Storage.js';
 
 const http = axios.create({
   headers: {
@@ -167,9 +168,12 @@ function saveRateState(state) {
   }
 }
 
+function logoHash(url) {
+  return createHash('sha256').update(url).digest('hex');
+}
+
 function logoPath(url) {
-  const key = createHash('sha256').update(url).digest('hex');
-  return join(CACHE_DIR, `${key}.img`);
+  return join(CACHE_DIR, `${logoHash(url)}.img`);
 }
 
 function runLimited(fn) {
@@ -240,8 +244,11 @@ async function downloadLogo(url, file, channel) {
 
   const bytes = Buffer.from(data);
   if (bytes.length > MAX_LOGO_BYTES) throw new Error(`logo too large (${bytes.length} bytes)`);
-  if (!rasterLogoContentType(bytes)) throw new Error('unexpected logo image format');
+  const rasterType = rasterLogoContentType(bytes);
+  if (!rasterType) throw new Error('unexpected logo image format');
   await writeFile(file, bytes);
+  // Persist to R2 so this crest survives the next container wipe (best-effort).
+  await r2PutLogo(logoHash(url), bytes, rasterType);
   return bytes;
 }
 
@@ -268,6 +275,17 @@ export async function fetchLogoBytes(url, channel = 'bot', { download = true } =
   const file = logoPath(url);
   const cached = await readCached(file);
   if (cached) return { bytes: cached, file, cached: true };
+
+  // Persistent R2 layer: after a deploy wipes the local disk cache, serve from
+  // R2 (our own storage/CDN — not Liquipedia, so no rate limit and allowed even
+  // when download=false) and refill the local hot cache. This is what stops the
+  // whole site from falling back to initials for hours after every deploy.
+  const fromR2 = await r2GetLogo(logoHash(url));
+  if (fromR2 && rasterLogoContentType(fromR2)) {
+    await writeFile(file, fromR2).catch(() => {});
+    return { bytes: fromR2, file, cached: true };
+  }
+
   if (!download) return null;
 
   const bytes = await runLimited(async () => {
