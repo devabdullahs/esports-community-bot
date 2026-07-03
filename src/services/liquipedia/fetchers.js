@@ -22,6 +22,7 @@ import {
   normalizeValveRankingRegion,
   parseValveRankingTable,
 } from './parsers.js';
+import { parseEventStandings } from './standingsParsers.js';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -295,4 +296,21 @@ export async function fetchValveRegionalStandings(region = 'global') {
     sourceUrl: 'https://liquipedia.net/counterstrike/Valve_Regional_Standings',
     standings: table ? parseValveRankingTable($, table, key) : [],
   };
+}
+
+// ---------------------------------------------------------------------------
+// Event standings (battle-royale panel-tables + round-robin group tables)
+// ---------------------------------------------------------------------------
+
+// Standings sections for a tournament page. Used for formats that produce no
+// head-to-head matches (BR events, TFT groups). external_id = "game/Page/Path".
+export async function fetchEventStandings(tournament) {
+  const [game, ...rest] = tournament.external_id.split('/');
+  const page = rest.join('/');
+  if (!game || !page) return [];
+  const data = await parsePage(game, page);
+  const html = data?.parse?.text?.['*'];
+  if (!html) return [];
+  const $ = cheerio.load(html);
+  return parseEventStandings($);
 }

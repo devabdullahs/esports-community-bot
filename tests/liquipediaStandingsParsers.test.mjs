@@ -1,0 +1,53 @@
+import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import test from 'node:test';
+import * as cheerio from 'cheerio';
+
+import {
+  parseBattleRoyaleStandings,
+  parseEventStandings,
+  parseGroupTableStandings,
+} from '../src/services/liquipedia/standingsParsers.js';
+
+const fixtures = join(dirname(fileURLToPath(import.meta.url)), 'fixtures');
+const br$ = cheerio.load(readFileSync(join(fixtures, 'liquipedia-br-standings.html'), 'utf8'));
+const group$ = cheerio.load(readFileSync(join(fixtures, 'liquipedia-group-standings.html'), 'utf8'));
+
+test('battle-royale panel-table parses rank/team/points with section title', () => {
+  const sections = parseBattleRoyaleStandings(br$);
+  assert.equal(sections.length, 1);
+  assert.equal(sections[0].title, 'Group Stage');
+  const [first, second, tbd] = sections[0].entries;
+  assert.deepEqual(
+    { rank: first.rank, team: first.team, points: first.points },
+    { rank: 1, team: 'Twisted Minds', points: '87' },
+  );
+  assert.match(first.logo, /^https:\/\//);
+  assert.equal(second.team, 'Falcons Force');
+  assert.equal(second.logo, null);
+  // TBD rows are kept (they become real once qualifiers finish) with a fallback rank.
+  assert.equal(tbd.team, 'TBD');
+  assert.equal(tbd.rank, 3);
+});
+
+test('group-table parses group title, aria-label team, match + game scores', () => {
+  const sections = parseGroupTableStandings(group$);
+  assert.equal(sections.length, 1);
+  assert.equal(sections[0].title, 'Group A');
+  const [weibo, falcons] = sections[0].entries;
+  assert.deepEqual(
+    { rank: weibo.rank, team: weibo.team, points: weibo.points, extra: weibo.extra },
+    { rank: 1, team: 'Weibo Gaming', points: '2–0', extra: '4–1' },
+  );
+  assert.match(weibo.logo, /Weibo_allmode/);
+  assert.equal(falcons.rank, 2); // blank rank cell falls back to position
+});
+
+test('parseEventStandings combines both formats and empty pages yield []', () => {
+  assert.equal(parseEventStandings(br$).length, 1);
+  assert.equal(parseEventStandings(group$).length, 1);
+  const empty$ = cheerio.load('<div class="mw-parser-output"><p>Nothing here.</p></div>');
+  assert.deepEqual(parseEventStandings(empty$), []);
+});

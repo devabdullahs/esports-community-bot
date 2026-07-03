@@ -14,7 +14,7 @@ const { closeDb } = await import('../src/db/index.js');
 const { addTournament } = await import('../src/db/tournaments.js');
 const { upsertMatch } = await import('../src/db/matches.js');
 const { upsertTeam, listTeams } = await import('../src/db/teams.js');
-const { listPlayers } = await import('../src/db/players.js');
+const { listPlayers, upsertPlayer, getPlayerByPandaScoreId } = await import('../src/db/players.js');
 const { runLiquipediaEnrichment } = await import('../src/jobs/liquipediaEnrichment.js');
 
 const GUILD = 'guild-lp';
@@ -182,6 +182,58 @@ test('transient search failures are never stamped as misses', async () => {
   const resolveCalls = [];
   await runLiquipediaEnrichment({ liquipedia: mockLiquipedia({ resolveCalls }), maxParses: 50, ttlMs: 0 });
   assert.ok(resolveCalls.some((c) => c.name === 'Flaky Team'));
+});
+
+test('a parsed roster verifies existing players and clears dropped ones (Liquipedia beats stale PandaScore)', async () => {
+  // TFT scene: PandaScore already knows the team and two players. Liquipedia's
+  // roster still lists "Star" but NOT "OldGuy" — he transferred away long ago
+  // and PandaScore never noticed (the Abo Makkah case).
+  const tft = await addTournament({
+    source: 'liquipedia', external_id: 'tft/open', game: 'tft',
+    name: 'TFT Open', url: 'https://liquipedia.net/tft/Open', guild_id: GUILD,
+  });
+  await upsertMatch({
+    tournament_id: tft.id, source: 'liquipedia', external_id: 'Match:tft-1',
+    team_a: 'Nova Esports', team_b: 'TBD', status: 'scheduled',
+  });
+  const nova = await upsertTeam({ game: 'tft', pandascore_id: 700, name: 'Nova Esports', slug: 'nova-esports' });
+  await upsertPlayer({
+    game: 'tft', pandascore_id: 7001, name: 'Nova_Esports Star',
+    current_team_id: nova.id, current_team_pandascore_id: 700, current_team_name: 'Nova Esports',
+  });
+  await upsertPlayer({
+    game: 'tft', pandascore_id: 7002, name: 'OldGuy',
+    current_team_id: nova.id, current_team_pandascore_id: 700, current_team_name: 'Nova Esports',
+  });
+
+  await runLiquipediaEnrichment({ liquipedia: mockLiquipedia(), maxParses: 50 });
+
+  const star = await getPlayerByPandaScoreId(7001);
+  assert.equal(star.current_team_id, nova.id); // confirmed by the roster
+  assert.ok(star.current_team_verified_at);
+
+  const oldGuy = await getPlayerByPandaScoreId(7002);
+  assert.equal(oldGuy.current_team_id, null); // dropped: gone from the roster
+  assert.equal(oldGuy.current_team_name, null);
+  assert.ok(oldGuy.current_team_verified_at); // …and protected against re-adds
+
+  // A later stale PandaScore sync must not revert either player.
+  await upsertPlayer({
+    game: 'tft', pandascore_id: 7002, name: 'OldGuy',
+    current_team_id: nova.id, current_team_pandascore_id: 700, current_team_name: 'Nova Esports',
+    image_url: 'https://cdn.pandascore.co/oldguy.png',
+  });
+  const oldGuyAfter = await getPlayerByPandaScoreId(7002);
+  assert.equal(oldGuyAfter.current_team_id, null); // verified team survives
+  assert.equal(oldGuyAfter.image_url, 'https://cdn.pandascore.co/oldguy.png'); // bio fields still flow
+
+  await upsertPlayer({
+    game: 'tft', pandascore_id: 7001, name: 'Nova_Esports Star',
+    current_team_id: null, current_team_pandascore_id: 999, current_team_name: 'Stale FC',
+  });
+  const starAfter = await getPlayerByPandaScoreId(7001);
+  assert.equal(starAfter.current_team_id, nova.id);
+  assert.equal(starAfter.current_team_name, 'Nova Esports');
 });
 
 test('a later PandaScore sync adopts the Liquipedia-only row instead of duplicating', async () => {

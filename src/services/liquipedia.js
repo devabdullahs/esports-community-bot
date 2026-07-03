@@ -31,8 +31,15 @@ export {
   fetchGameMatches,
   fetchSchedule,
   fetchValveRegionalStandings,
+  fetchEventStandings,
   resolveTournamentTitle,
 } from './liquipedia/fetchers.js';
+
+export {
+  parseBattleRoyaleStandings,
+  parseEventStandings,
+  parseGroupTableStandings,
+} from './liquipedia/standingsParsers.js';
 
 export {
   fetchPlayerEntity,

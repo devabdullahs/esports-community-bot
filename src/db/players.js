@@ -55,9 +55,15 @@ export async function upsertPlayer(row) {
        nationality                = COALESCE(excluded.nationality, players.nationality),
        image_url                  = COALESCE(excluded.image_url, players.image_url),
        role                       = COALESCE(excluded.role, players.role),
-       current_team_id            = COALESCE(excluded.current_team_id, players.current_team_id),
-       current_team_pandascore_id = COALESCE(excluded.current_team_pandascore_id, players.current_team_pandascore_id),
-       current_team_name          = COALESCE(excluded.current_team_name, players.current_team_name),
+       current_team_id            = CASE WHEN players.current_team_verified_at IS NOT NULL
+                                         THEN players.current_team_id
+                                         ELSE COALESCE(excluded.current_team_id, players.current_team_id) END,
+       current_team_pandascore_id = CASE WHEN players.current_team_verified_at IS NOT NULL
+                                         THEN players.current_team_pandascore_id
+                                         ELSE COALESCE(excluded.current_team_pandascore_id, players.current_team_pandascore_id) END,
+       current_team_name          = CASE WHEN players.current_team_verified_at IS NOT NULL
+                                         THEN players.current_team_name
+                                         ELSE COALESCE(excluded.current_team_name, players.current_team_name) END,
        modified_at                = COALESCE(excluded.modified_at, players.modified_at),
        raw_json                   = excluded.raw_json,
        last_seen_at               = excluded.last_seen_at,
@@ -201,6 +207,50 @@ export async function savePlayerLiquipedia(
 // (PandaScore or previously created) before creating anything.
 export async function listPlayerNamesForGame(game) {
   return all('SELECT id, name, liquipedia_parsed_at FROM players WHERE game = $1 ORDER BY id ASC', [game]);
+}
+
+// A successfully parsed Liquipedia roster confirmed this player's team. While
+// current_team_verified_at is set, upsertPlayer's PandaScore path leaves the
+// current_team_* columns alone — Liquipedia rosters are fresher than
+// PandaScore's team data (which can lag transfers by months).
+export async function setPlayerVerifiedTeam(id, { teamId, teamName }) {
+  const now = nowText();
+  return get(
+    `UPDATE players SET
+       current_team_id            = $1,
+       current_team_name          = $2,
+       current_team_pandascore_id = NULL,
+       current_team_verified_at   = $3,
+       updated_at                 = $3
+     WHERE id = $4
+     RETURNING *`,
+    [numberOrNull(teamId), textOrNull(teamName), now, id],
+  );
+}
+
+// After a roster parse succeeded, players our DB still places on the team but
+// who no longer appear on the parsed roster have left. Clearing keeps
+// verified_at stamped so a stale PandaScore sync can't put them back.
+export async function clearDroppedRosterPlayers(game, teamId, keepIds) {
+  const ids = (keepIds ?? []).map(Number).filter(Number.isFinite);
+  const now = nowText();
+  const params = [game, teamId, now];
+  const notIn = ids.map((id) => {
+    params.push(id);
+    return `$${params.length}`;
+  });
+  const result = await run(
+    `UPDATE players SET
+       current_team_id            = NULL,
+       current_team_name          = NULL,
+       current_team_pandascore_id = NULL,
+       current_team_verified_at   = $3,
+       updated_at                 = $3
+     WHERE game = $1 AND current_team_id = $2
+       ${notIn.length ? `AND id NOT IN (${notIn.join(', ')})` : ''}`,
+    params,
+  );
+  return result?.changes ?? 0;
 }
 
 export async function stampPlayerLiquipedia(id, { url = null } = {}) {
