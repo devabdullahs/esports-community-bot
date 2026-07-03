@@ -4,10 +4,13 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
+  EyeOffIcon,
+  FlagIcon,
   HeartIcon,
   Loader2Icon,
   MessageCircleIcon,
   PencilIcon,
+  ShieldCheckIcon,
   Trash2Icon,
 } from "lucide-react";
 import { DiscordIcon } from "@/components/discord-icon";
@@ -16,25 +19,41 @@ import { AuthorAvatar } from "@/components/news/author-avatar";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { DISCORD_INVITE_URL } from "@/lib/community-links";
 import { commentsCopy } from "@/lib/comments-i18n";
-import { COMMENT_MAX_LENGTH } from "@/lib/comment-validation";
+import {
+  COMMENT_MAX_LENGTH,
+  COMMENT_REPORT_DETAIL_MAX,
+  COMMENT_REPORT_REASONS,
+  type CommentReportReason,
+} from "@/lib/comment-validation";
 import { localizedPath, type Locale } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
+
+type CommentStatus = "visible" | "pending" | "hidden" | "rejected" | "deleted";
+type ModerationAction = "approve" | "hide" | "restore" | "delete";
 
 type ApiComment = {
   id: number;
   authorName: string;
   authorAvatarUrl: string | null;
   body: string;
-  status: "visible" | "pending" | "deleted";
+  status: CommentStatus;
   createdAt: string;
   editedAt: string | null;
   likeCount: number;
   viewerLiked: boolean;
   isOwn: boolean;
   isDeleted: boolean;
+  reportCount: number;
   replies: ApiComment[];
 };
 
@@ -45,6 +64,7 @@ type ApiData = {
     signedIn: boolean;
     verified: boolean;
     inGuild: boolean;
+    canModerate: boolean;
     discordUserId: string | null;
     displayName: string | null;
     avatarUrl: string | null;
@@ -174,6 +194,24 @@ export function CommentsSection({ postId, locale }: { postId: number; locale: Lo
       setActionNotice(t.removeSuccess);
     });
   }
+  async function report(id: number, reason: CommentReportReason, detail: string) {
+    await run(async () => {
+      const res = await api(`/api/comments/${id}/report`, "POST", { reason, detail });
+      setActionNotice(
+        res.created === false ? t.reportAlreadyReported : res.held ? t.reportHeldSuccess : t.reportSuccess,
+      );
+      await load(); // a held comment changes state
+    });
+  }
+  async function moderate(id: number, action: ModerationAction) {
+    await run(async () => {
+      await api(`/api/admin/comments/${id}/moderate`, "POST", { action });
+      setActionNotice(t.modActioned);
+      await load();
+    });
+  }
+
+  const canModerate = data?.viewer.canModerate ?? false;
 
   // Total real comments across the whole tree (roots + replies), excluding the
   // "[removed]" placeholders shown to keep deleted threads from collapsing.
@@ -263,10 +301,14 @@ export function CommentsSection({ postId, locale }: { postId: number; locale: Lo
               comment={c}
               locale={locale}
               canReply={verified}
+              canReport={verified}
+              canModerate={canModerate}
               onLike={toggleCommentLike}
               onReply={(body) => submit(body, c.id)}
               onEdit={saveEdit}
               onDelete={setDeleteTargetId}
+              onReport={report}
+              onModerate={moderate}
             />
           </li>
         ))}
@@ -374,24 +416,35 @@ function CommentNode({
   comment,
   locale,
   canReply,
+  canReport,
+  canModerate,
   onLike,
   onReply,
   onEdit,
   onDelete,
+  onReport,
+  onModerate,
   isReply = false,
 }: {
   comment: ApiComment;
   locale: Locale;
   canReply: boolean;
+  canReport: boolean;
+  canModerate: boolean;
   onLike: (c: ApiComment) => void;
   onReply: (body: string) => Promise<void>;
   onEdit: (id: number, body: string) => Promise<void>;
   onDelete: (id: number) => void;
+  onReport: (id: number, reason: CommentReportReason, detail: string) => Promise<void>;
+  onModerate: (id: number, action: ModerationAction) => Promise<void>;
   isReply?: boolean;
 }) {
   const t = commentsCopy[locale];
   const [replying, setReplying] = useState(false);
   const [editing, setEditing] = useState(false);
+  const [reporting, setReporting] = useState(false);
+
+  const childProps = { canReport, canModerate, onLike, onReply, onEdit, onDelete, onReport, onModerate };
 
   if (comment.isDeleted) {
     return (
@@ -401,7 +454,7 @@ function CommentNode({
           <ul className="flex flex-col gap-4 ps-5 border-s">
             {comment.replies.map((r) => (
               <li key={r.id}>
-                <CommentNode comment={r} locale={locale} canReply={false} onLike={onLike} onReply={onReply} onEdit={onEdit} onDelete={onDelete} isReply />
+                <CommentNode comment={r} locale={locale} canReply={false} {...childProps} isReply />
               </li>
             ))}
           </ul>
@@ -409,6 +462,11 @@ function CommentNode({
       </div>
     );
   }
+
+  // A verified member can report someone else's live comment. Moderators act
+  // via the moderation controls instead, so they don't see a report button.
+  const showReport = canReport && !canModerate && !comment.isOwn && comment.status === "visible";
+  const modActions = canModerate ? moderationActionsFor(comment.status) : [];
 
   return (
     <div className="flex flex-col gap-2">
@@ -423,7 +481,23 @@ function CommentNode({
             {comment.editedAt ? <span className="text-xs text-muted-foreground">({t.edited})</span> : null}
             {comment.status === "pending" ? (
               <span className="rounded-full bg-amber-500/15 px-2 py-0.5 text-xs font-medium text-amber-600 dark:text-amber-400">
-                {t.pending}
+                {canModerate ? t.statusPending : t.pending}
+              </span>
+            ) : null}
+            {comment.status === "hidden" ? (
+              <span className="rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">
+                {t.statusHidden}
+              </span>
+            ) : null}
+            {comment.status === "rejected" ? (
+              <span className="rounded-full bg-destructive/15 px-2 py-0.5 text-xs font-medium text-destructive">
+                {t.statusRejected}
+              </span>
+            ) : null}
+            {canModerate && comment.reportCount > 0 ? (
+              <span className="inline-flex items-center gap-1 rounded-full bg-destructive/15 px-2 py-0.5 text-xs font-medium text-destructive">
+                <FlagIcon className="size-3" />
+                {t.reportedCount(comment.reportCount)}
               </span>
             ) : null}
           </div>
@@ -446,7 +520,7 @@ function CommentNode({
             </p>
           )}
 
-          {comment.status === "pending" ? (
+          {comment.status === "pending" && comment.isOwn ? (
             <p className="text-xs text-muted-foreground">{t.pendingHint}</p>
           ) : null}
 
@@ -480,7 +554,38 @@ function CommentNode({
                   </button>
                 </>
               ) : null}
+              {showReport ? (
+                <button type="button" onClick={() => setReporting((v) => !v)} className="inline-flex items-center gap-1 transition-colors hover:text-destructive">
+                  <FlagIcon className="size-3.5" />
+                  {t.report}
+                </button>
+              ) : null}
+              {modActions.map((a) => (
+                <button
+                  key={a.action}
+                  type="button"
+                  onClick={() => void onModerate(comment.id, a.action)}
+                  className={cn(
+                    "inline-flex items-center gap-1 transition-colors",
+                    a.action === "delete" ? "hover:text-destructive" : "hover:text-foreground",
+                  )}
+                >
+                  <a.Icon className="size-3.5" />
+                  {t[a.labelKey]}
+                </button>
+              ))}
             </div>
+          ) : null}
+
+          {reporting ? (
+            <ReportForm
+              locale={locale}
+              onCancel={() => setReporting(false)}
+              onSubmit={async (reason, detail) => {
+                await onReport(comment.id, reason, detail);
+                setReporting(false);
+              }}
+            />
           ) : null}
 
           {replying ? (
@@ -504,11 +609,105 @@ function CommentNode({
         <ul className="flex flex-col gap-4 ps-11">
           {comment.replies.map((r) => (
             <li key={r.id}>
-              <CommentNode comment={r} locale={locale} canReply={false} onLike={onLike} onReply={onReply} onEdit={onEdit} onDelete={onDelete} isReply />
+              <CommentNode comment={r} locale={locale} canReply={false} {...childProps} isReply />
             </li>
           ))}
         </ul>
       ) : null}
+    </div>
+  );
+}
+
+// Contextual moderator actions per comment status. Approve/restore both send the
+// comment back to visible; the label differs so it reads right for the state.
+function moderationActionsFor(
+  status: CommentStatus,
+): { action: ModerationAction; labelKey: "modApprove" | "modHide" | "modRestore" | "modDelete"; Icon: typeof EyeOffIcon }[] {
+  switch (status) {
+    case "visible":
+      return [
+        { action: "hide", labelKey: "modHide", Icon: EyeOffIcon },
+        { action: "delete", labelKey: "modDelete", Icon: Trash2Icon },
+      ];
+    case "pending":
+      return [
+        { action: "approve", labelKey: "modApprove", Icon: ShieldCheckIcon },
+        { action: "hide", labelKey: "modHide", Icon: EyeOffIcon },
+        { action: "delete", labelKey: "modDelete", Icon: Trash2Icon },
+      ];
+    case "hidden":
+    case "rejected":
+      return [
+        { action: "restore", labelKey: "modRestore", Icon: ShieldCheckIcon },
+        { action: "delete", labelKey: "modDelete", Icon: Trash2Icon },
+      ];
+    default:
+      return [];
+  }
+}
+
+function ReportForm({
+  locale,
+  onSubmit,
+  onCancel,
+}: {
+  locale: Locale;
+  onSubmit: (reason: CommentReportReason, detail: string) => Promise<void>;
+  onCancel: () => void;
+}) {
+  const t = commentsCopy[locale];
+  const [reason, setReason] = useState<CommentReportReason>("spam");
+  const [detail, setDetail] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  async function submit() {
+    setBusy(true);
+    try {
+      await onSubmit(reason, detail.trim());
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="mt-1 flex flex-col gap-2 rounded-lg border bg-muted/20 p-3">
+      <p className="text-xs text-muted-foreground">{t.reportDescription}</p>
+      <div className="flex flex-col gap-1">
+        <span className="text-xs font-medium">{t.reportReasonLabel}</span>
+        <Select value={reason} onValueChange={(v) => setReason(v as CommentReportReason)}>
+          <SelectTrigger className="h-8 w-full max-w-xs text-sm">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {COMMENT_REPORT_REASONS.map((r) => (
+              <SelectItem key={r} value={r}>
+                {t.reasons[r]}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+      <div className="flex flex-col gap-1">
+        <span className="text-xs font-medium">{t.reportDetailLabel}</span>
+        <Textarea
+          value={detail}
+          dir="auto"
+          rows={2}
+          maxLength={COMMENT_REPORT_DETAIL_MAX}
+          placeholder={t.reportDetailPlaceholder}
+          onChange={(e) => setDetail(e.target.value)}
+          className="bidi-plaintext resize-y text-sm"
+        />
+      </div>
+      <div className="flex items-center justify-end gap-2">
+        <Button variant="ghost" size="sm" onClick={onCancel} disabled={busy}>
+          {t.cancel}
+        </Button>
+        <Button variant="destructive" size="sm" onClick={submit} disabled={busy}>
+          {busy ? <Loader2Icon data-icon="inline-start" className="animate-spin" /> : <FlagIcon data-icon="inline-start" />}
+          {busy ? t.reportSubmitting : t.reportSubmit}
+        </Button>
+      </div>
     </div>
   );
 }

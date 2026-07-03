@@ -33,6 +33,29 @@ export type CommentsCopy = {
   like: string;
   replyingTo: string;
   showReplies: (n: number) => string;
+  // Reporting
+  report: string;
+  reportTitle: string;
+  reportDescription: string;
+  reportReasonLabel: string;
+  reportDetailLabel: string;
+  reportDetailPlaceholder: string;
+  reportSubmit: string;
+  reportSubmitting: string;
+  reportSuccess: string;
+  reportHeldSuccess: string;
+  reportAlreadyReported: string;
+  reasons: { spam: string; harassment: string; hate: string; sexual: string; other: string };
+  // Moderator inline controls
+  reportedCount: (n: number) => string;
+  statusHidden: string;
+  statusRejected: string;
+  statusPending: string;
+  modApprove: string;
+  modHide: string;
+  modRestore: string;
+  modDelete: string;
+  modActioned: string;
 };
 
 export const commentsCopy: Record<Locale, CommentsCopy> = {
@@ -67,6 +90,33 @@ export const commentsCopy: Record<Locale, CommentsCopy> = {
     like: "Like",
     replyingTo: "Replying",
     showReplies: (n) => `${n} ${n === 1 ? "reply" : "replies"}`,
+    report: "Report",
+    reportTitle: "Report this comment",
+    reportDescription: "Tell the moderators what's wrong. Reports are private.",
+    reportReasonLabel: "Reason",
+    reportDetailLabel: "Details (optional)",
+    reportDetailPlaceholder: "Add anything that helps the moderators…",
+    reportSubmit: "Submit report",
+    reportSubmitting: "Submitting…",
+    reportSuccess: "Thanks — the moderators will review this.",
+    reportHeldSuccess: "Thanks — this comment has been hidden pending review.",
+    reportAlreadyReported: "You've already reported this comment.",
+    reasons: {
+      spam: "Spam or scam",
+      harassment: "Harassment or bullying",
+      hate: "Hate speech or violence",
+      sexual: "Sexual or inappropriate",
+      other: "Something else",
+    },
+    reportedCount: (n) => `${n} ${n === 1 ? "report" : "reports"}`,
+    statusHidden: "Hidden",
+    statusRejected: "Rejected",
+    statusPending: "Pending",
+    modApprove: "Approve",
+    modHide: "Hide",
+    modRestore: "Restore",
+    modDelete: "Delete",
+    modActioned: "Done.",
   },
   ar: {
     title: "التعليقات",
@@ -99,5 +149,32 @@ export const commentsCopy: Record<Locale, CommentsCopy> = {
     like: "إعجاب",
     replyingTo: "ردًا على",
     showReplies: (n) => `${n} ${n === 1 ? "رد" : "ردود"}`,
+    report: "إبلاغ",
+    reportTitle: "الإبلاغ عن هذا التعليق",
+    reportDescription: "أخبر المشرفين بالمشكلة. تبقى البلاغات خاصة.",
+    reportReasonLabel: "السبب",
+    reportDetailLabel: "تفاصيل (اختياري)",
+    reportDetailPlaceholder: "أضف ما يساعد المشرفين…",
+    reportSubmit: "إرسال البلاغ",
+    reportSubmitting: "جارٍ الإرسال…",
+    reportSuccess: "شكرًا — سيراجع المشرفون هذا التعليق.",
+    reportHeldSuccess: "شكرًا — تم إخفاء التعليق بانتظار المراجعة.",
+    reportAlreadyReported: "لقد أبلغت عن هذا التعليق مسبقًا.",
+    reasons: {
+      spam: "رسائل مزعجة أو احتيال",
+      harassment: "تحرّش أو تنمّر",
+      hate: "خطاب كراهية أو عنف",
+      sexual: "محتوى جنسي أو غير لائق",
+      other: "سبب آخر",
+    },
+    reportedCount: (n) => `${n} ${n === 1 ? "بلاغ" : "بلاغات"}`,
+    statusHidden: "مخفي",
+    statusRejected: "مرفوض",
+    statusPending: "قيد المراجعة",
+    modApprove: "اعتماد",
+    modHide: "إخفاء",
+    modRestore: "استعادة",
+    modDelete: "حذف",
+    modActioned: "تم.",
   },
 };

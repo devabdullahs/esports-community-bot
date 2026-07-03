@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { CheckIcon, EyeOffIcon, Loader2Icon, RotateCcwIcon, Trash2Icon, XIcon } from "lucide-react";
+import { CheckIcon, EyeOffIcon, FlagIcon, Loader2Icon, RotateCcwIcon, Trash2Icon, XIcon } from "lucide-react";
 import { LocalDateTime } from "@/components/local-date-time";
 import { AuthorAvatar } from "@/components/news/author-avatar";
 import { getAdminCopy } from "@/lib/admin-copy";
@@ -22,12 +22,13 @@ type ModComment = {
   body: string;
   status: "visible" | "pending" | "hidden" | "rejected" | "deleted";
   flagReason: { profanity?: string[]; links?: string[] } | null;
+  reportCount: number;
   createdAt: string;
   editedAt: string | null;
   deletedBy: string | null;
 };
 
-const FILTERS = ["pending", "flagged", "visible", "hidden", "rejected", "deleted"] as const;
+const FILTERS = ["pending", "reported", "flagged", "visible", "hidden", "rejected", "deleted"] as const;
 type Filter = (typeof FILTERS)[number];
 type ModerationAction = "approve" | "reject" | "hide" | "restore" | "delete";
 
@@ -147,6 +148,12 @@ export function CommentModeration({ locale }: { locale: Locale }) {
                   <LocalDateTime value={c.createdAt} locale={locale} />
                 </span>
                 <Badge variant="outline">{t.comments.filters[c.status]}</Badge>
+                {c.reportCount > 0 ? (
+                  <Badge variant="destructive" className="gap-1">
+                    <FlagIcon className="size-3" />
+                    {t.comments.reports(c.reportCount)}
+                  </Badge>
+                ) : null}
                 {c.parentCommentId ? <Badge variant="secondary">{t.comments.reply}</Badge> : null}
               </div>
 

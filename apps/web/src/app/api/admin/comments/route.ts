@@ -1,6 +1,13 @@
 import { NextResponse } from "next/server";
 import { getAdminAccess } from "@/lib/admin";
-import { autoApproveDueCommentsForModeration, commentStatusCounts, listModerationComments } from "@/lib/comments";
+import {
+  autoApproveDueCommentsForModeration,
+  commentStatusCounts,
+  listModerationComments,
+  listReportedModerationComments,
+  reportCountsForComments,
+  reportedCommentsCount,
+} from "@/lib/comments";
 import { parseStatusFilter } from "@/lib/comment-validation";
 import { getNewsPost } from "@/lib/news";
 
@@ -15,12 +22,26 @@ export async function GET(request: Request) {
 
   const params = new URL(request.url).searchParams;
   const filterParam = params.get("status");
-  const filter = filterParam === "flagged" ? { flagged: true } : { status: parseStatusFilter(filterParam) };
 
   // Flip due link-only pending comments to visible first, so the queue and counts
   // don't show stale pending entries that should already be approved.
   await autoApproveDueCommentsForModeration();
-  const [comments, counts] = await Promise.all([listModerationComments(filter), commentStatusCounts()]);
+  const [comments, counts, reported] = await Promise.all([
+    filterParam === "reported"
+      ? listReportedModerationComments()
+      : listModerationComments(filterParam === "flagged" ? { flagged: true } : { status: parseStatusFilter(filterParam) }),
+    commentStatusCounts(),
+    reportedCommentsCount(),
+  ]);
+
+  // Open report counts for the listed comments (already present on the reported
+  // list; fetched for the other filters so every row can show its report badge).
+  const reportCounts =
+    filterParam === "reported"
+      ? Object.fromEntries(
+          comments.map((c) => [Number(c.id), Number((c as { reportOpenCount?: number }).reportOpenCount ?? 0)]),
+        )
+      : await reportCountsForComments(comments.map((c) => Number(c.id)));
 
   // Resolve post titles once per unique post (small page size).
   const titles = new Map<number, string>();
@@ -30,7 +51,7 @@ export async function GET(request: Request) {
   }
 
   return NextResponse.json({
-    counts,
+    counts: { ...counts, reported },
     comments: comments.map((c) => ({
       id: Number(c.id),
       postId: Number(c.postId),
@@ -42,6 +63,7 @@ export async function GET(request: Request) {
       body: c.body,
       status: c.status,
       flagReason: c.flagReason,
+      reportCount: reportCounts[Number(c.id)] ?? 0,
       createdAt: c.createdAt,
       editedAt: c.editedAt,
       deletedBy: c.deletedBy,

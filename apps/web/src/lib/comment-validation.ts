@@ -32,3 +32,14 @@ export type CommentStatus = (typeof COMMENT_STATUSES)[number];
 export function parseStatusFilter(raw: string | null): CommentStatus | null {
   return raw && (COMMENT_STATUSES as readonly string[]).includes(raw) ? (raw as CommentStatus) : null;
 }
+
+export const COMMENT_REPORT_REASONS = ["spam", "harassment", "hate", "sexual", "other"] as const;
+export type CommentReportReason = (typeof COMMENT_REPORT_REASONS)[number];
+
+export const COMMENT_REPORT_DETAIL_MAX = 500;
+
+export function parseReportReason(raw: unknown): CommentReportReason | null {
+  return (COMMENT_REPORT_REASONS as readonly string[]).includes(raw as string)
+    ? (raw as CommentReportReason)
+    : null;
+}

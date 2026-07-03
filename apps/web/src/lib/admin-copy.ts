@@ -172,6 +172,7 @@ const en = {
     filters: {
       pending: "Pending",
       flagged: "Flagged",
+      reported: "Reported",
       visible: "Visible",
       hidden: "Hidden",
       rejected: "Rejected",
@@ -199,6 +200,7 @@ const en = {
     reply: "reply",
     profanity: "profanity",
     links: "links",
+    reports: (n: number) => `${n} ${n === 1 ? "report" : "reports"}`,
     deleteTitle: "Delete this comment?",
     deleteDescription:
       "This removes the comment from public threads while keeping the moderation history.",
@@ -575,6 +577,7 @@ const ar: typeof en = {
     filters: {
       pending: "معلقة",
       flagged: "تحتاج مراجعة",
+      reported: "مُبلّغ عنها",
       visible: "ظاهرة",
       hidden: "مخفية",
       rejected: "مرفوضة",
@@ -602,6 +605,7 @@ const ar: typeof en = {
     reply: "رد",
     profanity: "ألفاظ مسيئة",
     links: "روابط",
+    reports: (n: number) => `${n} ${n === 1 ? "بلاغ" : "بلاغات"}`,
     deleteTitle: "حذف هذا التعليق؟",
     deleteDescription:
       "سيتم إزالة التعليق من النقاشات العامة مع الاحتفاظ بسجل المراجعة.",
