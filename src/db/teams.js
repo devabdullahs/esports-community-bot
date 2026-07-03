@@ -129,6 +129,18 @@ export async function listTeamNamesForGame(game) {
   return all('SELECT id, name, liquipedia_url, liquipedia_parsed_at FROM teams WHERE game = $1 ORDER BY id ASC', [game]);
 }
 
+// Team crests hosted on Liquipedia - the logo-warmup job pre-downloads these
+// into the shared cache so the web logo proxy can serve them (Liquipedia
+// hotlinking is not allowed). PandaScore CDN crests are excluded: those may be
+// served directly and are not cacheable through the Liquipedia-only proxy.
+export async function listLiquipediaTeamLogos() {
+  const rows = await all(
+    "SELECT DISTINCT image_url FROM teams WHERE image_url LIKE 'https://liquipedia.net/%'",
+    [],
+  );
+  return rows.map((row) => row.image_url).filter(Boolean);
+}
+
 // Distinct games that actually have synced teams - drives the directory's game filter.
 export async function listTeamGames() {
   const rows = await all(

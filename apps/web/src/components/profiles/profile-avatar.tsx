@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { cn } from "@/lib/utils";
+import { displayImageUrl } from "@/lib/logo-url";
 import { safeUrlOrUndefined } from "@/lib/safe-url";
 
 function initials(name: string) {
@@ -15,8 +16,10 @@ function initials(name: string) {
   );
 }
 
-// Player photos and team crests are hotlinked PandaScore URLs. They're usually
-// reliable, but a missing/blocked image must degrade to clean initials rather
+// Player photos and team crests come from PandaScore's CDN (rendered as-is) or
+// Liquipedia (rewritten to our caching proxy — hotlinking Liquipedia images is
+// not allowed, so /api/logo serves them from the bot-warmed on-disk cache).
+// Either way a missing/blocked image must degrade to clean initials rather
 // than a broken-image icon — same lesson as the tournament crests.
 export function ProfileAvatar({
   src,
@@ -51,9 +54,9 @@ export function ProfileAvatar({
   }
 
   return (
-    // eslint-disable-next-line @next/next/no-img-element -- hotlinked PandaScore image, validated http(s)
+    // eslint-disable-next-line @next/next/no-img-element -- PandaScore CDN or proxied Liquipedia image, validated http(s)
     <img
-      src={safe}
+      src={displayImageUrl(safe)}
       alt=""
       loading="lazy"
       onError={() => setFailed(true)}
