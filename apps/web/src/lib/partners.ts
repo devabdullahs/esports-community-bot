@@ -1,5 +1,6 @@
 import "server-only";
 
+import { unstable_cache } from "next/cache";
 import {
   createPartner as _createPartner,
   createPartnerCampaign as _createCampaign,
@@ -178,6 +179,19 @@ export function listActivePartnerCampaigns(filter: {
 }): Promise<PartnerCampaign[]> {
   return listActiveCampaignRecords(filter);
 }
+
+// Cached public-read variant for the placement components (footer renders on
+// EVERY page, so an uncached read would hit the DB on every request). Tag
+// `cms-partners` lets the admin partner/campaign routes bust it immediately on
+// edit; the 5-minute revalidate is the fallback for time-based start/end windows.
+// `now` is intentionally omitted from the args so it isn't part of the cache key
+// (it defaults per execution, i.e. per cache miss).
+export const listActivePartnerCampaignsCached = unstable_cache(
+  (filter: { kind: PartnerCampaignKind; target?: string; limit?: number }) =>
+    listActiveCampaignRecords(filter),
+  ["partner-active-campaigns"],
+  { tags: ["cms-partners"], revalidate: 300 },
+);
 
 export function updatePartnerCampaign(id: number, patch: Partial<PartnerCampaignInput>): Promise<PartnerCampaign | null> {
   return updateCampaignRecord(id, patch);

@@ -4,7 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { localizedPath, type Locale } from "@/lib/i18n";
-import { listActivePartnerCampaigns, type PartnerCampaign } from "@/lib/partners";
+import { listActivePartnerCampaignsCached, type PartnerCampaign } from "@/lib/partners";
 import { safeUrlOrUndefined } from "@/lib/safe-url";
 
 type PlacementKind = "homepage" | "footer" | "predictions" | "leaderboard" | "tournament";
@@ -92,7 +92,7 @@ export async function PartnerPlacement({
   locale: Locale;
 }) {
   const limit = kind === "footer" ? 4 : 1;
-  const campaigns = await listActivePartnerCampaigns({ kind, target, limit });
+  const campaigns = await listActivePartnerCampaignsCached({ kind, target, limit });
   if (!campaigns.length) return null;
 
   const t = PLACEMENT_COPY[locale];

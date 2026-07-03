@@ -35,6 +35,9 @@ import { POST as mediaReorderPOST } from "@/app/api/admin/media/reorder/route";
 import { POST as newsPOST } from "@/app/api/admin/news/route";
 import { PATCH as newsIdPATCH, DELETE as newsIdDELETE } from "@/app/api/admin/news/[id]/route";
 import { POST as newsIdStatusPOST } from "@/app/api/admin/news/[id]/status/route";
+import { POST as partnersPOST } from "@/app/api/admin/partners/route";
+import { PATCH as partnerIdPATCH, DELETE as partnerIdDELETE } from "@/app/api/admin/partners/[id]/route";
+import { POST as campaignsPOST } from "@/app/api/admin/partners/campaigns/route";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -276,5 +279,45 @@ describe("admin mutation routes call revalidateTag on success", () => {
     const res = await newsIdStatusPOST(req("POST", { status: "published" }), ctx({ id: String(postId) }));
     expect(res.status).toBe(200);
     expect(spyRevalidateTag).toHaveBeenCalledWith("cms-news", "default");
+  });
+
+  // ---- Partners -------------------------------------------------------------
+
+  async function seedPartner(): Promise<{ id: number; slug: string }> {
+    const { createPartner } = await import("@bot/db/partners.js");
+    const slug = `cache-partner-${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
+    return (await createPartner({ slug, name: "Cache Partner" })) as { id: number; slug: string };
+  }
+
+  test("POST /api/admin/partners → revalidateTag(cms-partners)", async () => {
+    const slug = `cache-partner-post-${Date.now()}`;
+    const res = await partnersPOST(req("POST", { slug, name: "Cache Partner" }));
+    expect(res.status).toBe(200);
+    expect(spyRevalidateTag).toHaveBeenCalledWith("cms-partners", "default");
+  });
+
+  test("PATCH /api/admin/partners/[id] → revalidateTag(cms-partners)", async () => {
+    const partner = await seedPartner();
+    // The route validates the full partner shape, so slug + name are required.
+    const res = await partnerIdPATCH(
+      req("PATCH", { slug: partner.slug, name: "Renamed" }),
+      ctx({ id: String(partner.id) }),
+    );
+    expect(res.status).toBe(200);
+    expect(spyRevalidateTag).toHaveBeenCalledWith("cms-partners", "default");
+  });
+
+  test("DELETE /api/admin/partners/[id] → revalidateTag(cms-partners)", async () => {
+    const partner = await seedPartner();
+    const res = await partnerIdDELETE(req("DELETE"), ctx({ id: String(partner.id) }));
+    expect(res.status).toBe(200);
+    expect(spyRevalidateTag).toHaveBeenCalledWith("cms-partners", "default");
+  });
+
+  test("POST /api/admin/partners/campaigns → revalidateTag(cms-partners)", async () => {
+    const partner = await seedPartner();
+    const res = await campaignsPOST(req("POST", { partnerId: partner.id, kind: "footer" }));
+    expect(res.status).toBe(200);
+    expect(spyRevalidateTag).toHaveBeenCalledWith("cms-partners", "default");
   });
 });
