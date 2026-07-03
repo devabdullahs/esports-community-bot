@@ -25,6 +25,7 @@ const {
   parseBracketMatch,
   parseMatchInfo,
   parseMatchStream,
+  parseTournamentEwcAffiliation,
 } = await import('../src/services/liquipedia.js');
 
 // ---------------------------------------------------------------------------
@@ -215,6 +216,17 @@ test('parseEwcEventSchedule: events are sorted by startAt', () => {
 test('parseEwcEventSchedule: empty document returns []', () => {
   const $ = load('<html></html>');
   assert.deepEqual(parseEwcEventSchedule($), []);
+});
+
+test('parseTournamentEwcAffiliation: detects Esports World Cup Foundation organizer in infobox', () => {
+  const $ = load(`
+    <div class="fo-nttax-infobox">
+      <div>Organizer</div>
+      <div><a title="Esports World Cup Foundation">Esports World Cup Foundation</a></div>
+    </div>
+  `);
+  assert.equal(parseTournamentEwcAffiliation($), true);
+  assert.equal(parseTournamentEwcAffiliation(load('<div class="fo-nttax-infobox">Organizer EA</div>')), false);
 });
 
 // ---------------------------------------------------------------------------

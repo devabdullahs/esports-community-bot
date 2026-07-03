@@ -264,6 +264,9 @@ export async function deleteTournamentPlaceholderMatches(tournamentId, currentEx
       if (/^sgg:preview_/i.test(String(row.external_id ?? ''))) {
         return current && !current.has(row.external_id);
       }
+      if (/^.+:br-schedule:/i.test(String(row.external_id ?? ''))) {
+        return current && !current.has(row.external_id);
+      }
       const placeholderA = isPlaceholder(row.team_a);
       const placeholderB = isPlaceholder(row.team_b);
       if (placeholderA && placeholderB) return true;

@@ -41,6 +41,10 @@ export async function updateTournamentGame(id, game) {
   return run('UPDATE tournaments SET game = $1 WHERE id = $2', [game, id]);
 }
 
+export async function updateTournamentEwc(id, ewc) {
+  return run('UPDATE tournaments SET ewc = $1 WHERE id = $2', [ewc ? 1 : 0, id]);
+}
+
 export async function deactivateTournament(id, guildId) {
   return run('UPDATE tournaments SET active = 0 WHERE id = $1 AND guild_id = $2', [id, guildId]);
 }

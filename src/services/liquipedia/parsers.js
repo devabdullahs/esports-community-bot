@@ -1031,3 +1031,9 @@ export function parseEwcEventPlacements($, event, players = []) {
 
   return [...byClub.values()].sort((a, b) => b.points - a.points || a.club.localeCompare(b.club));
 }
+
+export function parseTournamentEwcAffiliation($) {
+  const infobox = $('.fo-nttax-infobox, .infobox, .infobox-center, .tournament-infobox').first();
+  const text = (infobox.length ? infobox.text() : $.text()).replace(/\s+/g, ' ').trim();
+  return /(?:Esports\s*World\s*Cup|EWC)\s*Foundation/i.test(text);
+}

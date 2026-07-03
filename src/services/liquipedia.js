@@ -17,6 +17,7 @@ export {
   parseMatchlistMatch,
   parseMatchStream,
   parseSwissMatches,
+  parseTournamentEwcAffiliation,
   valveRankingRegions,
 } from './liquipedia/parsers.js';
 
@@ -32,10 +33,13 @@ export {
   fetchSchedule,
   fetchValveRegionalStandings,
   fetchEventStandings,
+  resolveTournamentEwc,
   resolveTournamentTitle,
 } from './liquipedia/fetchers.js';
 
 export {
+  parseBattleRoyaleParticipantGroups,
+  parseBattleRoyaleSchedules,
   parseBattleRoyaleStandings,
   parseEventStandings,
   parseGroupTableStandings,

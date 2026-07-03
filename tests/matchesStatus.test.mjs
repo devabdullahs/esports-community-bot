@@ -91,6 +91,26 @@ test('markStaleActiveFinished retires old scheduled and running rows only', asyn
     status: 'scheduled',
     scheduled_at: future,
   });
+  await upsertMatch({
+    tournament_id: tournamentId,
+    source: 'liquipedia',
+    external_id: 'apexlegends:br-schedule:missing',
+    name: 'Missing Lobby Game',
+    team_a: 'Group Stage - A vs B - Game 1',
+    team_b: 'Lobby',
+    status: 'scheduled',
+    scheduled_at: future,
+  });
+  await upsertMatch({
+    tournament_id: tournamentId,
+    source: 'liquipedia',
+    external_id: 'apexlegends:br-schedule:keep',
+    name: 'Kept Lobby Game',
+    team_a: 'Group Stage - A vs B - Game 2',
+    team_b: 'Lobby',
+    status: 'scheduled',
+    scheduled_at: future,
+  });
 
   const visibleMatches = await getMatchesForGuild('guild-1');
   assert.equal(
@@ -120,8 +140,13 @@ test('markStaleActiveFinished retires old scheduled and running rows only', asyn
   assert.equal((await getMatch('liquipedia', 'future-scheduled')).status, 'scheduled');
   assert.equal((await getMatch('liquipedia', 'old-finished')).status, 'finished');
 
-  const deletedPreviewRows = await deleteTournamentPlaceholderMatches(tournamentId, ['sgg:104353062']);
-  assert.equal(deletedPreviewRows, 1);
+  const deletedPreviewRows = await deleteTournamentPlaceholderMatches(tournamentId, [
+    'sgg:104353062',
+    'apexlegends:br-schedule:keep',
+  ]);
+  assert.equal(deletedPreviewRows, 2);
   assert.equal(await getMatch('startgg', 'sgg:preview_3348077_2_1'), null);
   assert.equal((await getMatch('startgg', 'sgg:104353062')).status, 'scheduled');
+  assert.equal(await getMatch('liquipedia', 'apexlegends:br-schedule:missing'), null);
+  assert.equal((await getMatch('liquipedia', 'apexlegends:br-schedule:keep')).status, 'scheduled');
 });

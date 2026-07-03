@@ -36,6 +36,7 @@ export type TournamentRow = {
   name: string | null;
   url: string | null;
   guild_id: string;
+  ewc?: number | null;
   active: number;
   archived_at: number | null;
   created_at: string;
@@ -134,7 +135,9 @@ function isEwcTournament(t: {
   name: string | null;
   external_id: string;
   url: string | null;
+  ewc?: number | null;
 }): boolean {
+  if (Number(t.ewc) === 1) return true;
   const haystack = `${t.external_id} ${t.url ?? ""} ${t.name ?? ""}`.toLowerCase();
   return haystack.includes("esports_world_cup") || haystack.includes("esports world cup");
 }

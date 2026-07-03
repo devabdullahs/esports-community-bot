@@ -223,6 +223,18 @@ function MatchText({
   );
 }
 
+function isLobbySchedule(match: MatchRow) {
+  return teamLabel(match.team_b, "").toLowerCase() === "lobby" && !match.logo_b;
+}
+
+function LobbyScheduleText({ match, fallback }: { match: MatchRow; fallback: string }) {
+  return (
+    <span className="flex min-w-0 items-center gap-2 text-sm font-medium" dir="auto">
+      <bdi className="min-w-0 truncate">{match.name || teamLabel(match.team_a, fallback)}</bdi>
+    </span>
+  );
+}
+
 function localDayKey(timestamp: number | null) {
   if (timestamp == null || !Number.isFinite(timestamp)) return "tbd";
   const d = new Date(timestamp * 1000);
@@ -330,17 +342,26 @@ export function TournamentMatchList({
           <div className="grid gap-3 sm:grid-cols-2">
             {running.map((m) => (
               <Card key={m.id} size="sm" className="flex flex-col">
-                <CardContent className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-3 py-1">
-                  <div className="flex min-w-0 items-center gap-2 text-sm font-medium" dir="auto">
-                    <Logo url={m.logo_a} alt={teamLabel(m.team_a, tbd)} />
-                    <TeamName label={teamLabel(m.team_a, tbd)} teamId={m.team_a_id} locale={locale} />
-                  </div>
-                  <ScoreText a={m.score_a} b={m.score_b} />
-                  <div className="flex min-w-0 items-center justify-end gap-2 text-sm font-medium" dir="auto">
-                    <TeamName label={teamLabel(m.team_b, tbd)} teamId={m.team_b_id} locale={locale} />
-                    <Logo url={m.logo_b} alt={teamLabel(m.team_b, tbd)} />
-                  </div>
-                </CardContent>
+                {isLobbySchedule(m) ? (
+                  <CardContent className="flex items-center justify-between gap-3 py-2">
+                    <LobbyScheduleText match={m} fallback={tbd} />
+                    <span className="shrink-0 text-xs text-muted-foreground">
+                      <MatchTime value={m.scheduled_at} locale={locale} fallback={text.timeTbd} />
+                    </span>
+                  </CardContent>
+                ) : (
+                  <CardContent className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-3 py-1">
+                    <div className="flex min-w-0 items-center gap-2 text-sm font-medium" dir="auto">
+                      <Logo url={m.logo_a} alt={teamLabel(m.team_a, tbd)} />
+                      <TeamName label={teamLabel(m.team_a, tbd)} teamId={m.team_a_id} locale={locale} />
+                    </div>
+                    <ScoreText a={m.score_a} b={m.score_b} />
+                    <div className="flex min-w-0 items-center justify-end gap-2 text-sm font-medium" dir="auto">
+                      <TeamName label={teamLabel(m.team_b, tbd)} teamId={m.team_b_id} locale={locale} />
+                      <Logo url={m.logo_b} alt={teamLabel(m.team_b, tbd)} />
+                    </div>
+                  </CardContent>
+                )}
                 {m.stream ? (
                   <a
                     href={m.stream.url}
@@ -402,17 +423,21 @@ export function TournamentMatchList({
                         <MatchTime value={m.scheduled_at} locale={locale} fallback={text.timeTbd} />
                       </TableCell>
                       <TableCell className="text-start">
-                        <MatchText
-                          a={m.team_a}
-                          b={m.team_b}
-                          aId={m.team_a_id}
-                          bId={m.team_b_id}
-                          logoA={m.logo_a}
-                          logoB={m.logo_b}
-                          locale={locale}
-                          tbd={tbd}
-                          vs={text.vs}
-                        />
+                        {isLobbySchedule(m) ? (
+                          <LobbyScheduleText match={m} fallback={tbd} />
+                        ) : (
+                          <MatchText
+                            a={m.team_a}
+                            b={m.team_b}
+                            aId={m.team_a_id}
+                            bId={m.team_b_id}
+                            logoA={m.logo_a}
+                            logoB={m.logo_b}
+                            locale={locale}
+                            tbd={tbd}
+                            vs={text.vs}
+                          />
+                        )}
                       </TableCell>
                     </TableRow>
                   ))}
@@ -450,18 +475,22 @@ export function TournamentMatchList({
                           <MatchTime value={m.scheduled_at} locale={locale} fallback={text.timeTbd} />
                         </TableCell>
                         <TableCell className="text-start">
-                          <MatchText
-                            a={m.team_a}
-                            b={m.team_b}
-                            aId={m.team_a_id}
-                            bId={m.team_b_id}
-                            logoA={m.logo_a}
-                            logoB={m.logo_b}
-                            locale={locale}
-                            tbd={tbd}
-                            vs={text.vs}
-                            winner={winner}
-                          />
+                          {isLobbySchedule(m) ? (
+                            <LobbyScheduleText match={m} fallback={tbd} />
+                          ) : (
+                            <MatchText
+                              a={m.team_a}
+                              b={m.team_b}
+                              aId={m.team_a_id}
+                              bId={m.team_b_id}
+                              logoA={m.logo_a}
+                              logoB={m.logo_b}
+                              locale={locale}
+                              tbd={tbd}
+                              vs={text.vs}
+                              winner={winner}
+                            />
+                          )}
                         </TableCell>
                         <TableCell className="text-end">
                           <ResultScoreText
