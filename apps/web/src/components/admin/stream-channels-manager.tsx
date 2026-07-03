@@ -392,7 +392,9 @@ export function StreamChannelsManager({
             <Label>{copy.labels.defaultPlatform}</Label>
             <Select value={defaultPlatform} onValueChange={(value) => setDefaultPlatform(value as StreamPlatform)}>
               <SelectTrigger className="w-full">
-                <SelectValue placeholder={copy.labels.platformPlaceholder} />
+                <SelectValue placeholder={copy.labels.platformPlaceholder}>
+                  {(v) => (v ? PLATFORM_LABELS[v as StreamPlatform] : "")}
+                </SelectValue>
               </SelectTrigger>
               <SelectContent>
                 <SelectGroup>
@@ -424,7 +426,9 @@ export function StreamChannelsManager({
             <Label>{copy.labels.scope}</Label>
             <Select value={scope} onValueChange={(value) => setScope(value as StreamScope)}>
               <SelectTrigger className="w-full">
-                <SelectValue placeholder={copy.labels.scope} />
+                <SelectValue placeholder={copy.labels.scope}>
+                  {(v) => (v ? copy.scopeLabels[v as StreamScope] : "")}
+                </SelectValue>
               </SelectTrigger>
               <SelectContent>
                 <SelectGroup>
