@@ -30,7 +30,11 @@ function rowsHaveResults(sections) {
 // standings when it has no content yet.
 function isRealTeam(name) {
   const text = cleanText(name);
-  return Boolean(text) && !/^tbd$/i.test(text);
+  return (
+    Boolean(text) &&
+    !/^tbd$/i.test(text) &&
+    !/^(?:group\s+[a-z0-9]+|survival stage|finals?)\s*#\d+$/i.test(text)
+  );
 }
 
 function hasRealTeam(entries) {
@@ -48,13 +52,15 @@ function nearestHeading($, el) {
 
 function battleRoyalePanelTitle($, table) {
   const panel = $(table).closest('.panel-content');
-  const tabs = $(table).closest('.tabs-dynamic');
-  if (panel.length && tabs.length) {
-    const panels = tabs
+  const navigationRoot = $(table).closest('.tabs-dynamic, .brkts-br-wrapper.battle-royale');
+  if (panel.length && navigationRoot.length) {
+    const panels = navigationRoot
       .find('.panel-content')
       .toArray()
       .filter((el) => $(el).find('.panel-table').length > 0);
-    const labels = tabs
+    const primaryTabs = navigationRoot.children('.navigation-tabs').first();
+    const labelSource = primaryTabs.length ? primaryTabs : navigationRoot;
+    const labels = labelSource
       .find('.navigation-tabs__list-item')
       .map((_, el) => cleanText($(el).text()))
       .get()

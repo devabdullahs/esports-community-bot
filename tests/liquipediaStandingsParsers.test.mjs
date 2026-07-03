@@ -88,6 +88,116 @@ test('battle-royale group draw wins over all-zero lobby standings before results
   assert.deepEqual(sections[1].entries.map((entry) => entry.team), ['Wolves Esports', 'Virtus.pro']);
 });
 
+test('battle-royale navigation wrapper titles Free Fire groups and skips future placeholder sections', () => {
+  const futureTs = Math.floor(Date.now() / 1000) + 24 * 3600;
+  const $ = cheerio.load(`
+    <div class="brkts-br-wrapper battle-royale">
+      <div class="navigation-tabs">
+        <ul class="navigation-tabs__list">
+          <li class="navigation-tabs__list-item">Group A</li>
+          <li class="navigation-tabs__list-item">Group B</li>
+        </ul>
+      </div>
+      <div class="navigation-content-container">
+        <div class="navigation-content">
+          <div class="panel-content">
+            <ul class="panel-content__game-schedule">
+              <li class="panel-content__game-schedule__list-item">
+                <span class="panel-content__game-schedule__title">Game 1:</span>
+                <span data-timestamp="${futureTs}">Soon</span>
+              </li>
+            </ul>
+            <div class="panel-table">
+              <div class="panel-table__row row--header"></div>
+              <div class="panel-table__row">
+                <div class="cell--rank" data-sort-val="1"></div>
+                <div class="cell--team" data-sort-val="All Gamers Global">
+                  <img src="/commons/images/all-gamers.png">
+                </div>
+                <div class="cell--total-points" data-sort-val="0"></div>
+              </div>
+              <div class="panel-table__row">
+                <div class="cell--rank" data-sort-val="2"></div>
+                <div class="cell--team" data-sort-val="Aurora Gaming"></div>
+                <div class="cell--total-points" data-sort-val="0"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="navigation-content">
+          <div class="panel-content">
+            <ul class="panel-content__game-schedule">
+              <li class="panel-content__game-schedule__list-item">
+                <span class="panel-content__game-schedule__title">Game 1:</span>
+                <span data-timestamp="${futureTs + 3600}">Soon</span>
+              </li>
+            </ul>
+            <div class="panel-table">
+              <div class="panel-table__row row--header"></div>
+              <div class="panel-table__row">
+                <div class="cell--rank" data-sort-val="1"></div>
+                <div class="cell--team" data-sort-val="Al Ahli Esports"></div>
+                <div class="cell--total-points" data-sort-val="0"></div>
+              </div>
+              <div class="panel-table__row">
+                <div class="cell--rank" data-sort-val="2"></div>
+                <div class="cell--team" data-sort-val="Fluxo W7M"></div>
+                <div class="cell--total-points" data-sort-val="0"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="brkts-br-wrapper battle-royale">
+      <div class="navigation-tabs is--hidden">
+        <ul class="navigation-tabs__list">
+          <li class="navigation-tabs__list-item">Survival Stage</li>
+        </ul>
+      </div>
+      <div class="navigation-content-container">
+        <div class="navigation-content">
+          <div class="panel-content">
+            <ul class="panel-content__game-schedule">
+              <li class="panel-content__game-schedule__list-item">
+                <span class="panel-content__game-schedule__title">Match:</span>
+                <span data-timestamp="${futureTs + 7200}">Soon</span>
+              </li>
+            </ul>
+            <div class="panel-table">
+              <div class="panel-table__row row--header"></div>
+              <div class="panel-table__row">
+                <div class="cell--rank" data-sort-val="1"></div>
+                <div class="cell--team" data-sort-val="Group A #05"></div>
+                <div class="cell--total-points" data-sort-val=""></div>
+              </div>
+              <div class="panel-table__row">
+                <div class="cell--rank" data-sort-val="2"></div>
+                <div class="cell--team" data-sort-val="Group B #10"></div>
+                <div class="cell--total-points" data-sort-val=""></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  `);
+
+  const sections = parseEventStandings($);
+  assert.equal(sections.length, 2);
+  assert.equal(sections[0].title, 'Group A');
+  assert.deepEqual(sections[0].entries.map((entry) => entry.team), ['All Gamers Global', 'Aurora Gaming']);
+  assert.match(sections[0].entries[0].logo, /all-gamers/);
+  assert.equal(sections[1].title, 'Group B');
+  assert.deepEqual(sections[1].entries.map((entry) => entry.team), ['Al Ahli Esports', 'Fluxo W7M']);
+
+  const schedules = parseBattleRoyaleSchedules($, 'freefire', 'Esports_World_Cup/2026');
+  assert.deepEqual(
+    schedules.map((match) => match.name),
+    ['Group A - Game 1', 'Group B - Game 1', 'Survival Stage - Match'],
+  );
+});
+
 test('battle-royale schedule rows parse as lobby calendar items', () => {
   const futureTs = Math.floor(Date.now() / 1000) + 24 * 3600;
   const $ = cheerio.load(`
