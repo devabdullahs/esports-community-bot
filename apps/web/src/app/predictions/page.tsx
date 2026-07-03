@@ -10,6 +10,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { PartnerPlacement } from "@/components/partners/partner-placement";
 import { localizedPath } from "@/lib/i18n";
 import { buildPageMetadata } from "@/lib/metadata";
 import { getRequestLocale } from "@/lib/request-locale";
@@ -73,6 +74,8 @@ export default async function PredictionsPage() {
         <h1 className="text-3xl font-semibold leading-tight sm:text-4xl">{t.title}</h1>
         <p className="text-sm leading-6 text-muted-foreground sm:text-base">{t.description}</p>
       </section>
+
+      <PartnerPlacement kind="predictions" locale={locale} />
 
       <section className="grid gap-4 md:grid-cols-2">
         <Card size="sm" className="h-full">

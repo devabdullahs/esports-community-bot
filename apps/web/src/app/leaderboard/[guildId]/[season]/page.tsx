@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { ArrowLeftIcon, ArrowRightIcon, CrownIcon, TrophyIcon, UsersRoundIcon } from "lucide-react";
 import { LeaderboardTable } from "@/components/dashboard/leaderboard-table";
+import { PartnerPlacement } from "@/components/partners/partner-placement";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -125,6 +126,8 @@ export default async function LeaderboardPage({
           />
         </div>
       </section>
+
+      <PartnerPlacement kind="leaderboard" target={`season:${season}`} locale={locale} />
 
       <Card>
         <CardHeader>
