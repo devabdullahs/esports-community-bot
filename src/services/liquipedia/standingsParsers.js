@@ -13,6 +13,20 @@ function cleanText(value) {
   return String(value ?? '').replace(/\s+/g, ' ').trim();
 }
 
+// A "TBD" row is an unfilled bracket slot (qualifier not yet decided). We keep
+// TBD rows inside a section that has real teams (they fill in as the event
+// progresses), but a section with NOTHING but TBD is an unseeded event — storing
+// it would show a page of "1. TBD, 2. TBD, ..." and mark the event as having
+// standings when it has no content yet.
+function isRealTeam(name) {
+  const text = cleanText(name);
+  return Boolean(text) && !/^tbd$/i.test(text);
+}
+
+function hasRealTeam(entries) {
+  return entries.some((entry) => isRealTeam(entry.team));
+}
+
 function nearestHeading($, el) {
   const heading = $(el).prevAll('h2, h3, h4').first();
   if (heading.length) return cleanText(heading.find('.mw-headline').text() || heading.text());
@@ -25,7 +39,8 @@ function nearestHeading($, el) {
 // Battle-royale panel-table(s). Returns one section per table:
 // { title, entries: [{ rank, team, points, logo }] }. TBD rows are kept (they
 // become real teams as qualifiers finish) but rows with no team text at all are
-// dropped.
+// dropped, and a table that is ENTIRELY TBD (an unseeded event) yields no
+// section at all.
 export function parseBattleRoyaleStandings($) {
   const sections = [];
   $('.panel-table').each((_, table) => {
@@ -49,7 +64,7 @@ export function parseBattleRoyaleStandings($) {
           logo: normalizeImageUrl(teamCell.find('img').first().attr('src')),
         });
       });
-    if (entries.length) sections.push({ title: nearestHeading($, table), entries });
+    if (hasRealTeam(entries)) sections.push({ title: nearestHeading($, table), entries });
   });
   return sections;
 }
@@ -77,7 +92,7 @@ export function parseGroupTableStandings($) {
           logo: normalizeImageUrl(entryCell.find('img').first().attr('src')),
         });
       });
-    if (entries.length) sections.push({ title, entries });
+    if (hasRealTeam(entries)) sections.push({ title, entries });
   });
   return sections;
 }
@@ -85,4 +100,40 @@ export function parseGroupTableStandings($) {
 // Every standings section on a tournament page, in page order per format.
 export function parseEventStandings($) {
   return [...parseBattleRoyaleStandings($), ...parseGroupTableStandings($)];
+}
+
+// Whether the page yields at least one PARSEABLE standings row (a team cell we
+// can read — TBD counts, since a TBD row is still a recognized standings row).
+// This is the clear-vs-preserve confidence signal: it stays true for an all-TBD
+// unseeded event (safe to clear stored rows) but goes false the moment the DOM
+// shape changes — an empty or restructured table, or renamed row/cell classes,
+// extracts nothing, so callers preserve stored rows rather than wipe good data.
+// It mirrors the exact team-cell extraction the parsers use above.
+export function hasStandingsRows($) {
+  let found = false;
+  $('.panel-table')
+    .find('.panel-table__row')
+    .not('.row--header')
+    .each((_, row) => {
+      const cell = $(row).find('.cell--team').first();
+      const team =
+        cleanText(cell.attr('data-sort-val')) || cleanText(cell.find('.block-team .name').first().text());
+      if (team) {
+        found = true;
+        return false;
+      }
+      return undefined;
+    });
+  if (found) return true;
+  $('.group-table')
+    .find('.group-table-result-row')
+    .each((_, row) => {
+      const entry = $(row).find('.group-table-entry').first();
+      if (cleanText(entry.attr('aria-label')) || cleanText(entry.text())) {
+        found = true;
+        return false;
+      }
+      return undefined;
+    });
+  return found;
 }

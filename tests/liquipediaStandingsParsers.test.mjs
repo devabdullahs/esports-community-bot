@@ -6,6 +6,7 @@ import test from 'node:test';
 import * as cheerio from 'cheerio';
 
 import {
+  hasStandingsRows,
   parseBattleRoyaleStandings,
   parseEventStandings,
   parseGroupTableStandings,
@@ -50,4 +51,40 @@ test('parseEventStandings combines both formats and empty pages yield []', () =>
   assert.equal(parseEventStandings(group$).length, 1);
   const empty$ = cheerio.load('<div class="mw-parser-output"><p>Nothing here.</p></div>');
   assert.deepEqual(parseEventStandings(empty$), []);
+});
+
+test('an all-TBD table (unseeded event) yields no section', () => {
+  // PUBG / PUBG Mobile / early Apex events list every slot as TBD until their
+  // qualifiers finish — storing that would be a page of "1. TBD, 2. TBD, ...".
+  const allTbd$ = cheerio.load(`
+    <div class="panel-table">
+      <div class="panel-table__row row--header"><div class="cell--rank">#</div></div>
+      <div class="panel-table__row">
+        <div class="cell--rank" data-sort-val="1">1</div>
+        <div class="cell--team" data-sort-val="TBD"><div class="block-team"><span class="name">TBD</span></div></div>
+      </div>
+      <div class="panel-table__row">
+        <div class="cell--rank" data-sort-val="2">2</div>
+        <div class="cell--team" data-sort-val="TBD"><div class="block-team"><span class="name">TBD</span></div></div>
+      </div>
+    </div>`);
+  assert.deepEqual(parseBattleRoyaleStandings(allTbd$), []);
+  assert.deepEqual(parseEventStandings(allTbd$), []);
+  // But rows WERE parsed — this is the clear-vs-preserve confidence signal.
+  assert.equal(hasStandingsRows(allTbd$), true);
+});
+
+test('hasStandingsRows is false when the DOM has no parseable rows (preserve guard)', () => {
+  // A real page yields rows; the fixture has Twisted Minds etc.
+  assert.equal(hasStandingsRows(br$), true);
+  assert.equal(hasStandingsRows(group$), true);
+  // A table container whose rows/cells changed shape yields nothing — the sync
+  // must PRESERVE stored rows in this case, not wipe them.
+  const shapeChanged$ = cheerio.load(
+    '<div class="panel-table"><div class="some-new-row"><div class="some-new-team">Twisted Minds</div></div></div>',
+  );
+  assert.equal(hasStandingsRows(shapeChanged$), false);
+  const emptyTable$ = cheerio.load('<div class="panel-table"></div>');
+  assert.equal(hasStandingsRows(emptyTable$), false);
+  assert.equal(hasStandingsRows(cheerio.load('<div><p>no standings</p></div>')), false);
 });

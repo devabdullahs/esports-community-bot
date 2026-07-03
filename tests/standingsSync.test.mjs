@@ -49,12 +49,15 @@ test('sync fetches ONLY standings-format events and stores rows', async () => {
     liquipedia: {
       fetchEventStandings: async (t) => {
         fetched.push(t.external_id);
-        return [
-          { title: 'Group Stage', entries: [
-            { rank: 1, team: 'Twisted Minds', points: '87', logo: 'https://liquipedia.net/img/tm.png' },
-            { rank: 2, team: 'Falcons Force', points: '81', logo: null },
-          ] },
-        ];
+        return {
+          hadRows: true,
+          sections: [
+            { title: 'Group Stage', entries: [
+              { rank: 1, team: 'Twisted Minds', points: '87', logo: 'https://liquipedia.net/img/tm.png' },
+              { rank: 2, team: 'Falcons Force', points: '81', logo: null },
+            ] },
+          ],
+        };
       },
     },
   });
@@ -78,6 +81,35 @@ test('refresh replaces wholesale (no stale rows)', async () => {
   assert.equal(rows[0].team, 'New Leader');
 });
 
+test('an all-TBD page (rows parsed, no real teams) clears stale rows', async () => {
+  // pubgEvent has rows from the previous test. An all-TBD page yields parseable
+  // rows but no confirmed teams, so sections is empty AND hadRows is true — the
+  // sync must clear the stale rows so hasStandings goes false.
+  await replaceTournamentStandings(pubgEvent.id, [
+    { title: 'Group Stage', entries: [{ rank: 1, team: 'Leftover', points: '10' }] },
+  ]);
+  assert.equal((await listStandingsForTournament(pubgEvent.id)).length, 1);
+
+  const summary = await runStandingsSync({
+    liquipedia: { fetchEventStandings: async () => ({ sections: [], hadRows: true }) },
+  });
+  assert.equal(summary.empty, 1);
+  assert.equal((await listStandingsForTournament(pubgEvent.id)).length, 0); // cleared
+});
+
+test('an empty parse with NO recognized tables preserves stored rows (transient/DOM-change guard)', async () => {
+  await replaceTournamentStandings(pubgEvent.id, [
+    { title: 'Group Stage', entries: [{ rank: 1, team: 'Keep Me', points: '5' }] },
+  ]);
+  const summary = await runStandingsSync({
+    liquipedia: { fetchEventStandings: async () => ({ sections: [], hadRows: false }) },
+  });
+  assert.equal(summary.empty, 1);
+  const rows = await listStandingsForTournament(pubgEvent.id);
+  assert.equal(rows.length, 1); // NOT cleared — could be a transient/partial page
+  assert.equal(rows[0].team, 'Keep Me');
+});
+
 test('a fetch failure on one event never blocks the others', async () => {
   const tft = await addTournament({
     source: 'liquipedia', external_id: 'tft/Esports_World_Cup/2026', game: 'tft',
@@ -87,7 +119,10 @@ test('a fetch failure on one event never blocks the others', async () => {
     liquipedia: {
       fetchEventStandings: async (t) => {
         if (t.game === 'pubg') throw new Error('boom');
-        return [{ title: 'Group A', entries: [{ rank: 1, team: 'Weibo Gaming', points: '2–0', extra: '4–1' }] }];
+        return {
+          hadRows: true,
+          sections: [{ title: 'Group A', entries: [{ rank: 1, team: 'Weibo Gaming', points: '2–0', extra: '4–1' }] }],
+        };
       },
     },
   });
