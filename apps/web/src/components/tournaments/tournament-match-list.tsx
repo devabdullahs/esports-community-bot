@@ -209,7 +209,7 @@ function MatchText({
   const aLabel = teamLabel(a, tbd);
   const bLabel = teamLabel(b, tbd);
   return (
-    <span dir={directionForLocale(locale)} className="flex max-w-full items-center gap-2 text-start">
+    <span dir={directionForLocale(locale)} className="flex w-full max-w-full items-center gap-2 text-start">
       <span className="flex min-w-0 items-center gap-1.5">
         <Logo url={logoA ?? null} alt={aLabel} />
         <TeamName label={aLabel} teamId={aId} locale={locale} bold={winner === "a"} />
@@ -227,9 +227,12 @@ function isLobbySchedule(match: MatchRow) {
   return teamLabel(match.team_b, "").toLowerCase() === "lobby" && !match.logo_b;
 }
 
-function LobbyScheduleText({ match, fallback }: { match: MatchRow; fallback: string }) {
+function LobbyScheduleText({ match, fallback, locale }: { match: MatchRow; fallback: string; locale: Locale }) {
   return (
-    <span className="flex min-w-0 items-center gap-2 text-sm font-medium" dir="auto">
+    <span
+      className="flex w-full min-w-0 items-center gap-2 text-start text-sm font-medium"
+      dir={directionForLocale(locale)}
+    >
       <bdi className="min-w-0 truncate">{match.name || teamLabel(match.team_a, fallback)}</bdi>
     </span>
   );
@@ -344,19 +347,25 @@ export function TournamentMatchList({
               <Card key={m.id} size="sm" className="flex flex-col">
                 {isLobbySchedule(m) ? (
                   <CardContent className="flex items-center justify-between gap-3 py-2">
-                    <LobbyScheduleText match={m} fallback={tbd} />
+                    <LobbyScheduleText match={m} fallback={tbd} locale={locale} />
                     <span className="shrink-0 text-xs text-muted-foreground">
                       <MatchTime value={m.scheduled_at} locale={locale} fallback={text.timeTbd} />
                     </span>
                   </CardContent>
                 ) : (
                   <CardContent className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-3 py-1">
-                    <div className="flex min-w-0 items-center gap-2 text-sm font-medium" dir="auto">
+                    <div
+                      className="flex min-w-0 items-center gap-2 text-start text-sm font-medium"
+                      dir={directionForLocale(locale)}
+                    >
                       <Logo url={m.logo_a} alt={teamLabel(m.team_a, tbd)} />
                       <TeamName label={teamLabel(m.team_a, tbd)} teamId={m.team_a_id} locale={locale} />
                     </div>
                     <ScoreText a={m.score_a} b={m.score_b} />
-                    <div className="flex min-w-0 items-center justify-end gap-2 text-sm font-medium" dir="auto">
+                    <div
+                      className="flex min-w-0 items-center justify-end gap-2 text-start text-sm font-medium"
+                      dir={directionForLocale(locale)}
+                    >
                       <TeamName label={teamLabel(m.team_b, tbd)} teamId={m.team_b_id} locale={locale} />
                       <Logo url={m.logo_b} alt={teamLabel(m.team_b, tbd)} />
                     </div>
@@ -424,7 +433,7 @@ export function TournamentMatchList({
                       </TableCell>
                       <TableCell className="text-start">
                         {isLobbySchedule(m) ? (
-                          <LobbyScheduleText match={m} fallback={tbd} />
+                          <LobbyScheduleText match={m} fallback={tbd} locale={locale} />
                         ) : (
                           <MatchText
                             a={m.team_a}
@@ -476,7 +485,7 @@ export function TournamentMatchList({
                         </TableCell>
                         <TableCell className="text-start">
                           {isLobbySchedule(m) ? (
-                            <LobbyScheduleText match={m} fallback={tbd} />
+                            <LobbyScheduleText match={m} fallback={tbd} locale={locale} />
                           ) : (
                             <MatchText
                               a={m.team_a}
