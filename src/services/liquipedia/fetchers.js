@@ -151,10 +151,39 @@ export async function fetchSchedule(tournament) {
   const seenIds = new Set();
   const pairIndex = new Map(); // pairKey -> match (dedupe + live-status upgrade)
   const pairOf = (m) => [normalizeTeamName(m.teamA), normalizeTeamName(m.teamB)].sort().join('|');
+  // A page can render the SAME match twice — once in a bracket widget and once in
+  // a match-list widget (this event's page has both). Those copies share the pair
+  // and day but carry different element ids, so store ONE row per pair+day (keeping
+  // whichever copy has the richer result) instead of persisting a redundant row.
+  // Same-pair matches on DIFFERENT days (a group match and a later rematch) key
+  // apart and are both kept — matching the display-layer dedupe in db/matches.js.
+  const authByKey = new Map(); // `${pair}|${day}` -> kept match
+  const dayOf = (m) => (m.scheduledAt ? Math.floor(m.scheduledAt / 86400) : 'x');
+  const resultRank = (m) => {
+    const hasScore = m.scoreA != null && m.scoreB != null;
+    if (m.status === 'finished' && hasScore) return 4;
+    if (m.status === 'running') return 3;
+    if (m.status === 'finished') return 2;
+    return hasScore ? 1 : 0;
+  };
   const addAuthoritative = (el, parser, structuralScope) => {
     const m = parser($, el, game, structuralScope || page);
     if (!m || seenIds.has(m.externalId)) return;
+    const key = `${pairOf(m)}|${dayOf(m)}`;
+    const kept = authByKey.get(key);
+    if (kept) {
+      // Same match from the sibling widget: fold in a richer result, drop the dup.
+      if (resultRank(m) > resultRank(kept)) {
+        kept.status = m.status;
+        kept.scoreA = m.scoreA;
+        kept.scoreB = m.scoreB;
+        kept.winner = m.winner;
+      }
+      if (!kept.scheduledAt && m.scheduledAt) kept.scheduledAt = m.scheduledAt;
+      return;
+    }
     seenIds.add(m.externalId);
+    authByKey.set(key, m);
     pairIndex.set(pairOf(m), m);
     out.push(m);
   };
