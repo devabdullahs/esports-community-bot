@@ -149,28 +149,83 @@ export async function fetchSchedule(tournament) {
 
   const out = [];
   const seenIds = new Set();
-  const pairIndex = new Map(); // pairKey -> match (dedupe + live-status upgrade)
+  const pairIndex = new Map(); // pairKey -> kept authoritative matches
   const pairOf = (m) => [normalizeTeamName(m.teamA), normalizeTeamName(m.teamB)].sort().join('|');
-  const addAuthoritative = (el, parser, structuralScope) => {
+  // A page can render the SAME match twice - once in a bracket widget and once in
+  // a match-list widget. Only collapse cross-widget twins that share the exact
+  // start timestamp; same-pair rematches later that day, or untimed rows where the
+  // match identity is ambiguous, must keep their separate structural ids.
+  const authByKey = new Map(); // `${pair}|${scheduledAt}` -> [{ match, widget }]
+  const timestampOf = (m) => (m.scheduledAt == null ? null : Number(m.scheduledAt) || null);
+  const dayOf = (m) => (m.scheduledAt ? Math.floor(m.scheduledAt / 86400) : 'x');
+  const authKeyOf = (m) => {
+    const ts = timestampOf(m);
+    return ts == null ? null : `${pairOf(m)}|${ts}`;
+  };
+  const addToPairIndex = (m) => {
+    const key = pairOf(m);
+    const matches = pairIndex.get(key);
+    if (matches) matches.push(m);
+    else pairIndex.set(key, [m]);
+  };
+  const findExistingForLiveWidget = (m) => {
+    const matches = pairIndex.get(pairOf(m)) || [];
+    if (!matches.length) return null;
+    const ts = timestampOf(m);
+    if (ts != null) {
+      const exact = matches.find((candidate) => timestampOf(candidate) === ts);
+      if (exact) return exact;
+      const sameDay = matches.filter((candidate) => dayOf(candidate) === dayOf(m));
+      if (sameDay.length === 1) return sameDay[0];
+      return null;
+    }
+    return matches.length === 1 ? matches[0] : null;
+  };
+  const resultRank = (m) => {
+    const hasScore = m.scoreA != null && m.scoreB != null;
+    if (m.status === 'finished' && hasScore) return 4;
+    if (m.status === 'running') return 3;
+    if (m.status === 'finished') return 2;
+    return hasScore ? 1 : 0;
+  };
+  const addAuthoritative = (el, parser, structuralScope, widget) => {
     const m = parser($, el, game, structuralScope || page);
     if (!m || seenIds.has(m.externalId)) return;
+    const key = authKeyOf(m);
+    const kept = key ? (authByKey.get(key) || []).find((entry) => entry.widget !== widget)?.match : null;
+    if (kept) {
+      // Same match from the sibling widget: fold in a richer result, drop the dup.
+      if (resultRank(m) > resultRank(kept)) {
+        kept.status = m.status;
+        kept.scoreA = m.scoreA;
+        kept.scoreB = m.scoreB;
+        kept.winner = m.winner;
+      }
+      if (!kept.scheduledAt && m.scheduledAt) kept.scheduledAt = m.scheduledAt;
+      return;
+    }
     seenIds.add(m.externalId);
-    pairIndex.set(pairOf(m), m);
+    if (key) {
+      const matches = authByKey.get(key);
+      if (matches) matches.push({ match: m, widget });
+      else authByKey.set(key, [{ match: m, widget }]);
+    }
+    addToPairIndex(m);
     out.push(m);
   };
 
   // 1) Brackets AND match lists (group / Swiss / weekly schedules) = authoritative:
   //    stable set, with winners + final scores.
-  $('.brkts-match').each((i, el) => addAuthoritative(el, parseBracketMatch, `${page}:bracket:${i}`));
+  $('.brkts-match').each((i, el) => addAuthoritative(el, parseBracketMatch, `${page}:bracket:${i}`, 'bracket'));
   $('.brkts-matchlist-match').each((i, el) =>
-    addAuthoritative(el, parseMatchlistMatch, `${page}:matchlist:${i}`),
+    addAuthoritative(el, parseMatchlistMatch, `${page}:matchlist:${i}`, 'matchlist'),
   );
 
   // 1c) Swiss group standings grids (RLCS etc.) — matches are encoded in the round cells.
   for (const m of parseSwissMatches($, game)) {
     if (seenIds.has(m.externalId) || pairIndex.has(pairOf(m))) continue;
     seenIds.add(m.externalId);
-    pairIndex.set(pairOf(m), m);
+    addToPairIndex(m);
     out.push(m);
   }
 
@@ -181,8 +236,7 @@ export async function fetchSchedule(tournament) {
   $('.match-info').each((_i, el) => {
     const m = parseMatchInfo($, el, game);
     if (!m || (m.teamA === 'TBD' && m.teamB === 'TBD')) return;
-    const key = pairOf(m);
-    const existing = pairIndex.get(key);
+    const existing = findExistingForLiveWidget(m);
     if (existing) {
       if (m.status === 'running' && existing.status !== 'running') {
         existing.status = 'running';
@@ -206,7 +260,7 @@ export async function fetchSchedule(tournament) {
     }
     if (seenIds.has(m.externalId)) return;
     seenIds.add(m.externalId);
-    pairIndex.set(key, m);
+    addToPairIndex(m);
     out.push(m);
   });
 

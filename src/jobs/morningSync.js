@@ -12,6 +12,7 @@ import {
 import {
   deleteResolvedDuplicateMatches,
   deleteTournamentPlaceholderMatches,
+  deleteTournamentDuplicateMatches,
   upsertMatch,
   toMatchRow,
 } from '../db/matches.js';
@@ -78,6 +79,8 @@ export async function syncTournament(client, t) {
   }
   const deleted = await deleteTournamentPlaceholderMatches(t.id, currentIds);
   if (deleted) logger.info(`[sync] removed ${deleted} stale placeholder match(es) for ${t.source}:${t.external_id}`);
+  const dupes = await deleteTournamentDuplicateMatches(t.id, currentIds);
+  if (dupes) logger.info(`[sync] removed ${dupes} duplicate match row(s) for ${t.source}:${t.external_id}`);
   return matches.length;
 }
 

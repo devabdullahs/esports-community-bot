@@ -284,6 +284,42 @@ export async function deleteTournamentPlaceholderMatches(tournamentId, currentEx
   return ids.length;
 }
 
+// Remove redundant duplicate rows within a tournament. A page can render the SAME
+// match in two widgets (e.g. a bracket AND a match list), so it lands under two
+// external ids that collapse to one on reads. Once a fetch settles on one canonical
+// id for the same pair at the same exact start time, any sibling row in that group
+// but absent from the current set is a stale duplicate and safe to drop. A group
+// with NO current row is left untouched (it may be a transient parse gap), and
+// untimed rows are skipped because same-pair rematches cannot be separated safely.
+export async function deleteTournamentDuplicateMatches(tournamentId, currentExternalIds) {
+  if (!currentExternalIds || !currentExternalIds.length) return 0;
+  const current = new Set(currentExternalIds);
+  const rows = await all(
+    'SELECT id, external_id, team_a, team_b, scheduled_at FROM matches WHERE tournament_id = $1',
+    [tournamentId],
+  );
+  const keyOf = (r) => {
+    if (!r.scheduled_at) return null;
+    return `${[normalizeTeamName(r.team_a), normalizeTeamName(r.team_b)].sort().join('|')}|${r.scheduled_at}`;
+  };
+  const groups = new Map(); // key -> { hasCurrent, staleIds: [] }
+  for (const r of rows) {
+    const key = keyOf(r);
+    if (!key) continue;
+    let g = groups.get(key);
+    if (!g) groups.set(key, (g = { hasCurrent: false, staleIds: [] }));
+    if (current.has(r.external_id)) g.hasCurrent = true;
+    else g.staleIds.push(r.id);
+  }
+  const ids = [];
+  for (const g of groups.values()) if (g.hasCurrent) ids.push(...g.staleIds);
+  if (!ids.length) return 0;
+  await transaction(async (tx) => {
+    for (const id of ids) await tx.run('DELETE FROM matches WHERE id = $1', [id]);
+  });
+  return ids.length;
+}
+
 // Distinct team names appearing in ACTIVE tournaments' matches for one game -
 // the Liquipedia enrichment job's target set (its scope is always the tracked
 // scene, never a wiki-wide crawl).

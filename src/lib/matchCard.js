@@ -68,6 +68,16 @@ export function displayTeamName(name) {
   return s;
 }
 
+export function hasTwoTeamLayout(m) {
+  const teamB = String(m?.team_b ?? m?.teamB ?? '').trim();
+  if (!teamB || /^lobby$/i.test(teamB)) return false;
+  // parseMatchInfo emits source-level calendar/event rows as "<game>:event:..."
+  // with team_b holding a stage/detail label, not an opponent.
+  const externalId = String(m?.external_id ?? m?.externalId ?? '');
+  if (/^[^:]+:event:/i.test(externalId)) return false;
+  return true;
+}
+
 function drawTeam(ctx, cx, cy, size, name, img) {
   name = displayTeamName(name);
   if (img) {
@@ -294,38 +304,45 @@ export async function renderScheduleCard({ title, subtitle, matches, accent, sho
     ctx.fillText(`${time.date} UTC+3`, 78, y + 20);
 
     const [logoA, logoB] = logoPairs[i];
-    const isLobby = isLobbyMatch(m);
-    drawSmallLogo(ctx, 306, y - 3, 76, 44, m.team_a, logoA);
-    if (!isLobby) drawSmallLogo(ctx, 908, y - 3, 76, 44, m.team_b, logoB);
-
-    ctx.textAlign = 'left';
-    ctx.fillStyle = '#ffffff';
-    ctx.font = `bold 25px ${HEAD}`;
+    // Two real teams (a head-to-head bracket match — including lobby-scored games
+    // like TFT at EWC, where each round is still Team vs Team) get the balanced
+    // two-crest layout. A single-participant lobby/event keeps one crest + label.
+    const twoTeams = hasTwoTeamLayout(m);
     const teamA = displayTeamName(m.team_a);
-    const teamB = isLobby ? m.team_b : displayTeamName(m.team_b);
-    if (isLobby) {
-      const label = matchLabel({ ...m, team_a: teamA, team_b: teamB });
-      ctx.fillText(fit(ctx, label, 760, `bold 25px ${HEAD}`), 350, y - 3);
-    } else {
+
+    if (twoTeams) {
+      const teamB = displayTeamName(m.team_b);
+      const separator = isLobbyMatch(m) ? '—' : 'VS';
+      drawSmallLogo(ctx, 306, y - 3, 76, 44, m.team_a, logoA);
+      drawSmallLogo(ctx, 908, y - 3, 76, 44, m.team_b, logoB);
+
+      ctx.fillStyle = '#ffffff';
+      ctx.font = `bold 25px ${HEAD}`;
+      ctx.textAlign = 'left';
       ctx.fillText(fit(ctx, teamA, 195, `bold 25px ${HEAD}`), 350, y - 3);
+      ctx.textAlign = 'right';
+      ctx.fillText(fit(ctx, teamB, 205, `bold 25px ${HEAD}`), 850, y - 3);
+
+      ctx.textAlign = 'center';
+      ctx.font = `bold 34px ${HEAD}`;
+      ctx.fillText(separator, W / 2, y - 2);
+    } else {
+      drawSmallLogo(ctx, 306, y - 3, 76, 44, m.team_a, logoA);
+      ctx.fillStyle = '#ffffff';
+      ctx.font = `bold 25px ${HEAD}`;
+      ctx.textAlign = 'left';
+      const label = matchLabel({ ...m, team_a: teamA });
+      ctx.fillText(fit(ctx, label, 760, `bold 25px ${HEAD}`), 350, y - 3);
     }
 
-    ctx.textAlign = 'center';
-    ctx.fillStyle = '#ffffff';
-    ctx.font = `bold 34px ${HEAD}`;
-    if (!isLobby) ctx.fillText('VS', W / 2, y - 2);
     if (m.tournament_name) {
+      ctx.textAlign = 'center';
       ctx.fillStyle = '#8ea2c3';
       ctx.font = `17px ${BODY}`;
       const tag = showGameTags ? matchTag(m) : null;
       const tournament = tag ? `${tag} - ${m.tournament_name}` : m.tournament_name;
       ctx.fillText(fit(ctx, tournament, 430, `17px ${BODY}`), W / 2, y + 23);
     }
-
-    ctx.textAlign = 'right';
-    ctx.fillStyle = '#ffffff';
-    ctx.font = `bold 25px ${HEAD}`;
-    if (!isLobby) ctx.fillText(fit(ctx, teamB, 205, `bold 25px ${HEAD}`), 850, y - 3);
   });
 
   return canvas.toBuffer('image/png');
@@ -522,6 +539,9 @@ function fmtUtc(sec) {
 
 // Render a card from a DB match row (joined with tournament fields by getMatchesForGuild).
 export function renderCardForMatch(m, { nextText } = {}) {
+  // A two-team match (TFT/other lobby-scored games are still Team vs Team per round)
+  // renders both crests; only a single-participant lobby collapses to one crest.
+  const twoTeams = hasTwoTeamLayout(m);
   const lobby = isLobbyMatch(m);
   const tag = matchTagEwc(m);
   let timeText = '';
@@ -536,17 +556,18 @@ export function renderCardForMatch(m, { nextText } = {}) {
     timeText = fmtUtc(m.scheduled_at);
     accent = 'rgba(88,101,242,0.65)';
   }
+  const hasScore = m.status !== 'scheduled' && m.score_a != null && m.score_b != null;
+  let scoreText;
+  if (hasScore) scoreText = `${m.score_a} : ${m.score_b}`;
+  else if (twoTeams) scoreText = lobby ? '—' : 'VS';
+  else scoreText = timeText || 'EVENT';
   return renderMatchCard({
     tournament: m.tournament_name || (tag ? `${tag} match` : 'Match'),
     subtitle: m.tournament_name && tag ? tag : null,
     timeText,
-    scoreText: lobby
-      ? timeText || 'EVENT'
-      : m.status !== 'scheduled' && m.score_a != null && m.score_b != null
-        ? `${m.score_a} : ${m.score_b}`
-        : 'VS',
+    scoreText,
     teamA: displayTeamName(m.team_a),
-    teamB: lobby ? null : displayTeamName(m.team_b),
+    teamB: twoTeams ? displayTeamName(m.team_b) : null,
     logoA: m.logo_a,
     logoB: m.logo_b,
     nextText,
