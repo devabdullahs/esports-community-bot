@@ -46,6 +46,24 @@ export async function listStandingsForTournament(tournamentId) {
   );
 }
 
+// Distinct participant team names from active, non-archived tournaments'
+// standings for one game. Battle-royale + TFT events have no head-to-head
+// matches, so their participants live here rather than in `matches`; the
+// Liquipedia enrichment job unions this with the match-based tracked names so
+// those participants (and their rosters) get enriched too.
+export async function listStandingsTeamNamesForGame(game) {
+  const rows = await all(
+    `SELECT DISTINCT s.team AS name
+       FROM tournament_standings s
+       JOIN tournaments t ON t.id = s.tournament_id
+      WHERE t.game = $1 AND t.active = 1 AND t.archived_at IS NULL
+        AND s.team IS NOT NULL AND s.team <> '' AND UPPER(s.team) <> 'TBD'
+      ORDER BY name ASC`,
+    [game],
+  );
+  return rows.map((row) => row.name);
+}
+
 // Distinct standings crest URLs across active, non-archived tournaments. All
 // standings come from Liquipedia, so the logo-warmup job pre-downloads these
 // into the shared cache; the web logo proxy never fetches Liquipedia upstream

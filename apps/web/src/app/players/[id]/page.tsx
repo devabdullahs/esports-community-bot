@@ -95,18 +95,18 @@ export default async function PlayerProfilePage({
       <PageBreadcrumb
         items={[
           { label: common.home, href: localizedPath("/", locale) },
-          { label: common.games, href: localizedPath("/games", locale) },
+          { label: text.players, href: localizedPath("/players", locale) },
           { label: player.name },
         ]}
       />
       <Button
-        render={<Link href={localizedPath("/games", locale)} />}
+        render={<Link href={localizedPath("/players", locale)} />}
         nativeButton={false}
         variant="ghost"
         className="w-fit"
       >
         <ArrowLeftIcon data-icon="inline-start" className="rtl:rotate-180" />
-        {text.backToGames}
+        {text.backToPlayers}
       </Button>
 
       <section className="relative overflow-hidden rounded-2xl border bg-card/40 p-5 shadow-sm sm:p-6">
