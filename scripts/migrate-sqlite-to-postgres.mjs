@@ -1,6 +1,6 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import Database from 'better-sqlite3';
 import pg from 'pg';
 
@@ -14,6 +14,11 @@ const { Pool } = pg;
 const rootDir = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const schemaPath = resolve(rootDir, 'scripts/postgres/schema.sql');
 
+// Every app table, in schema.sql declaration order. That order is FK-safe: a
+// referenced table always appears before the tables that reference it, so both
+// CREATE and the row copy below (one whole table at a time) satisfy foreign
+// keys. KEEP THIS IN SYNC with scripts/postgres/schema.sql — a table missing
+// here is silently NOT migrated (its data is dropped).
 const appTables = [
   'tournaments',
   'matches',
@@ -31,18 +36,39 @@ const appTables = [
   'ewc_profile_links',
   'ewc_news_posts',
   'ewc_news_post_translations',
+  'ewc_news_post_authors',
   'ewc_news_discord_posts',
   'ewc_games',
   'ewc_media_channels',
+  'ewc_media_discord_posts',
   'ewc_rate_limits',
+  'post_comments',
+  'post_likes',
+  'comment_likes',
+  'comment_moderation_actions',
+  'comment_reports',
+  'community_user_blocks',
+  'partner_inquiries',
+  'partners',
+  'partner_campaigns',
   'ewc_admins',
   'ewc_admin_game_scopes',
   'ewc_admin_media_scopes',
   'ewc_admin_audit_log',
+  'stream_channels',
+  'stream_channel_status',
+  'user_follows',
+  'user_notification_prefs',
+  'user_notifications',
+  'tournament_standings',
 ];
 
 const authTables = ['user', 'session', 'account', 'verification'];
 
+// Tables whose Postgres id is `BIGINT GENERATED ... AS IDENTITY` (mirrors an
+// AUTOINCREMENT id in SQLite). After copying explicit ids the identity sequence
+// must be advanced past MAX(id) so new inserts don't collide. Every such table
+// in schema.sql must appear here.
 const identityColumns = new Map([
   ['tournaments', 'id'],
   ['matches', 'id'],
@@ -51,6 +77,16 @@ const identityColumns = new Map([
   ['ewc_prediction_weeks', 'id'],
   ['ewc_news_posts', 'id'],
   ['ewc_admin_audit_log', 'id'],
+  ['post_comments', 'id'],
+  ['comment_moderation_actions', 'id'],
+  ['comment_reports', 'id'],
+  ['partner_inquiries', 'id'],
+  ['partners', 'id'],
+  ['partner_campaigns', 'id'],
+  ['stream_channels', 'id'],
+  ['user_follows', 'id'],
+  ['user_notifications', 'id'],
+  ['tournament_standings', 'id'],
 ]);
 
 function parseArgs(argv) {
@@ -156,7 +192,10 @@ function postgresSslConfig() {
 
 function readRows(sqlite, table, columns) {
   const selectList = columns.map(quoteIdent).join(', ');
-  return sqlite.prepare(`SELECT ${selectList} FROM ${quoteIdent(table)}`).all();
+  // ORDER BY rowid = creation order, so a self-referential table (post_comments'
+  // parent_comment_id -> post_comments.id) always inserts parents before the
+  // replies that point at them, and the copy is deterministic across runs.
+  return sqlite.prepare(`SELECT ${selectList} FROM ${quoteIdent(table)} ORDER BY rowid`).all();
 }
 
 async function copyTable({ sqlite, client, table }) {
@@ -282,7 +321,14 @@ async function main() {
   }
 }
 
-main().catch((error) => {
-  console.error(error);
-  process.exitCode = 1;
-});
+// Exported so a test can assert appTables stays in sync with schema.sql.
+export { appTables, identityColumns };
+
+// Only run the migration when invoked directly (node scripts/migrate-...), not
+// when imported by a test.
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  main().catch((error) => {
+    console.error(error);
+    process.exitCode = 1;
+  });
+}
