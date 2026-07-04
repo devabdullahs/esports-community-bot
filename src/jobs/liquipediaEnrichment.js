@@ -94,12 +94,22 @@ export async function runLiquipediaEnrichment({
       const playerQueue = [];
       // Tracked scene = teams in active tournaments' matches PLUS battle-royale /
       // TFT participants (which live in tournament_standings, not matches), so
-      // those events' teams and rosters get enriched too.
+      // those events' teams and rosters get enriched too. Dedupe by NORMALIZED
+      // name (not exact string) so two aliases of one team — e.g. a match's
+      // "Team Falcons" and a standings row's "Falcons" — are processed once,
+      // never re-parsing the same team and wasting the Liquipedia budget.
       const [matchNames, standingsNames] = await Promise.all([
         listTrackedTeamNamesForGame(game),
         listStandingsTeamNamesForGame(game),
       ]);
-      const trackedNames = [...new Set([...matchNames, ...standingsNames])];
+      const seenTrackedKeys = new Set();
+      const trackedNames = [];
+      for (const name of [...matchNames, ...standingsNames]) {
+        const key = normalizeTeamName(name);
+        if (!key || seenTrackedKeys.has(key)) continue;
+        seenTrackedKeys.add(key);
+        trackedNames.push(name);
+      }
       for (const teamName of trackedNames) {
         if (budget <= 0) break;
         if (isPlaceholderTeam(teamName)) continue;
