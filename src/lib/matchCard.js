@@ -68,6 +68,16 @@ export function displayTeamName(name) {
   return s;
 }
 
+export function hasTwoTeamLayout(m) {
+  const teamB = String(m?.team_b ?? m?.teamB ?? '').trim();
+  if (!teamB || /^lobby$/i.test(teamB)) return false;
+  // parseMatchInfo emits source-level calendar/event rows as "<game>:event:..."
+  // with team_b holding a stage/detail label, not an opponent.
+  const externalId = String(m?.external_id ?? m?.externalId ?? '');
+  if (/^[^:]+:event:/i.test(externalId)) return false;
+  return true;
+}
+
 function drawTeam(ctx, cx, cy, size, name, img) {
   name = displayTeamName(name);
   if (img) {
@@ -297,7 +307,7 @@ export async function renderScheduleCard({ title, subtitle, matches, accent, sho
     // Two real teams (a head-to-head bracket match — including lobby-scored games
     // like TFT at EWC, where each round is still Team vs Team) get the balanced
     // two-crest layout. A single-participant lobby/event keeps one crest + label.
-    const twoTeams = Boolean(m.team_b) && !/^lobby$/i.test(String(m.team_b));
+    const twoTeams = hasTwoTeamLayout(m);
     const teamA = displayTeamName(m.team_a);
 
     if (twoTeams) {
@@ -531,7 +541,7 @@ function fmtUtc(sec) {
 export function renderCardForMatch(m, { nextText } = {}) {
   // A two-team match (TFT/other lobby-scored games are still Team vs Team per round)
   // renders both crests; only a single-participant lobby collapses to one crest.
-  const twoTeams = Boolean(m.team_b) && !/^lobby$/i.test(String(m.team_b));
+  const twoTeams = hasTwoTeamLayout(m);
   const lobby = isLobbyMatch(m);
   const tag = matchTagEwc(m);
   let timeText = '';

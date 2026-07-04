@@ -133,7 +133,33 @@ test('keeps a same-pair rematch on a different day', async () => {
   assert.ok(await getMatch('liquipedia', 'tft:b:bracket:9'), 'the different-day rematch is kept');
 });
 
-test('never deletes a match whose pair+day has no current row (transient parse gap)', async () => {
+test('keeps a same-pair rematch later on the same day', async () => {
+  const t = await tournament('tft/EWC/2026-same-day');
+  const first = 1784620800;
+  const rematch = first + 3 * 3600;
+  await sched(t.id, 'tft:same-day:bracket:0', 'MOUZ', 'All Gamers', first);
+  await sched(t.id, 'tft:same-day:bracket:9', 'MOUZ', 'All Gamers', rematch);
+
+  const removed = await deleteTournamentDuplicateMatches(t.id, ['tft:same-day:bracket:9']);
+
+  assert.equal(removed, 0, 'a current later rematch must not delete the earlier real match');
+  assert.ok(await getMatch('liquipedia', 'tft:same-day:bracket:0'));
+  assert.ok(await getMatch('liquipedia', 'tft:same-day:bracket:9'));
+});
+
+test('keeps untimed same-pair rows because rematches cannot be separated safely', async () => {
+  const t = await tournament('tft/EWC/2026-untimed');
+  await sched(t.id, 'tft:untimed:bracket:0', 'Team Alpha', 'Team Beta', null);
+  await sched(t.id, 'tft:untimed:matchlist:0', 'Team Alpha', 'Team Beta', null);
+
+  const removed = await deleteTournamentDuplicateMatches(t.id, ['tft:untimed:matchlist:0']);
+
+  assert.equal(removed, 0);
+  assert.ok(await getMatch('liquipedia', 'tft:untimed:bracket:0'));
+  assert.ok(await getMatch('liquipedia', 'tft:untimed:matchlist:0'));
+});
+
+test('never deletes a match whose pair/time has no current row (transient parse gap)', async () => {
   const t = await tournament('tft/EWC/2026-c');
   await sched(t.id, 'tft:c:bracket:0', 'Fnatic', 'Team GoDlike', 1784620800);
 
