@@ -105,7 +105,7 @@ export async function SiteFooter() {
 function FooterColumn({ heading, children }: { heading: string; children: React.ReactNode }) {
   return (
     <div className="flex flex-col gap-2.5">
-      <p className="text-xs font-semibold uppercase tracking-wide text-foreground/70">{heading}</p>
+      <p className="text-xs font-semibold uppercase text-foreground/70 rtl:normal-case">{heading}</p>
       {children}
     </div>
   );
