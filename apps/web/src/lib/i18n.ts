@@ -581,6 +581,13 @@ const baseCopy = {
     footer: {
       brand: "Esports Community Bot",
       note: "Community coverage, prediction boards, and Discord profile showcase.",
+      explore: "Explore",
+      about: "About",
+      contact: "Contact",
+      contactHint: "Questions or partnerships? Reach us any time.",
+      emailUs: "Email us",
+      madeIn: "Proudly made in Saudi Arabia",
+      rights: "All rights reserved.",
     },
   },
   ar: {
@@ -990,6 +997,13 @@ const baseCopy = {
     footer: {
       brand: "\u0628\u0648\u062a \u0645\u062c\u062a\u0645\u0639 \u0627\u0644\u0631\u064a\u0627\u0636\u0627\u062a \u0627\u0644\u0625\u0644\u0643\u062a\u0631\u0648\u0646\u064a\u0629",
       note: "\u062a\u063a\u0637\u064a\u0629 \u0627\u0644\u0645\u062c\u062a\u0645\u0639\u060c \u0644\u0648\u062d\u0627\u062a \u0627\u0644\u062a\u0648\u0642\u0639\u0627\u062a\u060c \u0648\u0627\u0633\u062a\u0639\u0631\u0627\u0636 \u0645\u0644\u0641 \u062f\u064a\u0633\u0643\u0648\u0631\u062f.",
+      explore: "\u062a\u0635\u0641\u0651\u062d",
+      about: "\u0639\u0646 \u0627\u0644\u0645\u0646\u0635\u0629",
+      contact: "\u062a\u0648\u0627\u0635\u0644 \u0645\u0639\u0646\u0627",
+      contactHint: "\u0623\u0633\u0626\u0644\u0629 \u0623\u0648 \u0634\u0631\u0627\u0643\u0627\u062a\u061f \u062a\u0648\u0627\u0635\u0644 \u0645\u0639\u0646\u0627 \u0641\u064a \u0623\u064a \u0648\u0642\u062a.",
+      emailUs: "\u0631\u0627\u0633\u0644\u0646\u0627 \u0628\u0627\u0644\u0628\u0631\u064a\u062f",
+      madeIn: "\u0635\u064f\u0646\u0639 \u0628\u0641\u062e\u0631 \u0641\u064a \u0627\u0644\u0633\u0639\u0648\u062f\u064a\u0629",
+      rights: "\u062c\u0645\u064a\u0639 \u0627\u0644\u062d\u0642\u0648\u0642 \u0645\u062d\u0641\u0648\u0638\u0629.",
     },
   },
 } as const;
