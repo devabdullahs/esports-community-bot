@@ -15,6 +15,9 @@ const { addTournament } = await import('../src/db/tournaments.js');
 const { upsertMatch } = await import('../src/db/matches.js');
 const { upsertTeam, listTeams } = await import('../src/db/teams.js');
 const { listPlayers, upsertPlayer, getPlayerByPandaScoreId } = await import('../src/db/players.js');
+const { replaceTournamentStandings, listStandingsTeamNamesForGame } = await import(
+  '../src/db/tournamentStandings.js'
+);
 const { runLiquipediaEnrichment } = await import('../src/jobs/liquipediaEnrichment.js');
 
 const GUILD = 'guild-lp';
@@ -86,6 +89,19 @@ test.before(async () => {
     team_a: 'Team Falcons', team_b: 'TBD', status: 'scheduled',
   });
   await upsertTeam({ game: 'valorant', pandascore_id: 900, name: 'Team Falcons', slug: 'team-falcons' });
+
+  // A standings-format TFT event: its participants live in tournament_standings,
+  // NOT in matches, so they must still enter the enrichment's tracked scene.
+  const tft = await addTournament({
+    source: 'liquipedia', external_id: 'tft/groups', game: 'tft',
+    name: 'TFT Groups', url: 'https://liquipedia.net/tft/Groups', guild_id: GUILD,
+  });
+  await replaceTournamentStandings(tft.id, [
+    { title: 'Group A', entries: [
+      { rank: 1, team: 'Standings Squad', points: '', logo: null },
+      { rank: 2, team: 'TBD', points: '', logo: null },
+    ] },
+  ]);
 });
 
 test.after(() => {
@@ -120,6 +136,18 @@ test('creates Liquipedia-only entities for uncovered games and enriches them', a
 
   // Placeholder TBD never became an entity.
   assert.ok(!rlTeams.some((t) => t.name === 'TBD'));
+});
+
+test('enriches battle-royale/TFT standings participants, not just match teams', async () => {
+  // "Standings Squad" appears only in tournament_standings (no match), so it is
+  // in scope only if the enrichment unions the standings participants.
+  const names = await listStandingsTeamNamesForGame('tft');
+  assert.deepEqual(names, ['Standings Squad']); // TBD excluded
+
+  const tftTeams = await listTeams({ game: 'tft', limit: 50 });
+  const squad = tftTeams.find((t) => t.name === 'Standings Squad');
+  assert.ok(squad, 'standings-only participant became a team');
+  assert.ok(squad.liquipedia_parsed_at, 'and was enriched from Liquipedia');
 });
 
 test('reuses the existing PandaScore row instead of duplicating', async () => {

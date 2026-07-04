@@ -4,6 +4,7 @@ import { logger } from '../lib/logger.js';
 import { normalizeTeamName } from '../lib/render.js';
 import { listActiveTournaments } from '../db/tournaments.js';
 import { listTrackedTeamNamesForGame } from '../db/matches.js';
+import { listStandingsTeamNamesForGame } from '../db/tournamentStandings.js';
 import {
   createLiquipediaTeam,
   listTeamNamesForGame,
@@ -91,7 +92,14 @@ export async function runLiquipediaEnrichment({
       }
 
       const playerQueue = [];
-      const trackedNames = await listTrackedTeamNamesForGame(game);
+      // Tracked scene = teams in active tournaments' matches PLUS battle-royale /
+      // TFT participants (which live in tournament_standings, not matches), so
+      // those events' teams and rosters get enriched too.
+      const [matchNames, standingsNames] = await Promise.all([
+        listTrackedTeamNamesForGame(game),
+        listStandingsTeamNamesForGame(game),
+      ]);
+      const trackedNames = [...new Set([...matchNames, ...standingsNames])];
       for (const teamName of trackedNames) {
         if (budget <= 0) break;
         if (isPlaceholderTeam(teamName)) continue;
