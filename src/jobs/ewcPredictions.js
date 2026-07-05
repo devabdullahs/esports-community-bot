@@ -4,6 +4,8 @@ import {
   listEwcWeeks,
   listEwcSeasonsForAutomation,
   listEwcWeeksForAutomation,
+  listEwcWeeksToAnnounceOpen,
+  markEwcWeekOpenAnnounced,
   getEwcSeason,
   listSeasonPredictions,
   listWeeklyPredictions,
@@ -282,13 +284,49 @@ export async function updateEwcPredictionLeaderboard(client, guildId) {
   return updated;
 }
 
+// Returns true only when the message was actually posted, so open-week announcing
+// can avoid stamping a week as announced when no channel is configured yet.
 async function announce(client, guildId, content) {
-  if (!client) return;
+  if (!client) return false;
   const channelId = (await getSettings(guildId)).ewc_predictions_channel_id;
-  if (!channelId) return;
+  if (!channelId) return false;
   const channel = await client.channels.fetch(channelId).catch(() => null);
-  if (!channel?.isTextBased?.()) return;
-  await channel.send({ content }).catch((error) => logger.warn(`[ewc-predictions] announcement failed: ${error.message}`));
+  if (!channel?.isTextBased?.()) return false;
+  try {
+    await channel.send({ content });
+    return true;
+  } catch (error) {
+    logger.warn(`[ewc-predictions] announcement failed: ${error.message}`);
+    return false;
+  }
+}
+
+// Post a "picks are open" message once per week, the moment its open window begins,
+// telling members it's open and when it closes. Only stamps open_announced_at when
+// the message actually posted, so a week configured before its channel still gets
+// announced later (but never after it has closed — see listEwcWeeksToAnnounceOpen).
+async function announceOpenWeeks(client) {
+  if (!client) return;
+  for (const round of await listEwcWeeksToAnnounceOpen(nowSec())) {
+    try {
+      const games = Array.isArray(round.games) ? round.games : [];
+      const gameList = games.length
+        ? `\n**Games**\n${games.map((game) => `• ${game.game}${game.event ? ` — ${game.event}` : ''}`).join('\n')}`
+        : '';
+      const closeLine = round.close_at
+        ? `Picks close <t:${round.close_at}:F> (<t:${round.close_at}:R>).`
+        : 'Picks stay open until each game locks.';
+      const content =
+        `## 🎯 EWC Weekly Predictions — ${round.label || round.week_key} is open!\n` +
+        `Make your picks with \`/ewc_predict weekly\`.${gameList}\n\n${closeLine}`;
+      if (await announce(client, round.guild_id, content)) {
+        await markEwcWeekOpenAnnounced(round.id);
+        logger.info(`[ewc-predictions] announced open week ${round.guild_id}/${round.season}/${round.week_key}`);
+      }
+    } catch (error) {
+      logger.error(`[ewc-predictions] open announce ${round.guild_id}/${round.season}/${round.week_key}: ${error.message}`);
+    }
+  }
 }
 
 async function syncLinkedProfileShowcases(guildId, season) {
@@ -455,6 +493,7 @@ async function processSeason(client, round) {
 
 export async function runEwcPredictionAutomation(client = null) {
   const now = nowSec();
+  await announceOpenWeeks(client);
   const weeks = await listEwcWeeksForAutomation(now);
   const seasons = await listEwcSeasonsForAutomation(now);
 

@@ -51,13 +51,26 @@ export async function listStandingsForTournament(tournamentId) {
 // matches, so their participants live here rather than in `matches`; the
 // Liquipedia enrichment job unions this with the match-based tracked names so
 // those participants (and their rosters) get enriched too.
-export async function listStandingsTeamNamesForGame(game) {
+// `ewcOnly` restricts to Esports World Cup events (weekly-pick options must not
+// include teams from unrelated tracked tournaments, e.g. LCK teams in an EWC LoL
+// pick). The `ewc` flag is the primary signal, but detection can miss (some EWC
+// events carry ewc=0), so an EWC name/path match backs it up — same detection idea
+// as isEwcMatch in lib/games.js. LIKE's `_` wildcard lets ONE portable pattern
+// cover both "Esports_World_Cup" page paths and "Esports World Cup" display names.
+export const EWC_TOURNAMENT_SQL = `(
+  t.ewc = 1
+  OR LOWER(COALESCE(t.name, '')) LIKE '%esports_world_cup%'
+  OR LOWER(COALESCE(t.external_id, '')) LIKE '%esports_world_cup%'
+)`;
+
+export async function listStandingsTeamNamesForGame(game, { ewcOnly = false } = {}) {
   const rows = await all(
     `SELECT DISTINCT s.team AS name
        FROM tournament_standings s
        JOIN tournaments t ON t.id = s.tournament_id
       WHERE t.game = $1 AND t.active = 1 AND t.archived_at IS NULL
         AND s.team IS NOT NULL AND s.team <> '' AND UPPER(s.team) <> 'TBD'
+        ${ewcOnly ? `AND ${EWC_TOURNAMENT_SQL}` : ''}
       ORDER BY name ASC`,
     [game],
   );

@@ -204,6 +204,18 @@ async function seasonPickTeamsForUsers(guildId, season, userIds, { includeHidden
   return teams;
 }
 
+// A weekly pick is either a legacy aggregate club (plain string) or a per-game
+// entry object `{ gameKey, game, event, pick }`. Render both as display strings so
+// the web/profile surfaces never leak "[object Object]" from a raw object.
+export function formatWeeklyPickLabel(entry) {
+  if (typeof entry === 'string') return entry.trim();
+  if (!entry || typeof entry !== 'object') return '';
+  const label = String(entry.game || entry.gameKey || '').trim();
+  const team = String(entry.pick || '').trim();
+  if (label && team) return `${label}: ${team}`;
+  return team || label || '';
+}
+
 function recentWeekly(profile) {
   return profile.weekly
     .filter((row) => row.picks?.length || row.score != null)
@@ -214,7 +226,7 @@ function recentWeekly(profile) {
       label: row.label || row.week_key,
       status: row.status,
       score: row.score == null ? null : Number(row.score),
-      picks: row.picks || [],
+      picks: (row.picks || []).map(formatWeeklyPickLabel).filter(Boolean),
       bonus: Number(row.details?.bonus || 0),
     }));
 }

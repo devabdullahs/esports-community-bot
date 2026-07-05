@@ -315,6 +315,7 @@ db.exec(`
     created_by     TEXT,
     created_at     TEXT NOT NULL DEFAULT (datetime('now')),
     scored_at      TEXT,
+    open_announced_at TEXT,
     UNIQUE (guild_id, season, week_key)
   );
 
@@ -690,6 +691,7 @@ ensureColumns('ewc_prediction_weeks', [
   ['end_at', 'INTEGER'],
   ['games_json', 'TEXT'],
   ['results_json', 'TEXT'],
+  ['open_announced_at', 'TEXT'],
 ]);
 ensureColumns('ewc_prediction_seasons', [['score_after', 'INTEGER'], ['best_weeks', 'INTEGER']]);
 ensureColumns('post_comments', [['author_avatar_url', 'TEXT']]);

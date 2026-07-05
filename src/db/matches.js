@@ -1,5 +1,6 @@
 import { all, get, run, transaction } from './client.js';
 import { normalizeTeamName } from '../lib/render.js';
+import { EWC_TOURNAMENT_SQL } from './tournamentStandings.js';
 
 function nowText() {
   return new Date().toISOString().slice(0, 19).replace('T', ' ');
@@ -323,16 +324,18 @@ export async function deleteTournamentDuplicateMatches(tournamentId, currentExte
 // Distinct team names appearing in ACTIVE tournaments' matches for one game -
 // the Liquipedia enrichment job's target set (its scope is always the tracked
 // scene, never a wiki-wide crawl).
-export async function listTrackedTeamNamesForGame(game) {
+export async function listTrackedTeamNamesForGame(game, { ewcOnly = false } = {}) {
+  // Same EWC scoping as listStandingsTeamNamesForGame (see EWC_TOURNAMENT_SQL there).
+  const ewcSql = ewcOnly ? `AND ${EWC_TOURNAMENT_SQL}` : '';
   const rows = await all(
     `SELECT DISTINCT name FROM (
        SELECT m.team_a AS name FROM matches m
          JOIN tournaments t ON t.id = m.tournament_id
-        WHERE t.game = $1 AND t.active = 1 AND t.archived_at IS NULL AND m.team_a IS NOT NULL AND m.team_a <> ''
+        WHERE t.game = $1 AND t.active = 1 AND t.archived_at IS NULL AND m.team_a IS NOT NULL AND m.team_a <> '' ${ewcSql}
        UNION
        SELECT m.team_b AS name FROM matches m
          JOIN tournaments t ON t.id = m.tournament_id
-        WHERE t.game = $1 AND t.active = 1 AND t.archived_at IS NULL AND m.team_b IS NOT NULL AND m.team_b <> ''
+        WHERE t.game = $1 AND t.active = 1 AND t.archived_at IS NULL AND m.team_b IS NOT NULL AND m.team_b <> '' ${ewcSql}
      ) AS names
      ORDER BY name ASC`,
     [game],

@@ -35,8 +35,9 @@ import {
   userPredictionProfile,
   weeklyLeaderboard,
 } from '../db/ewcPredictions.js';
-import { effectiveEwcWeekStatus, formatShortDate, formatTimestamp } from '../lib/ewcPredictions.js';
+import { effectiveEwcWeekStatus, formatShortDate, formatTimestamp, normalizeClubName } from '../lib/ewcPredictions.js';
 import { resolveEwcClubPick, searchEwcClubChoices } from '../lib/ewcClubCache.js';
+import { ewcGameParticipantTeams, matchParticipant } from '../lib/ewcGameTeams.js';
 import { announceEwcParticipation } from '../lib/ewcParticipation.js';
 import { updateEwcPredictionLeaderboard } from '../jobs/ewcPredictions.js';
 import { renderEwcShareCard } from '../lib/ewcShareCard.js';
@@ -532,7 +533,9 @@ export async function autocomplete(interaction) {
     const gameKey = interaction.options.getString('game');
     const round = weekKey ? await getEwcWeek(interaction.guildId, seasonYear, weekKey) : null;
     const game = gameKey ? findRoundGame(round, gameKey) : null;
-    await interaction.respond(await searchEwcClubChoices(focused.value, { game: game?.game }));
+    await interaction.respond(
+      game ? await weeklyGameTeamOptions(game, focused.value) : await searchEwcClubChoices(focused.value),
+    );
     return;
   }
   await interaction.respond(await searchEwcClubChoices(focused.value));
@@ -552,6 +555,29 @@ function modalTextValue(interaction, customId) {
   } catch {
     return '';
   }
+}
+
+// Team options for a weekly game pick: the game's actual qualified/participating
+// teams (from tracked EWC standings/matches) first, then any EWC Club Championship
+// clubs for that game not already listed. Surfaces game-specific qualifiers (e.g.
+// Free Fire's EVOS Divine) that are not season-long club members. Optional `query`
+// filters for autocomplete. Returns Discord {name, value} options, capped at 25.
+async function weeklyGameTeamOptions(game, query = '') {
+  const q = normalizeClubName(query);
+  const [participants, clubChoices] = await Promise.all([
+    ewcGameParticipantTeams(game.game),
+    searchEwcClubChoices(query, { game: game.game, strictGame: true }),
+  ]);
+  const seen = new Set();
+  const out = [];
+  for (const value of [...participants, ...clubChoices.map((choice) => choice.value)]) {
+    const key = normalizeClubName(value);
+    if (!key || seen.has(key) || (q && !key.includes(q))) continue;
+    seen.add(key);
+    out.push({ name: value.slice(0, 100), value: value.slice(0, 100) });
+    if (out.length >= 25) break;
+  }
+  return out;
 }
 
 async function showWeeklyPickModal(interaction, { seasonYear, weekKey, gameKey, ownerId }) {
@@ -576,7 +602,7 @@ async function showWeeklyPickModal(interaction, { seasonYear, weekKey, gameKey, 
   }
 
   const current = await getExistingGamePick(interaction.guildId, round, interaction.user.id, gameKey);
-  const choices = await searchEwcClubChoices('', { game: game.game, strictGame: true });
+  const choices = await weeklyGameTeamOptions(game);
   const modal = new ModalBuilder()
     .setCustomId(weeklyPickModalId(seasonYear, weekKey, gameKey, interaction.user.id))
     .setTitle(`${game.game || 'Game'} pick`.slice(0, 45));
@@ -651,10 +677,21 @@ async function handleWeeklyPickModal(interaction, { seasonYear, weekKey, gameKey
     return;
   }
 
-  const resolved = await resolveEwcClubPick(rawPick, { wait: true, game: game.game, strictGame: true });
-  if (!resolved.ok) {
-    await interaction.followUp({ content: `❌ ${resolved.message}`, flags: MessageFlags.Ephemeral });
-    return;
+  // Accept a pick that is a real participant in this game's tracked event first
+  // (covers game-specific qualifiers the club list omits, e.g. EVOS Divine in Free
+  // Fire), else fall back to the EWC Club Championship resolver for fuzzy matching.
+  const participants = await ewcGameParticipantTeams(game.game);
+  const participantPick = matchParticipant(rawPick, participants);
+  let pickName;
+  if (participantPick) {
+    pickName = participantPick;
+  } else {
+    const resolved = await resolveEwcClubPick(rawPick, { wait: true, game: game.game, strictGame: true });
+    if (!resolved.ok) {
+      await interaction.followUp({ content: `❌ ${resolved.message}`, flags: MessageFlags.Ephemeral });
+      return;
+    }
+    pickName = resolved.name;
   }
 
   const saved = await upsertWeeklyGamePick({
@@ -664,7 +701,7 @@ async function handleWeeklyPickModal(interaction, { seasonYear, weekKey, gameKey
     gameKey,
     game: game.game,
     event: game.event,
-    pick: resolved.name,
+    pick: pickName,
   });
 
   // Re-render the picker in place so the new pick shows in line with its game.
