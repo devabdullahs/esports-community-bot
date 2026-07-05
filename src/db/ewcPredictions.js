@@ -126,6 +126,28 @@ export async function listEwcWeeksForAutomation(nowSec) {
   ).map(hydrateWeek);
 }
 
+// Weeks whose OPEN window has begun but whose "picks are open" announcement hasn't
+// been posted yet: still open, open_at reached (or none), and close_at not yet
+// passed. open_announced_at is stamped once so the automation never re-announces.
+export async function listEwcWeeksToAnnounceOpen(nowSec) {
+  return (
+    await all(
+      `SELECT *
+       FROM ewc_prediction_weeks
+       WHERE status = 'open'
+         AND open_announced_at IS NULL
+         AND (open_at IS NULL OR open_at <= $1)
+         AND (close_at IS NULL OR close_at > $2)
+       ORDER BY season, COALESCE(open_at, id), id`,
+      [nowSec, nowSec],
+    )
+  ).map(hydrateWeek);
+}
+
+export async function markEwcWeekOpenAnnounced(weekId, client = null) {
+  await runWith(client, 'UPDATE ewc_prediction_weeks SET open_announced_at = $1 WHERE id = $2', [nowText(), weekId]);
+}
+
 export async function setEwcWeekStatus(weekId, status, client = null) {
   await runWith(
     client,

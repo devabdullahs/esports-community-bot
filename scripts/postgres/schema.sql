@@ -213,8 +213,10 @@ CREATE TABLE IF NOT EXISTS ewc_prediction_weeks (
   created_by     TEXT,
   created_at     TEXT NOT NULL DEFAULT (to_char(now() AT TIME ZONE 'UTC', 'YYYY-MM-DD HH24:MI:SS')),
   scored_at      TEXT,
+  open_announced_at TEXT,
   UNIQUE (guild_id, season, week_key)
 );
+ALTER TABLE ewc_prediction_weeks ADD COLUMN IF NOT EXISTS open_announced_at TEXT;
 
 CREATE TABLE IF NOT EXISTS ewc_weekly_predictions (
   guild_id       TEXT NOT NULL,
