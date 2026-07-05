@@ -76,12 +76,14 @@ export const config = {
     ),
     // Team/player entity enrichment (quiet-hours, capped, tracked-scene scope).
     // The budget counts EVERY Liquipedia request the run makes (searches AND
-    // parses), so it truly bounds queue occupancy: 12 requests ~= <=6 min.
+    // parses), so it truly bounds queue occupancy: 60 requests ~= <=45 min
+    // with prod's 45s parse gap. Lower after the roster/player backfill catches up.
     enrichEnabled: get('LIQUIPEDIA_ENRICH_ENABLED', 'false') === 'true',
     enrichCron: get('LIQUIPEDIA_ENRICH_CRON', '45 4 * * *'),
     enrichTimezone: get('LIQUIPEDIA_ENRICH_TIMEZONE', 'Asia/Riyadh'),
-    enrichMaxParses: Math.max(1, Number(get('LIQUIPEDIA_ENRICH_MAX_PARSES', 12)) || 12),
+    enrichMaxParses: Math.max(1, Number(get('LIQUIPEDIA_ENRICH_MAX_PARSES', 60)) || 60),
     enrichTtlDays: Math.max(1, Number(get('LIQUIPEDIA_ENRICH_TTL_DAYS', 30)) || 30),
+    rosterBackfillBefore: get('LIQUIPEDIA_ROSTER_BACKFILL_BEFORE', '2026-07-07T00:00:00Z'),
   },
   standings: {
     // Standings tracking for battle-royale / TFT events (no matches to poll).

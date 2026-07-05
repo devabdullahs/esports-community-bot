@@ -13,7 +13,7 @@ process.env.DISCORD_CLIENT_ID = 'test-client-id';
 const { closeDb } = await import('../src/db/index.js');
 const { addTournament, listActiveTournaments } = await import('../src/db/tournaments.js');
 const { upsertMatch } = await import('../src/db/matches.js');
-const { upsertTeam, listTeams } = await import('../src/db/teams.js');
+const { upsertTeam, listTeams, saveTeamLiquipedia } = await import('../src/db/teams.js');
 const { listPlayers, upsertPlayer, getPlayerByPandaScoreId } = await import('../src/db/players.js');
 const { replaceTournamentStandings, listStandingsTeamNamesForGame } = await import(
   '../src/db/tournamentStandings.js'
@@ -54,7 +54,7 @@ function mockLiquipedia({
           { name: `${page} Star`, page: `${page}_Star`, role: 'Player' },
           { name: `${page} Two`, page: `${page}_Two`, role: null },
         ],
-        raw: '<div class="fo-nttax-infobox">…</div>',
+        raw: '<div class="fo-nttax-infobox">...</div><table class="table2__table"></table>',
       };
     },
     fetchPlayerEntity: async (wiki, page) => {
@@ -190,6 +190,98 @@ test('the request budget caps a run (refreshes reuse the stored page, no search)
   assert.equal(parseCalls.length, 1);
   assert.equal(summary.teamsParsed + summary.playersParsed, 1);
   assert.ok(!resolveCalls.some((c) => c.name === 'Twisted Minds')); // refresh went straight to parse
+});
+
+test('old rosterless raw bypasses freshness once for roster backfill', async () => {
+  const tournament = await addTournament({
+    source: 'liquipedia',
+    external_id: 'backfill/cup',
+    game: 'backfill',
+    name: 'Backfill Cup',
+    url: 'https://liquipedia.net/backfill/Cup',
+    guild_id: GUILD,
+  });
+  await upsertMatch({
+    tournament_id: tournament.id,
+    source: 'liquipedia',
+    external_id: 'Match:backfill-1',
+    team_a: 'Rosterless Old Raw',
+    team_b: 'TBD',
+    status: 'scheduled',
+  });
+  const team = await upsertTeam({
+    game: 'backfill',
+    pandascore_id: 8100,
+    name: 'Rosterless Old Raw',
+    slug: 'rosterless-old-raw',
+  });
+  await saveTeamLiquipedia(team.id, {
+    url: 'https://liquipedia.net/backfill/Rosterless_Old_Raw',
+    raw: '<div class="fo-nttax-infobox">old parser stored only the infobox</div>',
+    facts: { region: 'Old' },
+  });
+
+  const parseCalls = [];
+  const summary = await runLiquipediaEnrichment({
+    liquipedia: mockLiquipedia({ parseCalls, supportedGames: ['backfill'] }),
+    maxParses: 10,
+    rosterBackfillBefore: '2999-01-01T00:00:00Z',
+  });
+
+  assert.equal(summary.rosterBackfilled, 1);
+  assert.ok(parseCalls.some((call) => call.kind === 'team' && call.page === 'Rosterless_Old_Raw'));
+
+  const secondParseCalls = [];
+  const second = await runLiquipediaEnrichment({
+    liquipedia: mockLiquipedia({ parseCalls: secondParseCalls, supportedGames: ['backfill'] }),
+    maxParses: 10,
+    rosterBackfillBefore: '2999-01-01T00:00:00Z',
+  });
+
+  assert.equal(second.rosterBackfilled, 0);
+  assert.ok(!secondParseCalls.some((call) => call.kind === 'team'));
+});
+
+test('player page enrichment resumes from stored roster links after budget cutoff', async () => {
+  const tournament = await addTournament({
+    source: 'liquipedia',
+    external_id: 'resume/cup',
+    game: 'resume',
+    name: 'Resume Cup',
+    url: 'https://liquipedia.net/resume/Cup',
+    guild_id: GUILD,
+  });
+  await upsertMatch({
+    tournament_id: tournament.id,
+    source: 'liquipedia',
+    external_id: 'Match:resume-1',
+    team_a: 'Resume Squad',
+    team_b: 'TBD',
+    status: 'scheduled',
+  });
+
+  const firstParseCalls = [];
+  await runLiquipediaEnrichment({
+    liquipedia: mockLiquipedia({ parseCalls: firstParseCalls, supportedGames: ['resume'] }),
+    maxParses: 2,
+  });
+  assert.deepEqual(firstParseCalls.map((call) => call.kind), ['team']);
+
+  const pendingPlayers = await listPlayers({ game: 'resume', limit: 50 });
+  const star = pendingPlayers.find((player) => player.name === 'Resume_Squad Star');
+  assert.ok(star, 'roster player was created before player-page budget was available');
+  assert.match(star.liquipedia_url, /resume\/Resume_Squad_Star$/);
+  assert.equal(star.liquipedia_parsed_at, null);
+
+  const secondParseCalls = [];
+  const summary = await runLiquipediaEnrichment({
+    liquipedia: mockLiquipedia({ parseCalls: secondParseCalls, supportedGames: ['resume'] }),
+    maxParses: 1,
+  });
+
+  assert.equal(summary.teamsParsed, 0);
+  assert.equal(summary.playersParsed, 1);
+  assert.deepEqual(secondParseCalls, [{ kind: 'player', wiki: 'resume', page: 'Resume_Squad_Star' }]);
 });
 
 test('transient search failures are never stamped as misses', async () => {

@@ -165,13 +165,33 @@ export async function listPlayersForTeam(teamId) {
 
 // --- Liquipedia enrichment -------------------------------------------------
 
-export async function createLiquipediaPlayer({ game, name, slug, currentTeamId = null, currentTeamName = null }) {
+export async function createLiquipediaPlayer({
+  game,
+  name,
+  slug,
+  currentTeamId = null,
+  currentTeamName = null,
+  liquipediaUrl = null,
+}) {
   const now = nowText();
   return get(
-    `INSERT INTO players (game, pandascore_id, name, slug, current_team_id, current_team_name, last_seen_at, created_at, updated_at)
-     VALUES ($1, NULL, $2, $3, $4, $5, $6, $6, $6)
+    `INSERT INTO players
+       (game, pandascore_id, name, slug, current_team_id, current_team_name, liquipedia_url, last_seen_at, created_at, updated_at)
+     VALUES ($1, NULL, $2, $3, $4, $5, $6, $7, $7, $7)
      RETURNING *`,
-    [textOrNull(game), textOrNull(name), textOrNull(slug), currentTeamId, textOrNull(currentTeamName), now],
+    [textOrNull(game), textOrNull(name), textOrNull(slug), currentTeamId, textOrNull(currentTeamName), textOrNull(liquipediaUrl), now],
+  );
+}
+
+export async function rememberPlayerLiquipediaUrl(id, url) {
+  const now = nowText();
+  return get(
+    `UPDATE players SET
+       liquipedia_url = COALESCE(liquipedia_url, $1),
+       updated_at     = $2
+     WHERE id = $3
+     RETURNING *`,
+    [textOrNull(url), now, id],
   );
 }
 
@@ -206,7 +226,10 @@ export async function savePlayerLiquipedia(
 // name+page pairs for one game - lets the enrichment job match existing rows
 // (PandaScore or previously created) before creating anything.
 export async function listPlayerNamesForGame(game) {
-  return all('SELECT id, name, liquipedia_parsed_at FROM players WHERE game = $1 ORDER BY id ASC', [game]);
+  return all(
+    'SELECT id, name, liquipedia_url, liquipedia_parsed_at, current_team_id FROM players WHERE game = $1 ORDER BY id ASC',
+    [game],
+  );
 }
 
 // A successfully parsed Liquipedia roster confirmed this player's team. While
