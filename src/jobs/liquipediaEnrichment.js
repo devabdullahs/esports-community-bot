@@ -15,6 +15,7 @@ import {
   clearDroppedRosterPlayers,
   createLiquipediaPlayer,
   listPlayerNamesForGame,
+  rememberPlayerLiquipediaUrl,
   savePlayerLiquipedia,
   setPlayerVerifiedTeam,
   stampPlayerLiquipedia,
@@ -57,20 +58,52 @@ function isScheduleRowName(name) {
   return /\bgame\s*\d+\b/i.test(text) || /\s-\s*match$/i.test(text) || /^lobby$/i.test(text);
 }
 
+function parseTimeMs(value) {
+  if (!value) return null;
+  const text = String(value);
+  const at = Date.parse(/\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}/.test(text) ? `${text}Z` : text);
+  return Number.isFinite(at) ? at : null;
+}
+
+function hasRosterRaw(raw) {
+  const text = String(raw ?? '');
+  return /roster-card/i.test(text) || /table2(?:__|&#95;&#95;)table/i.test(text);
+}
+
+function needsRosterBackfill(team, cutoffMs) {
+  if (!cutoffMs || !team?.liquipedia_raw || hasRosterRaw(team.liquipedia_raw)) return false;
+  const parsedAt = parseTimeMs(team.liquipedia_parsed_at);
+  return Boolean(parsedAt && parsedAt < cutoffMs);
+}
+
+function playerUrl(wiki, page) {
+  return page ? `https://liquipedia.net/${wiki}/${encodeURIComponent(page)}` : null;
+}
+
 export async function runLiquipediaEnrichment({
   liquipedia = defaultLiquipedia,
   maxParses = config.liquipedia.enrichMaxParses,
   ttlMs = config.liquipedia.enrichTtlDays * 24 * 60 * 60 * 1000,
   now = Date.now(),
   random = Math.random,
+  rosterBackfillBefore = config.liquipedia.rosterBackfillBefore,
 } = {}) {
   if (running) {
     logger.debug('[lp-enrich] already running - skipping overlapping run.');
     return { skipped: 'already-running' };
   }
   running = true;
-  const summary = { games: 0, teamsParsed: 0, playersParsed: 0, created: 0, misses: 0, skippedFresh: 0 };
+  const summary = {
+    games: 0,
+    teamsParsed: 0,
+    playersParsed: 0,
+    rosterBackfilled: 0,
+    created: 0,
+    misses: 0,
+    skippedFresh: 0,
+  };
   let budget = Math.max(1, Number(maxParses) || 1);
+  const rosterBackfillCutoff = parseTimeMs(rosterBackfillBefore);
 
   try {
     const tournaments = await listActiveTournaments();
@@ -110,6 +143,18 @@ export async function runLiquipediaEnrichment({
       }
 
       const playerQueue = [];
+      const queuedPlayerIds = new Set();
+      const queuePlayer = ({ player, page = null, url = null, role = null }) => {
+        const resolvedPage = page || liquipedia.pageFromUrl?.(url);
+        if (!player?.id || !resolvedPage || queuedPlayerIds.has(player.id)) return;
+        queuedPlayerIds.add(player.id);
+        playerQueue.push({ player, page: resolvedPage, url: url || playerUrl(wiki, resolvedPage), role });
+      };
+      for (const player of existingPlayers) {
+        if (!player.current_team_id || !player.liquipedia_url || isFresh(player.liquipedia_parsed_at, ttlMs, now)) continue;
+        queuePlayer({ player, url: player.liquipedia_url });
+      }
+
       // Tracked scene = teams in active tournaments' matches PLUS battle-royale /
       // TFT participants (which live in tournament_standings, not matches), so
       // those events' teams and rosters get enriched too. Dedupe by NORMALIZED
@@ -141,10 +186,12 @@ export async function runLiquipediaEnrichment({
           byName.set(key, team);
           summary.created += 1;
         }
-        if (isFresh(team.liquipedia_parsed_at, ttlMs, now)) {
+        const rosterBackfill = needsRosterBackfill(team, rosterBackfillCutoff);
+        if (!rosterBackfill && isFresh(team.liquipedia_parsed_at, ttlMs, now)) {
           summary.skippedFresh += 1;
           continue;
         }
+        if (rosterBackfill) summary.rosterBackfilled += 1;
 
         // Refreshes reuse the stored page URL and skip the search round-trip;
         // only never-resolved names spend a search. EVERY Liquipedia request
@@ -194,6 +241,7 @@ export async function runLiquipediaEnrichment({
         for (const member of entity.roster) {
           const memberKey = normalizeTeamName(member.name);
           if (!memberKey) continue;
+          const memberUrl = playerUrl(wiki, member.page);
           let player = playersByName.get(memberKey);
           if (!player) {
             player = await createLiquipediaPlayer({
@@ -202,13 +250,17 @@ export async function runLiquipediaEnrichment({
               slug: memberKey,
               currentTeamId: team.id,
               currentTeamName: teamName,
+              liquipediaUrl: memberUrl,
             });
             playersByName.set(memberKey, player);
             summary.created += 1;
+          } else if (memberUrl && !player.liquipedia_url) {
+            player = await rememberPlayerLiquipediaUrl(player.id, memberUrl);
+            playersByName.set(memberKey, player);
           }
           await setPlayerVerifiedTeam(player.id, { teamId: team.id, teamName });
           confirmedIds.push(player.id);
-          if (member.page) playerQueue.push({ ...member, player });
+          if (member.page) queuePlayer({ player, page: member.page, url: memberUrl, role: member.role });
         }
         if (confirmedIds.length && !entity.rosterTruncated) {
           await clearDroppedRosterPlayers(game, team.id, confirmedIds);
@@ -229,13 +281,13 @@ export async function runLiquipediaEnrichment({
           const entity = await liquipedia.fetchPlayerEntity(wiki, member.page);
           budget -= 1;
           if (!entity) {
-            await stampPlayerLiquipedia(player.id, {});
+            await stampPlayerLiquipedia(player.id, { url: member.url });
             summary.misses += 1;
             continue;
           }
           const nameParts = splitName(entity.normalized.romanizedName);
           await savePlayerLiquipedia(player.id, {
-            url: `https://liquipedia.net/${wiki}/${encodeURIComponent(member.page)}`,
+            url: member.url,
             raw: entity.raw,
             facts: entity.facts,
             image: entity.image,
@@ -251,7 +303,7 @@ export async function runLiquipediaEnrichment({
 
     logger.info(
       `[lp-enrich] ${summary.teamsParsed} team(s) + ${summary.playersParsed} player(s) parsed across ${summary.games} game(s); ` +
-        `${summary.created} created, ${summary.skippedFresh} fresh, ${summary.misses} misses.`,
+        `${summary.rosterBackfilled} roster backfill(s), ${summary.created} created, ${summary.skippedFresh} fresh, ${summary.misses} misses.`,
     );
     return summary;
   } finally {

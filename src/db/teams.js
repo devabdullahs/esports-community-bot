@@ -126,7 +126,10 @@ export async function countTeams({ game = null, q = null } = {}) {
 
 // id+name pairs for one game - powers the web's match-name -> team-page linking.
 export async function listTeamNamesForGame(game) {
-  return all('SELECT id, name, liquipedia_url, liquipedia_parsed_at FROM teams WHERE game = $1 ORDER BY id ASC', [game]);
+  return all(
+    'SELECT id, name, liquipedia_url, liquipedia_raw, liquipedia_parsed_at FROM teams WHERE game = $1 ORDER BY id ASC',
+    [game],
+  );
 }
 
 // Team crests hosted on Liquipedia - the logo-warmup job pre-downloads these
