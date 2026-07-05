@@ -21,17 +21,19 @@ function slugForGameName(gameName) {
 // The teams actually participating in the tracked EWC event(s) for a game — the
 // qualified field a weekly pick should choose from. Sourced from tournament
 // STANDINGS (clean participant list for BR/TFT and group-stage tables) plus, for
-// head-to-head games, the tracked match team names. This is the authoritative
-// per-game field: e.g. Free Fire's EVOS Divine lives here even though it is not an
-// EWC Club Championship member. Deduped by the same normalization scoring uses, so
-// a picked name here matches the Liquipedia results at scoring time.
+// head-to-head games, the tracked match team names — scoped to EWC tournaments
+// only, so teams from unrelated tracked events (e.g. LCK in LoL, regional R6
+// leagues) never become EWC pick options. This is the authoritative per-game
+// field: e.g. Free Fire's EVOS Divine lives here even though it is not an EWC Club
+// Championship member. Deduped by the same normalization scoring uses, so a picked
+// name here matches the Liquipedia results at scoring time.
 export async function ewcGameParticipantTeams(gameName) {
   const slug = slugForGameName(gameName);
   if (!slug) return [];
 
   const [standings, matchTeams] = await Promise.all([
-    listStandingsTeamNamesForGame(slug).catch(() => []),
-    isLobbyGame(slug) ? Promise.resolve([]) : listTrackedTeamNamesForGame(slug).catch(() => []),
+    listStandingsTeamNamesForGame(slug, { ewcOnly: true }).catch(() => []),
+    isLobbyGame(slug) ? Promise.resolve([]) : listTrackedTeamNamesForGame(slug, { ewcOnly: true }).catch(() => []),
   ]);
 
   const seen = new Set();

@@ -120,6 +120,36 @@ test('ewcGameParticipantTeams uses match teams for head-to-head games', async ()
   assert.ok(teams.includes('Paper Rex'));
 });
 
+test('ewcGameParticipantTeams excludes teams from unrelated (non-EWC) tracked tournaments', async () => {
+  // Same game, active, but NOT an EWC event: its teams must not become pick options.
+  const lck = await tournament('leagueoflegends', 'leagueoflegends/LCK/2026_Season');
+  await upsertMatch({
+    tournament_id: lck.id,
+    source: 'liquipedia',
+    external_id: 'lol:LCK:bracket:0',
+    team_a: 'Dplus KIA',
+    team_b: 'KT Rolster',
+    status: 'scheduled',
+    scheduled_at: 1784620800,
+  });
+  const ewc = await tournament('leagueoflegends', 'leagueoflegends/Esports_World_Cup/2026');
+  await upsertMatch({
+    tournament_id: ewc.id,
+    source: 'liquipedia',
+    external_id: 'lol:EWC:bracket:0',
+    team_a: 'Gen.G',
+    team_b: 'T1',
+    status: 'scheduled',
+    scheduled_at: 1784620800,
+  });
+
+  const teams = await ewcGameParticipantTeams('League of Legends');
+  assert.ok(teams.includes('Gen.G'), 'EWC event team present');
+  assert.ok(teams.includes('T1'));
+  assert.ok(!teams.includes('Dplus KIA'), 'non-EWC tournament team excluded');
+  assert.ok(!teams.includes('KT Rolster'));
+});
+
 // ---------------------------------------------------------------------------
 // listEwcWeeksToAnnounceOpen / markEwcWeekOpenAnnounced
 // ---------------------------------------------------------------------------
