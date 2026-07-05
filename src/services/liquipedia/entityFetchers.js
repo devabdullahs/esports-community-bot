@@ -5,7 +5,7 @@
 import * as cheerio from 'cheerio';
 import { normalizeTeamName } from '../../lib/render.js';
 import { parsePage, searchPagesStrict } from './client.js';
-import { normalizeEntityFacts, parseEntityInfobox, parseTeamRoster } from './entityParsers.js';
+import { findTeamRosterTable, normalizeEntityFacts, parseEntityInfobox, parseTeamRoster } from './entityParsers.js';
 
 // Tournament game slug -> Liquipedia wiki. Only listed games are enriched; the
 // battle-royale wikis and TFT are the headline additions (PandaScore has no
@@ -85,9 +85,10 @@ export async function fetchTeamEntity(wiki, page) {
   const infobox = parseEntityInfobox($);
   if (!infobox) return null;
   const { players: roster, truncated: rosterTruncated } = parseTeamRoster($);
+  const rosterTable = findTeamRosterTable($);
   const raw = [
     $.html($('.fo-nttax-infobox').first()),
-    $.html($('table.roster-card').first()),
+    rosterTable ? $.html(rosterTable) : '',
   ].filter(Boolean).join('\n');
   return {
     name: infobox.name,

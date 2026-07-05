@@ -11,7 +11,7 @@ process.env.DISCORD_TOKEN = 'test-token';
 process.env.DISCORD_CLIENT_ID = 'test-client-id';
 
 const { closeDb } = await import('../src/db/index.js');
-const { addTournament } = await import('../src/db/tournaments.js');
+const { addTournament, listActiveTournaments } = await import('../src/db/tournaments.js');
 const { upsertMatch } = await import('../src/db/matches.js');
 const { upsertTeam, listTeams } = await import('../src/db/teams.js');
 const { listPlayers, upsertPlayer, getPlayerByPandaScoreId } = await import('../src/db/players.js');
@@ -22,9 +22,15 @@ const { runLiquipediaEnrichment } = await import('../src/jobs/liquipediaEnrichme
 
 const GUILD = 'guild-lp';
 
-function mockLiquipedia({ resolveCalls = [], parseCalls = [], transientNames = [] } = {}) {
+function mockLiquipedia({
+  resolveCalls = [],
+  parseCalls = [],
+  transientNames = [],
+  supportedGames = ['rocketleague', 'tft', 'valorant'],
+} = {}) {
+  const supported = new Set(supportedGames);
   return {
-    wikiForGame: (game) => (['rocketleague', 'tft', 'valorant'].includes(game) ? game : null),
+    wikiForGame: (game) => (supported.has(game) ? game : null),
     pageFromUrl: (url) => {
       if (!url) return null;
       const segments = String(url).split('/').filter(Boolean);
@@ -297,4 +303,102 @@ test('a later PandaScore sync adopts the Liquipedia-only row instead of duplicat
   assert.equal(rlTeams[0].id, adopted.id);
   assert.equal(rlTeams[0].pandascore_id, 4242);
   assert.ok(rlTeams[0].liquipedia_parsed_at); // Liquipedia enrichment preserved
+});
+
+test('lobby schedule rows are not searched as team entities', async () => {
+  const tournament = await addTournament({
+    source: 'liquipedia',
+    external_id: 'schedulejunk/cup',
+    game: 'schedulejunk',
+    name: 'Schedule Junk Cup',
+    url: 'https://liquipedia.net/schedulejunk/Cup',
+    guild_id: GUILD,
+  });
+  await upsertMatch({
+    tournament_id: tournament.id,
+    source: 'liquipedia',
+    external_id: 'Match:schedule-junk-real',
+    team_a: 'Actual Squad',
+    team_b: 'Grand Finals - Game 3',
+    status: 'scheduled',
+  });
+  await upsertMatch({
+    tournament_id: tournament.id,
+    source: 'liquipedia',
+    external_id: 'Match:schedule-junk-lobby',
+    team_a: 'Survival Stage - Match',
+    team_b: 'Lobby',
+    status: 'scheduled',
+  });
+  await upsertMatch({
+    tournament_id: tournament.id,
+    source: 'liquipedia',
+    external_id: 'Match:schedule-junk-real-match-name',
+    team_a: 'The Match',
+    team_b: 'TBD',
+    status: 'scheduled',
+  });
+
+  const resolveCalls = [];
+  await runLiquipediaEnrichment({
+    liquipedia: mockLiquipedia({ resolveCalls, supportedGames: ['schedulejunk'] }),
+    maxParses: 20,
+    ttlMs: 0,
+  });
+
+  const names = resolveCalls.map((call) => call.name);
+  assert.deepEqual(names, ['Actual Squad', 'The Match']);
+});
+
+test('game order is shuffled before a small budget cuts the run off', async () => {
+  const first = await addTournament({
+    source: 'liquipedia',
+    external_id: 'shufflea/cup',
+    game: 'shufflea',
+    name: 'Shuffle A Cup',
+    url: 'https://liquipedia.net/shufflea/Cup',
+    guild_id: GUILD,
+  });
+  await upsertMatch({
+    tournament_id: first.id,
+    source: 'liquipedia',
+    external_id: 'Match:shuffle-a',
+    team_a: 'Alpha Shuffle',
+    team_b: 'TBD',
+    status: 'scheduled',
+  });
+  const second = await addTournament({
+    source: 'liquipedia',
+    external_id: 'shuffleb/cup',
+    game: 'shuffleb',
+    name: 'Shuffle B Cup',
+    url: 'https://liquipedia.net/shuffleb/Cup',
+    guild_id: GUILD,
+  });
+  await upsertMatch({
+    tournament_id: second.id,
+    source: 'liquipedia',
+    external_id: 'Match:shuffle-b',
+    team_a: 'Beta Shuffle',
+    team_b: 'TBD',
+    status: 'scheduled',
+  });
+
+  const supportedGames = ['shufflea', 'shuffleb'];
+  const initialOrder = [
+    ...new Set((await listActiveTournaments()).map((t) => t.game).filter((game) => supportedGames.includes(game))),
+  ];
+  assert.equal(initialOrder.length, 2);
+
+  const parseCalls = [];
+  const resolveCalls = [];
+  await runLiquipediaEnrichment({
+    liquipedia: mockLiquipedia({ resolveCalls, parseCalls, supportedGames }),
+    maxParses: 2,
+    ttlMs: 0,
+    random: () => 0,
+  });
+
+  assert.equal(resolveCalls[0].wiki, initialOrder[1]);
+  assert.equal(parseCalls[0].wiki, initialOrder[1]);
 });
