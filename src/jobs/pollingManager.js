@@ -175,7 +175,9 @@ async function pollOnce(match, tournament) {
   if (deleted) logger.info(`[poll] removed ${deleted} stale placeholder match(es) for tournament ${match.tournament_id}`);
   const dupes = await deleteTournamentDuplicateMatches(match.tournament_id, currentIds);
   if (dupes) logger.info(`[poll] removed ${dupes} duplicate match row(s) for tournament ${match.tournament_id}`);
-  if (deleted && !(await getMatch(match.source, match.external_id))) {
+  // Either cleanup can remove THIS watcher's row (a placeholder that resolved, or a
+  // duplicate twin the current fetch dropped) — stop polling a row that no longer exists.
+  if ((deleted || dupes) && !(await getMatch(match.source, match.external_id))) {
     clearWatcher(match.external_id);
     return;
   }
