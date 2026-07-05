@@ -30,12 +30,12 @@ test.after(() => {
   rmSync(dir, { recursive: true, force: true });
 });
 
-async function tournament(game, externalId) {
+async function tournament(game, externalId, { name = externalId, source = 'liquipedia' } = {}) {
   return addTournament({
-    source: 'liquipedia',
+    source,
     external_id: externalId,
     game,
-    name: externalId,
+    name,
     url: null,
     guild_id: 'g-ewc',
     added_by: 'admin',
@@ -139,6 +139,105 @@ test('ewcGameParticipantTeams returns event-scoped fighters participants from st
   assert.ok(!teams.includes('Arslan Ash'), 'other fighters events stay out of the CotW pick list');
   assert.ok(!teams.includes('Knee'));
   assert.equal(matchParticipant('DarkAngel', teams), 'DarkAngel');
+});
+
+test('a hub-page eventUrl must not empty the list: fighters disambiguate by game name', async () => {
+  // Prod week rows carry EWC calendar hub links ("esports/Esports_World_Cup")
+  // that match NO tracked tournament path. The scoping must fall back — first to
+  // the fighters-name filter, never to an empty list.
+  const cotw = await tournament('fighters', 'fighters/Esports_World_Cup/2026/CotW_named', {
+    name: 'Fatal Fury: City of the Wolves - Esports World Cup 2026',
+  });
+  await replaceTournamentStandings(cotw.id, [
+    { title: 'Invited', entries: [{ rank: 1, team: 'NaiWang' }, { rank: 2, team: 'xiaohai' }] },
+  ]);
+  const sf6 = await tournament('fighters', 'fighters/Esports_World_Cup/2026/SF6_named', {
+    name: 'Street Fighter 6 - Esports World Cup 2026',
+  });
+  await replaceTournamentStandings(sf6.id, [
+    { title: 'Qualified', entries: [{ rank: 1, team: 'MenaRD' }, { rank: 2, team: 'Punk' }] },
+  ]);
+
+  const teams = await ewcGameParticipantTeams('Fatal Fury: City of the Wolves', {
+    eventUrl: 'https://liquipedia.net/esports/Esports_World_Cup', // hub page, matches nothing
+  });
+  assert.ok(teams.includes('NaiWang'), 'CotW participant present despite hub eventUrl');
+  assert.ok(teams.includes('xiaohai'));
+  assert.ok(!teams.includes('MenaRD'), 'SF6 participants stay out of a Fatal Fury pick');
+  assert.ok(!teams.includes('Punk'));
+
+  const sf6Teams = await ewcGameParticipantTeams('Street Fighter 6', {
+    eventUrl: 'https://liquipedia.net/esports/Esports_World_Cup',
+  });
+  assert.ok(sf6Teams.includes('MenaRD'));
+  assert.ok(!sf6Teams.includes('NaiWang'));
+});
+
+test('a hub-page eventUrl must not empty the list: lobby games keep their field', async () => {
+  // Free Fire regression guard: with the hub eventUrl (what prod weeks store),
+  // the participant list must still be the EWC standings field.
+  const teams = await ewcGameParticipantTeams('Free Fire', {
+    eventUrl: 'https://liquipedia.net/esports/Esports_World_Cup',
+  });
+  assert.ok(teams.includes('EVOS Divine'), 'EVOS Divine survives hub eventUrl scoping');
+});
+
+test('standings (curated field) replace match teams so qualifier brackets stay out', async () => {
+  // The CotW LCQ is a startgg bracket with a hundred-plus entrants; once the
+  // event's participants table is synced, options must come from it alone.
+  const lcq = await tournament('fighters', 'esports-world-cup-2026-fatal-fury-city-of-the-wolves-lcq2', {
+    name: 'Esports World Cup 2026: FATAL FURY: City of the Wolves - LCQ',
+    source: 'startgg',
+  });
+  await upsertMatch({
+    tournament_id: lcq.id,
+    source: 'startgg',
+    external_id: 'sgg:lcq:1',
+    team_a: 'Random LCQ Entrant',
+    team_b: 'Another LCQ Entrant',
+    status: 'finished',
+    scheduled_at: 1784000000,
+  });
+
+  const teams = await ewcGameParticipantTeams('Fatal Fury: City of the Wolves', {
+    eventUrl: 'https://liquipedia.net/esports/Esports_World_Cup',
+  });
+  assert.ok(teams.includes('NaiWang'), 'participants table still listed');
+  assert.ok(!teams.includes('Random LCQ Entrant'), 'LCQ bracket entrants are not options');
+});
+
+test('version-suffixed schedule game names resolve to tracked slugs', async () => {
+  // The EWC calendar names games "Counter-Strike 2" / "Overwatch 2" / "Rainbow
+  // Six Siege" — shapes our registry lacks; the tolerant resolver must map them.
+  const cs = await tournament('counterstrike', 'counterstrike/Esports_World_Cup/2026', {
+    name: 'Esports World Cup 2026',
+  });
+  await upsertMatch({
+    tournament_id: cs.id,
+    source: 'liquipedia',
+    external_id: 'cs:EWC:bracket:0',
+    team_a: 'Team Spirit',
+    team_b: 'FaZe Clan',
+    status: 'scheduled',
+    scheduled_at: 1784620800,
+  });
+  const r6 = await tournament('rainbowsix', 'rainbowsix/Esports_World_Cup/2026', {
+    name: 'R6 Siege at Esports World Cup 2026',
+  });
+  await upsertMatch({
+    tournament_id: r6.id,
+    source: 'liquipedia',
+    external_id: 'r6:EWC:bracket:0',
+    team_a: 'Team BDS',
+    team_b: 'w7m esports',
+    status: 'scheduled',
+    scheduled_at: 1784620800,
+  });
+
+  const csTeams = await ewcGameParticipantTeams('Counter-Strike 2');
+  assert.ok(csTeams.includes('Team Spirit'), 'Counter-Strike 2 resolves to counterstrike');
+  const r6Teams = await ewcGameParticipantTeams('Rainbow Six Siege');
+  assert.ok(r6Teams.includes('Team BDS'), 'Rainbow Six Siege resolves to rainbowsix');
 });
 
 test('ewcGameParticipantTeams excludes teams from unrelated (non-EWC) tracked tournaments', async () => {

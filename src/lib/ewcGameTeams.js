@@ -1,7 +1,7 @@
-import { gameSlugFromName, isLobbyGame, isKnownGameSlug, normalizeGameSlug } from './games.js';
+import { categoryToGameSlug, fightersTag, gameSlugFromName, isLobbyGame, isKnownGameSlug, normalizeGameSlug } from './games.js';
 import { normalizeClubName } from './ewcPredictions.js';
-import { listStandingsTeamNamesForGame } from '../db/tournamentStandings.js';
-import { listTrackedTeamNamesForGame } from '../db/matches.js';
+import { listStandingsTeamRowsForGame } from '../db/tournamentStandings.js';
+import { listTrackedTeamRowsForGame } from '../db/matches.js';
 
 // Junk rows the BR/lobby schedule parser stores in `matches` (team_a = "Group A -
 // Game 3", team_b = "Lobby", "… - Match"). These are never real teams, so keep them
@@ -10,11 +10,14 @@ function looksLikeScheduleRow(name) {
   return /\bgame\s*\d+\b/i.test(name) || /\bmatch$/i.test(name) || /^lobby$/i.test(name);
 }
 
-// Resolve a week's game NAME ("Free Fire", "Teamfight Tactics") to our game slug.
+// Resolve a week's game NAME to our game slug. EWC schedule names carry version /
+// edition suffixes our registry doesn't ("Counter-Strike 2", "Overwatch 2",
+// "Rainbow Six Siege", "EA SPORTS FC 26", "Call of Duty: Warzone"), so fall back
+// to the tolerant stream-category resolver, which handles exactly those shapes.
 function slugForGameName(gameName) {
   const raw = String(gameName ?? '').trim();
   if (!raw) return null;
-  const slug = gameSlugFromName(raw) || normalizeGameSlug(raw.toLowerCase());
+  const slug = gameSlugFromName(raw) || categoryToGameSlug(raw) || normalizeGameSlug(raw.toLowerCase());
   return slug && isKnownGameSlug(slug) ? normalizeGameSlug(slug) : slug || null;
 }
 
@@ -31,29 +34,53 @@ function eventPathFromUrl(eventUrl) {
   }
 }
 
+// Narrow EWC team rows to the week game's OWN event. Fallback chain, most to
+// least specific — each step only applies when it actually matches something:
+//  1. Exact event path from the round's eventUrl. In practice the EWC calendar
+//     links hub pages ("esports/Esports_World_Cup") that match no tracked
+//     tournament, so this step usually falls through — it must NEVER zero the
+//     list on its own (that would silently drop every real participant).
+//  2. Fighters disambiguation: SF6 / Tekken / Fatal Fury share the `fighters`
+//     slug, so match the game NAME's fighters tag against tournament names.
+//  3. Everything EWC for the game (correct for every single-event game).
+function scopeRows(rows, { slug, gameName, eventPath }) {
+  if (eventPath) {
+    const exact = rows.filter((row) => String(row.tournament_path ?? '').toLowerCase() === eventPath);
+    if (exact.length) return exact;
+  }
+  if (normalizeGameSlug(slug) === 'fighters') {
+    const wanted = fightersTag(gameName);
+    const tagged = rows.filter((row) => fightersTag(row.tournament_name) === wanted);
+    if (tagged.length) return tagged;
+  }
+  return rows;
+}
+
 // The teams actually participating in the tracked EWC event(s) for a game — the
 // qualified field a weekly pick should choose from. Sourced from tournament
-// STANDINGS (clean participant list for BR/TFT and group-stage tables) plus, for
-// head-to-head games, the tracked match team names — scoped to EWC tournaments
-// only, so teams from unrelated tracked events (e.g. LCK in LoL, regional R6
-// leagues) never become EWC pick options. This is the authoritative per-game
-// field: e.g. Free Fire's EVOS Divine lives here even though it is not an EWC Club
-// Championship member. Deduped by the same normalization scoring uses, so a picked
-// name here matches the Liquipedia results at scoring time.
+// STANDINGS (participants/qualifier tables, BR/TFT fields, group tables) plus,
+// for head-to-head games, the tracked match team names — scoped to EWC
+// tournaments, so teams from unrelated tracked events (e.g. LCK in LoL, regional
+// R6 leagues) never become EWC pick options. When standings exist they are used
+// ALONE: they are the curated field (e.g. a fighters participants table), while
+// matches would add whole qualifier brackets (170+ LCQ entrants). Deduped by the
+// same normalization scoring uses, so a picked name matches results at scoring.
 export async function ewcGameParticipantTeams(gameName, { eventUrl = null } = {}) {
   const slug = slugForGameName(gameName);
   if (!slug) return [];
   const eventPath = eventPathFromUrl(eventUrl);
 
-  const [standings, matchTeams] = await Promise.all([
-    listStandingsTeamNamesForGame(slug, { ewcOnly: true, eventPath }).catch(() => []),
-    isLobbyGame(slug) ? Promise.resolve([]) : listTrackedTeamNamesForGame(slug, { ewcOnly: true, eventPath }).catch(() => []),
+  const [standingsRows, matchRows] = await Promise.all([
+    listStandingsTeamRowsForGame(slug, { ewcOnly: true }).catch(() => []),
+    isLobbyGame(slug) ? Promise.resolve([]) : listTrackedTeamRowsForGame(slug, { ewcOnly: true }).catch(() => []),
   ]);
+  const standings = scopeRows(standingsRows, { slug, gameName, eventPath });
+  const matchTeams = standings.length ? [] : scopeRows(matchRows, { slug, gameName, eventPath });
 
   const seen = new Set();
   const out = [];
-  for (const name of [...standings, ...matchTeams]) {
-    const clean = String(name ?? '').replace(/\s+/g, ' ').trim();
+  for (const row of [...standings, ...matchTeams]) {
+    const clean = String(row.team ?? '').replace(/\s+/g, ' ').trim();
     if (!clean || looksLikeScheduleRow(clean)) continue;
     const key = normalizeClubName(clean);
     if (!key || seen.has(key)) continue;

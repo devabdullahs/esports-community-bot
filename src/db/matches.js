@@ -324,27 +324,40 @@ export async function deleteTournamentDuplicateMatches(tournamentId, currentExte
 // Distinct team names appearing in ACTIVE tournaments' matches for one game -
 // the Liquipedia enrichment job's target set (its scope is always the tracked
 // scene, never a wiki-wide crawl).
-export async function listTrackedTeamNamesForGame(game, { ewcOnly = false, eventPath = null } = {}) {
+export async function listTrackedTeamNamesForGame(game, { ewcOnly = false } = {}) {
   // Same EWC scoping as listStandingsTeamNamesForGame (see EWC_TOURNAMENT_SQL there).
   const ewcSql = ewcOnly ? `AND ${EWC_TOURNAMENT_SQL}` : '';
-  const params = [game];
-  let eventSql = '';
-  if (eventPath) {
-    params.push(String(eventPath).toLowerCase());
-    eventSql = `AND LOWER(COALESCE(t.external_id, '')) = $${params.length}`;
-  }
   const rows = await all(
     `SELECT DISTINCT name FROM (
        SELECT m.team_a AS name FROM matches m
           JOIN tournaments t ON t.id = m.tournament_id
-         WHERE t.game = $1 AND t.active = 1 AND t.archived_at IS NULL AND m.team_a IS NOT NULL AND m.team_a <> '' ${ewcSql} ${eventSql}
+         WHERE t.game = $1 AND t.active = 1 AND t.archived_at IS NULL AND m.team_a IS NOT NULL AND m.team_a <> '' ${ewcSql}
        UNION
        SELECT m.team_b AS name FROM matches m
           JOIN tournaments t ON t.id = m.tournament_id
-         WHERE t.game = $1 AND t.active = 1 AND t.archived_at IS NULL AND m.team_b IS NOT NULL AND m.team_b <> '' ${ewcSql} ${eventSql}
+         WHERE t.game = $1 AND t.active = 1 AND t.archived_at IS NULL AND m.team_b IS NOT NULL AND m.team_b <> '' ${ewcSql}
       ) AS names
       ORDER BY name ASC`,
-    params,
+    [game],
   );
   return rows.map((row) => row.name);
+}
+
+// Match team rows WITH their tournament's identity, for the EWC weekly-pick
+// scoping's JS-side event filtering (see listStandingsTeamRowsForGame).
+export async function listTrackedTeamRowsForGame(game, { ewcOnly = false } = {}) {
+  const ewcSql = ewcOnly ? `AND ${EWC_TOURNAMENT_SQL}` : '';
+  return all(
+    `SELECT DISTINCT team, tournament_path, tournament_name FROM (
+       SELECT m.team_a AS team, t.external_id AS tournament_path, t.name AS tournament_name FROM matches m
+          JOIN tournaments t ON t.id = m.tournament_id
+         WHERE t.game = $1 AND t.active = 1 AND t.archived_at IS NULL AND m.team_a IS NOT NULL AND m.team_a <> '' ${ewcSql}
+       UNION
+       SELECT m.team_b AS team, t.external_id AS tournament_path, t.name AS tournament_name FROM matches m
+          JOIN tournaments t ON t.id = m.tournament_id
+         WHERE t.game = $1 AND t.active = 1 AND t.archived_at IS NULL AND m.team_b IS NOT NULL AND m.team_b <> '' ${ewcSql}
+      ) AS names
+      ORDER BY team ASC`,
+    [game],
+  );
 }
