@@ -41,19 +41,59 @@ export function parseEntityInfobox($) {
   return { name: name || null, image: image || null, facts };
 }
 
-// Active roster from a team page: the first roster-card table (Liquipedia lists
-// the active squad first; "Former" squads come in later tables/sections). Each
-// row links the player's wiki page — that link is what lets the enrichment job
-// walk team -> players without any name guessing.
+// The ACTIVE roster table on a team page, across both Liquipedia markups:
+//  - legacy `table.roster-card` (td.ID / td.Position cells), and
+//  - the current `table2` component (<table class="table2__table"> with a
+//    header row of ID | Name | Position | Join Date).
+// In both formats the active squad is the FIRST roster-shaped table on the page;
+// "Former" tables carry Leave Date / New Team columns and are rejected outright
+// (never just ordered after), so a page whose active squad section is missing
+// can't silently yield ex-players. Exported so fetchTeamEntity can store the
+// same fragment it parsed (raw re-extraction without another request).
+export function findTeamRosterTable($) {
+  const legacy = $('table.roster-card').first();
+  if (legacy.length) return legacy;
+
+  const candidates = $('table[class*="table2__table"]').filter((_, table) => {
+    const head = tableHeaderCells($, table).map((cell) => cell.toLowerCase());
+    if (!head.includes('id')) return false;
+    if (head.some((cell) => /leave date|new team|inactive/.test(cell))) return false;
+    return head.some((cell) => /position|role|join date/.test(cell));
+  });
+  return candidates.length ? candidates.first() : null;
+}
+
+function tableHeaderCells($, table) {
+  const headRow = $(table).find('tr').first();
+  return headRow
+    .children('th,td')
+    .map((_, cell) => cleanText($(cell).text()))
+    .get();
+}
+
+// Active roster from a team page (see findTeamRosterTable for format handling).
+// Each row links the player's wiki page — that link is what lets the enrichment
+// job walk team -> players without any name guessing.
 // Returns { players, truncated }: `truncated` means the cap cut real rows off,
 // so the caller must NOT treat absence from `players` as "left the team".
 export function parseTeamRoster($, { limit = 20 } = {}) {
-  const table = $('table.roster-card').first();
-  if (!table.length) return { players: [], truncated: false };
+  const table = findTeamRosterTable($);
+  if (!table || !table.length) return { players: [], truncated: false };
+  const isLegacy = table.is('table.roster-card');
+
+  // table2 rows carry no ID/Position cell classes — locate columns by header.
+  const header = tableHeaderCells($, table).map((cell) => cell.toLowerCase());
+  const idIndex = Math.max(0, header.indexOf('id'));
+  const positionIndex = header.findIndex((cell) => /position|role/.test(cell));
 
   const players = [];
   table.find('tr').each((_, row) => {
-    const idCell = $(row).find('td.ID').first();
+    const rowClass = String($(row).attr('class') ?? '');
+    if (/row--head/.test(rowClass) || $(row).children('th').length) return;
+
+    const cells = $(row).children('td');
+    const idCell = isLegacy ? $(row).find('td.ID').first() : cells.eq(idIndex);
+    if (!idCell.length) return;
     const link = idCell.find('a').filter((_, a) => {
       const href = $(a).attr('href') || '';
       return href.startsWith('/') && !href.includes('index.php') && !$(a).find('img').length;
@@ -61,7 +101,12 @@ export function parseTeamRoster($, { limit = 20 } = {}) {
     const name = cleanText(link.length ? link.text() : idCell.text());
     if (!name) return;
     const href = link.attr('href') || null;
-    const position = cleanText($(row).find('td.Position, td.PositionWoTeam2').first().text()) || null;
+    const positionCell = isLegacy
+      ? $(row).find('td.Position, td.PositionWoTeam2').first()
+      : positionIndex >= 0
+        ? cells.eq(positionIndex)
+        : null;
+    const position = positionCell ? cleanText(positionCell.text()) || null : null;
     players.push({
       name,
       page: href ? decodeURIComponent(href.replace(/^\/[^/]+\/(?:index\.php\?title=)?/, '')) : null,

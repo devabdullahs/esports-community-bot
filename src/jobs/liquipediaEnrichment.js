@@ -48,11 +48,21 @@ function isFresh(parsedAt, ttlMs, now) {
   return Number.isFinite(at) && now - at < ttlMs;
 }
 
+// BR/lobby schedule rows stored in `matches` (team_a = "Grand Finals - Game 3",
+// "Survival Stage - Match", team_b = "Lobby") are lobby time slots, not teams.
+// Searching Liquipedia for them is a guaranteed miss that burns the whole run's
+// budget (prod stored 62 such "teams" for pubgmobile alone before this filter).
+function isScheduleRowName(name) {
+  const text = String(name ?? '').trim();
+  return /\bgame\s*\d+\b/i.test(text) || /\s-\s*match$/i.test(text) || /^lobby$/i.test(text);
+}
+
 export async function runLiquipediaEnrichment({
   liquipedia = defaultLiquipedia,
   maxParses = config.liquipedia.enrichMaxParses,
   ttlMs = config.liquipedia.enrichTtlDays * 24 * 60 * 60 * 1000,
   now = Date.now(),
+  random = Math.random,
 } = {}) {
   if (running) {
     logger.debug('[lp-enrich] already running - skipping overlapping run.');
@@ -67,6 +77,14 @@ export async function runLiquipediaEnrichment({
     const games = [...new Set(tournaments.map((t) => t.game).filter(Boolean))].filter((g) =>
       liquipedia.wikiForGame(g),
     );
+    // The budget exhausts most runs, so a STABLE game order starves the tail —
+    // prod had zero enrichment for counterstrike/valorant/dota2 after days while
+    // the head games re-ran. Shuffle per run: fresh entities skip for free, so
+    // progress accumulates across runs no matter where the budget cuts off.
+    for (let i = games.length - 1; i > 0; i--) {
+      const j = Math.floor(random() * (i + 1));
+      [games[i], games[j]] = [games[j], games[i]];
+    }
 
     for (const game of games) {
       if (budget <= 0) break;
@@ -105,6 +123,7 @@ export async function runLiquipediaEnrichment({
       const seenTrackedKeys = new Set();
       const trackedNames = [];
       for (const name of [...matchNames, ...standingsNames]) {
+        if (isScheduleRowName(String(name ?? ''))) continue;
         const key = normalizeTeamName(name);
         if (!key || seenTrackedKeys.has(key)) continue;
         seenTrackedKeys.add(key);
