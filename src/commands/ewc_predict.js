@@ -561,11 +561,11 @@ function modalTextValue(interaction, customId) {
 // teams (from tracked EWC standings/matches) first, then any EWC Club Championship
 // clubs for that game not already listed. Surfaces game-specific qualifiers (e.g.
 // Free Fire's EVOS Divine) that are not season-long club members. Optional `query`
-// filters for autocomplete. Returns Discord {name, value} options, capped at 25.
-async function weeklyGameTeamOptions(game, query = '') {
+// filters for autocomplete. Returns Discord {name, value} options.
+async function weeklyGameTeamOptions(game, query = '', { limit = 25 } = {}) {
   const q = normalizeClubName(query);
   const [participants, clubChoices] = await Promise.all([
-    ewcGameParticipantTeams(game.game),
+    ewcGameParticipantTeams(game.game, { eventUrl: game.eventUrl }),
     searchEwcClubChoices(query, { game: game.game, strictGame: true }),
   ]);
   const seen = new Set();
@@ -575,9 +575,17 @@ async function weeklyGameTeamOptions(game, query = '') {
     if (!key || seen.has(key) || (q && !key.includes(q))) continue;
     seen.add(key);
     out.push({ name: value.slice(0, 100), value: value.slice(0, 100) });
-    if (out.length >= 25) break;
+    if (out.length >= limit) break;
   }
   return out;
+}
+
+function selectedWeeklyPickValue(interaction) {
+  for (const customId of ['club', 'club_2', 'club_3', 'club_4']) {
+    const selected = modalSelectValues(interaction, customId)[0];
+    if (selected) return selected;
+  }
+  return '';
 }
 
 async function showWeeklyPickModal(interaction, { seasonYear, weekKey, gameKey, ownerId }) {
@@ -602,29 +610,34 @@ async function showWeeklyPickModal(interaction, { seasonYear, weekKey, gameKey, 
   }
 
   const current = await getExistingGamePick(interaction.guildId, round, interaction.user.id, gameKey);
-  const choices = await weeklyGameTeamOptions(game);
+  const choices = await weeklyGameTeamOptions(game, '', { limit: 100 });
   const modal = new ModalBuilder()
     .setCustomId(weeklyPickModalId(seasonYear, weekKey, gameKey, interaction.user.id))
     .setTitle(`${game.game || 'Game'} pick`.slice(0, 45));
 
   if (choices.length) {
-    const select = new StringSelectMenuBuilder()
-      .setCustomId('club')
-      .setPlaceholder('Choose a club')
-      .setRequired(false)
-      .addOptions(
-        choices.map((choice) => {
-          const option = new StringSelectMenuOptionBuilder().setLabel(choice.value.slice(0, 100)).setValue(choice.value.slice(0, 100));
-          if (current?.pick === choice.value) option.setDefault(true);
-          return option;
-        }),
+    const choiceChunks = chunk(choices, 25).slice(0, 4);
+    for (const [index, choiceChunk] of choiceChunks.entries()) {
+      const start = index * 25 + 1;
+      const end = start + choiceChunk.length - 1;
+      const select = new StringSelectMenuBuilder()
+        .setCustomId(index === 0 ? 'club' : `club_${index + 1}`)
+        .setPlaceholder(choiceChunks.length > 1 ? `Choose a pick (${start}-${end})` : 'Choose a pick')
+        .setRequired(false)
+        .addOptions(
+          choiceChunk.map((choice) => {
+            const option = new StringSelectMenuOptionBuilder().setLabel(choice.value.slice(0, 100)).setValue(choice.value.slice(0, 100));
+            if (current?.pick === choice.value) option.setDefault(true);
+            return option;
+          }),
+        );
+      modal.addLabelComponents(
+        new LabelBuilder()
+          .setLabel(choiceChunks.length > 1 ? `Pick ${start}-${end}` : 'Pick')
+          .setDescription('Use the manual field if your pick is not listed.')
+          .setStringSelectMenuComponent(select),
       );
-    modal.addLabelComponents(
-      new LabelBuilder()
-        .setLabel('Club pick')
-        .setDescription('Use the manual field if your club is not listed.')
-        .setStringSelectMenuComponent(select),
-    );
+    }
   }
 
   const input = new TextInputBuilder()
@@ -632,13 +645,13 @@ async function showWeeklyPickModal(interaction, { seasonYear, weekKey, gameKey, 
     .setStyle(TextInputStyle.Short)
     .setRequired(!choices.length)
     .setMaxLength(100)
-    .setPlaceholder('Team Falcons');
+    .setPlaceholder('GO1');
   if (current?.pick && !choices.some((choice) => choice.value === current.pick)) input.setValue(current.pick.slice(0, 100));
 
   modal.addLabelComponents(
     new LabelBuilder()
-      .setLabel(choices.length ? 'Manual club name' : 'Club name')
-      .setDescription(choices.length ? 'Optional. This overrides the select menu.' : 'Type the official club name.')
+      .setLabel(choices.length ? 'Manual pick' : 'Pick')
+      .setDescription(choices.length ? 'Optional. This overrides the select menu.' : 'Type the official pick name.')
       .setTextInputComponent(input),
   );
 
@@ -670,7 +683,7 @@ async function handleWeeklyPickModal(interaction, { seasonYear, weekKey, gameKey
   }
 
   const manual = modalTextValue(interaction, 'club_text').replace(/\s+/g, ' ').trim();
-  const selected = modalSelectValues(interaction, 'club')[0] || '';
+  const selected = selectedWeeklyPickValue(interaction);
   const rawPick = manual || selected;
   if (!rawPick) {
     await interaction.followUp({ content: '❌ Choose a club from the list or type one manually.', flags: MessageFlags.Ephemeral });
@@ -680,7 +693,7 @@ async function handleWeeklyPickModal(interaction, { seasonYear, weekKey, gameKey
   // Accept a pick that is a real participant in this game's tracked event first
   // (covers game-specific qualifiers the club list omits, e.g. EVOS Divine in Free
   // Fire), else fall back to the EWC Club Championship resolver for fuzzy matching.
-  const participants = await ewcGameParticipantTeams(game.game);
+  const participants = await ewcGameParticipantTeams(game.game, { eventUrl: game.eventUrl });
   const participantPick = matchParticipant(rawPick, participants);
   let pickName;
   if (participantPick) {

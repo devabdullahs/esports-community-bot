@@ -120,6 +120,27 @@ test('ewcGameParticipantTeams uses match teams for head-to-head games', async ()
   assert.ok(teams.includes('Paper Rex'));
 });
 
+test('ewcGameParticipantTeams returns event-scoped fighters participants from standings', async () => {
+  const cotw = await tournament('fighters', 'fighters/Esports_World_Cup/2026/CotW');
+  await replaceTournamentStandings(cotw.id, [
+    { title: 'Invited', entries: [{ rank: 1, team: 'GO1' }, { rank: 2, team: 'Laggia' }] },
+    { title: 'Qualified', entries: [{ rank: 1, team: 'DarkAngel' }, { rank: 2, team: 'Basher' }] },
+  ]);
+  const tekken = await tournament('fighters', 'fighters/Esports_World_Cup/2026/T8');
+  await replaceTournamentStandings(tekken.id, [
+    { title: 'Qualified', entries: [{ rank: 1, team: 'Arslan Ash' }, { rank: 2, team: 'Knee' }] },
+  ]);
+
+  const teams = await ewcGameParticipantTeams('Fatal Fury: City of the Wolves', {
+    eventUrl: 'https://liquipedia.net/fighters/Esports_World_Cup/2026/CotW',
+  });
+
+  assert.deepEqual(teams.slice(0, 4), ['GO1', 'Laggia', 'DarkAngel', 'Basher']);
+  assert.ok(!teams.includes('Arslan Ash'), 'other fighters events stay out of the CotW pick list');
+  assert.ok(!teams.includes('Knee'));
+  assert.equal(matchParticipant('DarkAngel', teams), 'DarkAngel');
+});
+
 test('ewcGameParticipantTeams excludes teams from unrelated (non-EWC) tracked tournaments', async () => {
   // Same game, active, but NOT an EWC event: its teams must not become pick options.
   const lck = await tournament('leagueoflegends', 'leagueoflegends/LCK/2026_Season');

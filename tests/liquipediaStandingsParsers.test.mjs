@@ -8,6 +8,7 @@ import * as cheerio from 'cheerio';
 import {
   parseBattleRoyaleParticipantGroups,
   parseBattleRoyaleSchedules,
+  parseParticipantTables,
   hasStandingsRows,
   parseBattleRoyaleStandings,
   parseEventStandings,
@@ -245,6 +246,67 @@ test('group-table parses group title, aria-label team, match + game scores', () 
   );
   assert.match(weibo.logo, /Weibo_allmode/);
   assert.equal(falcons.rank, 2); // blank rank cell falls back to position
+});
+
+test('participant-table parses individual-player EWC qualifier fields', () => {
+  const $ = cheerio.load(`
+    <h2><span class="mw-headline">Participants</span></h2>
+    <div class="participantTable">
+      <div class="participantTable-title">Invited</div>
+      <div class="participantTable-row">
+        <div class="participantTable-title">EWC 2025 Champion <i>(1)</i></div>
+      </div>
+      <div class="participantTable-row">
+        <div class="participantTable-entry brkts-opponent-hover" aria-label="GO1">
+          <div class="block-player has-team">
+            <span class="flag"><img src="/commons/images/jp.png"></span>
+            <span class="race"><img src="/commons/images/mr-karate.png"></span>
+            <span class="name"><a href="/fighters/GO1" title="GO1">GO1</a></span>
+            <span class="team-template-image-icon"><img src="/commons/images/dfm.png"></span>
+          </div>
+        </div>
+        <div class="participantTable-entry participantTable-empty"></div>
+      </div>
+    </div>
+    <div class="participantTable">
+      <div class="participantTable-title">Qualified</div>
+      <div class="participantTable-row">
+        <div class="participantTable-title">GEMA LIVE <i>(1)</i></div>
+      </div>
+      <div class="participantTable-row">
+        <div class="participantTable-entry brkts-opponent-hover" aria-label="DarkAngel">
+          <div class="block-player"><span class="name">DarkAngel</span></div>
+        </div>
+      </div>
+      <div class="participantTable-row">
+        <div class="participantTable-title">DreamHack Birmingham 2026 <i>(4)</i></div>
+      </div>
+      <div class="participantTable-row">
+        <div class="participantTable-entry brkts-opponent-hover" aria-label="ZJZ"><div class="block-player"><span class="name">ZJZ</span></div></div>
+        <div class="participantTable-entry brkts-opponent-hover" aria-label="Basher"><div class="block-player"><span class="name">Basher</span></div></div>
+        <div class="participantTable-entry brkts-opponent-hover" aria-label="Dany"><div class="block-player"><span class="name">Dany "El Maza"</span></div></div>
+      </div>
+    </div>
+  `);
+
+  const sections = parseParticipantTables($);
+  assert.deepEqual(
+    sections.map((section) => ({ title: section.title, teams: section.entries.map((entry) => entry.team) })),
+    [
+      { title: 'Invited: EWC 2025 Champion (1)', teams: ['GO1'] },
+      { title: 'Qualified: GEMA LIVE (1)', teams: ['DarkAngel'] },
+      { title: 'Qualified: DreamHack Birmingham 2026 (4)', teams: ['ZJZ', 'Basher', 'Dany "El Maza"'] },
+    ],
+  );
+  assert.match(sections[0].entries[0].logo, /dfm/);
+  assert.equal(hasStandingsRows($), true);
+  assert.deepEqual(parseEventStandings($).flatMap((section) => section.entries.map((entry) => entry.team)), [
+    'GO1',
+    'DarkAngel',
+    'ZJZ',
+    'Basher',
+    'Dany "El Maza"',
+  ]);
 });
 
 test('parseEventStandings combines both formats and empty pages yield []', () => {
