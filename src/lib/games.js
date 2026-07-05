@@ -170,8 +170,9 @@ export function isEwcMatch(m) {
 }
 
 // Tekken, Street Fighter, Fatal Fury, etc. all share Liquipedia's `fighters` wiki, so the slug
-// alone can't tell them apart — disambiguate from the tournament name.
-function fightersTag(name) {
+// alone can't tell them apart — disambiguate from the tournament name. Exported so EWC pick
+// scoping can match a week's fighting-game NAME against fighters tournament names.
+export function fightersTag(name) {
   const n = String(name || '').toLowerCase();
   if (/street fighter/.test(n)) return 'SF6';
   if (/fatal fury/.test(n)) return 'FatalFury';

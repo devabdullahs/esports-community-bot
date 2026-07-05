@@ -63,13 +63,7 @@ export const EWC_TOURNAMENT_SQL = `(
   OR LOWER(COALESCE(t.external_id, '')) LIKE '%esports_world_cup%'
 )`;
 
-export async function listStandingsTeamNamesForGame(game, { ewcOnly = false, eventPath = null } = {}) {
-  const params = [game];
-  let eventSql = '';
-  if (eventPath) {
-    params.push(String(eventPath).toLowerCase());
-    eventSql = `AND LOWER(COALESCE(t.external_id, '')) = $${params.length}`;
-  }
+export async function listStandingsTeamNamesForGame(game, { ewcOnly = false } = {}) {
   const rows = await all(
     `SELECT s.team AS name
        FROM tournament_standings s
@@ -77,12 +71,28 @@ export async function listStandingsTeamNamesForGame(game, { ewcOnly = false, eve
       WHERE t.game = $1 AND t.active = 1 AND t.archived_at IS NULL
         AND s.team IS NOT NULL AND s.team <> '' AND UPPER(s.team) <> 'TBD'
         ${ewcOnly ? `AND ${EWC_TOURNAMENT_SQL}` : ''}
-        ${eventSql}
       GROUP BY s.team
       ORDER BY MIN(s.section_order) ASC, MIN(s.rank) ASC, s.team ASC`,
-    params,
+    [game],
   );
   return rows.map((row) => row.name);
+}
+
+// Standings team rows WITH their tournament's identity, in page order. The EWC
+// weekly-pick scoping filters these in JS — exact event path when it matches a
+// tracked tournament, then fighters-name disambiguation, then all EWC events.
+// SQL can't express that fallback chain portably, and per-game row counts are tiny.
+export async function listStandingsTeamRowsForGame(game, { ewcOnly = false } = {}) {
+  return all(
+    `SELECT s.team AS team, t.external_id AS tournament_path, t.name AS tournament_name
+       FROM tournament_standings s
+       JOIN tournaments t ON t.id = s.tournament_id
+      WHERE t.game = $1 AND t.active = 1 AND t.archived_at IS NULL
+        AND s.team IS NOT NULL AND s.team <> '' AND UPPER(s.team) <> 'TBD'
+        ${ewcOnly ? `AND ${EWC_TOURNAMENT_SQL}` : ''}
+      ORDER BY t.id ASC, s.section_order ASC, s.rank ASC, s.id ASC`,
+    [game],
+  );
 }
 
 // Distinct standings crest URLs across active, non-archived tournaments. All
