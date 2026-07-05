@@ -454,6 +454,25 @@ test('scorePerGameWeeklyPrediction: an unknown club (no match in results) scores
   assert.equal(out.score, 1000);
 });
 
+test('scorePerGameWeeklyPrediction: player participant aliases match solo-game club placements', () => {
+  const games = [{ key: 'fatal-fury-1', game: 'Fatal Fury: City of the Wolves', event: 'EWC CotW' }];
+  const results = [
+    {
+      gameKey: 'fatal-fury-1',
+      placements: [
+        { club: 'DetonatioN FocusMe', participant: 'GO1', points: 1000, place: '1st' },
+        { club: 'Natus Vincere', participant: 'DarkAngel', points: 750, place: '2nd' },
+      ],
+    },
+  ];
+
+  const out = scorePerGameWeeklyPrediction([{ gameKey: 'fatal-fury-1', pick: 'GO1' }], games, results);
+  const detail = out.details.picks[0];
+  assert.equal(detail.points, 1000);
+  assert.equal(detail.matchedClub, 'DetonatioN FocusMe');
+  assert.equal(detail.participant, 'GO1');
+});
+
 test('scorePerGameWeeklyPrediction: a missing pick for a configured game scores 0, pick null', () => {
   const picks = [{ gameKey: 'valorant-1', pick: 'Team Falcons' }]; // no apex pick
   const out = scorePerGameWeeklyPrediction(picks, GAMES, resultsFor());

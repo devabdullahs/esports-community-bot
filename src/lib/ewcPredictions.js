@@ -226,6 +226,9 @@ function resultMapForGame(results, gameKey) {
     for (const key of clubNameKeys(row.club)) {
       if (!map.has(key)) map.set(key, value);
     }
+    for (const key of clubNameKeys(row.participant)) {
+      if (!map.has(key)) map.set(key, value);
+    }
   }
   return { gameResult, map };
 }

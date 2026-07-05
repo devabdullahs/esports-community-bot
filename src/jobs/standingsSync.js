@@ -6,12 +6,14 @@ import { replaceTournamentStandings } from '../db/tournamentStandings.js';
 import * as defaultLiquipedia from '../services/liquipedia.js';
 
 // Tournament tracking for standings-format games. Battle-royale events and TFT
-// groups have no head-to-head matches for the poller to arm, so their pages are
-// re-parsed on a gentle fixed cadence instead: one parse per tournament, every
-// few hours, through the same serialized Liquipedia queue as everything else.
+// groups have no head-to-head matches for the poller to arm. Fighters also expose
+// individual-player EWC qualifier fields in participant tables before brackets
+// land. Re-parse those pages on a gentle fixed cadence: one parse per tournament,
+// every few hours, through the same serialized Liquipedia queue as everything else.
 // 8 active events = ~4 minutes of queue time per sweep at the >=30s gap.
 const STANDINGS_GAMES = new Set([
   'apexlegends',
+  'fighters',
   'fortnite',
   'freefire',
   'pubg',

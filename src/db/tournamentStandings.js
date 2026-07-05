@@ -63,16 +63,24 @@ export const EWC_TOURNAMENT_SQL = `(
   OR LOWER(COALESCE(t.external_id, '')) LIKE '%esports_world_cup%'
 )`;
 
-export async function listStandingsTeamNamesForGame(game, { ewcOnly = false } = {}) {
+export async function listStandingsTeamNamesForGame(game, { ewcOnly = false, eventPath = null } = {}) {
+  const params = [game];
+  let eventSql = '';
+  if (eventPath) {
+    params.push(String(eventPath).toLowerCase());
+    eventSql = `AND LOWER(COALESCE(t.external_id, '')) = $${params.length}`;
+  }
   const rows = await all(
-    `SELECT DISTINCT s.team AS name
+    `SELECT s.team AS name
        FROM tournament_standings s
        JOIN tournaments t ON t.id = s.tournament_id
       WHERE t.game = $1 AND t.active = 1 AND t.archived_at IS NULL
         AND s.team IS NOT NULL AND s.team <> '' AND UPPER(s.team) <> 'TBD'
         ${ewcOnly ? `AND ${EWC_TOURNAMENT_SQL}` : ''}
-      ORDER BY name ASC`,
-    [game],
+        ${eventSql}
+      GROUP BY s.team
+      ORDER BY MIN(s.section_order) ASC, MIN(s.rank) ASC, s.team ASC`,
+    params,
   );
   return rows.map((row) => row.name);
 }

@@ -83,6 +83,16 @@ function groupDrawLogo($, cell) {
   return null;
 }
 
+function participantLogo($, entry) {
+  const imgs = $(entry).find('.team-template-image-icon img, .team-template-logo img, img').toArray();
+  for (const img of imgs) {
+    if ($(img).closest('.flag, .race').length) continue;
+    const url = normalizeImageUrl(imageSrc($(img)));
+    if (url) return url;
+  }
+  return null;
+}
+
 function groupDrawHeaders($, row) {
   return $(row)
     .children('th,td')
@@ -124,6 +134,45 @@ export function parseBattleRoyaleParticipantGroups($) {
     }
   });
   return sections;
+}
+
+// Liquipedia participant tables used by individual-player events (fighters,
+// chess, etc.). These are not standings yet, but they are the authoritative
+// qualified field that weekly picks should list before group/bracket results land.
+export function parseParticipantTables($) {
+  const sections = [];
+  $('.participantTable').each((_, table) => {
+    const tableTitle = cleanText($(table).children('.participantTable-title').first().text());
+    let current = null;
+    for (const row of $(table).children('.participantTable-row').toArray()) {
+      const title = cleanText($(row).children('.participantTable-title').first().text());
+      if (title) {
+        const fullTitle = [tableTitle, title].filter(Boolean).join(': ');
+        current = { title: fullTitle, entries: [] };
+        sections.push(current);
+      }
+
+      for (const entry of $(row).children('.participantTable-entry').not('.participantTable-empty').toArray()) {
+        const team =
+          cleanText($(entry).find('.block-player .name').first().text()) ||
+          cleanText($(entry).find('.name').first().text()) ||
+          cleanText($(entry).attr('aria-label'));
+        if (!team) continue;
+        if (!current) {
+          current = { title: tableTitle, entries: [] };
+          sections.push(current);
+        }
+        current.entries.push({
+          rank: current.entries.length + 1,
+          team,
+          points: '',
+          extra: '',
+          logo: participantLogo($, entry),
+        });
+      }
+    }
+  });
+  return sections.filter((section) => hasRealTeam(section.entries));
 }
 
 // Battle-royale panel-table(s). Returns one section per table:
@@ -243,7 +292,8 @@ export function parseEventStandings($) {
     battleRoyale.length && !rowsHaveResults(battleRoyale) && participantGroups.length
       ? participantGroups
       : battleRoyale;
-  return [...battleRoyaleSections, ...parseGroupTableStandings($)];
+  const structured = [...battleRoyaleSections, ...parseGroupTableStandings($)];
+  return structured.length ? structured : parseParticipantTables($);
 }
 
 // Whether the page yields at least one PARSEABLE standings row (a team cell we
@@ -274,6 +324,20 @@ export function hasStandingsRows($) {
     .each((_, row) => {
       const entry = $(row).find('.group-table-entry').first();
       if (cleanText(entry.attr('aria-label')) || cleanText(entry.text())) {
+        found = true;
+        return false;
+      }
+      return undefined;
+    });
+  if (found) return true;
+  $('.participantTable-entry')
+    .not('.participantTable-empty')
+    .each((_, entry) => {
+      if (
+        cleanText($(entry).attr('aria-label')) ||
+        cleanText($(entry).find('.block-player .name').first().text()) ||
+        cleanText($(entry).find('.name').first().text())
+      ) {
         found = true;
         return false;
       }

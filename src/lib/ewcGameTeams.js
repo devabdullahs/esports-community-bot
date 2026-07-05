@@ -18,6 +18,19 @@ function slugForGameName(gameName) {
   return slug && isKnownGameSlug(slug) ? normalizeGameSlug(slug) : slug || null;
 }
 
+function eventPathFromUrl(eventUrl) {
+  if (!eventUrl) return null;
+  try {
+    const url = new URL(eventUrl);
+    if (!/liquipedia\.net$/i.test(url.hostname)) return null;
+    const parts = url.pathname.split('/').filter(Boolean);
+    if (parts.length < 2) return null;
+    return `${parts[0].toLowerCase()}/${parts.slice(1).join('/')}`.toLowerCase();
+  } catch {
+    return null;
+  }
+}
+
 // The teams actually participating in the tracked EWC event(s) for a game — the
 // qualified field a weekly pick should choose from. Sourced from tournament
 // STANDINGS (clean participant list for BR/TFT and group-stage tables) plus, for
@@ -27,13 +40,14 @@ function slugForGameName(gameName) {
 // field: e.g. Free Fire's EVOS Divine lives here even though it is not an EWC Club
 // Championship member. Deduped by the same normalization scoring uses, so a picked
 // name here matches the Liquipedia results at scoring time.
-export async function ewcGameParticipantTeams(gameName) {
+export async function ewcGameParticipantTeams(gameName, { eventUrl = null } = {}) {
   const slug = slugForGameName(gameName);
   if (!slug) return [];
+  const eventPath = eventPathFromUrl(eventUrl);
 
   const [standings, matchTeams] = await Promise.all([
-    listStandingsTeamNamesForGame(slug, { ewcOnly: true }).catch(() => []),
-    isLobbyGame(slug) ? Promise.resolve([]) : listTrackedTeamNamesForGame(slug, { ewcOnly: true }).catch(() => []),
+    listStandingsTeamNamesForGame(slug, { ewcOnly: true, eventPath }).catch(() => []),
+    isLobbyGame(slug) ? Promise.resolve([]) : listTrackedTeamNamesForGame(slug, { ewcOnly: true, eventPath }).catch(() => []),
   ]);
 
   const seen = new Set();
@@ -46,7 +60,6 @@ export async function ewcGameParticipantTeams(gameName) {
     seen.add(key);
     out.push(clean);
   }
-  out.sort((a, b) => a.localeCompare(b));
   return out;
 }
 
