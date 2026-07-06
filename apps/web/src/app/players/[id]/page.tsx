@@ -8,6 +8,7 @@ import { FollowButton } from "@/components/follows/follow-button";
 import { PageBreadcrumb } from "@/components/page-breadcrumb";
 import { LiquipediaAttribution } from "@/components/tournaments/liquipedia-attribution";
 import { ProfileAvatar } from "@/components/profiles/profile-avatar";
+import { ProfileMatchList } from "@/components/profiles/profile-match-list";
 import { GameIcon } from "@/components/tournaments/tournament-directory";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -18,6 +19,7 @@ import { copy, localizedPath } from "@/lib/i18n";
 import { liquipediaPlayerDetails } from "@/lib/liquipedia-profile-details";
 import { buildPageMetadata } from "@/lib/metadata";
 import { getPlayerProfileCached, type PlayerProfile } from "@/lib/pandascore-profiles";
+import { getProfileMatchesForTeamNamesCached } from "@/lib/profile-matches";
 import { getRequestLocale } from "@/lib/request-locale";
 import { safeUrlOrUndefined } from "@/lib/safe-url";
 
@@ -114,6 +116,10 @@ export default async function PlayerProfilePage({
   const hasLiquipediaDetails = Boolean(
     infoRows.length || liquipedia.achievements.length || liquipedia.history.length,
   );
+  const trackedMatches = await getProfileMatchesForTeamNamesCached({
+    game: player.game,
+    names: [teamName, player.current_team_name, liquipedia.team],
+  });
 
   return (
     <main className="mx-auto flex w-full max-w-5xl flex-1 flex-col gap-6 px-4 py-8 sm:px-8 sm:py-10">
@@ -258,6 +264,8 @@ export default async function PlayerProfilePage({
           ) : null}
         </section>
       ) : null}
+
+      <ProfileMatchList matches={trackedMatches} locale={locale} />
 
       {player.resolved_team_id ? (
         <Link
