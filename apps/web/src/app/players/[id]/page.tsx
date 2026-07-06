@@ -136,7 +136,7 @@ export default async function PlayerProfilePage({
 
       <section className="relative overflow-hidden rounded-2xl border bg-card/40 p-5 shadow-sm sm:p-6">
         <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-primary/60 to-transparent" />
-        <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
+        <div className="flex min-h-[15rem] flex-col gap-6">
           <div className="flex min-w-0 items-center gap-4 sm:gap-5">
             <ProfileAvatar
               src={imageUrl}
@@ -151,7 +151,7 @@ export default async function PlayerProfilePage({
                 <UserIcon className="size-3.5" />
                 {text.playerProfile}
               </Badge>
-              <h1 dir="auto" className="text-3xl font-semibold leading-tight sm:text-4xl">
+              <h1 dir="auto" className="max-w-full break-normal text-3xl font-semibold leading-tight sm:text-4xl">
                 {player.name}
               </h1>
               {secondaryName ? (
@@ -182,7 +182,7 @@ export default async function PlayerProfilePage({
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-2 sm:min-w-[26rem] lg:grid-cols-4">
+          <div className="mt-auto grid w-full grid-cols-1 gap-2 sm:ms-auto sm:w-auto sm:min-w-[30rem] sm:grid-cols-3 md:min-w-[36rem]">
             <Stat label={text.currentTeam}>
               {player.resolved_team_image_url ? (
                 <ProfileAvatar

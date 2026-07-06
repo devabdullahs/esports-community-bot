@@ -76,6 +76,11 @@ function needsRosterBackfill(team, cutoffMs) {
   return Boolean(parsedAt && parsedAt < cutoffMs);
 }
 
+function isEwcTournament(tournament) {
+  const text = `${tournament?.name ?? ''} ${tournament?.external_id ?? ''} ${tournament?.url ?? ''}`.toLowerCase();
+  return Number(tournament?.ewc || 0) === 1 || text.includes('esports_world_cup') || text.includes('esports world cup');
+}
+
 function playerUrl(wiki, page) {
   return page ? `https://liquipedia.net/${wiki}/${encodeURIComponent(page)}` : null;
 }
@@ -107,6 +112,7 @@ export async function runLiquipediaEnrichment({
 
   try {
     const tournaments = await listActiveTournaments();
+    const ewcGames = new Set(tournaments.filter(isEwcTournament).map((t) => t.game).filter(Boolean));
     const games = [...new Set(tournaments.map((t) => t.game).filter(Boolean))].filter((g) =>
       liquipedia.wikiForGame(g),
     );
@@ -114,12 +120,19 @@ export async function runLiquipediaEnrichment({
     // prod had zero enrichment for counterstrike/valorant/dota2 after days while
     // the head games re-ran. Shuffle per run: fresh entities skip for free, so
     // progress accumulates across runs no matter where the budget cuts off.
-    for (let i = games.length - 1; i > 0; i--) {
-      const j = Math.floor(random() * (i + 1));
-      [games[i], games[j]] = [games[j], games[i]];
-    }
+    const shuffle = (items) => {
+      for (let i = items.length - 1; i > 0; i--) {
+        const j = Math.floor(random() * (i + 1));
+        [items[i], items[j]] = [items[j], items[i]];
+      }
+    };
+    const priorityGames = games.filter((game) => ewcGames.has(game));
+    const remainingGames = games.filter((game) => !ewcGames.has(game));
+    shuffle(priorityGames);
+    shuffle(remainingGames);
+    const orderedGames = [...priorityGames, ...remainingGames];
 
-    for (const game of games) {
+    for (const game of orderedGames) {
       if (budget <= 0) break;
       summary.games += 1;
       const wiki = liquipedia.wikiForGame(game);
@@ -150,10 +163,9 @@ export async function runLiquipediaEnrichment({
         queuedPlayerIds.add(player.id);
         playerQueue.push({ player, page: resolvedPage, url: url || playerUrl(wiki, resolvedPage), role });
       };
-      for (const player of existingPlayers) {
-        if (!player.current_team_id || !player.liquipedia_url || isFresh(player.liquipedia_parsed_at, ttlMs, now)) continue;
-        queuePlayer({ player, url: player.liquipedia_url });
-      }
+      const stalePlayers = existingPlayers.filter(
+        (player) => player.current_team_id && player.liquipedia_url && !isFresh(player.liquipedia_parsed_at, ttlMs, now),
+      );
 
       // Tracked scene = teams in active tournaments' matches PLUS battle-royale /
       // TFT participants (which live in tournament_standings, not matches), so
@@ -161,118 +173,140 @@ export async function runLiquipediaEnrichment({
       // name (not exact string) so two aliases of one team — e.g. a match's
       // "Team Falcons" and a standings row's "Falcons" — are processed once,
       // never re-parsing the same team and wasting the Liquipedia budget.
-      const [matchNames, standingsNames] = await Promise.all([
+      const [ewcMatchNames, ewcStandingsNames, matchNames, standingsNames] = await Promise.all([
+        listTrackedTeamNamesForGame(game, { ewcOnly: true }),
+        listStandingsTeamNamesForGame(game, { ewcOnly: true }),
         listTrackedTeamNamesForGame(game),
         listStandingsTeamNamesForGame(game),
       ]);
       const seenTrackedKeys = new Set();
-      const trackedNames = [];
-      for (const name of [...matchNames, ...standingsNames]) {
-        if (isScheduleRowName(String(name ?? ''))) continue;
-        const key = normalizeTeamName(name);
-        if (!key || seenTrackedKeys.has(key)) continue;
-        seenTrackedKeys.add(key);
-        trackedNames.push(name);
+      const ewcTrackedKeys = new Set();
+      const priorityNames = [];
+      const remainingNames = [];
+      const appendNames = (names, { ewc = false } = {}) => {
+        for (const name of names) {
+          if (isScheduleRowName(String(name ?? ''))) continue;
+          const key = normalizeTeamName(name);
+          if (!key) continue;
+          if (ewc) ewcTrackedKeys.add(key);
+          if (seenTrackedKeys.has(key)) continue;
+          seenTrackedKeys.add(key);
+          (ewc ? priorityNames : remainingNames).push(name);
+        }
+      };
+      appendNames([...ewcMatchNames, ...ewcStandingsNames], { ewc: true });
+      appendNames([...matchNames, ...standingsNames]);
+
+      const ewcTeamIds = new Set();
+      for (const key of ewcTrackedKeys) {
+        const team = byName.get(key);
+        if (team?.id) ewcTeamIds.add(team.id);
       }
-      for (const teamName of trackedNames) {
-        if (budget <= 0) break;
-        if (isPlaceholderTeam(teamName)) continue;
-        const key = normalizeTeamName(teamName);
-        if (!key) continue;
+      const isEwcPlayer = (player) =>
+        ewcTeamIds.has(player.current_team_id) || ewcTrackedKeys.has(normalizeTeamName(player.current_team_name));
 
-        let team = byName.get(key);
-        if (!team) {
-          team = await createLiquipediaTeam({ game, name: teamName, slug: key });
-          byName.set(key, team);
-          summary.created += 1;
-        }
-        const rosterBackfill = needsRosterBackfill(team, rosterBackfillCutoff);
-        if (!rosterBackfill && isFresh(team.liquipedia_parsed_at, ttlMs, now)) {
-          summary.skippedFresh += 1;
-          continue;
-        }
-        if (rosterBackfill) summary.rosterBackfilled += 1;
+      const processTeams = async (trackedNames, { ewc = false } = {}) => {
+        for (const teamName of trackedNames) {
+          if (budget <= 0) break;
+          if (isPlaceholderTeam(teamName)) continue;
+          const key = normalizeTeamName(teamName);
+          if (!key) continue;
 
-        // Refreshes reuse the stored page URL and skip the search round-trip;
-        // only never-resolved names spend a search. EVERY Liquipedia request
-        // (search or parse) costs one budget unit, so the cap truly bounds the
-        // run's queue occupancy.
-        let page = liquipedia.pageFromUrl?.(team.liquipedia_url) ?? null;
-        let url = team.liquipedia_url ?? null;
-        if (!page) {
-          const resolved = await liquipedia.resolveEntityPage(wiki, teamName);
+          let team = byName.get(key);
+          if (!team) {
+            team = await createLiquipediaTeam({ game, name: teamName, slug: key });
+            byName.set(key, team);
+            summary.created += 1;
+          }
+          if (ewc && team?.id) ewcTeamIds.add(team.id);
+          const rosterBackfill = needsRosterBackfill(team, rosterBackfillCutoff);
+          if (!rosterBackfill && isFresh(team.liquipedia_parsed_at, ttlMs, now)) {
+            summary.skippedFresh += 1;
+            continue;
+          }
+          if (rosterBackfill) summary.rosterBackfilled += 1;
+
+          // Refreshes reuse the stored page URL and skip the search round-trip;
+          // only never-resolved names spend a search. EVERY Liquipedia request
+          // (search or parse) costs one budget unit, so the cap truly bounds the
+          // run's queue occupancy.
+          let page = liquipedia.pageFromUrl?.(team.liquipedia_url) ?? null;
+          let url = team.liquipedia_url ?? null;
+          if (!page) {
+            const resolved = await liquipedia.resolveEntityPage(wiki, teamName);
+            budget -= 1;
+            if (resolved.status === 'transient') continue; // backoff/queue-full: retry next run, no stamp
+            if (resolved.status !== 'ok') {
+              // Durable miss (search worked, nothing matched): stamp WITHOUT
+              // touching any previously stored raw/facts.
+              await stampTeamLiquipedia(team.id, {});
+              summary.misses += 1;
+              continue;
+            }
+            page = resolved.page;
+            url = resolved.url;
+          }
+          if (budget <= 0) break;
+          const entity = await liquipedia.fetchTeamEntity(wiki, page);
           budget -= 1;
-          if (resolved.status === 'transient') continue; // backoff/queue-full: retry next run, no stamp
-          if (resolved.status !== 'ok') {
-            // Durable miss (search worked, nothing matched): stamp WITHOUT
-            // touching any previously stored raw/facts.
-            await stampTeamLiquipedia(team.id, {});
+          if (!entity) {
+            await stampTeamLiquipedia(team.id, { url });
             summary.misses += 1;
             continue;
           }
-          page = resolved.page;
-          url = resolved.url;
-        }
-        if (budget <= 0) break;
-        const entity = await liquipedia.fetchTeamEntity(wiki, page);
-        budget -= 1;
-        if (!entity) {
-          await stampTeamLiquipedia(team.id, { url });
-          summary.misses += 1;
-          continue;
-        }
-        await saveTeamLiquipedia(team.id, {
-          url,
-          raw: entity.raw,
-          facts: entity.facts,
-          image: entity.image,
-          location: entity.normalized.location,
-        });
-        summary.teamsParsed += 1;
+          await saveTeamLiquipedia(team.id, {
+            url,
+            raw: entity.raw,
+            facts: entity.facts,
+            image: entity.image,
+            location: entity.normalized.location,
+          });
+          summary.teamsParsed += 1;
 
-        // Roster precedence: the parsed active roster is the source of truth
-        // for who plays here — PandaScore's current_team can lag transfers by
-        // months. Verify every member (existing rows included, no budget cost),
-        // then clear players our DB still places on this team but who are gone
-        // from the roster. Absence is only meaningful when the roster parse was
-        // COMPLETE: an empty roster (pageless stub) or a truncated one (parser
-        // row cap hit) must never clear anyone.
-        const confirmedIds = [];
-        for (const member of entity.roster) {
-          const memberKey = normalizeTeamName(member.name);
-          if (!memberKey) continue;
-          const memberUrl = playerUrl(wiki, member.page);
-          let player = playersByName.get(memberKey);
-          if (!player) {
-            player = await createLiquipediaPlayer({
-              game,
-              name: member.name,
-              slug: memberKey,
-              currentTeamId: team.id,
-              currentTeamName: teamName,
-              liquipediaUrl: memberUrl,
-            });
-            playersByName.set(memberKey, player);
-            summary.created += 1;
-          } else if (memberUrl && !player.liquipedia_url) {
-            player = await rememberPlayerLiquipediaUrl(player.id, memberUrl);
-            playersByName.set(memberKey, player);
+          // Roster precedence: the parsed active roster is the source of truth
+          // for who plays here — PandaScore's current_team can lag transfers by
+          // months. Verify every member (existing rows included, no budget cost),
+          // then clear players our DB still places on this team but who are gone
+          // from the roster. Absence is only meaningful when the roster parse was
+          // COMPLETE: an empty roster (pageless stub) or a truncated one (parser
+          // row cap hit) must never clear anyone.
+          const confirmedIds = [];
+          for (const member of entity.roster) {
+            const memberKey = normalizeTeamName(member.name);
+            if (!memberKey) continue;
+            const memberUrl = playerUrl(wiki, member.page);
+            let player = playersByName.get(memberKey);
+            if (!player) {
+              player = await createLiquipediaPlayer({
+                game,
+                name: member.name,
+                slug: memberKey,
+                currentTeamId: team.id,
+                currentTeamName: teamName,
+                liquipediaUrl: memberUrl,
+              });
+              playersByName.set(memberKey, player);
+              summary.created += 1;
+            } else if (memberUrl && !player.liquipedia_url) {
+              player = await rememberPlayerLiquipediaUrl(player.id, memberUrl);
+              playersByName.set(memberKey, player);
+            }
+            await setPlayerVerifiedTeam(player.id, { teamId: team.id, teamName });
+            confirmedIds.push(player.id);
+            if (member.page) queuePlayer({ player, page: member.page, url: memberUrl, role: member.role });
           }
-          await setPlayerVerifiedTeam(player.id, { teamId: team.id, teamName });
-          confirmedIds.push(player.id);
-          if (member.page) queuePlayer({ player, page: member.page, url: memberUrl, role: member.role });
+          if (confirmedIds.length && !entity.rosterTruncated) {
+            await clearDroppedRosterPlayers(game, team.id, confirmedIds);
+          }
         }
-        if (confirmedIds.length && !entity.rosterTruncated) {
-          await clearDroppedRosterPlayers(game, team.id, confirmedIds);
-        }
-      }
+      };
 
       // Roster players: their rows were created/verified during the roster
       // pass above, and their pages came straight from the team page links, so
       // no search round-trip is needed - just a parse each, budget permitting.
-      if (playerQueue.length && budget > 0) {
-        for (const member of playerQueue) {
-          if (budget <= 0) break;
+      const drainPlayerQueue = async () => {
+        while (playerQueue.length && budget > 0) {
+          const member = playerQueue.shift();
           const player = member.player;
           if (isFresh(player.liquipedia_parsed_at, ttlMs, now)) {
             summary.skippedFresh += 1;
@@ -298,7 +332,18 @@ export async function runLiquipediaEnrichment({
           });
           summary.playersParsed += 1;
         }
+      };
+
+      await processTeams(priorityNames, { ewc: true });
+      for (const player of stalePlayers) {
+        if (isEwcPlayer(player)) queuePlayer({ player, url: player.liquipedia_url });
       }
+      await drainPlayerQueue();
+      for (const player of stalePlayers) {
+        if (!isEwcPlayer(player)) queuePlayer({ player, url: player.liquipedia_url });
+      }
+      await processTeams(remainingNames);
+      await drainPlayerQueue();
     }
 
     logger.info(
