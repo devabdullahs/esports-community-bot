@@ -13,7 +13,7 @@ process.env.DISCORD_CLIENT_ID = 'test-client-id';
 const { closeDb } = await import('../src/db/index.js');
 const { addTournament, listActiveTournaments } = await import('../src/db/tournaments.js');
 const { upsertMatch } = await import('../src/db/matches.js');
-const { upsertTeam, listTeams, saveTeamLiquipedia } = await import('../src/db/teams.js');
+const { upsertTeam, listTeams, saveTeamLiquipedia, createLiquipediaTeam } = await import('../src/db/teams.js');
 const { listPlayers, upsertPlayer, getPlayerByPandaScoreId, savePlayerLiquipedia } = await import('../src/db/players.js');
 const { replaceTournamentStandings, listStandingsTeamNamesForGame } = await import(
   '../src/db/tournamentStandings.js'
@@ -505,6 +505,37 @@ test('lobby schedule rows are not searched as team entities', async () => {
 
   const names = resolveCalls.map((call) => call.name);
   assert.deepEqual(names, ['Actual Squad', 'The Match']);
+});
+
+test('junk schedule-row team stubs from earlier runs are deleted (real rows kept)', async () => {
+  // Rows the job created from schedule names BEFORE the isScheduleRowName filter
+  // existed: Liquipedia-created stubs (no PandaScore id, no parsed data). Prod
+  // accumulated 62 of these for pubgmobile alone.
+  const junk1 = await createLiquipediaTeam({ game: 'schedulejunk', name: 'Grand Finals - Game 7', slug: 'gf-g7' });
+  const junk2 = await createLiquipediaTeam({ game: 'schedulejunk', name: 'Survival Stage - Match', slug: 'ss-m' });
+  // Junk-looking NAME but with parsed data: never deleted (could be a real page).
+  const enriched = await createLiquipediaTeam({ game: 'schedulejunk', name: 'Odd Game 9', slug: 'odd-game-9' });
+  await saveTeamLiquipedia(enriched.id, { url: 'https://liquipedia.net/schedulejunk/Odd', raw: '<div/>', facts: {} });
+
+  const summary = await runLiquipediaEnrichment({
+    liquipedia: mockLiquipedia({ supportedGames: ['schedulejunk'] }),
+    maxParses: 20,
+  });
+  assert.ok(summary.junkDeleted >= 2, `junk stubs deleted (got ${summary.junkDeleted})`);
+
+  const teams = await listTeams({ game: 'schedulejunk', limit: 100 });
+  const names = teams.map((t) => t.name);
+  assert.ok(!names.includes('Grand Finals - Game 7'), 'stub deleted');
+  assert.ok(!names.includes('Survival Stage - Match'), 'stub deleted');
+  assert.ok(names.includes('Odd Game 9'), 'row with parsed data kept');
+  assert.ok(names.includes('Actual Squad'), 'real team kept');
+
+  // Second run: nothing left to delete (idempotent).
+  const again = await runLiquipediaEnrichment({
+    liquipedia: mockLiquipedia({ supportedGames: ['schedulejunk'] }),
+    maxParses: 20,
+  });
+  assert.equal(again.junkDeleted, 0);
 });
 
 test('EWC games consume enrichment budget before other active games', async () => {

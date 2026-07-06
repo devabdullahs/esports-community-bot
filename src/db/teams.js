@@ -127,9 +127,23 @@ export async function countTeams({ game = null, q = null } = {}) {
 // id+name pairs for one game - powers the web's match-name -> team-page linking.
 export async function listTeamNamesForGame(game) {
   return all(
-    'SELECT id, name, liquipedia_url, liquipedia_raw, liquipedia_parsed_at FROM teams WHERE game = $1 ORDER BY id ASC',
+    'SELECT id, pandascore_id, name, liquipedia_url, liquipedia_raw, liquipedia_parsed_at FROM teams WHERE game = $1 ORDER BY id ASC',
     [game],
   );
+}
+
+// Remove team rows by id. The enrichment job uses this to retire junk rows it
+// created from BR schedule names ("Grand Finals - Game 3") before the
+// schedule-row filter existed — callers must pre-filter to Liquipedia-created
+// stubs (NULL pandascore_id, no parsed data). players.current_team_id declares
+// ON DELETE SET NULL, so a stray reference detaches instead of blocking.
+export async function deleteTeamsByIds(ids) {
+  let deleted = 0;
+  for (const id of ids ?? []) {
+    const result = await run('DELETE FROM teams WHERE id = $1', [id]);
+    deleted += Number(result?.changes ?? 0);
+  }
+  return deleted;
 }
 
 // Team crests hosted on Liquipedia - the logo-warmup job pre-downloads these
