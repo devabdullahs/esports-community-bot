@@ -28,6 +28,7 @@ export function ProfileAvatar({
   shape = "circle",
   fit = "cover",
   focus = "center",
+  padded = true,
 }: {
   src: string | null | undefined;
   name: string;
@@ -35,6 +36,7 @@ export function ProfileAvatar({
   shape?: "circle" | "rounded";
   fit?: "cover" | "contain";
   focus?: "center" | "top";
+  padded?: boolean;
 }) {
   const [failed, setFailed] = useState(false);
   const safe = safeUrlOrUndefined(src);
@@ -65,7 +67,7 @@ export function ProfileAvatar({
       className={cn(
         "bg-muted",
         radius,
-        fit === "contain" ? "object-contain p-1.5" : "object-cover",
+        fit === "contain" ? (padded ? "object-contain p-1.5" : "object-contain") : "object-cover",
         fit === "cover" && focus === "top" ? "object-top" : "object-center",
         className,
       )}

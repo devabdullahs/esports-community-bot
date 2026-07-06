@@ -14,7 +14,7 @@ const { closeDb } = await import('../src/db/index.js');
 const { addTournament, listActiveTournaments } = await import('../src/db/tournaments.js');
 const { upsertMatch } = await import('../src/db/matches.js');
 const { upsertTeam, listTeams, saveTeamLiquipedia } = await import('../src/db/teams.js');
-const { listPlayers, upsertPlayer, getPlayerByPandaScoreId } = await import('../src/db/players.js');
+const { listPlayers, upsertPlayer, getPlayerByPandaScoreId, savePlayerLiquipedia } = await import('../src/db/players.js');
 const { replaceTournamentStandings, listStandingsTeamNamesForGame } = await import(
   '../src/db/tournamentStandings.js'
 );
@@ -282,6 +282,71 @@ test('player page enrichment resumes from stored roster links after budget cutof
   assert.equal(summary.teamsParsed, 0);
   assert.equal(summary.playersParsed, 1);
   assert.deepEqual(secondParseCalls, [{ kind: 'player', wiki: 'resume', page: 'Resume_Squad_Star' }]);
+});
+
+test('fresh Liquipedia players missing a portrait get one image backfill pass', async () => {
+  const tournament = await addTournament({
+    source: 'liquipedia',
+    external_id: 'imagebackfill/cup',
+    game: 'imagebackfill',
+    name: 'Image Backfill Cup',
+    url: 'https://liquipedia.net/imagebackfill/Cup',
+    guild_id: GUILD,
+  });
+  await upsertMatch({
+    tournament_id: tournament.id,
+    source: 'liquipedia',
+    external_id: 'Match:image-backfill-1',
+    team_a: 'Image Squad',
+    team_b: 'TBD',
+    status: 'scheduled',
+  });
+  const team = await upsertTeam({
+    game: 'imagebackfill',
+    pandascore_id: 8200,
+    name: 'Image Squad',
+    slug: 'image-squad',
+  });
+  await saveTeamLiquipedia(team.id, {
+    url: 'https://liquipedia.net/imagebackfill/Image_Squad',
+    raw: '<div class="fo-nttax-infobox">...</div><table class="table2__table"></table>',
+    facts: { region: 'Fresh' },
+  });
+  const player = await upsertPlayer({
+    game: 'imagebackfill',
+    pandascore_id: 8201,
+    name: 'Image_Squad Star',
+    current_team_id: team.id,
+    current_team_name: 'Image Squad',
+  });
+  await savePlayerLiquipedia(player.id, {
+    url: 'https://liquipedia.net/imagebackfill/Image_Squad_Star',
+    facts: { nationality: 'Brazil' },
+  });
+
+  const firstParseCalls = [];
+  const first = await runLiquipediaEnrichment({
+    liquipedia: mockLiquipedia({ parseCalls: firstParseCalls, supportedGames: ['imagebackfill'] }),
+    maxParses: 5,
+    playerImageBackfillBefore: '2999-01-01T00:00:00Z',
+  });
+
+  assert.equal(first.teamsParsed, 0);
+  assert.equal(first.playersParsed, 1);
+  assert.equal(first.playerImageBackfilled, 1);
+  assert.deepEqual(firstParseCalls, [{ kind: 'player', wiki: 'imagebackfill', page: 'Image_Squad_Star' }]);
+  const withImage = (await listPlayers({ game: 'imagebackfill', limit: 10 })).find((p) => p.id === player.id);
+  assert.equal(withImage.image_url, 'https://liquipedia.net/img/Image_Squad_Star.jpg');
+
+  const secondParseCalls = [];
+  const second = await runLiquipediaEnrichment({
+    liquipedia: mockLiquipedia({ parseCalls: secondParseCalls, supportedGames: ['imagebackfill'] }),
+    maxParses: 5,
+    playerImageBackfillBefore: '2999-01-01T00:00:00Z',
+  });
+
+  assert.equal(second.playersParsed, 0);
+  assert.deepEqual(secondParseCalls, []);
 });
 
 test('transient search failures are never stamped as misses', async () => {

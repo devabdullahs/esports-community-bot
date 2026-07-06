@@ -76,6 +76,16 @@ function needsRosterBackfill(team, cutoffMs) {
   return Boolean(parsedAt && parsedAt < cutoffMs);
 }
 
+function needsPlayerImageBackfill(player, cutoffMs) {
+  if (!cutoffMs || player?.image_url) return false;
+  const parsedAt = parseTimeMs(player?.liquipedia_parsed_at);
+  return Boolean(parsedAt && parsedAt < cutoffMs);
+}
+
+function needsPlayerPageRefresh(player, ttlMs, now, imageBackfillCutoff) {
+  return !isFresh(player?.liquipedia_parsed_at, ttlMs, now) || needsPlayerImageBackfill(player, imageBackfillCutoff);
+}
+
 function isEwcTournament(tournament) {
   const text = `${tournament?.name ?? ''} ${tournament?.external_id ?? ''} ${tournament?.url ?? ''}`.toLowerCase();
   return Number(tournament?.ewc || 0) === 1 || text.includes('esports_world_cup') || text.includes('esports world cup');
@@ -92,6 +102,7 @@ export async function runLiquipediaEnrichment({
   now = Date.now(),
   random = Math.random,
   rosterBackfillBefore = config.liquipedia.rosterBackfillBefore,
+  playerImageBackfillBefore = config.liquipedia.playerImageBackfillBefore,
 } = {}) {
   if (running) {
     logger.debug('[lp-enrich] already running - skipping overlapping run.');
@@ -103,12 +114,14 @@ export async function runLiquipediaEnrichment({
     teamsParsed: 0,
     playersParsed: 0,
     rosterBackfilled: 0,
+    playerImageBackfilled: 0,
     created: 0,
     misses: 0,
     skippedFresh: 0,
   };
   let budget = Math.max(1, Number(maxParses) || 1);
   const rosterBackfillCutoff = parseTimeMs(rosterBackfillBefore);
+  const playerImageBackfillCutoff = parseTimeMs(playerImageBackfillBefore);
 
   try {
     const tournaments = await listActiveTournaments();
@@ -164,7 +177,10 @@ export async function runLiquipediaEnrichment({
         playerQueue.push({ player, page: resolvedPage, url: url || playerUrl(wiki, resolvedPage), role });
       };
       const stalePlayers = existingPlayers.filter(
-        (player) => player.current_team_id && player.liquipedia_url && !isFresh(player.liquipedia_parsed_at, ttlMs, now),
+        (player) =>
+          player.current_team_id &&
+          player.liquipedia_url &&
+          needsPlayerPageRefresh(player, ttlMs, now, playerImageBackfillCutoff),
       );
 
       // Tracked scene = teams in active tournaments' matches PLUS battle-royale /
@@ -308,9 +324,12 @@ export async function runLiquipediaEnrichment({
         while (playerQueue.length && budget > 0) {
           const member = playerQueue.shift();
           const player = member.player;
-          if (isFresh(player.liquipedia_parsed_at, ttlMs, now)) {
+          if (!needsPlayerPageRefresh(player, ttlMs, now, playerImageBackfillCutoff)) {
             summary.skippedFresh += 1;
             continue;
+          }
+          if (needsPlayerImageBackfill(player, playerImageBackfillCutoff)) {
+            summary.playerImageBackfilled += 1;
           }
           const entity = await liquipedia.fetchPlayerEntity(wiki, member.page);
           budget -= 1;
@@ -348,7 +367,8 @@ export async function runLiquipediaEnrichment({
 
     logger.info(
       `[lp-enrich] ${summary.teamsParsed} team(s) + ${summary.playersParsed} player(s) parsed across ${summary.games} game(s); ` +
-        `${summary.rosterBackfilled} roster backfill(s), ${summary.created} created, ${summary.skippedFresh} fresh, ${summary.misses} misses.`,
+        `${summary.rosterBackfilled} roster backfill(s), ${summary.playerImageBackfilled} player image backfill(s), ` +
+        `${summary.created} created, ${summary.skippedFresh} fresh, ${summary.misses} misses.`,
     );
     return summary;
   } finally {

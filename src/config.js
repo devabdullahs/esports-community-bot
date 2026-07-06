@@ -48,7 +48,7 @@ export const config = {
     enabled: get('LOGO_WARMUP_ENABLED', 'true') === 'true',
     cron: get('LOGO_WARMUP_CRON', '20 */3 * * *'),
     timezone: get('LOGO_WARMUP_TIMEZONE', 'Asia/Riyadh'),
-    maxDownloadsPerRun: Math.max(1, Number(get('LOGO_WARMUP_MAX_DOWNLOADS_PER_RUN', 40)) || 40),
+    maxDownloadsPerRun: Math.max(1, Number(get('LOGO_WARMUP_MAX_DOWNLOADS_PER_RUN', 80)) || 80),
     bootDelayMs: Math.max(0, Number(get('LOGO_WARMUP_BOOT_DELAY_MS', 30000)) || 0),
   },
   startgg: {
@@ -84,6 +84,7 @@ export const config = {
     enrichMaxParses: Math.max(1, Number(get('LIQUIPEDIA_ENRICH_MAX_PARSES', 60)) || 60),
     enrichTtlDays: Math.max(1, Number(get('LIQUIPEDIA_ENRICH_TTL_DAYS', 30)) || 30),
     rosterBackfillBefore: get('LIQUIPEDIA_ROSTER_BACKFILL_BEFORE', '2026-07-07T00:00:00Z'),
+    playerImageBackfillBefore: get('LIQUIPEDIA_PLAYER_IMAGE_BACKFILL_BEFORE', '2026-07-07T00:00:00Z'),
   },
   standings: {
     // Standings tracking for battle-royale / TFT events (no matches to poll).

@@ -37,6 +37,10 @@ function stringValue(value: unknown) {
   return typeof value === "string" && value.trim() ? value.trim() : null;
 }
 
+function moneyValue(value: unknown) {
+  return stringValue(value)?.replace(/^\$+/, "$") ?? null;
+}
+
 function parseFacts(value: string | null | undefined): Record<string, unknown> {
   if (!value) return {};
   try {
@@ -79,7 +83,7 @@ export function liquipediaPlayerDetails(player: PlayerProfile): LiquipediaPlayer
     romanizedName: stringValue(facts.romanized_name),
     status: stringValue(facts.status),
     team: stringValue(facts.team) ?? stringValue(facts.current_team),
-    totalWinnings: stringValue(facts.approx_total_winnings) ?? stringValue(facts.total_winnings) ?? stringValue(facts.earnings),
+    totalWinnings: moneyValue(facts.approx_total_winnings) ?? moneyValue(facts.total_winnings) ?? moneyValue(facts.earnings),
     achievements: cleanAchievements(facts.achievements).length
       ? cleanAchievements(facts.achievements)
       : rawDetails.achievements,
@@ -98,7 +102,7 @@ export function liquipediaTeamDetails(team: TeamProfile): LiquipediaTeamDetails 
     region: stringValue(facts.region),
     coach: stringValue(facts.coach) ?? stringValue(facts.head_coach),
     manager: stringValue(facts.manager),
-    totalWinnings: stringValue(facts.approx_total_winnings) ?? stringValue(facts.total_winnings) ?? stringValue(facts.earnings),
+    totalWinnings: moneyValue(facts.approx_total_winnings) ?? moneyValue(facts.total_winnings) ?? moneyValue(facts.earnings),
     achievements: cleanAchievements(facts.achievements).length
       ? cleanAchievements(facts.achievements)
       : rawDetails.achievements,

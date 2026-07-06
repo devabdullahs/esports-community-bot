@@ -4,7 +4,7 @@
 // battle-royale wikis, TFT, and the rest — the extracted facts are a label→text
 // dictionary plus a few normalized conveniences.
 
-import { normalizeImageUrl } from './parsers.js';
+import { imageSrc, normalizeImageUrl } from './parsers.js';
 
 function cleanText(value) {
   return String(value ?? '')
@@ -35,7 +35,11 @@ export function parseEntityInfobox($) {
     if (value) facts[label] = value;
   });
 
-  const image = normalizeImageUrl(box.find('.infobox-image img').first().attr('src'));
+  const image =
+    normalizeImageUrl(imageSrc(box.find('.infobox-image img, .infobox-image-wrapper img').first())) ||
+    normalizeImageUrl($('meta[property="og:image"]').attr('content')) ||
+    normalizeImageUrl($('meta[name="twitter:image:src"]').attr('content')) ||
+    normalizeImageUrl($('meta[name="twitter:image"]').attr('content'));
   const name = cleanText(box.find('.infobox-header').first().clone().children('span').remove().end().text());
 
   return { name: name || null, image: image || null, facts };

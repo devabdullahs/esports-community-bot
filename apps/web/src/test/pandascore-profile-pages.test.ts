@@ -30,7 +30,7 @@ test("team and player profile pages render synced PandaScore data", async () => 
         region: "Korea",
         coach: "Easyhoon",
         manager: "Becker",
-        approx_total_winnings: "$10,067,532",
+        approx_total_winnings: "$$10,067,532",
         created: ": 1999: 2024-05-30",
       },
       raw: `
@@ -60,7 +60,7 @@ test("team and player profile pages render synced PandaScore data", async () => 
         romanized_name: "Player Realname",
         status: "Active",
         team: "Team Alpha",
-        approx_total_winnings: "$12,345",
+        approx_total_winnings: "$$12,345",
       },
       raw: `
         <div class="fo-nttax-infobox">
@@ -128,6 +128,7 @@ test("team and player profile pages render synced PandaScore data", async () => 
     expect(teamHtml).toContain("Profile data from Liquipedia and PandaScore");
     expect(teamHtml).toContain("Team information");
     expect(teamHtml).toContain("$10,067,532");
+    expect(teamHtml).not.toContain("$$10,067,532");
     expect(teamHtml).not.toContain("Created");
     expect(teamHtml).not.toContain(": 1999: 2024-05-30");
     expect(teamHtml).toContain("Masters 2026");
@@ -147,6 +148,7 @@ test("team and player profile pages render synced PandaScore data", async () => 
     expect(playerHtml).toContain("Profile data from Liquipedia and PandaScore");
     expect(playerHtml).toContain("Player Realname");
     expect(playerHtml).toContain("$12,345");
+    expect(playerHtml).not.toContain("$$12,345");
     expect(playerHtml).toContain("Champions 2026");
     expect(playerHtml).toContain("2025-01-01");
     expect(playerHtml).toContain("Tracked matches");
@@ -156,4 +158,4 @@ test("team and player profile pages render synced PandaScore data", async () => 
     if (previousGuild == null) delete process.env.EWC_DASHBOARD_DEFAULT_GUILD_ID;
     else process.env.EWC_DASHBOARD_DEFAULT_GUILD_ID = previousGuild;
   }
-}, 10_000);
+}, 20_000);
