@@ -6,6 +6,7 @@ import {
   MessageFlags,
 } from 'discord.js';
 import { parseTournamentInput } from '../lib/parseTournamentInput.js';
+import { clubChampionshipStandingsPage } from '../services/liquipedia.js';
 import { setClubChampionship } from '../db/settings.js';
 import { updateClubChampionship } from '../jobs/clubChampionship.js';
 import { logger } from '../lib/logger.js';
@@ -22,7 +23,7 @@ export const data = new SlashCommandBuilder()
   .addStringOption((o) =>
     o
       .setName('url')
-      .setDescription('Liquipedia EWC page URL, e.g. https://liquipedia.net/esports/Esports_World_Cup/2026')
+      .setDescription('Liquipedia EWC standings URL')
       .setRequired(true),
   )
   .addChannelOption((o) =>
@@ -45,7 +46,7 @@ export async function execute(interaction) {
   if (!parsed || parsed.source !== 'liquipedia') {
     await interaction.reply({
       content:
-        '❌ Please provide a **Liquipedia** EWC page URL, e.g.\n`https://liquipedia.net/esports/Esports_World_Cup/2026`',
+        '❌ Please provide a **Liquipedia** EWC standings URL, e.g.\n`https://liquipedia.net/esports/Esports_World_Cup/2026/Club_Championship_Standings`',
       flags: MessageFlags.Ephemeral,
     });
     return;
@@ -60,9 +61,9 @@ export async function execute(interaction) {
     return;
   }
 
-  // externalId is "<wiki>/<page>" e.g. "esports/Esports_World_Cup/2026"
+  // externalId is "<wiki>/<page>"; season roots are normalized to the standings subpage.
   const [wiki, ...rest] = parsed.externalId.split('/');
-  const page = rest.join('/');
+  const page = clubChampionshipStandingsPage(rest.join('/'));
   await setClubChampionship(interaction.guildId, { wiki, page, channelId: channel.id, label });
 
   await interaction.reply({

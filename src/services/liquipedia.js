@@ -22,6 +22,7 @@ export {
 } from './liquipedia/parsers.js';
 
 export {
+  clubChampionshipStandingsPage,
   fetchClubChampionship,
   fetchEwcClubStandings,
   fetchEwcClubs,

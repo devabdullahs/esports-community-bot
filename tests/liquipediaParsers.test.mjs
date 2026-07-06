@@ -17,6 +17,7 @@ process.env.DB_PATH = ':memory:';
 import { load } from 'cheerio';
 
 const {
+  clubChampionshipStandingsPage,
   parseClubStandings,
   parseEwcEventSchedule,
   parseEwcClubs,
@@ -102,6 +103,21 @@ test('parseClubStandings: table with header but zero data rows returns []', () =
   `;
   const $ = load(html);
   assert.deepEqual(parseClubStandings($), []);
+});
+
+test('clubChampionshipStandingsPage: maps EWC season roots to the standings page', () => {
+  assert.equal(
+    clubChampionshipStandingsPage('Esports_World_Cup/2026'),
+    'Esports_World_Cup/2026/Club_Championship_Standings',
+  );
+  assert.equal(
+    clubChampionshipStandingsPage('/Esports_World_Cup/2026/Club_Championship/'),
+    'Esports_World_Cup/2026/Club_Championship_Standings',
+  );
+  assert.equal(
+    clubChampionshipStandingsPage('Esports_World_Cup/2026/Club_Championship_Standings'),
+    'Esports_World_Cup/2026/Club_Championship_Standings',
+  );
 });
 
 // ---------------------------------------------------------------------------
