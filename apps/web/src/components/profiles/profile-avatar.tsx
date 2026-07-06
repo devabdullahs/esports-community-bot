@@ -1,9 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { cn } from "@/lib/utils";
-import { displayImageUrl } from "@/lib/logo-url";
+import { displayImageUrl, isProxiableLogoUrl } from "@/lib/logo-url";
 import { safeUrlOrUndefined } from "@/lib/safe-url";
+
+const PROXY_RETRY_DELAY_MS = 60_000;
+const MAX_PROXY_RETRIES = 5;
 
 function initials(name: string) {
   return (
@@ -38,11 +41,53 @@ export function ProfileAvatar({
   focus?: "center" | "top";
   padded?: boolean;
 }) {
-  const [failed, setFailed] = useState(false);
   const safe = safeUrlOrUndefined(src);
+  const [imageState, setImageState] = useState({
+    src: safe ?? null,
+    failed: false,
+    retryToken: 0,
+    retryCount: 0,
+  });
+  const currentImageState =
+    imageState.src === (safe ?? null)
+      ? imageState
+      : { src: safe ?? null, failed: false, retryToken: 0, retryCount: 0 };
   const radius = shape === "circle" ? "rounded-full" : "rounded-2xl";
+  const isProxyImage = safe ? isProxiableLogoUrl(safe) : false;
+  const renderedSrc = useMemo(() => {
+    if (!safe) return null;
+    const url = displayImageUrl(safe);
+    if (!isProxyImage || currentImageState.retryToken <= 0) return url;
+    return `${url}${url.includes("?") ? "&" : "?"}retry=${currentImageState.retryToken}`;
+  }, [currentImageState.retryToken, isProxyImage, safe]);
 
-  if (!safe || failed) {
+  useEffect(() => {
+    if (
+      !safe ||
+      !currentImageState.failed ||
+      !isProxyImage ||
+      currentImageState.retryCount >= MAX_PROXY_RETRIES
+    ) {
+      return undefined;
+    }
+    const timer = window.setTimeout(() => {
+      setImageState((state) => {
+        const active =
+          state.src === safe
+            ? state
+            : { src: safe, failed: true, retryToken: 0, retryCount: 0 };
+        return {
+          ...active,
+          failed: false,
+          retryCount: active.retryCount + 1,
+          retryToken: Date.now(),
+        };
+      });
+    }, PROXY_RETRY_DELAY_MS);
+    return () => window.clearTimeout(timer);
+  }, [currentImageState.failed, currentImageState.retryCount, isProxyImage, safe]);
+
+  if (!safe || !renderedSrc || currentImageState.failed) {
     return (
       <div
         aria-hidden
@@ -60,10 +105,18 @@ export function ProfileAvatar({
   return (
     // eslint-disable-next-line @next/next/no-img-element -- PandaScore CDN or proxied Liquipedia image, validated http(s)
     <img
-      src={displayImageUrl(safe)}
+      src={renderedSrc}
       alt=""
       loading="lazy"
-      onError={() => setFailed(true)}
+      onError={() =>
+        setImageState((state) => {
+          const active =
+            state.src === safe
+              ? state
+              : { src: safe, failed: false, retryToken: 0, retryCount: 0 };
+          return { ...active, failed: true };
+        })
+      }
       className={cn(
         "bg-muted",
         radius,
