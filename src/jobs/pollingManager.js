@@ -78,6 +78,7 @@ function clearWatcher(externalId) {
   const w = watchers.get(externalId);
   if (!w) return;
   if (w.armTimer) clearTimeout(w.armTimer);
+  if (w.firstPollTimer) clearTimeout(w.firstPollTimer);
   if (w.pollTimer) clearInterval(w.pollTimer);
   watchers.delete(externalId);
 }
@@ -94,7 +95,7 @@ export function stopAll() {
 }
 
 // Schedule polling for a match: immediately if it has started, else at its start time.
-export function armMatch(match, tournament) {
+export function armMatch(match, tournament, { initialPollDelayMs = 0 } = {}) {
   if (match.status === 'finished') return false;
   if (watchers.has(match.external_id)) return false; // already armed or polling
   if (isNonPollableMatch(match)) return false;
@@ -103,7 +104,7 @@ export function armMatch(match, tournament) {
 
   const delaySec = match.scheduled_at ? match.scheduled_at - nowSec() : 0;
   if (delaySec <= 0) {
-    startPolling(match, tournament);
+    startPolling(match, tournament, { initialPollDelayMs });
     return true;
   }
   if (delaySec > ARM_LOOKAHEAD_SECONDS) {
@@ -121,9 +122,9 @@ export function armMatch(match, tournament) {
   return true;
 }
 
-function startPolling(match, tournament) {
+function startPolling(match, tournament, { initialPollDelayMs = 0 } = {}) {
   const w = watchers.get(match.external_id) || {};
-  if (w.pollTimer) return;
+  if (w.pollTimer || w.firstPollTimer) return;
   logger.info(`[poll] start ${match.external_id} (${match.team_a} vs ${match.team_b})`);
   const tick = () =>
     pollOnce(match, tournament).catch((e) => {
@@ -131,9 +132,24 @@ function startPolling(match, tournament) {
       if (isServiceBackoff(e)) logger.debug(message);
       else logger.error(message);
     });
-  w.pollTimer = setInterval(tick, config.scheduler.livePollIntervalMs);
+  const startLoop = () => {
+    const current = watchers.get(match.external_id);
+    if (!current) return;
+    current.firstPollTimer = null;
+    current.pollTimer = setInterval(tick, config.scheduler.livePollIntervalMs);
+    watchers.set(match.external_id, current);
+    tick();
+  };
+  const delay = Math.max(0, Number(initialPollDelayMs) || 0);
+  if (delay) {
+    w.firstPollTimer = setTimeout(startLoop, delay);
+    w.firstPollTimer.unref?.();
+    watchers.set(match.external_id, w);
+    logger.info(`[poll] first refresh for ${match.external_id} in ${Math.round(delay / 1000)}s`);
+    return;
+  }
   watchers.set(match.external_id, w);
-  tick(); // poll right away
+  startLoop();
 }
 
 async function fetchTournamentSchedule(service, tournament) {
@@ -231,7 +247,7 @@ export async function resumePolling() {
   for (const row of await getActiveMatches()) {
     const tournament = await getTournamentById(row.tournament_id);
     if (!tournament) continue;
-    if (armMatch(row, tournament)) armed++;
+    if (armMatch(row, tournament, { initialPollDelayMs: config.scheduler.pollResumeDelayMs })) armed++;
     else skipped++;
   }
   if (armed || skipped) logger.info(`[poll] resumed ${armed} pending/running match watcher(s) after restart; skipped ${skipped}.`);
