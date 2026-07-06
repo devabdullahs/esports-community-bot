@@ -7,6 +7,7 @@ import { listTrackedTeamNamesForGame } from '../db/matches.js';
 import { listStandingsTeamNamesForGame } from '../db/tournamentStandings.js';
 import {
   createLiquipediaTeam,
+  deleteTeamsByIds,
   listTeamNamesForGame,
   saveTeamLiquipedia,
   stampTeamLiquipedia,
@@ -118,6 +119,7 @@ export async function runLiquipediaEnrichment({
     created: 0,
     misses: 0,
     skippedFresh: 0,
+    junkDeleted: 0,
   };
   let budget = Math.max(1, Number(maxParses) || 1);
   const rosterBackfillCutoff = parseTimeMs(rosterBackfillBefore);
@@ -152,7 +154,22 @@ export async function runLiquipediaEnrichment({
 
       // Existing rows (PandaScore or previous runs) by normalized name, so the
       // tracked-match names below reuse rows instead of creating duplicates.
-      const existing = await listTeamNamesForGame(game);
+      let existing = await listTeamNamesForGame(game);
+
+      // Retire junk rows earlier runs created from BR schedule names before the
+      // isScheduleRowName filter existed (prod had 62 pubgmobile "Grand Finals -
+      // Game N" stubs). Only Liquipedia-created stubs with no parsed data are
+      // touched — a PandaScore row or anything with stored facts is never junk.
+      const junkIds = existing
+        .filter((row) => row.pandascore_id == null && !row.liquipedia_raw && isScheduleRowName(row.name))
+        .map((row) => row.id);
+      if (junkIds.length) {
+        const deleted = await deleteTeamsByIds(junkIds);
+        summary.junkDeleted += deleted;
+        existing = existing.filter((row) => !junkIds.includes(row.id));
+        logger.info(`[lp-enrich] deleted ${deleted} schedule-row junk team(s) for ${game}.`);
+      }
+
       const byName = new Map();
       for (const row of existing) {
         const key = normalizeTeamName(row.name);
