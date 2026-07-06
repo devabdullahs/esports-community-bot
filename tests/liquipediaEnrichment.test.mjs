@@ -19,6 +19,7 @@ const { replaceTournamentStandings, listStandingsTeamNamesForGame } = await impo
   '../src/db/tournamentStandings.js'
 );
 const { runLiquipediaEnrichment } = await import('../src/jobs/liquipediaEnrichment.js');
+const { run: runDb } = await import('../src/db/client.js');
 
 const GUILD = 'guild-lp';
 
@@ -630,6 +631,49 @@ test('EWC roster player pages run before non-EWC teams in the same game', async 
     { kind: 'player', wiki: 'samepriority', page: 'EWC_Same_Star' },
   ]);
   assert.ok(!resolveCalls.some((call) => call.name === 'Other Same'));
+});
+
+test('least-recently-enriched game wins the budget over a freshly-enriched one', async () => {
+  // "lrufresh" was fully enriched moments ago; "lrustale" has an old parse.
+  // Regardless of shuffle luck, the stale game must be processed first — this is
+  // what gets a starved game (prod: LoL) its turn deterministically.
+  const staleT = await addTournament({
+    source: 'liquipedia', external_id: 'lrustale/cup', game: 'lrustale',
+    name: 'LRU Stale Cup', url: 'https://liquipedia.net/lrustale/Cup', guild_id: GUILD,
+  });
+  await upsertMatch({
+    tournament_id: staleT.id, source: 'liquipedia', external_id: 'Match:lru-stale',
+    team_a: 'Stale Squad', team_b: 'TBD', status: 'scheduled',
+  });
+  const freshT = await addTournament({
+    source: 'liquipedia', external_id: 'lrufresh/cup', game: 'lrufresh',
+    name: 'LRU Fresh Cup', url: 'https://liquipedia.net/lrufresh/Cup', guild_id: GUILD,
+  });
+  await upsertMatch({
+    tournament_id: freshT.id, source: 'liquipedia', external_id: 'Match:lru-fresh',
+    team_a: 'Fresh Squad', team_b: 'TBD', status: 'scheduled',
+  });
+
+  // Give both games a parsed team so neither counts as "never enriched", with
+  // the stale game's stamp far in the past.
+  const staleTeam = await createLiquipediaTeam({ game: 'lrustale', name: 'Stale Squad', slug: 'stale-squad' });
+  await saveTeamLiquipedia(staleTeam.id, { url: 'https://liquipedia.net/lrustale/Stale_Squad', raw: '<table class="table2__table"/>', facts: {} });
+  await runDb("UPDATE teams SET liquipedia_parsed_at = '2026-01-01 00:00:00' WHERE id = $1", [staleTeam.id]);
+  const freshTeam = await createLiquipediaTeam({ game: 'lrufresh', name: 'Fresh Squad', slug: 'fresh-squad' });
+  await saveTeamLiquipedia(freshTeam.id, { url: 'https://liquipedia.net/lrufresh/Fresh_Squad', raw: '<table class="table2__table"/>', facts: {} });
+
+  const parseCalls = [];
+  // Try both extreme shuffle outcomes: ordering must not depend on them.
+  for (const randomValue of [0, 0.99]) {
+    parseCalls.length = 0;
+    await runLiquipediaEnrichment({
+      liquipedia: mockLiquipedia({ parseCalls, supportedGames: ['lrustale', 'lrufresh'] }),
+      maxParses: 2,
+      ttlMs: 0,
+      random: () => randomValue,
+    });
+    assert.equal(parseCalls[0]?.wiki, 'lrustale', `stale game first (random=${randomValue})`);
+  }
 });
 
 test('game order is shuffled before a small budget cuts the run off', async () => {

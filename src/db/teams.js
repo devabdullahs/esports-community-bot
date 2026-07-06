@@ -132,6 +132,20 @@ export async function listTeamNamesForGame(game) {
   );
 }
 
+// game -> most recent liquipedia_parsed_at across its teams (NULL when a game
+// was never enriched). Drives the enrichment job's least-recently-enriched-first
+// game ordering, so the budget always goes to the most starved game instead of
+// depending on shuffle luck.
+export async function listGameLastEnrichedAt() {
+  return all(
+    `SELECT game, MAX(liquipedia_parsed_at) AS last_parsed_at
+       FROM teams
+      WHERE game IS NOT NULL
+      GROUP BY game`,
+    [],
+  );
+}
+
 // Remove team rows by id. The enrichment job uses this to retire junk rows it
 // created from BR schedule names ("Grand Finals - Game 3") before the
 // schedule-row filter existed — callers must pre-filter to Liquipedia-created
