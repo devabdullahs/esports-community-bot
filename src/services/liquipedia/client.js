@@ -61,17 +61,24 @@ let parseQueueDepth = 0;
 let searchChain = Promise.resolve(); // serializes ALL opensearch requests (prevents bursts)
 let searchQueueDepth = 0;
 const apiUrl = (game) => `https://liquipedia.net/${game}/api.php`;
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 // ---------------------------------------------------------------------------
 // Throttle
 // ---------------------------------------------------------------------------
 
 async function throttleParse() {
-  loadRateState();
-  // Honor both the parse sub-limit (1/30s) and the general floor (1/2s) vs any recent search.
-  const floor = Math.max(rateState.lastRequestAt + PARSE_MIN_GAP_MS, lastSearchAt + SEARCH_MIN_GAP_MS);
-  const wait = floor - Date.now();
-  if (wait > 0) await new Promise((r) => setTimeout(r, wait));
+  for (;;) {
+    loadRateState({ force: true });
+    // Honor both the parse sub-limit (1/30s) and the general floor (1/2s)
+    // vs any recent search. The persisted timestamp is also shared with
+    // Liquipedia-hosted logo downloads, so reload it after each sleep in case
+    // another startup queue used the same upstream while this request waited.
+    const floor = Math.max(rateState.lastRequestAt + PARSE_MIN_GAP_MS, lastSearchAt + SEARCH_MIN_GAP_MS);
+    const wait = floor - Date.now();
+    if (wait <= 0) break;
+    await sleep(wait);
+  }
   rateState.lastRequestAt = Date.now();
   saveRateState();
 }
@@ -151,8 +158,12 @@ function scheduleSearch(task) {
   if (searchQueueDepth >= SEARCH_MAX_QUEUE) return Promise.reject(new Error('search queue full'));
   searchQueueDepth++;
   const run = searchChain.then(async () => {
-    const wait = Math.max(lastSearchAt, rateState.lastRequestAt) + SEARCH_MIN_GAP_MS - Date.now();
-    if (wait > 0) await new Promise((r) => setTimeout(r, wait));
+    for (;;) {
+      loadRateState({ force: true });
+      const wait = Math.max(lastSearchAt, rateState.lastRequestAt) + SEARCH_MIN_GAP_MS - Date.now();
+      if (wait <= 0) break;
+      await sleep(wait);
+    }
     lastSearchAt = Date.now();
     return task();
   });

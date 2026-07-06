@@ -18,6 +18,7 @@ const CACHE_DIR = process.env.LOGO_CACHE_DIR || join(/* turbopackIgnore: true */
 // same upstream/IP budget as MediaWiki requests, so concurrency is not worth it.
 const MAX_CONCURRENT_DOWNLOADS = 1;
 const DOWNLOAD_MIN_GAP_MS = Math.max(10_000, Number(process.env.LOGO_DOWNLOAD_MIN_GAP_MS || 10_000));
+const UPSTREAM_MIN_GAP_MS = Math.max(30_000, Number(process.env.LOGO_UPSTREAM_MIN_GAP_MS || 30_000));
 const RATE_LIMIT_BACKOFF_MS = Math.max(60_000, Number(process.env.LOGO_RATE_LIMIT_BACKOFF_MS || 20 * 60_000));
 const MAX_LOGO_BYTES = Math.max(64_000, Number(process.env.LOGO_MAX_BYTES || 4 * 1024 * 1024));
 const RATE_STATE_PATH = process.env.LOGO_RATE_STATE_PATH || join(/* turbopackIgnore: true */ process.cwd(), 'data', 'logo-rate-limit.json');
@@ -45,11 +46,22 @@ async function liquipediaRateHelpers() {
   return liquipediaRateStatePromise;
 }
 
-async function liquipediaBlockedUntil() {
+async function liquipediaRateSnapshot() {
   const helpers = await liquipediaRateHelpers();
-  if (!helpers) return 0;
+  if (!helpers) return { blockedUntil: 0, lastRequestAt: 0 };
   helpers.loadRateState({ force: true });
-  return Number(helpers.rateState?.blockedUntil) || 0;
+  return {
+    blockedUntil: Number(helpers.rateState?.blockedUntil) || 0,
+    lastRequestAt: Number(helpers.rateState?.lastRequestAt) || 0,
+  };
+}
+
+async function markLiquipediaRequestAt(at) {
+  const helpers = await liquipediaRateHelpers();
+  if (!helpers) return;
+  helpers.loadRateState({ force: true });
+  helpers.rateState.lastRequestAt = Math.max(Number(helpers.rateState?.lastRequestAt) || 0, at);
+  helpers.saveRateState();
 }
 
 async function markLiquipediaBackoff(durationMs) {
@@ -258,10 +270,16 @@ async function waitForLogoSlot(state, globalState) {
   for (;;) {
     loadRateState(state, { force: true });
     loadRateState(globalState, { force: true });
-    const blockedUntil = Math.max(state.blockedUntil, globalState.blockedUntil, await liquipediaBlockedUntil());
+    const upstream = await liquipediaRateSnapshot();
+    const blockedUntil = Math.max(state.blockedUntil, globalState.blockedUntil, upstream.blockedUntil);
     if (Date.now() < blockedUntil) throw new Error('logo downloads backing off after a rate limit');
 
-    const wait = Math.max(state.lastDownloadAt, globalState.lastDownloadAt) + DOWNLOAD_MIN_GAP_MS - Date.now();
+    const wait =
+      Math.max(
+        state.lastDownloadAt + DOWNLOAD_MIN_GAP_MS,
+        globalState.lastDownloadAt + DOWNLOAD_MIN_GAP_MS,
+        upstream.lastRequestAt + UPSTREAM_MIN_GAP_MS,
+      ) - Date.now();
     if (wait <= 0) break;
     await sleep(wait);
   }
@@ -271,6 +289,7 @@ async function waitForLogoSlot(state, globalState) {
   globalState.lastDownloadAt = now;
   saveRateState(state);
   saveRateState(globalState);
+  await markLiquipediaRequestAt(now);
 }
 
 export async function fetchLogoBytes(url, channel = 'bot', { download = true } = {}) {
