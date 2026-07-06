@@ -287,9 +287,15 @@ export async function fetchSchedule(tournament) {
 // EWC Club Championship (season-long club points race + prize pool)
 // ---------------------------------------------------------------------------
 
+export function clubChampionshipStandingsPage(page) {
+  const clean = String(page || '').trim().replace(/^\/+|\/+$/g, '');
+  const match = clean.match(/^(Esports_World_Cup\/\d{4})(?:\/Club_Championship(?:_Standings)?)?$/i);
+  return match ? `${match[1]}/Club_Championship_Standings` : clean;
+}
+
 // Fetch the Club Championship page (wiki is usually "esports").
 export async function fetchClubChampionship(wiki, page) {
-  const data = await parsePage(wiki, page);
+  const data = await parsePage(wiki, clubChampionshipStandingsPage(page));
   const html = data?.parse?.text?.['*'];
   if (!html) return { standings: [], prizepool: [] };
   const $ = cheerio.load(html);
