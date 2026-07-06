@@ -90,6 +90,12 @@ export async function fetchTeamEntity(wiki, page) {
   if (!$) return null;
   const infobox = parseEntityInfobox($);
   if (!infobox) return null;
+  const details = parsePlayerInfoboxDetails($);
+  const facts = {
+    ...infobox.facts,
+    ...(details.achievements.length ? { achievements: details.achievements } : {}),
+    ...(details.history.length ? { history: details.history } : {}),
+  };
   const { players: roster, truncated: rosterTruncated } = parseTeamRoster($);
   const rosterTable = findTeamRosterTable($);
   const raw = [
@@ -99,8 +105,8 @@ export async function fetchTeamEntity(wiki, page) {
   return {
     name: infobox.name,
     image: infobox.image,
-    facts: infobox.facts,
-    normalized: normalizeEntityFacts(infobox.facts),
+    facts,
+    normalized: normalizeEntityFacts(facts),
     roster,
     rosterTruncated,
     raw,

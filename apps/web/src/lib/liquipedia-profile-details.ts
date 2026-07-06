@@ -2,7 +2,7 @@ import "server-only";
 
 import * as cheerio from "cheerio";
 import { parsePlayerInfoboxDetails } from "@bot/services/liquipedia/entityParsers.js";
-import type { PlayerProfile } from "@/lib/pandascore-profiles";
+import type { PlayerProfile, TeamProfile } from "@/lib/pandascore-profiles";
 
 export type LiquipediaAchievement = {
   title: string | null;
@@ -19,6 +19,17 @@ export type LiquipediaPlayerDetails = {
   status: string | null;
   team: string | null;
   totalWinnings: string | null;
+  achievements: LiquipediaAchievement[];
+  history: LiquipediaHistoryEntry[];
+};
+
+export type LiquipediaTeamDetails = {
+  location: string | null;
+  region: string | null;
+  coach: string | null;
+  manager: string | null;
+  totalWinnings: string | null;
+  created: string | null;
   achievements: LiquipediaAchievement[];
   history: LiquipediaHistoryEntry[];
 };
@@ -70,6 +81,26 @@ export function liquipediaPlayerDetails(player: PlayerProfile): LiquipediaPlayer
     status: stringValue(facts.status),
     team: stringValue(facts.team) ?? stringValue(facts.current_team),
     totalWinnings: stringValue(facts.approx_total_winnings) ?? stringValue(facts.total_winnings) ?? stringValue(facts.earnings),
+    achievements: cleanAchievements(facts.achievements).length
+      ? cleanAchievements(facts.achievements)
+      : rawDetails.achievements,
+    history: cleanHistory(facts.history).length ? cleanHistory(facts.history) : rawDetails.history,
+  };
+}
+
+export function liquipediaTeamDetails(team: TeamProfile): LiquipediaTeamDetails {
+  const facts = parseFacts(team.liquipedia_facts);
+  const rawDetails = team.liquipedia_raw
+    ? parsePlayerInfoboxDetails(cheerio.load(team.liquipedia_raw))
+    : { achievements: [], history: [] };
+
+  return {
+    location: stringValue(facts.location) ?? stringValue(facts.country),
+    region: stringValue(facts.region),
+    coach: stringValue(facts.coach) ?? stringValue(facts.head_coach),
+    manager: stringValue(facts.manager),
+    totalWinnings: stringValue(facts.approx_total_winnings) ?? stringValue(facts.total_winnings) ?? stringValue(facts.earnings),
+    created: stringValue(facts.created) ?? stringValue(facts.founded),
     achievements: cleanAchievements(facts.achievements).length
       ? cleanAchievements(facts.achievements)
       : rawDetails.achievements,

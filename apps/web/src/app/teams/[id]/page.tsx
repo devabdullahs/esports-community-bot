@@ -16,6 +16,7 @@ import { flagEmoji } from "@/lib/country";
 import { getViewerFollowState } from "@/lib/follows";
 import { gameTitleForSlug, listGamesCached } from "@/lib/games";
 import { copy, formatNumber, localizedPath, type Locale } from "@/lib/i18n";
+import { liquipediaTeamDetails } from "@/lib/liquipedia-profile-details";
 import { buildPageMetadata } from "@/lib/metadata";
 import {
   getTeamPlayersCached,
@@ -44,6 +45,17 @@ function Stat({ label, children }: { label: string; children: ReactNode }) {
   );
 }
 
+function DetailRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="grid gap-1 border-b border-border/60 py-2 last:border-b-0 sm:grid-cols-[11rem_minmax(0,1fr)]">
+      <dt className="text-xs font-medium uppercase text-muted-foreground">{label}</dt>
+      <dd className="min-w-0 text-sm font-medium" dir="auto">
+        {value}
+      </dd>
+    </div>
+  );
+}
+
 function RosterCard({ player, locale }: { player: PlayerProfile; locale: Locale }) {
   const text = copy[locale].profiles;
   return (
@@ -57,6 +69,7 @@ function RosterCard({ player, locale }: { player: PlayerProfile; locale: Locale 
         name={player.name}
         shape="circle"
         fit="cover"
+        focus="top"
         className="size-16 border border-border sm:size-20"
       />
       <div className="min-w-0">
@@ -118,6 +131,19 @@ export default async function TeamProfilePage({
   const gameTitle = gameTitleForSlug(team.game, games, locale) || team.game;
   const region = team.location ?? team.nationality;
   const regionFlag = flagEmoji(region);
+  const liquipedia = liquipediaTeamDetails(team);
+  const sourceLabel = team.liquipedia_parsed_at ? text.profileSourceMixed : text.pandascoreSource;
+  const infoRows: { label: string; value: string }[] = [
+    { label: text.location, value: liquipedia.location },
+    { label: text.region, value: liquipedia.region },
+    { label: text.coach, value: liquipedia.coach },
+    { label: text.manager, value: liquipedia.manager },
+    { label: text.totalWinnings, value: liquipedia.totalWinnings },
+    { label: text.created, value: liquipedia.created },
+  ].flatMap((row) => (row.value ? [{ label: row.label, value: row.value }] : []));
+  const hasLiquipediaDetails = Boolean(
+    infoRows.length || liquipedia.achievements.length || liquipedia.history.length,
+  );
 
   return (
     <main className="mx-auto flex w-full max-w-6xl flex-1 flex-col gap-6 px-4 py-8 sm:px-8 sm:py-10">
@@ -192,6 +218,56 @@ export default async function TeamProfilePage({
         </div>
       </section>
 
+      {hasLiquipediaDetails ? (
+        <section className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(18rem,0.85fr)]">
+          {infoRows.length ? (
+            <div className="rounded-2xl border bg-card/40 p-4 shadow-sm sm:p-5">
+              <h2 className="text-base font-semibold">{text.teamInfo}</h2>
+              <dl className="mt-3">
+                {infoRows.map((row) => (
+                  <DetailRow key={row.label} label={row.label} value={row.value} />
+                ))}
+              </dl>
+            </div>
+          ) : null}
+
+          {liquipedia.history.length ? (
+            <div className="rounded-2xl border bg-card/40 p-4 shadow-sm sm:p-5">
+              <h2 className="text-base font-semibold">{text.history}</h2>
+              <div className="mt-3 flex flex-col gap-2">
+                {liquipedia.history.map((entry, index) => (
+                  <div key={`${entry.period}-${entry.team}-${index}`} className="grid gap-1 text-sm sm:grid-cols-[9.5rem_minmax(0,1fr)]">
+                    <span className="text-xs italic text-muted-foreground" dir="ltr">
+                      {entry.period}
+                    </span>
+                    <span className="font-medium" dir="auto">
+                      {entry.team}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : null}
+
+          {liquipedia.achievements.length ? (
+            <div className="rounded-2xl border bg-card/40 p-4 shadow-sm sm:p-5 lg:col-span-2">
+              <h2 className="text-base font-semibold">{text.achievements}</h2>
+              <div className="mt-3 flex flex-wrap gap-2">
+                {liquipedia.achievements.map((achievement, index) => (
+                  <span
+                    key={`${achievement.title ?? achievement.image ?? "achievement"}-${index}`}
+                    className="inline-flex min-h-8 items-center rounded-full border bg-background/50 px-3 py-1 text-sm font-medium"
+                    dir="auto"
+                  >
+                    {achievement.title || text.achievements}
+                  </span>
+                ))}
+              </div>
+            </div>
+          ) : null}
+        </section>
+      ) : null}
+
       <section className="flex flex-col gap-4">
         <div className="flex items-baseline justify-between gap-3">
           <h2 className="text-lg font-semibold">{text.roster}</h2>
@@ -216,7 +292,7 @@ export default async function TeamProfilePage({
       </section>
 
       <p className="flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground">
-        <span>{text.pandascoreSource}</span>
+        <span>{sourceLabel}</span>
         <span aria-hidden>·</span>
         <span>
           {text.updated}: <DateTime value={team.updated_at} locale={locale} />
