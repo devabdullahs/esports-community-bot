@@ -343,6 +343,23 @@ export async function listTrackedTeamNamesForGame(game, { ewcOnly = false } = {}
   return rows.map((row) => row.name);
 }
 
+// game -> soonest upcoming match time (unix seconds) across active tournaments.
+// `sinceSec` should sit a few hours in the past so a LIVE event still counts as
+// "now". Games with no upcoming scheduled match are absent. Drives the
+// enrichment job's nearest-event-first ordering: the game whose tournament
+// plays next gets the budget first.
+export async function listGameNextMatchAt(sinceSec) {
+  return all(
+    `SELECT t.game AS game, MIN(m.scheduled_at) AS next_at
+       FROM matches m
+       JOIN tournaments t ON t.id = m.tournament_id
+      WHERE t.active = 1 AND t.archived_at IS NULL
+        AND m.scheduled_at IS NOT NULL AND m.scheduled_at >= $1
+      GROUP BY t.game`,
+    [sinceSec],
+  );
+}
+
 // Match team rows WITH their tournament's identity, for the EWC weekly-pick
 // scoping's JS-side event filtering (see listStandingsTeamRowsForGame).
 export async function listTrackedTeamRowsForGame(game, { ewcOnly = false } = {}) {
