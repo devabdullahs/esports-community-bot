@@ -82,6 +82,7 @@ export async function updateCsRankings(client, guildId) {
 }
 
 let timer = null;
+let bootTimer = null;
 let running = false;
 
 export function startCsRankings(client) {
@@ -103,10 +104,16 @@ export function startCsRankings(client) {
   timer = setInterval(() => run().catch((e) => logger.error(`[cs-rankings] ${e.message}`)), minutes * 60 * 1000);
   timer.unref?.();
   logger.info(`[cs-rankings] refresh every ${minutes}m.`);
-  run().catch((e) => logger.error(`[cs-rankings] ${e.message}`));
+  bootTimer = setTimeout(
+    () => run().catch((e) => logger.error(`[cs-rankings] ${e.message}`)),
+    config.csRankings.bootDelayMs,
+  );
+  bootTimer.unref?.();
 }
 
 export function stopCsRankings() {
+  if (bootTimer) clearTimeout(bootTimer);
+  bootTimer = null;
   if (timer) clearInterval(timer);
   timer = null;
   running = false;

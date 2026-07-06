@@ -66,5 +66,5 @@ export function execute(client) {
   startNotifier(client); // Deliver follower notifications (site inbox rows -> Discord DMs).
   startLiquipediaEnrichment(); // Quiet-hours team/player enrichment from Liquipedia.
   startStandingsSync(); // BR/TFT event standings tracking (no matches to poll).
-  primeEwcClubCache(); // Warm autocomplete without blocking startup.
+  primeEwcClubCache(); // Warm autocomplete after user-facing Liquipedia boards get first queue slots.
 }

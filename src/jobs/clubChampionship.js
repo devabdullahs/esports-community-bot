@@ -91,6 +91,7 @@ export async function updateClubChampionship(client, guildId) {
 }
 
 let timer = null;
+let bootTimer = null;
 let running = false;
 
 export function startClubChampionship(client) {
@@ -112,10 +113,16 @@ export function startClubChampionship(client) {
   timer = setInterval(() => run().catch((e) => logger.error(`[cc] ${e.message}`)), minutes * 60 * 1000);
   timer.unref?.();
   logger.info(`[cc] Club Championship refresh every ${minutes}m.`);
-  run().catch((e) => logger.error(`[cc] ${e.message}`)); // initial paint
+  bootTimer = setTimeout(
+    () => run().catch((e) => logger.error(`[cc] ${e.message}`)),
+    config.clubChampionship.bootDelayMs,
+  );
+  bootTimer.unref?.();
 }
 
 export function stopClubChampionship() {
+  if (bootTimer) clearTimeout(bootTimer);
+  bootTimer = null;
   if (timer) clearInterval(timer);
   timer = null;
   running = false;
