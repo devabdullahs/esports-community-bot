@@ -34,7 +34,7 @@ export async function execute(interaction) {
     return;
   }
 
-  if (!interaction.isChatInputCommand()) return;
+  if (!interaction.isChatInputCommand() && !interaction.isMessageContextMenuCommand()) return;
 
   const command = interaction.client.commands.get(interaction.commandName);
   if (!command) {
@@ -45,7 +45,8 @@ export async function execute(interaction) {
   try {
     await command.execute(interaction);
   } catch (err) {
-    logger.error(`Error in /${interaction.commandName}:`, err);
+    const label = interaction.isChatInputCommand() ? `/${interaction.commandName}` : interaction.commandName;
+    logger.error(`Error in ${label}:`, err);
     const payload = { content: '⚠️ Something went wrong running that command.', flags: MessageFlags.Ephemeral };
     if (interaction.replied || interaction.deferred) {
       await interaction.followUp(payload).catch(() => {});
