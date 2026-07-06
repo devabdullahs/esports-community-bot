@@ -44,12 +44,12 @@ export const config = {
   logoWarmup: {
     // Pre-download tracked-match crests into the shared cache so the web logo
     // proxy can serve them (it never fetches upstream on public page views).
-    // Downloads reuse logoSource's serial, 10s-paced, back-off-protected queue.
+    // Downloads reuse logoSource's serial, shared-rate-state, back-off-protected queue.
     enabled: get('LOGO_WARMUP_ENABLED', 'true') === 'true',
     cron: get('LOGO_WARMUP_CRON', '20 */3 * * *'),
     timezone: get('LOGO_WARMUP_TIMEZONE', 'Asia/Riyadh'),
     maxDownloadsPerRun: Math.max(1, Number(get('LOGO_WARMUP_MAX_DOWNLOADS_PER_RUN', 80)) || 80),
-    bootDelayMs: Math.max(0, Number(get('LOGO_WARMUP_BOOT_DELAY_MS', 30000)) || 0),
+    bootDelayMs: Math.max(0, Number(get('LOGO_WARMUP_BOOT_DELAY_MS', 180000)) || 0),
   },
   startgg: {
     token: get('STARTGG_TOKEN'),

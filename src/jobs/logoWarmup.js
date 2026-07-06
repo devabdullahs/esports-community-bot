@@ -42,10 +42,10 @@ async function listWarmableLogos() {
 // refuses to fetch upstream on public page views (rate-limit / SSRF guard) — so
 // without this the directory, standings tables and profile pages show initials
 // for any Liquipedia image the bot has not happened to cache yet. Downloads go
-// through logoSource's serial, 10s-paced, back-off-protected queue, so a run is
-// naturally throttled; we additionally cap fresh downloads per run so a single
-// run stays bounded and load spreads across the day. Already-cached images are
-// near-instant and do not count against the cap.
+// through logoSource's serial, shared-rate-state, back-off-protected queue, so
+// a run is naturally throttled; we additionally cap fresh downloads per run so
+// a single run stays bounded and load spreads across the day. Already-cached
+// images are near-instant and do not count against the cap.
 export async function warmTrackedMatchLogos({
   load = defaultLoadLogoBytes,
   listLogos = listWarmableLogos,

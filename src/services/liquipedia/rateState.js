@@ -7,6 +7,8 @@ const RATE_STATE_PATH =
   join(/* turbopackIgnore: true */ process.cwd(), 'data', 'liquipedia-rate-limit.json');
 
 // Mutable state object — exported by reference so client.js can read and write fields directly.
+// Shared by the MediaWiki client and Liquipedia-hosted logo downloader so
+// restart-persisted pacing covers every path that can pressure Liquipedia.
 export const rateState = {
   lastRequestAt: 0,
   blockedUntil: 0,
