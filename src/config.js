@@ -108,10 +108,19 @@ export const config = {
   clubChampionship: {
     // How often to refresh the EWC Club Championship standings embed (minutes).
     refreshMinutes: Number(get('CC_REFRESH_MINUTES', 15)),
+    // Delay the boot repaint so deploy restarts do not immediately compete with
+    // the previous container's final Liquipedia request.
+    bootDelayMs: Math.max(0, Number(get('CC_BOOT_DELAY_MS', 45_000)) || 0),
   },
   csRankings: {
     // Valve Regional Standings update infrequently; keep this gentle for Liquipedia.
     refreshMinutes: Number(get('CS_RANKINGS_REFRESH_MINUTES', 60)),
+    bootDelayMs: Math.max(0, Number(get('CS_RANKINGS_BOOT_DELAY_MS', 90_000)) || 0),
+  },
+  ewcClubCache: {
+    // Non-critical autocomplete warmup; let user-facing boards take the first
+    // Liquipedia queue slots after a deploy.
+    bootDelayMs: Math.max(0, Number(get('EWC_CLUB_CACHE_BOOT_DELAY_MS', 120_000)) || 0),
   },
   ewcPredictions: {
     // Checks for due prediction snapshots/scoring. Actual Liquipedia requests still go through

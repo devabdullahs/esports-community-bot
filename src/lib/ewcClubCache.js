@@ -1,4 +1,5 @@
 import { fetchEwcClubs } from '../services/liquipedia.js';
+import { config } from '../config.js';
 import { normalizeClubName } from './ewcPredictions.js';
 import { logger } from './logger.js';
 
@@ -7,6 +8,11 @@ const TTL_MS = 6 * 60 * 60 * 1000;
 let cachedAt = 0;
 let cachedClubs = [];
 let inFlight = null;
+let primeTimer = null;
+
+function hasFreshCache() {
+  return cachedClubs.length && Date.now() - cachedAt < TTL_MS;
+}
 
 function refreshEwcClubCache() {
   if (inFlight) return inFlight;
@@ -55,13 +61,24 @@ function gameScopedPool(clubs, game, strictGame = false) {
   };
 }
 
-export function primeEwcClubCache() {
-  refreshEwcClubCache().catch(() => {});
+export function primeEwcClubCache({ delayMs = config.ewcClubCache.bootDelayMs } = {}) {
+  if (primeTimer) return;
+  const run = () => {
+    primeTimer = null;
+    if (hasFreshCache()) return;
+    refreshEwcClubCache().catch(() => {});
+  };
+  const delay = Math.max(0, Number(delayMs) || 0);
+  if (!delay) {
+    run();
+    return;
+  }
+  primeTimer = setTimeout(run, delay);
+  primeTimer.unref?.();
 }
 
 export async function getEwcClubsCached({ wait = true } = {}) {
-  const fresh = cachedClubs.length && Date.now() - cachedAt < TTL_MS;
-  if (fresh) return cachedClubs;
+  if (hasFreshCache()) return cachedClubs;
 
   const refresh = refreshEwcClubCache();
   if (wait && !cachedClubs.length) return refresh;
