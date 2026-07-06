@@ -74,15 +74,13 @@ let builder = new SlashCommandBuilder()
     s
       .setName('weekly')
       .setDescription('Open the guided weekly EWC pick menu.')
-      .addStringOption((o) => o.setName('week').setDescription('Week key').setAutocomplete(true).setRequired(false))
-      .addStringOption((o) => o.setName('season').setDescription('Season year').setRequired(false)),
+      .addStringOption((o) => o.setName('week').setDescription('Week key').setAutocomplete(true).setRequired(false)),
   );
 
 function seasonCommand(s) {
   return s
     .setName('season')
-    .setDescription('Predict your top clubs for the whole EWC season.')
-    .addStringOption((o) => o.setName('season').setDescription('Season year').setRequired(false));
+    .setDescription('Predict your top clubs for the whole EWC season.');
 }
 
 builder = builder
@@ -103,15 +101,13 @@ builder = builder
           ),
       )
       .addStringOption((o) => o.setName('week').setDescription('Week key for weekly leaderboard').setAutocomplete(true))
-      .addIntegerOption((o) => o.setName('page').setDescription('Page number').setMinValue(1))
-      .addStringOption((o) => o.setName('season').setDescription('Season year').setRequired(false)),
+      .addIntegerOption((o) => o.setName('page').setDescription('Page number').setMinValue(1)),
   )
   .addSubcommand((s) =>
     s
       .setName('profile')
       .setDescription('Show your EWC prediction profile.')
-      .addUserOption((o) => o.setName('member').setDescription('Member to inspect'))
-      .addStringOption((o) => o.setName('season').setDescription('Season year').setRequired(false)),
+      .addUserOption((o) => o.setName('member').setDescription('Member to inspect')),
   )
   .addSubcommand((s) =>
     s
@@ -122,8 +118,7 @@ builder = builder
           .setName('language')
           .setDescription('Card language')
           .addChoices({ name: 'English', value: 'en' }, { name: 'العربية', value: 'ar' }),
-      )
-      .addStringOption((o) => o.setName('season').setDescription('Season year').setRequired(false)),
+      ),
   )
   .addSubcommand((s) => s.setName('guide').setDescription('Show the EWC prediction guide (Arabic + English).'))
   .addSubcommand((s) =>
@@ -135,14 +130,12 @@ builder = builder
   .addSubcommand((s) =>
     s
       .setName('link')
-      .setDescription('Connect your Discord profile showcase on the EWC dashboard.')
-      .addStringOption((o) => o.setName('season').setDescription('Season year').setRequired(false)),
+      .setDescription('Connect your Discord profile showcase on the EWC dashboard.'),
   )
   .addSubcommand((s) =>
     s
       .setName('sync')
-      .setDescription('Re-sync your EWC Discord profile showcase.')
-      .addStringOption((o) => o.setName('season').setDescription('Season year').setRequired(false)),
+      .setDescription('Re-sync your EWC Discord profile showcase.'),
   )
   .addSubcommand((s) => s.setName('unlink').setDescription('Remove your EWC Discord profile showcase link.'))
   .setContexts(InteractionContextType.Guild);
@@ -180,8 +173,9 @@ async function dashboardInternalRequest(path, body) {
   return data;
 }
 
-function season(interaction) {
-  return interaction.options.getString('season') || DEFAULT_SEASON;
+function season() {
+  // Member-facing prediction commands always target the current EWC season.
+  return DEFAULT_SEASON;
 }
 
 function roundClosedMessage(round) {
