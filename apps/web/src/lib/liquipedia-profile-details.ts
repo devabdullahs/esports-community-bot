@@ -29,7 +29,6 @@ export type LiquipediaTeamDetails = {
   coach: string | null;
   manager: string | null;
   totalWinnings: string | null;
-  created: string | null;
   achievements: LiquipediaAchievement[];
   history: LiquipediaHistoryEntry[];
 };
@@ -100,7 +99,6 @@ export function liquipediaTeamDetails(team: TeamProfile): LiquipediaTeamDetails 
     coach: stringValue(facts.coach) ?? stringValue(facts.head_coach),
     manager: stringValue(facts.manager),
     totalWinnings: stringValue(facts.approx_total_winnings) ?? stringValue(facts.total_winnings) ?? stringValue(facts.earnings),
-    created: stringValue(facts.created) ?? stringValue(facts.founded),
     achievements: cleanAchievements(facts.achievements).length
       ? cleanAchievements(facts.achievements)
       : rawDetails.achievements,

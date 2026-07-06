@@ -8,6 +8,7 @@ import { FollowButton } from "@/components/follows/follow-button";
 import { PageBreadcrumb } from "@/components/page-breadcrumb";
 import { LiquipediaAttribution } from "@/components/tournaments/liquipedia-attribution";
 import { ProfileAvatar } from "@/components/profiles/profile-avatar";
+import { ProfileMatchList } from "@/components/profiles/profile-match-list";
 import { GameIcon } from "@/components/tournaments/tournament-directory";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -18,6 +19,7 @@ import { gameTitleForSlug, listGamesCached } from "@/lib/games";
 import { copy, formatNumber, localizedPath, type Locale } from "@/lib/i18n";
 import { liquipediaTeamDetails } from "@/lib/liquipedia-profile-details";
 import { buildPageMetadata } from "@/lib/metadata";
+import { getProfileMatchesForTeamNamesCached } from "@/lib/profile-matches";
 import {
   getTeamPlayersCached,
   getTeamProfileCached,
@@ -139,11 +141,14 @@ export default async function TeamProfilePage({
     { label: text.coach, value: liquipedia.coach },
     { label: text.manager, value: liquipedia.manager },
     { label: text.totalWinnings, value: liquipedia.totalWinnings },
-    { label: text.created, value: liquipedia.created },
   ].flatMap((row) => (row.value ? [{ label: row.label, value: row.value }] : []));
   const hasLiquipediaDetails = Boolean(
     infoRows.length || liquipedia.achievements.length || liquipedia.history.length,
   );
+  const trackedMatches = await getProfileMatchesForTeamNamesCached({
+    game: team.game,
+    names: [team.name, team.acronym, team.slug],
+  });
 
   return (
     <main className="mx-auto flex w-full max-w-6xl flex-1 flex-col gap-6 px-4 py-8 sm:px-8 sm:py-10">
@@ -267,6 +272,8 @@ export default async function TeamProfilePage({
           ) : null}
         </section>
       ) : null}
+
+      <ProfileMatchList matches={trackedMatches} locale={locale} />
 
       <section className="flex flex-col gap-4">
         <div className="flex items-baseline justify-between gap-3">
