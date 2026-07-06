@@ -227,7 +227,7 @@ export async function savePlayerLiquipedia(
 // (PandaScore or previously created) before creating anything.
 export async function listPlayerNamesForGame(game) {
   return all(
-    'SELECT id, name, liquipedia_url, liquipedia_parsed_at, current_team_id FROM players WHERE game = $1 ORDER BY id ASC',
+    'SELECT id, name, liquipedia_url, liquipedia_parsed_at, current_team_id, current_team_name FROM players WHERE game = $1 ORDER BY id ASC',
     [game],
   );
 }

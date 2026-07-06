@@ -442,6 +442,100 @@ test('lobby schedule rows are not searched as team entities', async () => {
   assert.deepEqual(names, ['Actual Squad', 'The Match']);
 });
 
+test('EWC games consume enrichment budget before other active games', async () => {
+  const ewc = await addTournament({
+    source: 'liquipedia',
+    external_id: 'ewcpriority/Esports_World_Cup/2026',
+    game: 'ewcpriority',
+    name: 'Esports World Cup 2026 Priority',
+    url: 'https://liquipedia.net/ewcpriority/Esports_World_Cup/2026',
+    guild_id: GUILD,
+  });
+  await upsertMatch({
+    tournament_id: ewc.id,
+    source: 'liquipedia',
+    external_id: 'Match:ewc-priority',
+    team_a: 'EWC Priority',
+    team_b: 'TBD',
+    status: 'scheduled',
+  });
+  const other = await addTournament({
+    source: 'liquipedia',
+    external_id: 'otherpriority/cup',
+    game: 'otherpriority',
+    name: 'Other Priority Cup',
+    url: 'https://liquipedia.net/otherpriority/Cup',
+    guild_id: GUILD,
+  });
+  await upsertMatch({
+    tournament_id: other.id,
+    source: 'liquipedia',
+    external_id: 'Match:other-priority',
+    team_a: 'Non EWC Priority',
+    team_b: 'TBD',
+    status: 'scheduled',
+  });
+
+  const parseCalls = [];
+  const resolveCalls = [];
+  await runLiquipediaEnrichment({
+    liquipedia: mockLiquipedia({ parseCalls, resolveCalls, supportedGames: ['ewcpriority', 'otherpriority'] }),
+    maxParses: 2,
+    random: () => 0,
+  });
+
+  assert.deepEqual(parseCalls, [{ kind: 'team', wiki: 'ewcpriority', page: 'EWC_Priority' }]);
+  assert.ok(!resolveCalls.some((call) => call.name === 'Non EWC Priority'));
+});
+
+test('EWC roster player pages run before non-EWC teams in the same game', async () => {
+  const ewc = await addTournament({
+    source: 'liquipedia',
+    external_id: 'samepriority/Esports_World_Cup/2026',
+    game: 'samepriority',
+    name: 'Esports World Cup 2026 Same Game',
+    url: 'https://liquipedia.net/samepriority/Esports_World_Cup/2026',
+    guild_id: GUILD,
+  });
+  await upsertMatch({
+    tournament_id: ewc.id,
+    source: 'liquipedia',
+    external_id: 'Match:same-priority-ewc',
+    team_a: 'EWC Same',
+    team_b: 'TBD',
+    status: 'scheduled',
+  });
+  const other = await addTournament({
+    source: 'liquipedia',
+    external_id: 'samepriority/weekly',
+    game: 'samepriority',
+    name: 'Same Priority Weekly',
+    url: 'https://liquipedia.net/samepriority/Weekly',
+    guild_id: GUILD,
+  });
+  await upsertMatch({
+    tournament_id: other.id,
+    source: 'liquipedia',
+    external_id: 'Match:same-priority-other',
+    team_a: 'Other Same',
+    team_b: 'TBD',
+    status: 'scheduled',
+  });
+
+  const parseCalls = [];
+  const resolveCalls = [];
+  await runLiquipediaEnrichment({
+    liquipedia: mockLiquipedia({ parseCalls, resolveCalls, supportedGames: ['samepriority'] }),
+    maxParses: 3,
+  });
+
+  assert.deepEqual(parseCalls, [
+    { kind: 'team', wiki: 'samepriority', page: 'EWC_Same' },
+    { kind: 'player', wiki: 'samepriority', page: 'EWC_Same_Star' },
+  ]);
+  assert.ok(!resolveCalls.some((call) => call.name === 'Other Same'));
+});
+
 test('game order is shuffled before a small budget cuts the run off', async () => {
   const first = await addTournament({
     source: 'liquipedia',
