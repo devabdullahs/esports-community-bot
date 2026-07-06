@@ -8,6 +8,7 @@ import { listStandingsTeamNamesForGame } from '../db/tournamentStandings.js';
 import {
   createLiquipediaTeam,
   deleteTeamsByIds,
+  listGameLastEnrichedAt,
   listTeamNamesForGame,
   saveTeamLiquipedia,
   stampTeamLiquipedia,
@@ -131,20 +132,28 @@ export async function runLiquipediaEnrichment({
     const games = [...new Set(tournaments.map((t) => t.game).filter(Boolean))].filter((g) =>
       liquipedia.wikiForGame(g),
     );
-    // The budget exhausts most runs, so a STABLE game order starves the tail —
-    // prod had zero enrichment for counterstrike/valorant/dota2 after days while
-    // the head games re-ran. Shuffle per run: fresh entities skip for free, so
-    // progress accumulates across runs no matter where the budget cuts off.
+    // The budget exhausts most runs, so the game ORDER decides who progresses.
+    // A stable order starves the tail (prod: zero counterstrike/valorant after
+    // days) and a pure shuffle can starve any one game for days by bad luck
+    // (prod: LoL rosters untouched while freefire re-won early slots). Order
+    // least-recently-enriched FIRST — the most starved game always goes next,
+    // never-enriched games (no parsed team at all) before everything. Shuffle
+    // only breaks ties so equally-starved games still rotate.
     const shuffle = (items) => {
       for (let i = items.length - 1; i > 0; i--) {
         const j = Math.floor(random() * (i + 1));
         [items[i], items[j]] = [items[j], items[i]];
       }
     };
-    const priorityGames = games.filter((game) => ewcGames.has(game));
-    const remainingGames = games.filter((game) => !ewcGames.has(game));
-    shuffle(priorityGames);
-    shuffle(remainingGames);
+    const lastEnrichedAt = new Map(
+      (await listGameLastEnrichedAt()).map((row) => [row.game, parseTimeMs(row.last_parsed_at) ?? 0]),
+    );
+    const byLeastRecentlyEnriched = (items) => {
+      shuffle(items); // tie-break: equal staleness still rotates run to run
+      return items.sort((a, b) => (lastEnrichedAt.get(a) ?? 0) - (lastEnrichedAt.get(b) ?? 0));
+    };
+    const priorityGames = byLeastRecentlyEnriched(games.filter((game) => ewcGames.has(game)));
+    const remainingGames = byLeastRecentlyEnriched(games.filter((game) => !ewcGames.has(game)));
     const orderedGames = [...priorityGames, ...remainingGames];
 
     for (const game of orderedGames) {
