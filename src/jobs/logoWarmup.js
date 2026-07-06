@@ -4,7 +4,7 @@ import { logger } from '../lib/logger.js';
 import { listTrackedMatchLogos } from '../db/matches.js';
 import { listStandingsLogos } from '../db/tournamentStandings.js';
 import { listLiquipediaTeamLogos } from '../db/teams.js';
-import { listLiquipediaPlayerLogos } from '../db/players.js';
+import { listLiquipediaPlayerLogos, listPriorityLiquipediaPlayerLogos } from '../db/players.js';
 import { loadLogoBytes as defaultLoadLogoBytes } from '../lib/logoSource.js';
 
 let task = null;
@@ -12,12 +12,14 @@ let bootTimer = null;
 let running = false;
 
 // Every Liquipedia-hosted image the site renders, warmed into the shared cache
-// so the web proxy can serve them without ever hotlinking Liquipedia. Match
-// crests come first (most time-sensitive); standings crests and entity crests/
-// photos follow. Order matters because the per-run cap counts fresh downloads
+// so the web proxy can serve them without ever hotlinking Liquipedia. EWC player
+// portraits come first because profile pages cannot fetch them on-demand; match
+// crests follow (time-sensitive), then standings and the remaining entity media.
+// Order matters because the per-run cap counts fresh downloads
 // only — cached URLs skip cheaply, so over successive runs the whole set warms.
 async function listWarmableLogos() {
-  const [matches, standings, teams, players] = await Promise.all([
+  const [priorityPlayers, matches, standings, teams, players] = await Promise.all([
+    listPriorityLiquipediaPlayerLogos(),
     listTrackedMatchLogos(),
     listStandingsLogos(),
     listLiquipediaTeamLogos(),
@@ -25,7 +27,7 @@ async function listWarmableLogos() {
   ]);
   const seen = new Set();
   const ordered = [];
-  for (const url of [...matches, ...standings, ...teams, ...players]) {
+  for (const url of [...priorityPlayers, ...matches, ...standings, ...teams, ...players]) {
     if (url && !seen.has(url)) {
       seen.add(url);
       ordered.push(url);

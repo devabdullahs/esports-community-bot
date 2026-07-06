@@ -17,6 +17,9 @@ const { replaceTournamentStandings, listStandingsLogos } = await import('../src/
 const { upsertTeam, createLiquipediaTeam, saveTeamLiquipedia, listLiquipediaTeamLogos } = await import(
   '../src/db/teams.js'
 );
+const { createLiquipediaPlayer, savePlayerLiquipedia, listPriorityLiquipediaPlayerLogos } = await import(
+  '../src/db/players.js'
+);
 const { warmTrackedMatchLogos } = await import('../src/jobs/logoWarmup.js');
 
 const GUILD = 'guild-warmup';
@@ -178,12 +181,13 @@ test('a loader error is counted as a miss without aborting the run', async () =>
 test('warmup also collects standings + Liquipedia entity logos, but not PandaScore CDN images', async () => {
   const SLOGO = 'https://liquipedia.net/commons/images/standings-team.png';
   const TLOGO = 'https://liquipedia.net/commons/images/lp-team.png';
+  const PLOGO = 'https://liquipedia.net/commons/images/lp-player.jpg';
   const CDN = 'https://cdn.pandascore.co/images/team/image/9/logo.png';
 
   // Active tournament with a battle-royale standings row (Liquipedia crest).
   const br = await addTournament({
-    source: 'liquipedia', external_id: 'warmup/br', game: 'pubg',
-    name: 'BR Event', url: 'https://liquipedia.net/pubg/Event', guild_id: GUILD,
+    source: 'liquipedia', external_id: 'pubg/Esports_World_Cup/2026/Warmup_BR', game: 'pubg',
+    name: 'Esports World Cup BR Event', url: 'https://liquipedia.net/pubg/Event', guild_id: GUILD,
   });
   await replaceTournamentStandings(br.id, [
     { title: '', entries: [{ rank: 1, team: 'Standings Team', points: '100', logo: SLOGO }] },
@@ -192,10 +196,20 @@ test('warmup also collects standings + Liquipedia entity logos, but not PandaSco
   // A Liquipedia-only team (crest must warm) + a PandaScore team (CDN crest must NOT).
   const lpTeam = await createLiquipediaTeam({ game: 'pubg', name: 'LP Team', slug: 'lp-team' });
   await saveTeamLiquipedia(lpTeam.id, { url: 'https://liquipedia.net/pubg/LP_Team', image: TLOGO });
+  const lpPlayer = await createLiquipediaPlayer({
+    game: 'pubg',
+    name: 'LP Player',
+    slug: 'lp-player',
+    currentTeamId: lpTeam.id,
+    currentTeamName: 'Standings Team',
+    liquipediaUrl: 'https://liquipedia.net/pubg/LP_Player',
+  });
+  await savePlayerLiquipedia(lpPlayer.id, { url: 'https://liquipedia.net/pubg/LP_Player', image: PLOGO });
   await upsertTeam({ game: 'pubg', pandascore_id: 5150, name: 'CDN Team', slug: 'cdn-team', image_url: CDN });
 
   assert.deepEqual(await listStandingsLogos(), [SLOGO]);
   assert.deepEqual((await listLiquipediaTeamLogos()).sort(), [TLOGO].sort());
+  assert.deepEqual(await listPriorityLiquipediaPlayerLogos(), [PLOGO]);
 
   const seen = [];
   await warmTrackedMatchLogos({
@@ -207,5 +221,6 @@ test('warmup also collects standings + Liquipedia entity logos, but not PandaSco
   });
   assert.ok(seen.includes(SLOGO), 'standings crest warmed');
   assert.ok(seen.includes(TLOGO), 'Liquipedia team crest warmed');
+  assert.ok(seen.includes(PLOGO), 'priority Liquipedia player portrait warmed');
   assert.ok(!seen.includes(CDN), 'PandaScore CDN crest never sent to the Liquipedia cache');
 });

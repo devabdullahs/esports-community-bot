@@ -83,6 +83,19 @@ test('player infobox parses bio facts', () => {
   assert.equal(n.totalWinnings, '$987,654');
 });
 
+test('entity infobox falls back to page social image when no infobox image is present', () => {
+  const $ = cheerio.load(`
+    <meta property="og:image" content="https://liquipedia.net/commons/images/2/2b/Bzp10.jpg">
+    <div class="fo-nttax-infobox">
+      <div><div class="infobox-header wiki-backgroundcolor-light">Bzp10</div></div>
+      <div><div class="infobox-cell-2 infobox-description">Status:</div><div>Active</div></div>
+    </div>
+  `);
+  const infobox = parseEntityInfobox($);
+  assert.equal(infobox.name, 'Bzp10');
+  assert.equal(infobox.image, 'https://liquipedia.net/commons/images/2/2b/Bzp10.jpg');
+});
+
 test('player infobox parses achievement and history sections', () => {
   const $ = cheerio.load(`
     <div class="fo-nttax-infobox">

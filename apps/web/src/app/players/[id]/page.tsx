@@ -196,7 +196,8 @@ export default async function PlayerProfilePage({
                   name={teamName || "?"}
                   shape="rounded"
                   fit="contain"
-                  className="size-4 shrink-0"
+                  padded={false}
+                  className="h-6 w-10 shrink-0 rounded-md border border-border/70"
                 />
               ) : (
                 <ShieldIcon className="size-3.5" />
@@ -277,7 +278,8 @@ export default async function PlayerProfilePage({
             name={teamName || "?"}
             shape="rounded"
             fit="contain"
-            className="size-12 shrink-0 border border-border"
+            padded={false}
+            className="h-14 w-20 shrink-0 rounded-xl border border-border"
           />
           <div className="min-w-0 flex-1">
             <div className="text-xs text-muted-foreground">{text.currentTeam}</div>

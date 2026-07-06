@@ -178,7 +178,8 @@ export default async function TeamProfilePage({
               name={team.name}
               shape="rounded"
               fit="contain"
-              className="size-20 shrink-0 border border-border sm:size-24"
+              padded={false}
+              className="h-20 w-28 shrink-0 border border-border sm:h-24 sm:w-32"
             />
             <div className="flex min-w-0 flex-col gap-2">
               <Badge variant="outline" className="w-fit gap-1.5 border-primary/35 bg-primary/10 text-primary">

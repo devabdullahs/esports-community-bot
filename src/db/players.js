@@ -1,5 +1,6 @@
 import { all, get, run } from './client.js';
 import { normalizeTeamName } from '../lib/render.js';
+import { EWC_TOURNAMENT_SQL } from './tournamentStandings.js';
 
 function nowText() {
   return new Date().toISOString().slice(0, 19).replace('T', ' ');
@@ -227,7 +228,7 @@ export async function savePlayerLiquipedia(
 // (PandaScore or previously created) before creating anything.
 export async function listPlayerNamesForGame(game) {
   return all(
-    'SELECT id, name, liquipedia_url, liquipedia_parsed_at, current_team_id, current_team_name FROM players WHERE game = $1 ORDER BY id ASC',
+    'SELECT id, name, image_url, liquipedia_url, liquipedia_parsed_at, current_team_id, current_team_name FROM players WHERE game = $1 ORDER BY id ASC',
     [game],
   );
 }
@@ -281,7 +282,49 @@ export async function clearDroppedRosterPlayers(game, teamId, keepIds) {
 // CDN photos are excluded (served directly, not proxied).
 export async function listLiquipediaPlayerLogos() {
   const rows = await all(
-    "SELECT DISTINCT image_url FROM players WHERE LOWER(image_url) LIKE 'https://liquipedia.net/%'",
+    `SELECT image_url
+       FROM players
+      WHERE LOWER(image_url) LIKE 'https://liquipedia.net/%'
+      GROUP BY image_url
+      ORDER BY MAX(updated_at) DESC, MIN(name) ASC`,
+    [],
+  );
+  return rows.map((row) => row.image_url).filter(Boolean);
+}
+
+export async function listPriorityLiquipediaPlayerLogos() {
+  const rows = await all(
+    `WITH ewc_team_names(name) AS (
+       SELECT LOWER(m.team_a) AS name
+         FROM matches m
+         JOIN tournaments t ON t.id = m.tournament_id
+        WHERE t.active = 1 AND t.archived_at IS NULL AND ${EWC_TOURNAMENT_SQL}
+          AND m.team_a IS NOT NULL AND m.team_a <> ''
+       UNION
+       SELECT LOWER(m.team_b) AS name
+         FROM matches m
+         JOIN tournaments t ON t.id = m.tournament_id
+        WHERE t.active = 1 AND t.archived_at IS NULL AND ${EWC_TOURNAMENT_SQL}
+          AND m.team_b IS NOT NULL AND m.team_b <> ''
+       UNION
+       SELECT LOWER(s.team) AS name
+         FROM tournament_standings s
+         JOIN tournaments t ON t.id = s.tournament_id
+        WHERE t.active = 1 AND t.archived_at IS NULL AND ${EWC_TOURNAMENT_SQL}
+          AND s.team IS NOT NULL AND s.team <> ''
+     )
+     SELECT p.image_url
+       FROM players p
+       LEFT JOIN teams tm ON tm.id = p.current_team_id
+      WHERE LOWER(p.image_url) LIKE 'https://liquipedia.net/%'
+        AND (
+          LOWER(p.current_team_name) IN (SELECT name FROM ewc_team_names)
+          OR LOWER(tm.name) IN (SELECT name FROM ewc_team_names)
+          OR LOWER(tm.acronym) IN (SELECT name FROM ewc_team_names)
+          OR LOWER(tm.slug) IN (SELECT name FROM ewc_team_names)
+        )
+      GROUP BY p.image_url
+      ORDER BY MAX(p.updated_at) DESC, MIN(p.name) ASC`,
     [],
   );
   return rows.map((row) => row.image_url).filter(Boolean);
