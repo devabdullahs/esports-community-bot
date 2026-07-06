@@ -22,6 +22,36 @@ test('message component interactions route to command handleComponent', async ()
     isAutocomplete: () => false,
     isMessageComponent: () => true,
     isModalSubmit: () => false,
+    isChatInputCommand: () => false,
+    isMessageContextMenuCommand: () => false,
+  };
+
+  await execute(interaction);
+
+  assert.equal(routed, true);
+});
+
+test('message context menu interactions route to command execute', async () => {
+  let routed = false;
+  const interaction = {
+    commandName: 'Delete After',
+    client: {
+      commands: new Map([
+        [
+          'Delete After',
+          {
+            async execute(value) {
+              routed = value === interaction;
+            },
+          },
+        ],
+      ]),
+    },
+    isAutocomplete: () => false,
+    isMessageComponent: () => false,
+    isModalSubmit: () => false,
+    isChatInputCommand: () => false,
+    isMessageContextMenuCommand: () => true,
   };
 
   await execute(interaction);
