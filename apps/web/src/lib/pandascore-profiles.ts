@@ -1,6 +1,5 @@
 import "server-only";
 
-import { unstable_cache } from "next/cache";
 import {
   getTeamById as _getTeamById,
   listTeamPlayers as _listTeamPlayers,
@@ -59,20 +58,18 @@ const getTeamById = _getTeamById as (id: number) => Promise<TeamProfile | null>;
 const listTeamPlayers = _listTeamPlayers as (id: number) => Promise<PlayerProfile[]>;
 const getPlayerById = _getPlayerById as (id: number) => Promise<PlayerProfile | null>;
 
-export const getTeamProfileCached = unstable_cache(
-  async (id: number) => getTeamById(id),
-  ["pandascore-team-profile"],
-  { revalidate: 3600, tags: ["pandascore-profiles"] },
-);
+// Bot-side Liquipedia enrichment updates these rows outside of Next.js, so tag
+// invalidation is not available when a profile gains fresh facts/images. Keep
+// profile detail reads live; these pages are already dynamic and the DB lookups
+// are cheap compared with showing stale enrichment for an hour.
+export async function getTeamProfile(id: number) {
+  return getTeamById(id);
+}
 
-export const getTeamPlayersCached = unstable_cache(
-  async (id: number) => listTeamPlayers(id),
-  ["pandascore-team-players"],
-  { revalidate: 3600, tags: ["pandascore-profiles"] },
-);
+export async function getTeamPlayers(id: number) {
+  return listTeamPlayers(id);
+}
 
-export const getPlayerProfileCached = unstable_cache(
-  async (id: number) => getPlayerById(id),
-  ["pandascore-player-profile"],
-  { revalidate: 3600, tags: ["pandascore-profiles"] },
-);
+export async function getPlayerProfile(id: number) {
+  return getPlayerById(id);
+}

@@ -21,8 +21,8 @@ import { liquipediaTeamDetails } from "@/lib/liquipedia-profile-details";
 import { buildPageMetadata } from "@/lib/metadata";
 import { getProfileMatchesForTeamNamesCached } from "@/lib/profile-matches";
 import {
-  getTeamPlayersCached,
-  getTeamProfileCached,
+  getTeamPlayers,
+  getTeamProfile,
   type PlayerProfile,
 } from "@/lib/pandascore-profiles";
 import { getRequestLocale } from "@/lib/request-locale";
@@ -97,7 +97,7 @@ export async function generateMetadata({
   const id = parseId(rawId);
   if (!id) return {};
 
-  const [team, locale] = await Promise.all([getTeamProfileCached(id), getRequestLocale()]);
+  const [team, locale] = await Promise.all([getTeamProfile(id), getRequestLocale()]);
   if (!team) return {};
 
   return buildPageMetadata({
@@ -119,8 +119,8 @@ export default async function TeamProfilePage({
   if (!id) notFound();
 
   const [team, players, games, locale] = await Promise.all([
-    getTeamProfileCached(id),
-    getTeamPlayersCached(id),
+    getTeamProfile(id),
+    getTeamPlayers(id),
     listGamesCached(),
     getRequestLocale(),
   ]);

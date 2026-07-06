@@ -18,7 +18,7 @@ import { gameTitleForSlug, listGamesCached } from "@/lib/games";
 import { copy, localizedPath } from "@/lib/i18n";
 import { liquipediaPlayerDetails } from "@/lib/liquipedia-profile-details";
 import { buildPageMetadata } from "@/lib/metadata";
-import { getPlayerProfileCached, type PlayerProfile } from "@/lib/pandascore-profiles";
+import { getPlayerProfile, type PlayerProfile } from "@/lib/pandascore-profiles";
 import { getProfileMatchesForTeamNamesCached } from "@/lib/profile-matches";
 import { getRequestLocale } from "@/lib/request-locale";
 import { safeUrlOrUndefined } from "@/lib/safe-url";
@@ -67,7 +67,7 @@ export async function generateMetadata({
   const id = parseId(rawId);
   if (!id) return {};
 
-  const [player, locale] = await Promise.all([getPlayerProfileCached(id), getRequestLocale()]);
+  const [player, locale] = await Promise.all([getPlayerProfile(id), getRequestLocale()]);
   if (!player) return {};
 
   return buildPageMetadata({
@@ -89,7 +89,7 @@ export default async function PlayerProfilePage({
   if (!id) notFound();
 
   const [player, games, locale] = await Promise.all([
-    getPlayerProfileCached(id),
+    getPlayerProfile(id),
     listGamesCached(),
     getRequestLocale(),
   ]);
