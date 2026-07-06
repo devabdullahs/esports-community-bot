@@ -12,7 +12,7 @@ process.env.DISCORD_CLIENT_ID = 'test-client-id';
 
 const { closeDb } = await import('../src/db/index.js');
 const { upsertEwcWeek, setEwcWeekStatus, upsertEwcSeason } = await import('../src/db/ewcPredictions.js');
-const { currentOpenWeek, seasonSlotState } = await import('../src/commands/ewc_predict.js');
+const { currentOpenWeek, seasonSlotState, weeklyPickPayload } = await import('../src/commands/ewc_predict.js');
 const { anyRoundOpen } = await import('../src/jobs/ewcPredictions.js');
 
 test.after(() => {
@@ -46,6 +46,56 @@ test('currentOpenWeek returns null when no week is open', async () => {
   await setEwcWeekStatus(scored.id, 'scored');
 
   assert.equal(await currentOpenWeek(guildId, '2026'), null);
+});
+
+function findComponent(node, predicate) {
+  if (!node || typeof node !== 'object') return null;
+  if (predicate(node)) return node;
+  for (const child of node.components || []) {
+    const found = findComponent(child, predicate);
+    if (found) return found;
+  }
+  return null;
+}
+
+test('weeklyPickPayload includes a week switcher with week statuses', async () => {
+  const guildId = 'guild-picker-week-select';
+  const now = Math.floor(Date.now() / 1000);
+  await upsertEwcWeek({
+    guildId,
+    season: '2026',
+    weekKey: 'week-open',
+    label: 'Week Open',
+    startAt: now,
+    endAt: now + 86400,
+    openAt: now - 3600,
+    closeAt: now + 7200,
+    games: [{ key: 'freefire', game: 'Free Fire', event: 'EWC', lockAt: now + 3600 }],
+    createdBy: 'admin',
+  });
+  await upsertEwcWeek({
+    guildId,
+    season: '2026',
+    weekKey: 'week-locked',
+    label: 'Week Locked',
+    startAt: now + 86400,
+    endAt: now + 172800,
+    openAt: now - 7200,
+    closeAt: now - 1800,
+    games: [{ key: 'fighters', game: 'Fatal Fury: City of the Wolves', event: 'EWC', lockAt: now - 1800 }],
+    createdBy: 'admin',
+  });
+
+  const payload = await weeklyPickPayload(guildId, '2026', 'week-open', 'user-week-select');
+  const json = payload.components[0].toJSON();
+  const select = findComponent(json, (component) => component.custom_id === 'ewc_predict:ww:2026:user-week-select');
+  assert.ok(select, 'renders the switch-week select menu');
+
+  const openOption = select.options.find((option) => option.value === 'week-open');
+  const lockedOption = select.options.find((option) => option.value === 'week-locked');
+  assert.equal(openOption?.default, true);
+  assert.match(`${openOption?.label} ${openOption?.description}`, /Open/);
+  assert.match(`${lockedOption?.label} ${lockedOption?.description}`, /Locked/);
 });
 
 test('anyRoundOpen is true when only the season round is open (weekly week opens later)', async () => {

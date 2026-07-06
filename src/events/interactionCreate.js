@@ -17,11 +17,11 @@ export async function execute(interaction) {
     return;
   }
 
-  // Buttons / modal submits — routed to the owning command by the "<commandName>:" custom_id
+  // Message components / modal submits are routed to the owning command by the "<commandName>:" custom_id
   // prefix (e.g. "ewc_predict:lb:..."), which exposes handleComponent / handleModal.
-  if (interaction.isButton() || interaction.isModalSubmit()) {
+  if (interaction.isMessageComponent() || interaction.isModalSubmit()) {
     const command = interaction.client.commands.get(String(interaction.customId).split(':')[0]);
-    const handler = interaction.isButton() ? command?.handleComponent : command?.handleModal;
+    const handler = interaction.isModalSubmit() ? command?.handleModal : command?.handleComponent;
     if (!handler) return;
     try {
       await handler(interaction);
