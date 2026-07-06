@@ -1,6 +1,6 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { expect, test, vi } from "vitest";
-import { upsertPlayer } from "@bot/db/players.js";
+import { savePlayerLiquipedia, upsertPlayer } from "@bot/db/players.js";
 import { upsertTeam } from "@bot/db/teams.js";
 
 vi.mock("@/lib/request-locale", () => ({
@@ -29,6 +29,27 @@ test("team and player profile pages render synced PandaScore data", async () => 
     current_team_name: "Team Alpha",
     raw_json: { id: 9002 },
   });
+  await savePlayerLiquipedia(player.id, {
+    url: "https://liquipedia.net/valorant/Player_One",
+    facts: {
+      romanized_name: "Player Realname",
+      status: "Active",
+      team: "Team Alpha",
+      approx_total_winnings: "$12,345",
+    },
+    raw: `
+      <div class="fo-nttax-infobox">
+        <div><div class="infobox-header wiki-backgroundcolor-light infobox-header-2">Achievements</div></div>
+        <div><div class="infobox-center">
+          <span class="league-icon-small-image"><a href="/valorant/Event" title="Champions 2026"><img alt="Champions 2026" src="/commons/images/champions.png"></a></span>
+        </div></div>
+        <div><div class="infobox-header wiki-backgroundcolor-light infobox-header-2">History</div></div>
+        <div><div class="infobox-center"><table><tbody>
+          <tr><td>2025-01-01 — Present</td><td><a href="/valorant/Team_Alpha">Team Alpha</a></td></tr>
+        </tbody></table></div></div>
+      </div>
+    `,
+  });
 
   const TeamPage = (await import("@/app/teams/[id]/page")).default;
   const PlayerPage = (await import("@/app/players/[id]/page")).default;
@@ -45,5 +66,10 @@ test("team and player profile pages render synced PandaScore data", async () => 
   );
   expect(playerHtml).toContain("Player One");
   expect(playerHtml).toContain("Team Alpha");
-  expect(playerHtml).toContain("duelist");
+  expect(playerHtml).toContain("Active");
+  expect(playerHtml).toContain("Profile data from Liquipedia and PandaScore");
+  expect(playerHtml).toContain("Player Realname");
+  expect(playerHtml).toContain("$12,345");
+  expect(playerHtml).toContain("Champions 2026");
+  expect(playerHtml).toContain("2025-01-01");
 });

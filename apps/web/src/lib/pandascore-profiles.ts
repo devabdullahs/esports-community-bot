@@ -41,6 +41,8 @@ export type PlayerProfile = {
   current_team_name: string | null;
   modified_at: string | null;
   liquipedia_url: string | null;
+  liquipedia_raw: string | null;
+  liquipedia_facts: string | null;
   liquipedia_parsed_at: string | null;
   last_seen_at: string | null;
   created_at: string;
