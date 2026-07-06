@@ -232,6 +232,10 @@ function weeklyPickModalId(seasonYear, weekKey, gameKey, ownerId) {
   return `ewc_predict:wpm:${seasonYear}:${weekKey}:${gameKey}:${ownerId}`;
 }
 
+function weeklyWeekSelectId(seasonYear, ownerId) {
+  return `ewc_predict:ww:${seasonYear}:${ownerId}`;
+}
+
 function seasonSlotId(seasonYear, index, ownerId) {
   return `ewc_predict:sg:${seasonYear}:${index}:${ownerId}`;
 }
@@ -246,7 +250,31 @@ function chunk(items, size) {
   return rows;
 }
 
-async function weeklyPickPayload(guildId, seasonYear, weekKey, userId) {
+function weeklySelectStatus(week) {
+  const state = effectiveEwcWeekStatus(week);
+  if (state.label === 'opens') return `Opens ${formatShortDate(state.at)}`;
+  if (state.label === 'partly open') return `Open ${state.openGames}/${state.totalGames}`;
+  if (state.label === 'open') return 'Open';
+  if (state.label === 'locked') return 'Locked';
+  if (state.label === 'closed') return 'Closed';
+  if (state.label === 'scored') return 'Scored';
+  return String(state.label || 'Unknown').replace(/^\w/, (c) => c.toUpperCase());
+}
+
+function weeklySelectDescription(week) {
+  const range = week.start_at || week.end_at ? `${formatShortDate(week.start_at)} - ${formatShortDate(week.end_at)}` : '';
+  return [weeklySelectStatus(week), range].filter(Boolean).join(' | ').slice(0, 100);
+}
+
+function visibleWeeklySelectWeeks(weeks, currentWeekKey) {
+  const withGames = weeks.filter((week) => Array.isArray(week.games) && week.games.length);
+  if (withGames.length <= 25) return withGames;
+  const currentIndex = Math.max(0, withGames.findIndex((week) => week.week_key === currentWeekKey));
+  const start = Math.min(Math.max(0, currentIndex - 12), withGames.length - 25);
+  return withGames.slice(start, start + 25);
+}
+
+export async function weeklyPickPayload(guildId, seasonYear, weekKey, userId) {
   const round = await getEwcWeek(guildId, seasonYear, weekKey);
   if (!round) return { error: 'That prediction round does not exist.' };
   if (!round.games?.length) {
@@ -264,6 +292,7 @@ async function weeklyPickPayload(guildId, seasonYear, weekKey, userId) {
       `## EWC Weekly Picks — ${round.label || round.week_key}\n-# Each game locks independently before it starts. Tap a game to pick or change it.`,
     ),
   );
+  container.addTextDisplayComponents(new TextDisplayBuilder().setContent(`-# Status: ${weeklySelectStatus(round)}`));
   // V2 budget is 40 components total; each game uses 3 (section + text + button), so stay well under.
   round.games.slice(0, 12).forEach((game) => {
     const existing = picks.find((p) => p && typeof p === 'object' && p.gameKey === game.key);
@@ -283,6 +312,28 @@ async function weeklyPickPayload(guildId, seasonYear, weekKey, userId) {
         ),
     );
   });
+
+  const weeks = visibleWeeklySelectWeeks(await listEwcWeeks(guildId, seasonYear), round.week_key);
+  if (weeks.length > 1) {
+    container.addActionRowComponents(
+      new ActionRowBuilder().addComponents(
+        new StringSelectMenuBuilder()
+          .setCustomId(weeklyWeekSelectId(seasonYear, userId))
+          .setPlaceholder('Switch week')
+          .setMinValues(1)
+          .setMaxValues(1)
+          .addOptions(
+            weeks.map((week) =>
+              new StringSelectMenuOptionBuilder()
+                .setLabel(`${week.label || week.week_key} - ${weeklySelectStatus(week)}`.slice(0, 100))
+                .setDescription(weeklySelectDescription(week))
+                .setValue(week.week_key)
+                .setDefault(week.week_key === round.week_key),
+            ),
+          ),
+      ),
+    );
+  }
 
   return { components: [container] };
 }
@@ -1255,6 +1306,28 @@ export async function handleComponent(interaction) {
   if (action === 'sg') {
     const [, , seasonYear, index, ownerId] = parts;
     await showSeasonSlotModal(interaction, { seasonYear, index, ownerId });
+    return;
+  }
+  if (action === 'ww') {
+    const [, , seasonYear, ownerId] = parts;
+    if (ownerId && interaction.user.id !== ownerId) {
+      await interaction.reply({
+        content: 'This week selector belongs to whoever opened the weekly picker.',
+        flags: MessageFlags.Ephemeral,
+      });
+      return;
+    }
+    const weekKey = interaction.values?.[0];
+    if (!weekKey) {
+      await interaction.reply({ content: 'Choose a week first.', flags: MessageFlags.Ephemeral });
+      return;
+    }
+    const payload = await weeklyPickPayload(interaction.guildId, seasonYear, weekKey, interaction.user.id);
+    if (payload.error) {
+      await interaction.reply({ content: `❌ ${payload.error}`, flags: MessageFlags.Ephemeral });
+      return;
+    }
+    await interaction.update({ components: payload.components });
     return;
   }
 
