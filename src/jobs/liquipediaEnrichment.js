@@ -3,7 +3,7 @@ import { config } from '../config.js';
 import { logger } from '../lib/logger.js';
 import { normalizeTeamName } from '../lib/render.js';
 import { listActiveTournaments } from '../db/tournaments.js';
-import { listTrackedTeamNamesForGame } from '../db/matches.js';
+import { listGameNextMatchAt, listTrackedTeamNamesForGame } from '../db/matches.js';
 import { listStandingsTeamNamesForGame } from '../db/tournamentStandings.js';
 import {
   createLiquipediaTeam,
@@ -135,25 +135,43 @@ export async function runLiquipediaEnrichment({
     // The budget exhausts most runs, so the game ORDER decides who progresses.
     // A stable order starves the tail (prod: zero counterstrike/valorant after
     // days) and a pure shuffle can starve any one game for days by bad luck
-    // (prod: LoL rosters untouched while freefire re-won early slots). Order
-    // least-recently-enriched FIRST — the most starved game always goes next,
-    // never-enriched games (no parsed team at all) before everything. Shuffle
-    // only breaks ties so equally-starved games still rotate.
+    // (prod: LoL rosters untouched while freefire re-won early slots). Order:
+    //  1. NEAREST tournament activity first (day of the game's soonest upcoming
+    //     match, live events counting as now) — the event playing next needs its
+    //     teams/rosters ready before events weeks away; games with nothing
+    //     scheduled yet sort last.
+    //  2. Least-recently-enriched breaks same-day ties — the most starved game
+    //     goes first, never-enriched (no parsed team) before everything.
+    //  3. Shuffle only randomizes exact ties so equal games still rotate.
     const shuffle = (items) => {
       for (let i = items.length - 1; i > 0; i--) {
         const j = Math.floor(random() * (i + 1));
         [items[i], items[j]] = [items[j], items[i]];
       }
     };
+    const nowSec = Math.floor(now / 1000);
+    const NO_UPCOMING = Number.MAX_SAFE_INTEGER;
+    const nextMatchDay = new Map(
+      // 6h grace so an event mid-broadcast (its next match already started)
+      // still ranks as playing NOW rather than "nothing upcoming".
+      (await listGameNextMatchAt(nowSec - 6 * 3600)).map((row) => {
+        const at = Number(row.next_at);
+        return [row.game, Number.isFinite(at) ? Math.floor(at / 86400) : NO_UPCOMING];
+      }),
+    );
     const lastEnrichedAt = new Map(
       (await listGameLastEnrichedAt()).map((row) => [row.game, parseTimeMs(row.last_parsed_at) ?? 0]),
     );
-    const byLeastRecentlyEnriched = (items) => {
-      shuffle(items); // tie-break: equal staleness still rotates run to run
-      return items.sort((a, b) => (lastEnrichedAt.get(a) ?? 0) - (lastEnrichedAt.get(b) ?? 0));
+    const byEventProximity = (items) => {
+      shuffle(items); // exact ties still rotate run to run
+      return items.sort(
+        (a, b) =>
+          (nextMatchDay.get(a) ?? NO_UPCOMING) - (nextMatchDay.get(b) ?? NO_UPCOMING) ||
+          (lastEnrichedAt.get(a) ?? 0) - (lastEnrichedAt.get(b) ?? 0),
+      );
     };
-    const priorityGames = byLeastRecentlyEnriched(games.filter((game) => ewcGames.has(game)));
-    const remainingGames = byLeastRecentlyEnriched(games.filter((game) => !ewcGames.has(game)));
+    const priorityGames = byEventProximity(games.filter((game) => ewcGames.has(game)));
+    const remainingGames = byEventProximity(games.filter((game) => !ewcGames.has(game)));
     const orderedGames = [...priorityGames, ...remainingGames];
 
     for (const game of orderedGames) {

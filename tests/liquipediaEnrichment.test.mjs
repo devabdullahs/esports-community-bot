@@ -676,6 +676,46 @@ test('least-recently-enriched game wins the budget over a freshly-enriched one',
   }
 });
 
+test('the game whose tournament plays soonest wins the budget over a more-starved later one', async () => {
+  const now = Date.now();
+  const soonT = await addTournament({
+    source: 'liquipedia', external_id: 'proxsoon/cup', game: 'proxsoon',
+    name: 'Prox Soon Cup', url: 'https://liquipedia.net/proxsoon/Cup', guild_id: GUILD,
+  });
+  await upsertMatch({
+    tournament_id: soonT.id, source: 'liquipedia', external_id: 'Match:prox-soon',
+    team_a: 'Soon Squad', team_b: 'TBD', status: 'scheduled',
+    scheduled_at: Math.floor(now / 1000) + 24 * 3600, // plays tomorrow
+  });
+  const lateT = await addTournament({
+    source: 'liquipedia', external_id: 'proxlate/cup', game: 'proxlate',
+    name: 'Prox Late Cup', url: 'https://liquipedia.net/proxlate/Cup', guild_id: GUILD,
+  });
+  await upsertMatch({
+    tournament_id: lateT.id, source: 'liquipedia', external_id: 'Match:prox-late',
+    team_a: 'Late Squad', team_b: 'TBD', status: 'scheduled',
+    scheduled_at: Math.floor(now / 1000) + 30 * 24 * 3600, // plays in a month
+  });
+
+  // Make the LATE game the more starved one (never enriched) and the SOON game
+  // recently attended — under pure staleness the late game would win; nearest
+  // tournament activity must dominate.
+  const soonDone = await createLiquipediaTeam({ game: 'proxsoon', name: 'Soon Done', slug: 'soon-done' });
+  await saveTeamLiquipedia(soonDone.id, { url: 'https://liquipedia.net/proxsoon/Soon_Done', raw: '<table class="table2__table"/>', facts: {} });
+
+  for (const randomValue of [0, 0.99]) {
+    const parseCalls = [];
+    await runLiquipediaEnrichment({
+      liquipedia: mockLiquipedia({ parseCalls, supportedGames: ['proxsoon', 'proxlate'] }),
+      maxParses: 2,
+      ttlMs: 0,
+      now,
+      random: () => randomValue,
+    });
+    assert.equal(parseCalls[0]?.wiki, 'proxsoon', `soonest event first (random=${randomValue})`);
+  }
+});
+
 test('game order is shuffled before a small budget cuts the run off', async () => {
   const first = await addTournament({
     source: 'liquipedia',
