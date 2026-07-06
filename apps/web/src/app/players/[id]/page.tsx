@@ -15,6 +15,7 @@ import { flagEmoji } from "@/lib/country";
 import { getViewerFollowState } from "@/lib/follows";
 import { gameTitleForSlug, listGamesCached } from "@/lib/games";
 import { copy, localizedPath } from "@/lib/i18n";
+import { liquipediaPlayerDetails } from "@/lib/liquipedia-profile-details";
 import { buildPageMetadata } from "@/lib/metadata";
 import { getPlayerProfileCached, type PlayerProfile } from "@/lib/pandascore-profiles";
 import { getRequestLocale } from "@/lib/request-locale";
@@ -40,6 +41,17 @@ function Stat({ label, children }: { label: string; children: ReactNode }) {
       <span className="flex items-center gap-1.5 truncate text-sm font-medium" dir="auto">
         {children}
       </span>
+    </div>
+  );
+}
+
+function DetailRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="grid gap-1 border-b border-border/60 py-2 last:border-b-0 sm:grid-cols-[11rem_minmax(0,1fr)]">
+      <dt className="text-xs font-medium uppercase text-muted-foreground">{label}</dt>
+      <dd className="min-w-0 text-sm font-medium" dir="auto">
+        {value}
+      </dd>
     </div>
   );
 }
@@ -86,9 +98,22 @@ export default async function PlayerProfilePage({
   const text = copy[locale].profiles;
   const imageUrl = safeUrlOrUndefined(player.image_url) ?? null;
   const gameTitle = gameTitleForSlug(player.game, games, locale) || player.game;
-  const teamName = player.resolved_team_name ?? player.current_team_name;
+  const liquipedia = liquipediaPlayerDetails(player);
+  const teamName = player.resolved_team_name ?? player.current_team_name ?? liquipedia.team;
   const nationalityFlag = flagEmoji(player.nationality);
   const secondaryName = realName(player);
+  const statusOrRole = liquipedia.status ?? player.role;
+  player.role = statusOrRole;
+  const sourceLabel = player.liquipedia_parsed_at ? text.profileSourceMixed : text.pandascoreSource;
+  const infoRows: { label: string; value: string }[] = [
+    { label: text.romanizedName, value: liquipedia.romanizedName },
+    { label: text.status, value: liquipedia.status },
+    { label: text.currentTeam, value: liquipedia.team },
+    { label: text.totalWinnings, value: liquipedia.totalWinnings },
+  ].flatMap((row) => (row.value ? [{ label: row.label, value: row.value }] : []));
+  const hasLiquipediaDetails = Boolean(
+    infoRows.length || liquipedia.achievements.length || liquipedia.history.length,
+  );
 
   return (
     <main className="mx-auto flex w-full max-w-5xl flex-1 flex-col gap-6 px-4 py-8 sm:px-8 sm:py-10">
@@ -118,6 +143,7 @@ export default async function PlayerProfilePage({
               name={player.name}
               shape="circle"
               fit="cover"
+              focus="top"
               className="size-24 shrink-0 border border-border sm:size-28"
             />
             <div className="flex min-w-0 flex-col gap-2">
@@ -156,7 +182,7 @@ export default async function PlayerProfilePage({
             </div>
           </div>
 
-          <div className="grid grid-cols-3 gap-2 sm:min-w-[22rem]">
+          <div className="grid grid-cols-2 gap-2 sm:min-w-[26rem] lg:grid-cols-4">
             <Stat label={text.currentTeam}>
               {player.resolved_team_image_url ? (
                 <ProfileAvatar
@@ -171,7 +197,7 @@ export default async function PlayerProfilePage({
               )}
               <span className="truncate">{teamName || text.unknownTeam}</span>
             </Stat>
-            <Stat label={text.role}>
+            <Stat label={liquipedia.status ? text.status : text.role}>
               <ShieldIcon className="size-3.5 text-primary" />
               <span className="truncate uppercase">{player.role || "—"}</span>
             </Stat>
@@ -182,6 +208,56 @@ export default async function PlayerProfilePage({
           </div>
         </div>
       </section>
+
+      {hasLiquipediaDetails ? (
+        <section className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(18rem,0.85fr)]">
+          {infoRows.length ? (
+            <div className="rounded-2xl border bg-card/40 p-4 shadow-sm sm:p-5">
+              <h2 className="text-base font-semibold">{text.liquipediaInfo}</h2>
+              <dl className="mt-3">
+                {infoRows.map((row) => (
+                  <DetailRow key={row.label} label={row.label} value={row.value} />
+                ))}
+              </dl>
+            </div>
+          ) : null}
+
+          {liquipedia.history.length ? (
+            <div className="rounded-2xl border bg-card/40 p-4 shadow-sm sm:p-5">
+              <h2 className="text-base font-semibold">{text.history}</h2>
+              <div className="mt-3 flex flex-col gap-2">
+                {liquipedia.history.map((entry, index) => (
+                  <div key={`${entry.period}-${entry.team}-${index}`} className="grid gap-1 text-sm sm:grid-cols-[9.5rem_minmax(0,1fr)]">
+                    <span className="text-xs italic text-muted-foreground" dir="ltr">
+                      {entry.period}
+                    </span>
+                    <span className="font-medium" dir="auto">
+                      {entry.team}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : null}
+
+          {liquipedia.achievements.length ? (
+            <div className="rounded-2xl border bg-card/40 p-4 shadow-sm sm:p-5 lg:col-span-2">
+              <h2 className="text-base font-semibold">{text.achievements}</h2>
+              <div className="mt-3 flex flex-wrap gap-2">
+                {liquipedia.achievements.map((achievement, index) => (
+                  <span
+                    key={`${achievement.title ?? achievement.image ?? "achievement"}-${index}`}
+                    className="inline-flex min-h-8 items-center rounded-full border bg-background/50 px-3 py-1 text-sm font-medium"
+                    dir="auto"
+                  >
+                    {achievement.title || text.achievements}
+                  </span>
+                ))}
+              </div>
+            </div>
+          ) : null}
+        </section>
+      ) : null}
 
       {player.resolved_team_id ? (
         <Link
@@ -209,7 +285,7 @@ export default async function PlayerProfilePage({
       ) : null}
 
       <p className="flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground">
-        <span>{text.pandascoreSource}</span>
+        <span>{sourceLabel}</span>
         <span aria-hidden>·</span>
         <span>
           {text.updated}: <DateTime value={player.updated_at} locale={locale} />

@@ -41,6 +41,50 @@ export function parseEntityInfobox($) {
   return { name: name || null, image: image || null, facts };
 }
 
+function findInfoboxSection($, heading) {
+  const target = String(heading ?? '').trim().toLowerCase();
+  if (!target) return null;
+  const header = $('.fo-nttax-infobox .infobox-header').filter((_, el) => (
+    cleanText($(el).clone().children('span').remove().end().text()).toLowerCase() === target
+  )).first();
+  if (!header.length) return null;
+  const section = header.parent().next();
+  return section.length ? section : null;
+}
+
+export function parsePlayerInfoboxDetails($, { historyLimit = 12, achievementLimit = 8 } = {}) {
+  const achievements = [];
+  const achievementSection = findInfoboxSection($, 'Achievements');
+  if (achievementSection) {
+    achievementSection.find('a').each((_, link) => {
+      if (achievements.length >= achievementLimit) return false;
+      const $link = $(link);
+      const img = $link.find('img').first();
+      const title = cleanText($link.attr('title') || img.attr('alt') || $link.text());
+      const image = normalizeImageUrl(img.attr('src'));
+      if (!title && !image) return;
+      achievements.push({ title: title || null, image: image || null });
+    });
+  }
+
+  const history = [];
+  const historySection = findInfoboxSection($, 'History');
+  if (historySection) {
+    historySection.find('tr').each((_, row) => {
+      if (history.length >= historyLimit) return false;
+      const cells = $(row).children('td');
+      if (cells.length < 2) return;
+      const period = cleanText(cells.eq(0).text()).replace(/\s*—\s*/g, ' — ');
+      const teamLink = cells.eq(1).find('a').last();
+      const team = cleanText(teamLink.length ? teamLink.text() : cells.eq(1).text());
+      if (!period || !team) return;
+      history.push({ period, team });
+    });
+  }
+
+  return { achievements, history };
+}
+
 // The ACTIVE roster table on a team page, across both Liquipedia markups:
 //  - legacy `table.roster-card` (td.ID / td.Position cells), and
 //  - the current `table2` component (<table class="table2__table"> with a

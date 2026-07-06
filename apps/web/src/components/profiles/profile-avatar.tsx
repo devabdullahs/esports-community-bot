@@ -27,12 +27,14 @@ export function ProfileAvatar({
   className,
   shape = "circle",
   fit = "cover",
+  focus = "center",
 }: {
   src: string | null | undefined;
   name: string;
   className?: string;
   shape?: "circle" | "rounded";
   fit?: "cover" | "contain";
+  focus?: "center" | "top";
 }) {
   const [failed, setFailed] = useState(false);
   const safe = safeUrlOrUndefined(src);
@@ -64,6 +66,7 @@ export function ProfileAvatar({
         "bg-muted",
         radius,
         fit === "contain" ? "object-contain p-1.5" : "object-cover",
+        fit === "cover" && focus === "top" ? "object-top" : "object-center",
         className,
       )}
     />

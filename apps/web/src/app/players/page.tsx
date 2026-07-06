@@ -65,6 +65,7 @@ function PlayerCard({ player, locale }: { player: PlayerProfile; locale: Locale 
         name={player.name}
         shape="circle"
         fit="cover"
+        focus="top"
         className="size-12 shrink-0 border border-border"
       />
       <div className="min-w-0 flex-1">

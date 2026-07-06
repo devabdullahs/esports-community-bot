@@ -9,6 +9,7 @@ import {
   findTeamRosterTable,
   normalizeEntityFacts,
   parseEntityInfobox,
+  parsePlayerInfoboxDetails,
   parseTeamRoster,
 } from '../src/services/liquipedia/entityParsers.js';
 
@@ -80,6 +81,32 @@ test('player infobox parses bio facts', () => {
   assert.equal(n.team, 'Twisted Minds');
   assert.equal(n.role, 'Player');
   assert.equal(n.totalWinnings, '$987,654');
+});
+
+test('player infobox parses achievement and history sections', () => {
+  const $ = cheerio.load(`
+    <div class="fo-nttax-infobox">
+      <div><div class="infobox-header wiki-backgroundcolor-light infobox-header-2">Achievements</div></div>
+      <div><div class="infobox-center">
+        <span class="league-icon-small-image"><a href="/freefire/Event" title="FFWS GF 2025 Clash Squad"><img alt="FFWS GF" src="/commons/images/ffws.png"></a></span>
+      </div></div>
+      <div><div class="infobox-header wiki-backgroundcolor-light infobox-header-2">History</div></div>
+      <div><div class="infobox-center"><table><tbody>
+        <tr><td class="th-mono">2022-01-23 — 2024-01-21</td><td><a href="/freefire/JAS_Academy">JAS Academy</a></td></tr>
+        <tr><td class="th-mono">2025-01-30 — <b>Present</b></td><td><a href="/freefire/All_Gamers_Global">All Gamers Global</a></td></tr>
+      </tbody></table></div></div>
+    </div>
+  `);
+  assert.deepEqual(parsePlayerInfoboxDetails($), {
+    achievements: [{
+      title: 'FFWS GF 2025 Clash Squad',
+      image: 'https://liquipedia.net/commons/images/ffws.png',
+    }],
+    history: [
+      { period: '2022-01-23 — 2024-01-21', team: 'JAS Academy' },
+      { period: '2025-01-30 — Present', team: 'All Gamers Global' },
+    ],
+  });
 });
 
 test('pages without an infobox return null instead of garbage', () => {
