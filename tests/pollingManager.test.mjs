@@ -31,3 +31,15 @@ test('armMatch skips projected start.gg preview rows but arms real set ids', (t)
   assert.equal(armMatch(startggMatch('sgg:104353062'), { id: 1, source: 'startgg' }), true);
   assert.equal(activeCount(), 1);
 });
+
+test('armMatch can delay the first poll for resumed live rows', (t) => {
+  t.after(() => stopAll());
+  stopAll();
+
+  const match = startggMatch('sgg:104353063');
+  match.status = 'running';
+  match.scheduled_at = Math.floor(Date.now() / 1000) - 60;
+
+  assert.equal(armMatch(match, { id: 1, source: 'startgg' }, { initialPollDelayMs: 60_000 }), true);
+  assert.equal(activeCount(), 1);
+});

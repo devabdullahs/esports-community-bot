@@ -103,6 +103,7 @@ export const config = {
     timezone: get('SCHEDULER_TIMEZONE', 'UTC'), // IANA tz, e.g. "Europe/London"
     morningCron: get('MORNING_CRON', '0 8 * * *'),
     livePollIntervalMs: Number(get('LIVE_POLL_INTERVAL_MS', 300_000)), // 5 minutes
+    pollResumeDelayMs: Math.max(0, Number(get('POLL_RESUME_DELAY_MS', 120_000)) || 0),
     syncOnBoot: get('SYNC_ON_BOOT', 'false') === 'true',
   },
   clubChampionship: {
