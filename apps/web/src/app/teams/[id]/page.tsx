@@ -21,6 +21,11 @@ import { liquipediaTeamDetails } from "@/lib/liquipedia-profile-details";
 import { buildPageMetadata } from "@/lib/metadata";
 import { getProfileMatchesForTeamNamesCached } from "@/lib/profile-matches";
 import {
+  profileReturnContextFromSearchParams,
+  withProfileReturn,
+  type ProfileReturnContext,
+} from "@/lib/profile-navigation";
+import {
   getTeamPlayers,
   getTeamProfile,
   type PlayerProfile,
@@ -58,11 +63,19 @@ function DetailRow({ label, value }: { label: string; value: string }) {
   );
 }
 
-function RosterCard({ player, locale }: { player: PlayerProfile; locale: Locale }) {
+function RosterCard({
+  player,
+  locale,
+  returnContext,
+}: {
+  player: PlayerProfile;
+  locale: Locale;
+  returnContext: ProfileReturnContext;
+}) {
   const text = copy[locale].profiles;
   return (
     <Link
-      href={localizedPath(`/players/${player.id}`, locale)}
+      href={withProfileReturn(`/players/${player.id}`, locale, returnContext)}
       aria-label={`${text.viewPlayer}: ${player.name}`}
       className="group flex flex-col items-center gap-2.5 rounded-2xl border bg-card/60 p-3 text-center outline-none transition-colors hover:border-primary/40 hover:bg-card focus-visible:ring-2 focus-visible:ring-ring"
     >
@@ -111,10 +124,15 @@ export async function generateMetadata({
 
 export default async function TeamProfilePage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>;
+  searchParams?: Promise<Record<string, string | string[] | undefined>>;
 }) {
-  const { id: rawId } = await params;
+  const [{ id: rawId }, rawSearchParams] = await Promise.all([
+    params,
+    searchParams ?? Promise.resolve({}),
+  ]);
   const id = parseId(rawId);
   if (!id) notFound();
 
@@ -129,6 +147,36 @@ export default async function TeamProfilePage({
   const followState = await getViewerFollowState("team", team.name);
   const common = copy[locale].common;
   const text = copy[locale].profiles;
+  const returnContext = profileReturnContextFromSearchParams(rawSearchParams, {
+    currentPath: `/teams/${team.id}`,
+  });
+  const returnParent =
+    returnContext?.type === "tournament"
+      ? { label: common.tournaments, href: localizedPath("/tournaments", locale) }
+      : returnContext?.type === "player"
+        ? { label: text.players, href: localizedPath("/players", locale) }
+        : returnContext?.type === "team"
+          ? { label: text.teams, href: localizedPath("/teams", locale) }
+          : null;
+  const breadcrumbItems = returnContext
+    ? [
+        { label: common.home, href: localizedPath("/", locale) },
+        ...(returnParent ? [returnParent] : []),
+        { label: returnContext.label, href: localizedPath(returnContext.href, locale) },
+        { label: team.name },
+      ]
+    : [
+        { label: common.home, href: localizedPath("/", locale) },
+        { label: text.teams, href: localizedPath("/teams", locale) },
+        { label: team.name },
+      ];
+  const backHref = localizedPath(returnContext?.href ?? "/teams", locale);
+  const backLabel = returnContext ? text.backTo(returnContext.label) : text.backToTeams;
+  const teamReturnContext: ProfileReturnContext = {
+    type: "team",
+    href: `/teams/${team.id}`,
+    label: team.name,
+  };
   const imageUrl = safeUrlOrUndefined(team.image_url) ?? null;
   const gameTitle = gameTitleForSlug(team.game, games, locale) || team.game;
   const region = team.location ?? team.nationality;
@@ -153,20 +201,16 @@ export default async function TeamProfilePage({
   return (
     <main className="mx-auto flex w-full max-w-6xl flex-1 flex-col gap-6 px-4 py-8 sm:px-8 sm:py-10">
       <PageBreadcrumb
-        items={[
-          { label: common.home, href: localizedPath("/", locale) },
-          { label: text.teams, href: localizedPath("/teams", locale) },
-          { label: team.name },
-        ]}
+        items={breadcrumbItems}
       />
       <Button
-        render={<Link href={localizedPath("/teams", locale)} />}
+        render={<Link href={backHref} />}
         nativeButton={false}
         variant="ghost"
         className="w-fit"
       >
         <ArrowLeftIcon data-icon="inline-start" className="rtl:rotate-180" />
-        {text.backToTeams}
+        {backLabel}
       </Button>
 
       <section className="relative overflow-hidden rounded-2xl border bg-card/40 p-5 shadow-sm sm:p-6">
@@ -286,7 +330,12 @@ export default async function TeamProfilePage({
         {players.length ? (
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
             {players.map((player) => (
-              <RosterCard key={player.id} player={player} locale={locale} />
+              <RosterCard
+                key={player.id}
+                player={player}
+                locale={locale}
+                returnContext={teamReturnContext}
+              />
             ))}
           </div>
         ) : (

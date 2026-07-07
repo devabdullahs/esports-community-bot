@@ -138,6 +138,7 @@ test("team and player profile pages render synced PandaScore data", async () => 
     expect(teamHtml).toContain("Rival Team");
     expect(teamHtml).toContain("Profile Lobby");
     expect(teamHtml).toContain("Group A - Game 1");
+    expect(teamHtml).toContain("fromType=team");
 
     const playerHtml = renderToStaticMarkup(
       await PlayerPage({ params: Promise.resolve({ id: String(player.id) }) }),
@@ -154,6 +155,32 @@ test("team and player profile pages render synced PandaScore data", async () => 
     expect(playerHtml).toContain("Tracked matches");
     expect(playerHtml).toContain("Profile Cup");
     expect(playerHtml).toContain("Profile Lobby");
+
+    const teamFromTournamentHtml = renderToStaticMarkup(
+      await TeamPage({
+        params: Promise.resolve({ id: String(team.id) }),
+        searchParams: Promise.resolve({
+          fromType: "tournament",
+          fromHref: `/tournaments/${liveTournament.id}`,
+          fromLabel: "Profile Cup",
+        }),
+      }),
+    );
+    expect(teamFromTournamentHtml).toContain("Back to Profile Cup");
+    expect(teamFromTournamentHtml).toContain(`/tournaments/${liveTournament.id}`);
+
+    const playerFromTeamHtml = renderToStaticMarkup(
+      await PlayerPage({
+        params: Promise.resolve({ id: String(player.id) }),
+        searchParams: Promise.resolve({
+          fromType: "team",
+          fromHref: `/teams/${team.id}`,
+          fromLabel: "Team Alpha",
+        }),
+      }),
+    );
+    expect(playerFromTeamHtml).toContain("Back to Team Alpha");
+    expect(playerFromTeamHtml).toContain(`/teams/${team.id}`);
   } finally {
     if (previousGuild == null) delete process.env.EWC_DASHBOARD_DEFAULT_GUILD_ID;
     else process.env.EWC_DASHBOARD_DEFAULT_GUILD_ID = previousGuild;

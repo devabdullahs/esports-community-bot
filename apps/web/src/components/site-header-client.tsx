@@ -136,6 +136,7 @@ export function SiteHeaderClient({
   const ewcLinks: Destination[] = [
     { href: "/news/ewc", label: text.common.ewcNews, icon: NewspaperIcon },
     { href: "/tournaments/ewc", label: text.common.ewcTournaments, icon: TrophyIcon },
+    { href: "/clubs", label: text.common.ewcClubs, icon: UsersIcon },
     { href: "/predictions", label: text.common.predictions, icon: TargetIcon },
     { href: "/leaderboard", label: text.common.publicLeaderboard, icon: CrownIcon },
   ];

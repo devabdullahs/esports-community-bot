@@ -20,6 +20,11 @@ import { liquipediaPlayerDetails } from "@/lib/liquipedia-profile-details";
 import { buildPageMetadata } from "@/lib/metadata";
 import { getPlayerProfile, type PlayerProfile } from "@/lib/pandascore-profiles";
 import { getProfileMatchesForTeamNamesCached } from "@/lib/profile-matches";
+import {
+  profileReturnContextFromSearchParams,
+  withProfileReturn,
+  type ProfileReturnContext,
+} from "@/lib/profile-navigation";
 import { getRequestLocale } from "@/lib/request-locale";
 import { safeUrlOrUndefined } from "@/lib/safe-url";
 
@@ -81,10 +86,15 @@ export async function generateMetadata({
 
 export default async function PlayerProfilePage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>;
+  searchParams?: Promise<Record<string, string | string[] | undefined>>;
 }) {
-  const { id: rawId } = await params;
+  const [{ id: rawId }, rawSearchParams] = await Promise.all([
+    params,
+    searchParams ?? Promise.resolve({}),
+  ]);
   const id = parseId(rawId);
   if (!id) notFound();
 
@@ -98,6 +108,36 @@ export default async function PlayerProfilePage({
   const followState = await getViewerFollowState("player", String(player.id));
   const common = copy[locale].common;
   const text = copy[locale].profiles;
+  const returnContext = profileReturnContextFromSearchParams(rawSearchParams, {
+    currentPath: `/players/${player.id}`,
+  });
+  const returnParent =
+    returnContext?.type === "tournament"
+      ? { label: common.tournaments, href: localizedPath("/tournaments", locale) }
+      : returnContext?.type === "team"
+        ? { label: text.teams, href: localizedPath("/teams", locale) }
+        : returnContext?.type === "player"
+          ? { label: text.players, href: localizedPath("/players", locale) }
+          : null;
+  const breadcrumbItems = returnContext
+    ? [
+        { label: common.home, href: localizedPath("/", locale) },
+        ...(returnParent ? [returnParent] : []),
+        { label: returnContext.label, href: localizedPath(returnContext.href, locale) },
+        { label: player.name },
+      ]
+    : [
+        { label: common.home, href: localizedPath("/", locale) },
+        { label: text.players, href: localizedPath("/players", locale) },
+        { label: player.name },
+      ];
+  const backHref = localizedPath(returnContext?.href ?? "/players", locale);
+  const backLabel = returnContext ? text.backTo(returnContext.label) : text.backToPlayers;
+  const playerReturnContext: ProfileReturnContext = {
+    type: "player",
+    href: `/players/${player.id}`,
+    label: player.name,
+  };
   const imageUrl = safeUrlOrUndefined(player.image_url) ?? null;
   const gameTitle = gameTitleForSlug(player.game, games, locale) || player.game;
   const liquipedia = liquipediaPlayerDetails(player);
@@ -124,20 +164,16 @@ export default async function PlayerProfilePage({
   return (
     <main className="mx-auto flex w-full max-w-5xl flex-1 flex-col gap-6 px-4 py-8 sm:px-8 sm:py-10">
       <PageBreadcrumb
-        items={[
-          { label: common.home, href: localizedPath("/", locale) },
-          { label: text.players, href: localizedPath("/players", locale) },
-          { label: player.name },
-        ]}
+        items={breadcrumbItems}
       />
       <Button
-        render={<Link href={localizedPath("/players", locale)} />}
+        render={<Link href={backHref} />}
         nativeButton={false}
         variant="ghost"
         className="w-fit"
       >
         <ArrowLeftIcon data-icon="inline-start" className="rtl:rotate-180" />
-        {text.backToPlayers}
+        {backLabel}
       </Button>
 
       <section className="relative overflow-hidden rounded-2xl border bg-card/40 p-5 shadow-sm sm:p-6">
@@ -270,7 +306,7 @@ export default async function PlayerProfilePage({
 
       {player.resolved_team_id ? (
         <Link
-          href={localizedPath(`/teams/${player.resolved_team_id}`, locale)}
+          href={withProfileReturn(`/teams/${player.resolved_team_id}`, locale, playerReturnContext)}
           className="group flex items-center gap-4 rounded-2xl border bg-card/40 p-4 outline-none transition-colors hover:border-primary/40 hover:bg-card focus-visible:ring-2 focus-visible:ring-ring"
         >
           <ProfileAvatar
