@@ -60,6 +60,7 @@ test('twitch.getLiveStreams returns only live channels, keyed lowercased', async
         viewer_count: 1234,
         game_name: 'Overwatch 2',
         started_at: '2026-06-20T10:00:00Z',
+        thumbnail_url: 'https://static-cdn.jtvnw.net/previews-ttv/live_user_owbrain-{width}x{height}.jpg',
       },
     ],
   });
@@ -71,6 +72,7 @@ test('twitch.getLiveStreams returns only live channels, keyed lowercased', async
   assert.equal(ow.viewerCount, 1234);
   assert.equal(ow.category, 'Overwatch 2');
   assert.ok(ow.startedAt > 0);
+  assert.equal(ow.thumbnailUrl, 'https://static-cdn.jtvnw.net/previews-ttv/live_user_owbrain-1280x720.jpg?t=1781949600');
   assert.equal(map.has('offlineguy'), false);
 });
 

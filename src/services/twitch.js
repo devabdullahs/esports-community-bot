@@ -12,6 +12,19 @@ const http = axios.create({ timeout: 12_000 });
 
 let tokenCache = { token: null, expiresAt: 0 };
 
+function normalizeThumbnailUrl(value, cacheKey = null) {
+  if (typeof value !== 'string' || !value.trim()) return null;
+  const concrete = value.trim().replaceAll('{width}', '1280').replaceAll('{height}', '720');
+  if (!cacheKey) return concrete;
+  try {
+    const url = new URL(concrete);
+    url.searchParams.set('t', String(cacheKey));
+    return url.toString();
+  } catch {
+    return concrete;
+  }
+}
+
 export function isConfigured() {
   return Boolean(config.twitch.clientId && config.twitch.clientSecret);
 }
@@ -36,13 +49,14 @@ export async function getAppToken({ client = http, now = Date.now } = {}) {
 }
 
 function normalizeStream(s) {
+  const startedAt = s.started_at ? Math.floor(new Date(s.started_at).getTime() / 1000) : null;
   return {
     isLive: s.type === 'live',
     title: s.title ?? null,
     viewerCount: s.viewer_count == null ? null : Number(s.viewer_count),
     category: s.game_name || null,
-    startedAt: s.started_at ? Math.floor(new Date(s.started_at).getTime() / 1000) : null,
-    thumbnailUrl: s.thumbnail_url || null,
+    startedAt,
+    thumbnailUrl: normalizeThumbnailUrl(s.thumbnail_url, startedAt),
   };
 }
 
