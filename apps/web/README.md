@@ -149,7 +149,7 @@ The site uses only Thmanyah Sans:
 The font base URL is controlled by:
 
 ```env
-THMANYAH_FONT_BASE_URL=https://assets.moonbot.info
+THMANYAH_FONT_BASE_URL=https://assets.esportscommunity.net
 ```
 
 The app expects the font files under:
