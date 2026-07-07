@@ -19,8 +19,9 @@ import {
 } from "@/components/ui/table";
 import { LocalDateTime } from "@/components/local-date-time";
 import { PlatformIcon } from "@/components/platform-icon";
-import { copy, directionForLocale, localizedPath, type Locale } from "@/lib/i18n";
+import { copy, directionForLocale, type Locale } from "@/lib/i18n";
 import { logoProxyUrl } from "@/lib/logo-url";
+import { withProfileReturn, type ProfileReturnContext } from "@/lib/profile-navigation";
 import { safeUrlOrUndefined } from "@/lib/safe-url";
 
 type MatchStatus = "running" | "scheduled" | "finished";
@@ -165,17 +166,19 @@ function TeamName({
   teamId,
   locale,
   bold,
+  returnContext,
 }: {
   label: string;
   teamId?: number | null;
   locale: Locale;
   bold?: boolean;
+  returnContext?: ProfileReturnContext | null;
 }) {
   const className = `min-w-0 truncate ${bold ? "font-bold text-foreground" : ""}`;
   if (!teamId) return <bdi className={className}>{label}</bdi>;
   return (
     <Link
-      href={localizedPath(`/teams/${teamId}`, locale)}
+      href={withProfileReturn(`/teams/${teamId}`, locale, returnContext)}
       className={`${className} underline-offset-4 hover:text-primary hover:underline`}
     >
       <bdi>{label}</bdi>
@@ -194,6 +197,7 @@ function MatchText({
   tbd,
   vs,
   winner,
+  returnContext,
 }: {
   a: string | null;
   b: string | null;
@@ -205,6 +209,7 @@ function MatchText({
   tbd: string;
   vs: string;
   winner?: Winner;
+  returnContext?: ProfileReturnContext | null;
 }) {
   const aLabel = teamLabel(a, tbd);
   const bLabel = teamLabel(b, tbd);
@@ -212,11 +217,23 @@ function MatchText({
     <span dir={directionForLocale(locale)} className="flex w-full max-w-full items-center gap-2 text-start">
       <span className="flex min-w-0 items-center gap-1.5">
         <Logo url={logoA ?? null} alt={aLabel} />
-        <TeamName label={aLabel} teamId={aId} locale={locale} bold={winner === "a"} />
+        <TeamName
+          label={aLabel}
+          teamId={aId}
+          locale={locale}
+          bold={winner === "a"}
+          returnContext={returnContext}
+        />
       </span>
       <span className="shrink-0 text-muted-foreground">{vs}</span>
       <span className="flex min-w-0 items-center gap-1.5">
-        <TeamName label={bLabel} teamId={bId} locale={locale} bold={winner === "b"} />
+        <TeamName
+          label={bLabel}
+          teamId={bId}
+          locale={locale}
+          bold={winner === "b"}
+          returnContext={returnContext}
+        />
         <Logo url={logoB ?? null} alt={bLabel} />
       </span>
     </span>
@@ -321,6 +338,11 @@ export function TournamentMatchList({
 
   const { running, scheduled, finished } = query.data.matches;
   const standings = query.data.standings ?? [];
+  const returnContext: ProfileReturnContext = {
+    type: "tournament",
+    href: `/tournaments/${query.data.tournament.id}`,
+    label: query.data.tournament.name || `#${query.data.tournament.id}`,
+  };
   const scheduledGroups = groupMatchesByLocalDay(scheduled, locale, text, hasHydrated);
   const finishedGroups = groupMatchesByLocalDay(finished, locale, text, hasHydrated);
   const tbd = text.tbd;
@@ -331,7 +353,14 @@ export function TournamentMatchList({
 
   return (
     <div className="flex flex-col gap-8">
-      {standings.length ? <StandingsSection standings={standings} locale={locale} text={text} /> : null}
+      {standings.length ? (
+        <StandingsSection
+          standings={standings}
+          locale={locale}
+          text={text}
+          returnContext={returnContext}
+        />
+      ) : null}
 
       {standingsOnly ? null : (
         <>
@@ -359,14 +388,24 @@ export function TournamentMatchList({
                       dir={directionForLocale(locale)}
                     >
                       <Logo url={m.logo_a} alt={teamLabel(m.team_a, tbd)} />
-                      <TeamName label={teamLabel(m.team_a, tbd)} teamId={m.team_a_id} locale={locale} />
+                      <TeamName
+                        label={teamLabel(m.team_a, tbd)}
+                        teamId={m.team_a_id}
+                        locale={locale}
+                        returnContext={returnContext}
+                      />
                     </div>
                     <ScoreText a={m.score_a} b={m.score_b} />
                     <div
                       className="flex min-w-0 items-center justify-end gap-2 text-start text-sm font-medium"
                       dir={directionForLocale(locale)}
                     >
-                      <TeamName label={teamLabel(m.team_b, tbd)} teamId={m.team_b_id} locale={locale} />
+                      <TeamName
+                        label={teamLabel(m.team_b, tbd)}
+                        teamId={m.team_b_id}
+                        locale={locale}
+                        returnContext={returnContext}
+                      />
                       <Logo url={m.logo_b} alt={teamLabel(m.team_b, tbd)} />
                     </div>
                   </CardContent>
@@ -445,6 +484,7 @@ export function TournamentMatchList({
                             locale={locale}
                             tbd={tbd}
                             vs={text.vs}
+                            returnContext={returnContext}
                           />
                         )}
                       </TableCell>
@@ -498,6 +538,7 @@ export function TournamentMatchList({
                               tbd={tbd}
                               vs={text.vs}
                               winner={winner}
+                              returnContext={returnContext}
                             />
                           )}
                         </TableCell>
@@ -547,10 +588,12 @@ function StandingsSection({
   standings,
   locale,
   text,
+  returnContext,
 }: {
   standings: StandingRow[];
   locale: Locale;
   text: TournamentCopy;
+  returnContext: ProfileReturnContext;
 }) {
   const sections = new Map<string, StandingRow[]>();
   for (const row of standings) {
@@ -593,7 +636,12 @@ function StandingsSection({
                       dir={directionForLocale(locale)}
                     >
                       <Logo url={row.logo} alt={row.team} />
-                      <TeamName label={row.team} teamId={row.team_id} locale={locale} />
+                      <TeamName
+                        label={row.team}
+                        teamId={row.team_id}
+                        locale={locale}
+                        returnContext={returnContext}
+                      />
                     </span>
                   </TableCell>
                   {hasResults ? (

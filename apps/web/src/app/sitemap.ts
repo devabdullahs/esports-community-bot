@@ -18,6 +18,7 @@ const STATIC_PATHS = [
   "/media",
   "/tournaments",
   "/tournaments/ewc",
+  "/clubs",
   "/predictions",
   "/terms",
   "/privacy",
