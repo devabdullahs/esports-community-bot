@@ -130,6 +130,7 @@ export function SiteHeaderClient({
   const competitionLinks: Destination[] = [
     { href: "/tournaments", label: text.common.tournaments, icon: TrophyIcon },
     { href: "/teams", label: text.common.teams, icon: UsersIcon },
+    { href: "/players", label: text.common.players, icon: UserRoundIcon },
   ];
   // Co-streams stays top-level because it spans every tracked event and carries
   // a live indicator when any co-streamer is on air.
