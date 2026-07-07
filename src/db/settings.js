@@ -34,6 +34,19 @@ export async function setAuditLogChannel(guildId, channelId) {
   );
 }
 
+// Channel for "co-streamer went live" announcements (null disables them).
+export async function setCostreamAnnounceChannel(guildId, channelId) {
+  const now = nowText();
+  await run(
+    `INSERT INTO guild_settings (guild_id, costream_announce_channel_id, updated_at)
+     VALUES ($1, $2, $3)
+     ON CONFLICT (guild_id) DO UPDATE SET
+       costream_announce_channel_id = excluded.costream_announce_channel_id,
+       updated_at = excluded.updated_at`,
+    [guildId, channelId, now],
+  );
+}
+
 export async function setEwcPredictionsChannel(guildId, channelId) {
   const now = nowText();
   await run(
@@ -306,6 +319,11 @@ export async function clearMatchCardMessages(guildId, game) {
 
 export async function getGuildsWithClubChampionship() {
   const rows = await all('SELECT guild_id FROM guild_settings WHERE cc_page IS NOT NULL AND cc_channel_id IS NOT NULL');
+  return rows.map((r) => r.guild_id);
+}
+
+export async function getGuildsWithCostreamAnnounce() {
+  const rows = await all('SELECT guild_id FROM guild_settings WHERE costream_announce_channel_id IS NOT NULL');
   return rows.map((r) => r.guild_id);
 }
 

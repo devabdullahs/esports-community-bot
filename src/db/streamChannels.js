@@ -376,6 +376,19 @@ export async function deleteStreamChannel(id) {
 
 // Distinct handles per platform — the input the live-status poller/webhook layer
 // needs to batch its API calls.
+// Display metadata for one platform+handle (the go-live announcement needs the
+// creator's label). Prefers the default/lowest-sorted active row.
+export async function getActiveChannelMeta(platform, handle) {
+  const row = await get(
+    `SELECT label, language FROM stream_channels
+      WHERE platform = $1 AND LOWER(handle) = LOWER($2) AND active = 1
+      ORDER BY is_default DESC, sort_order ASC, id ASC
+      LIMIT 1`,
+    [platform, handle],
+  );
+  return row ?? null;
+}
+
 export async function listDistinctActiveHandles() {
   const rows = await all(
     `SELECT DISTINCT platform, handle FROM stream_channels WHERE active = 1 ORDER BY platform, handle`,

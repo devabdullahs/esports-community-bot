@@ -20,6 +20,7 @@ const {
   markStaleStatusesOffline,
 } = await import('../src/db/streamChannelStatus.js');
 const { refreshStreamStatus } = await import('../src/jobs/streamStatus.js');
+const { setCostreamAnnounceChannel } = await import('../src/db/settings.js');
 
 test.after(() => {
   closeDb();
@@ -136,4 +137,81 @@ test('youtube polls on its own cadence, keeps previous status on fetch gaps, sto
   await refreshStreamStatus(opts);
   assert.equal(ytCalls, 2);
   assert.equal((await getStreamStatus('youtube', 'ytlive')).isLive, true, 'fetch gap keeps previous status');
+});
+
+test('announces offline -> live transitions once, with cooldown, in the configured channel', async () => {
+  const GUILD = 'guild-announce';
+  await createStreamChannel({ platform: 'twitch', handle: 'goliver', scope: 'ewc', label: 'GoLiver' });
+  await setCostreamAnnounceChannel(GUILD, 'chan-live');
+
+  const sends = [];
+  const client = {
+    channels: {
+      fetch: async (id) => ({
+        isTextBased: () => true,
+        send: async (payload) => sends.push({ id, payload }),
+      }),
+    },
+  };
+  const noop = { isConfigured: () => false };
+  let liveNow = false;
+  const twitchSvc = {
+    isConfigured: () => true,
+    getLiveStreams: async () =>
+      liveNow
+        ? new Map([['goliver', { isLive: true, title: 'EWC finals!', viewerCount: 99, category: 'VALORANT' }]])
+        : new Map(),
+  };
+  let clock = 5_000_000_000;
+  const opts = { twitchSvc, kickSvc: noop, youtubeSvc: noop, client, now: () => clock };
+
+  await refreshStreamStatus(opts); // offline baseline
+  assert.equal(sends.length, 0);
+
+  liveNow = true;
+  await refreshStreamStatus(opts); // offline -> live: announce once
+  assert.equal(sends.length, 1, 'one go-live announcement');
+  assert.equal(sends[0].id, 'chan-live');
+  const embed = sends[0].payload.embeds[0].toJSON();
+  assert.match(embed.title, /GoLiver is live on Twitch/);
+  assert.match(embed.url, /twitch\.tv\/goliver/);
+
+  await refreshStreamStatus(opts); // still live: no transition, no announce
+  assert.equal(sends.length, 1);
+
+  // Flap offline -> live inside the cooldown window: suppressed.
+  liveNow = false;
+  await refreshStreamStatus(opts);
+  liveNow = true;
+  clock += 5 * 60 * 1000;
+  await refreshStreamStatus(opts);
+  assert.equal(sends.length, 1, 'cooldown suppresses the re-announce');
+
+  // After the cooldown, a fresh transition announces again.
+  liveNow = false;
+  await refreshStreamStatus(opts);
+  liveNow = true;
+  clock += 31 * 60 * 1000;
+  await refreshStreamStatus(opts);
+  assert.equal(sends.length, 2);
+});
+
+test('off-topic categories are not announced; no configured channel means no sends', async () => {
+  await createStreamChannel({ platform: 'twitch', handle: 'offtopic', scope: 'ewc', label: 'OffTopic' });
+  const sends = [];
+  const client = {
+    channels: { fetch: async (id) => ({ isTextBased: () => true, send: async (p) => sends.push({ id, p }) }) },
+  };
+  const noop = { isConfigured: () => false };
+  let category = 'Just Chatting';
+  const twitchSvc = {
+    isConfigured: () => true,
+    getLiveStreams: async () => new Map([['offtopic', { isLive: true, title: 'chat', category }]]),
+  };
+  let clock = 6_000_000_000;
+  const opts = { twitchSvc, kickSvc: noop, youtubeSvc: noop, client, now: () => clock };
+
+  await refreshStreamStatus(opts);
+  assert.equal(sends.filter((s) => String(s.p?.embeds?.[0]?.toJSON()?.title ?? '').includes('OffTopic')).length, 0,
+    'off-topic go-live is not announced');
 });
