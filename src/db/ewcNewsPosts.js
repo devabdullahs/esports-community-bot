@@ -6,6 +6,7 @@ import {
   isNewsLocale,
   resolvePostForLocale,
 } from '../lib/ewcNewsContent.js';
+import { canonicalPublicAssetUrl } from '../lib/publicAssets.js';
 
 function nowText() {
   return new Date().toISOString().slice(0, 19).replace('T', ' ');
@@ -18,6 +19,10 @@ function hydrateTranslation(row) {
     summary: row.summary,
     body: row.body,
   };
+}
+
+function nullablePublicAssetUrl(value) {
+  return canonicalPublicAssetUrl(value) || null;
 }
 
 async function translationsForPost(id) {
@@ -54,7 +59,7 @@ async function hydrate(row, locale) {
     status: row.status,
     authorDiscordId: row.author_discord_id,
     authorName: row.author_name,
-    coverImageUrl: row.cover_image_url,
+    coverImageUrl: nullablePublicAssetUrl(row.cover_image_url),
     coverPlacement: isNewsCoverPlacement(row.cover_placement) ? row.cover_placement : 'top',
     ewc: Boolean(row.ewc),
     createdAt: row.created_at,
@@ -80,6 +85,7 @@ async function hydrate(row, locale) {
 
 function normalizeInput(input) {
   const contentMode = isNewsContentMode(input.contentMode) ? input.contentMode : 'shared';
+  const coverImageUrl = nullablePublicAssetUrl(input.coverImageUrl);
   const defaultLocale = isNewsLocale(input.defaultLocale)
     ? input.defaultLocale
     : isNewsLocale(input.locale)
@@ -119,6 +125,7 @@ function normalizeInput(input) {
     return {
       ...input,
       contentMode,
+      coverImageUrl,
       defaultLocale,
       authors: normalizeAuthors(input),
       translations: {
@@ -130,6 +137,7 @@ function normalizeInput(input) {
   return {
     ...input,
     contentMode,
+    coverImageUrl,
     defaultLocale,
     authors: normalizeAuthors(input),
     translations: {
@@ -182,7 +190,7 @@ async function authorsForPost(id) {
   return rows.map((row) => ({
     discordId: row.discord_id,
     name: row.name || '',
-    avatarUrl: row.avatar_url || null,
+    avatarUrl: nullablePublicAssetUrl(row.avatar_url),
   }));
 }
 
@@ -199,7 +207,7 @@ function normalizeAuthors(input) {
     out.push({
       discordId,
       name: typeof author?.name === 'string' ? author.name : '',
-      avatarUrl: typeof author?.avatarUrl === 'string' && author.avatarUrl ? author.avatarUrl : null,
+      avatarUrl: nullablePublicAssetUrl(author?.avatarUrl),
     });
   }
   if (out.length === 0 && typeof input.authorDiscordId === 'string' && input.authorDiscordId.trim()) {

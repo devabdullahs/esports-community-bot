@@ -106,6 +106,42 @@ test('lists shared posts in both public languages and preserves cover URLs', asy
   assert.equal(resolved.coverImageUrl, 'https://assets.example.test/cover.jpg');
 });
 
+test('canonicalizes legacy public asset cover and avatar URLs', async () => {
+  const post = await createEwcNewsPost({
+    gameSlug: 'valorant',
+    status: 'draft',
+    contentMode: 'shared',
+    defaultLocale: 'en',
+    coverImageUrl: 'https://assets.moonbot.info/news/2026-07-02/cover.jpg?size=large',
+    authors: [
+      {
+        discordId: '123456789012345678',
+        name: 'Editor',
+        avatarUrl: 'https://assets.moonbot.info/avatars/editor.png',
+      },
+    ],
+    translations: {
+      en: {
+        title: 'Legacy upload',
+        summary: '',
+        body: 'Body.',
+      },
+    },
+  });
+
+  assert.equal(
+    post.coverImageUrl,
+    'https://assets.esportscommunity.net/news/2026-07-02/cover.jpg?size=large',
+  );
+  assert.equal(post.authors[0].avatarUrl, 'https://assets.esportscommunity.net/avatars/editor.png');
+
+  const stored = await get('SELECT cover_image_url FROM ewc_news_posts WHERE id = $1', [post.id]);
+  assert.equal(
+    stored.cover_image_url,
+    'https://assets.esportscommunity.net/news/2026-07-02/cover.jpg?size=large',
+  );
+});
+
 test('resolves translated posts by requested locale', async () => {
   const post = await createEwcNewsPost({
     gameSlug: 'valorant',
