@@ -276,6 +276,62 @@ export async function deleteResolvedDuplicateMatches() {
   return ids.length;
 }
 
+// Live widgets can use redirected short names before the stable match row resolves
+// (for example PTime -> PlayTime). Once a single stable, scored result exists for
+// the same normalized pair/day, retire older timestamp-keyed alias rows immediately
+// so they do not stay live while waiting for the next Liquipedia fetch.
+export async function deleteResolvedLiveAliasMatches() {
+  const rows = await all(
+    `SELECT id, tournament_id, source, external_id, team_a, team_b, score_a, score_b, status, scheduled_at
+     FROM matches
+     WHERE source = 'liquipedia'
+       AND scheduled_at IS NOT NULL
+       AND (
+         (status = 'finished' AND score_a IS NOT NULL AND score_b IS NOT NULL)
+         OR status IN ('scheduled','running')
+       )`,
+  );
+  const liveWidgetFallback = (r) => /^[^:]+:\d+:/i.test(String(r.external_id ?? ''));
+  const normalizedDayKeyOf = (r) => {
+    const pair = [normalizeTeamName(r.team_a), normalizeTeamName(r.team_b)].sort().join('|');
+    return `${r.tournament_id}|${pair}|${Math.floor(Number(r.scheduled_at) / 86400)}`;
+  };
+  const rawPairKeyOf = (r) =>
+    [r.team_a, r.team_b]
+      .map((value) =>
+        String(value ?? '')
+          .replace(/\s+/g, ' ')
+          .trim()
+          .toLowerCase(),
+      )
+      .sort()
+      .join('|');
+
+  const canonicalByDay = new Map();
+  for (const r of rows) {
+    if (liveWidgetFallback(r) || r.status !== 'finished' || r.score_a == null || r.score_b == null) continue;
+    const key = normalizedDayKeyOf(r);
+    const bucket = canonicalByDay.get(key);
+    if (bucket) bucket.push(r);
+    else canonicalByDay.set(key, [r]);
+  }
+
+  const ids = [];
+  for (const r of rows) {
+    if (!liveWidgetFallback(r) || !['scheduled', 'running'].includes(r.status)) continue;
+    const candidates = canonicalByDay.get(normalizedDayKeyOf(r)) || [];
+    if (candidates.length !== 1) continue;
+    const canonical = candidates[0];
+    if (rawPairKeyOf(r) === rawPairKeyOf(canonical)) continue;
+    if (Number(r.scheduled_at) <= Number(canonical.scheduled_at)) ids.push(r.id);
+  }
+  if (!ids.length) return 0;
+  await transaction(async (tx) => {
+    for (const id of ids) await tx.run('DELETE FROM matches WHERE id = $1', [id]);
+  });
+  return ids.length;
+}
+
 export async function deleteTournamentPlaceholderMatches(tournamentId, currentExternalIds = null) {
   const rows = await all(
     'SELECT id, external_id, team_a, team_b, scheduled_at FROM matches WHERE tournament_id = $1',

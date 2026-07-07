@@ -9,6 +9,7 @@ import {
   getMatch,
   getActiveMatches,
   markFinishedByExternalId,
+  deleteResolvedLiveAliasMatches,
   deleteTournamentPlaceholderMatches,
   deleteTournamentDuplicateMatches,
 } from '../db/matches.js';
@@ -239,6 +240,9 @@ async function pollOnce(match, tournament) {
 
 // After a restart, re-arm polling for matches still pending/running in the DB.
 export async function resumePolling() {
+  const retiredAliases = await deleteResolvedLiveAliasMatches();
+  if (retiredAliases) logger.info(`[poll] retired ${retiredAliases} stale live alias match row(s) before resume.`);
+
   let armed = 0;
   let skipped = 0;
   for (const row of await getActiveMatches()) {
