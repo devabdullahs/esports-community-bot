@@ -147,6 +147,7 @@ ensureColumns('guild_settings', [
   ['ewc_predictions_mentions_message_id', 'TEXT'],
   ['ewc_predictions_mentions_season', 'TEXT'],
   ['ewc_news_channel_id', 'TEXT'],
+  ['costream_announce_role_id', 'TEXT'],
 ]);
 
 ensureColumns('matches', [

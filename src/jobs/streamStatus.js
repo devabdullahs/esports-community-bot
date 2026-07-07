@@ -81,10 +81,15 @@ async function announceGoLive(client, newlyLive, now = Date.now) {
       const settings = await getSettings(guildId);
       const channelId = settings.costream_announce_channel_id;
       if (!channelId) continue;
+      const roleId = settings.costream_announce_role_id;
       const channel = await client.channels.fetch(channelId).catch(() => null);
       if (!channel?.isTextBased?.()) continue;
       try {
-        await channel.send({ embeds: [embed] });
+        await channel.send({
+          content: roleId ? `<@&${roleId}>` : undefined,
+          embeds: [embed],
+          allowedMentions: roleId ? { roles: [roleId], parse: [] } : { parse: [] },
+        });
         delivered = true;
         sent += 1;
       } catch (e) {
