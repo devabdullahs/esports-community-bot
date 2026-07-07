@@ -94,7 +94,7 @@ export type EwcClubTracker = {
   summary: {
     total: number;
     featured: number;
-    qualifiedSlots: number;
+    qualifiedGames: number;
     confirmedWins: number;
     pointsLeader: { name: string; points: number; rank: number | null } | null;
   };
@@ -306,6 +306,24 @@ function normalizeGame(game: RawEwcClubGame): EwcClubGame {
   };
 }
 
+function ewcClubGameKey(game: Pick<EwcClubGame, "label" | "shortLabel" | "pageUrl">) {
+  const pageUrl = stringValue(game.pageUrl);
+  if (pageUrl) return `url:${pageUrl}`;
+  const label = clubKey(game.label) || clubKey(game.shortLabel);
+  return label ? `label:${label}` : null;
+}
+
+export function countUniqueQualifiedGames(clubs: Array<Pick<EwcClubTrackerClub, "qualifiedGames">>) {
+  const seen = new Set<string>();
+  for (const club of clubs) {
+    for (const game of club.qualifiedGames) {
+      const key = ewcClubGameKey(game);
+      if (key) seen.add(key);
+    }
+  }
+  return seen.size;
+}
+
 function sourceForRegion(name: string, profile: (TeamProfileRow & { facts: Record<string, unknown> | null }) | null) {
   if (isFeaturedClubName(name)) return "featured" as const;
   if (profile?.location || profile?.nationality || profile?.facts) return "profile" as const;
@@ -380,7 +398,7 @@ export const getEwcClubTrackerCached = unstable_cache(
       summary: {
         total: clubs.length,
         featured: clubs.filter((club) => club.featured).length,
-        qualifiedSlots: clubs.reduce((sum, club) => sum + club.qualifiedGames.length, 0),
+        qualifiedGames: countUniqueQualifiedGames(clubs),
         confirmedWins: clubs.reduce((sum, club) => sum + club.wins.length, 0),
         pointsLeader: pointsLeader
           ? { name: pointsLeader.name, points: pointsLeader.points ?? 0, rank: pointsLeader.rank }

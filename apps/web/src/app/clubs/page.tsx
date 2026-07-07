@@ -24,6 +24,7 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import {
+  countUniqueQualifiedGames,
   filterEwcClubTracker,
   getEwcClubTrackerCached,
   type EwcClubGame,
@@ -244,6 +245,7 @@ export default async function EwcClubsPage({
     clubs
       .filter((club) => club.points != null)
       .sort((a, b) => (b.points ?? 0) - (a.points ?? 0) || (a.rank ?? 9999) - (b.rank ?? 9999))[0] ?? null;
+  const qualifiedGamesCount = countUniqueQualifiedGames(clubs);
 
   return (
     <main className="mx-auto flex w-full max-w-6xl flex-1 flex-col gap-6 px-4 py-8 sm:px-8 sm:py-10">
@@ -332,8 +334,8 @@ export default async function EwcClubsPage({
           icon={CrownIcon}
         />
         <StatCard
-          label={text.stats.qualifiedSlots}
-          value={text.qualifiedCount(clubs.reduce((sum, club) => sum + club.qualifiedGames.length, 0))}
+          label={text.qualifiedGames}
+          value={text.qualifiedCount(qualifiedGamesCount)}
           icon={ShieldCheckIcon}
         />
         <StatCard
