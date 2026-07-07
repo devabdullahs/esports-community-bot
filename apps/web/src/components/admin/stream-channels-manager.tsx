@@ -6,6 +6,7 @@ import { CheckIcon, PencilIcon, PlusIcon, StarIcon, Trash2Icon } from "lucide-re
 import { getAdminCopy } from "@/lib/admin-copy";
 import type { Locale } from "@/lib/i18n";
 import {
+  STREAM_DEFAULT_EMBED_PLATFORMS,
   STREAM_PLATFORMS,
   STREAM_SCOPES,
   type StreamChannel,
@@ -43,7 +44,7 @@ const PLATFORM_LABELS: Record<StreamPlatform, string> = {
 };
 
 const SCOPE_ORDER: StreamScope[] = ["ewc", "game", "team", "match"];
-const EMBED_PLATFORMS: StreamPlatform[] = ["twitch", "kick"];
+const DEFAULT_EMBED_PLATFORM_SET = new Set<StreamPlatform>(STREAM_DEFAULT_EMBED_PLATFORMS);
 type StreamManagerCopy = ReturnType<typeof getAdminCopy>["streams"];
 
 function scopeTarget(channel: StreamChannel): string | null {
@@ -212,7 +213,7 @@ export function StreamChannelsManager({
     }
 
     const creatorKey = normalizeCreatorKey(label || firstHandle(handles));
-    const embeddableEntries = entries.filter((entry) => EMBED_PLATFORMS.includes(entry.platform));
+    const embeddableEntries = entries.filter((entry) => DEFAULT_EMBED_PLATFORM_SET.has(entry.platform));
     const effectiveDefault =
       embeddableEntries.find((entry) => entry.platform === defaultPlatform)?.platform ??
       embeddableEntries[0]?.platform ??
@@ -398,7 +399,7 @@ export function StreamChannelsManager({
               </SelectTrigger>
               <SelectContent>
                 <SelectGroup>
-                  {EMBED_PLATFORMS.map((p) => (
+                  {STREAM_DEFAULT_EMBED_PLATFORMS.map((p) => (
                     <SelectItem key={p} value={p}>
                       {PLATFORM_LABELS[p]}
                     </SelectItem>
@@ -584,7 +585,7 @@ export function StreamChannelsManager({
                             ) : null}
                             {!channel.active ? <Badge variant="outline">{copy.inactive}</Badge> : null}
                             <div className="ms-auto flex flex-wrap gap-1">
-                              {!channel.isDefault && EMBED_PLATFORMS.includes(channel.platform) ? (
+                              {!channel.isDefault && DEFAULT_EMBED_PLATFORM_SET.has(channel.platform) ? (
                                 <Button variant="ghost" size="sm" disabled={busy} onClick={() => patchChannel(channel, { isDefault: true } as Partial<StreamChannel>)}>
                                   {copy.setDefault}
                                 </Button>

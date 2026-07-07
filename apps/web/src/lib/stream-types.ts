@@ -5,6 +5,10 @@
 export const STREAM_PLATFORMS = ["twitch", "kick", "youtube", "soop"] as const;
 export type StreamPlatform = (typeof STREAM_PLATFORMS)[number];
 
+// Platforms an admin can choose as the preferred embedded player. YouTube embeds
+// only while live, after the poller resolves the current video id.
+export const STREAM_DEFAULT_EMBED_PLATFORMS = ["twitch", "kick", "youtube"] as const satisfies readonly StreamPlatform[];
+
 export const STREAM_SCOPES = ["game", "team", "match", "ewc"] as const;
 export type StreamScope = (typeof STREAM_SCOPES)[number];
 

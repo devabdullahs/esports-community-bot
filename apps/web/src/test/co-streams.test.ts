@@ -90,7 +90,7 @@ describe("buildCoStreamGroups — embedChannel preference", () => {
     expect(groups[0].embedChannel?.handle).toBe("only-embeddable");
   });
 
-  test("embedChannel is null when no embeddable platform present", () => {
+  test("embedChannel is null when YouTube has no video id and no other embeddable platform exists", () => {
     const groups = buildCoStreamGroups([
       channel({ platform: "youtube", handle: "yt" }),
       channel({ platform: "soop", handle: "soop" }),
