@@ -63,8 +63,11 @@ export default async function Home() {
   const tournamentsHref = localizedPath("/tournaments", locale);
   const newsHref = localizedPath("/news", locale);
 
-  const games = await listGamesCached();
-  const latestPosts = await listLatestPublishedNewsPostsCached(locale, 4);
+  const [games, latestPosts, summaries] = await Promise.all([
+    listGamesCached(),
+    listLatestPublishedNewsPostsCached(locale, 4),
+    listTournamentSummariesCached(),
+  ]);
   const gameTitleOf = (slug: string) => gameTitleForSlug(slug, games, locale);
   const featuredPost = latestPosts[0] ?? null;
   const secondaryPosts = latestPosts.slice(1);
@@ -85,7 +88,6 @@ export default async function Home() {
   };
   const newsPostLogoSlug = (post: NewsPost) => post.gameSlug ?? post.mediaSlug ?? "news";
 
-  const summaries = await listTournamentSummariesCached();
   const live = summaries
     .filter((t) => t.matchCounts.running > 0)
     .sort(compareTournamentPreviewStart);

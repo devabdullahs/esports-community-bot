@@ -86,7 +86,8 @@ export async function getLiveChannels(handles, { client = http, gapMs = REQUEST_
     first = false;
     try {
       const { status, data } = await client.get(channelLiveUrl(handle));
-      const parsed = status === 200 ? parseLivePage(data) : null;
+      if (status !== 200) continue; // transient (429/5xx): keep previous status, don't flap
+      const parsed = parseLivePage(data);
       out.set(handle, parsed?.isLive ? parsed : { isLive: false });
     } catch {
       // Network hiccup: report nothing for this handle so the poller keeps the
