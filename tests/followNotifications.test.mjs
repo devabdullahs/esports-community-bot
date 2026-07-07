@@ -29,6 +29,7 @@ const {
   listNotificationsForUser,
   listPendingDmNotifications,
   countUnreadNotifications,
+  markNotificationRead,
   markAllNotificationsRead,
 } = await import('../src/db/userNotifications.js');
 const { notifyMatchEvent, drainDmQueue } = await import('../src/jobs/notifier.js');
@@ -197,11 +198,17 @@ test('drainDmQueue delivers pending DMs, marks closed DMs skipped and errors fai
   assert.match(dm, /Manage notifications/);
 });
 
-test('read tracking: unread count and mark-all-read', async () => {
+test('read tracking: unread count, single mark-read, and mark-all-read', async () => {
   const unread = await countUnreadNotifications(GAME_FAN);
   assert.ok(unread >= 1);
+  const first = (await listNotificationsForUser(GAME_FAN)).find((row) => row.read_at === null);
+  assert.ok(first, 'expected at least one unread notification');
+  assert.equal(await markNotificationRead(GAME_FAN, first.id), 1);
+  assert.equal(await markNotificationRead(GAME_FAN, first.id), 0);
+  assert.equal(await countUnreadNotifications(GAME_FAN), unread - 1);
+
   const marked = await markAllNotificationsRead(GAME_FAN);
-  assert.equal(marked, unread);
+  assert.equal(marked, unread - 1);
   assert.equal(await countUnreadNotifications(GAME_FAN), 0);
 });
 

@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import {
   BellIcon,
   BellOffIcon,
+  CheckIcon,
   CheckCheckIcon,
   FlagIcon,
   Gamepad2Icon,
@@ -71,6 +72,7 @@ export function FollowCenter({ locale }: { locale: Locale }) {
   const [prefs, setPrefs] = useState<Prefs | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [pendingReadIds, setPendingReadIds] = useState<Set<number>>(() => new Set());
 
   useEffect(() => {
     let cancelled = false;
@@ -140,6 +142,42 @@ export function FollowCenter({ locale }: { locale: Locale }) {
     }
   }
 
+  async function markNotificationRead(notification: NotificationRow) {
+    if (notification.read_at || pendingReadIds.has(notification.id)) return;
+    const readAt = new Date().toISOString();
+    setPendingReadIds((prev) => new Set(prev).add(notification.id));
+    setUnread((prev) => Math.max(0, prev - 1));
+    setNotifications((prev) =>
+      (prev ?? []).map((item) =>
+        item.id === notification.id ? { ...item, read_at: item.read_at ?? readAt } : item,
+      ),
+    );
+
+    try {
+      const res = await fetch("/api/me/notifications", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: notification.id }),
+        keepalive: true,
+      });
+      if (!res.ok) throw new Error("mark-read failed");
+    } catch {
+      setError(text.updateFailed);
+      setUnread((prev) => prev + 1);
+      setNotifications((prev) =>
+        (prev ?? []).map((item) =>
+          item.id === notification.id && item.read_at === readAt ? { ...item, read_at: null } : item,
+        ),
+      );
+    } finally {
+      setPendingReadIds((prev) => {
+        const next = new Set(prev);
+        next.delete(notification.id);
+        return next;
+      });
+    }
+  }
+
   async function updatePref(patch: { dmEnabled?: boolean; notifyMatchStart?: boolean; notifyMatchResult?: boolean }) {
     if (!prefs) return;
     setBusy(true);
@@ -186,37 +224,76 @@ export function FollowCenter({ locale }: { locale: Locale }) {
           {!loading && notifications && notifications.length === 0 ? (
             <p className="text-sm text-muted-foreground">{text.noNotifications}</p>
           ) : null}
-          {(notifications ?? []).map((n) => (
-            <div
-              key={n.id}
-              className={cn(
-                "flex flex-wrap items-center gap-2 rounded-lg border px-3 py-2",
-                n.read_at ? "border-border/50 bg-background/30" : "border-primary/30 bg-primary/5",
-              )}
-            >
-              {n.type === "match_start" ? (
-                <PlayIcon className="size-3.5 shrink-0 text-destructive" />
-              ) : (
-                <FlagIcon className="size-3.5 shrink-0 text-primary" />
-              )}
-              <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                {n.type === "match_start" ? text.matchStart : text.matchResult}
-              </span>
-              <span className="min-w-0 flex-1 truncate text-sm font-medium" dir="auto">
+          {(notifications ?? []).map((n) => {
+            const pendingRead = pendingReadIds.has(n.id);
+            const contentClassName = cn(
+              "flex min-w-0 flex-1 flex-wrap items-center gap-2 rounded-md px-2.5 py-1.5 outline-none focus-visible:ring-2 focus-visible:ring-ring",
+              n.url && (n.read_at ? "hover:bg-muted/30" : "hover:bg-primary/10"),
+            );
+            const content = (
+              <>
+                {n.type === "match_start" ? (
+                  <PlayIcon className="size-3.5 shrink-0 text-destructive" />
+                ) : (
+                  <FlagIcon className="size-3.5 shrink-0 text-primary" />
+                )}
+                <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                  {n.type === "match_start" ? text.matchStart : text.matchResult}
+                </span>
+                <span className="min-w-0 flex-1 truncate text-sm font-medium" dir="auto">
+                  {n.title}
+                  {n.body ? <span className="text-muted-foreground"> · {n.body}</span> : null}
+                </span>
+                <span className="shrink-0 text-xs text-muted-foreground">
+                  <DateTime value={n.created_at} locale={locale} />
+                </span>
+              </>
+            );
+
+            return (
+              <div
+                key={n.id}
+                className={cn(
+                  "flex items-center gap-1 rounded-lg border p-0.5 transition-colors",
+                  n.read_at
+                    ? "border-border/50 bg-background/30"
+                    : "border-primary/30 bg-primary/5",
+                )}
+              >
                 {n.url ? (
-                  <Link href={n.url} className="hover:underline">
-                    {n.title}
+                  <Link
+                    href={n.url}
+                    className={contentClassName}
+                    aria-label={text.openNotification}
+                    onClick={() => void markNotificationRead(n)}
+                  >
+                    {content}
                   </Link>
                 ) : (
-                  n.title
+                  <div className={contentClassName}>{content}</div>
                 )}
-                {n.body ? <span className="text-muted-foreground"> · {n.body}</span> : null}
-              </span>
-              <span className="shrink-0 text-xs text-muted-foreground">
-                <DateTime value={n.created_at} locale={locale} />
-              </span>
-            </div>
-          ))}
+                {!n.read_at ? (
+                  <Button
+                    variant="ghost"
+                    size="icon-xs"
+                    disabled={busy || pendingRead}
+                    title={text.markRead}
+                    aria-label={`${text.markRead}: ${n.title}`}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      void markNotificationRead(n);
+                    }}
+                  >
+                    {pendingRead ? (
+                      <Loader2Icon data-icon="inline-start" className="animate-spin" />
+                    ) : (
+                      <CheckIcon data-icon="inline-start" />
+                    )}
+                  </Button>
+                ) : null}
+              </div>
+            );
+          })}
         </CardContent>
       </Card>
 

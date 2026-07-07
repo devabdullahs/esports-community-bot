@@ -462,6 +462,8 @@ const baseCopy = {
       noNotifications: "No notifications yet.",
       unreadCount: (count: number) => `${count} unread`,
       markAllRead: "Mark all read",
+      markRead: "Mark read",
+      openNotification: "Open notification",
       matchStart: "Match started",
       matchResult: "Final result",
       settingsTitle: "Notification settings",
@@ -941,6 +943,8 @@ const baseCopy = {
       unreadCount: (count: number) =>
         count === 1 ? "\u0625\u0634\u0639\u0627\u0631 \u0648\u0627\u062d\u062f \u063a\u064a\u0631 \u0645\u0642\u0631\u0648\u0621" : count === 2 ? "\u0625\u0634\u0639\u0627\u0631\u0627\u0646 \u063a\u064a\u0631 \u0645\u0642\u0631\u0648\u0621\u064a\u0646" : `${count} \u063a\u064a\u0631 \u0645\u0642\u0631\u0648\u0621\u0629`,
       markAllRead: "\u062a\u062d\u062f\u064a\u062f \u0627\u0644\u0643\u0644 \u0643\u0645\u0642\u0631\u0648\u0621",
+      markRead: "\u062a\u062d\u062f\u064a\u062f \u0643\u0645\u0642\u0631\u0648\u0621",
+      openNotification: "\u0641\u062a\u062d \u0627\u0644\u0625\u0634\u0639\u0627\u0631",
       matchStart: "\u0628\u062f\u0623\u062a \u0627\u0644\u0645\u0628\u0627\u0631\u0627\u0629",
       matchResult: "\u0627\u0644\u0646\u062a\u064a\u062c\u0629 \u0627\u0644\u0646\u0647\u0627\u0626\u064a\u0629",
       settingsTitle: "\u0625\u0639\u062f\u0627\u062f\u0627\u062a \u0627\u0644\u0625\u0634\u0639\u0627\u0631\u0627\u062a",
