@@ -380,13 +380,26 @@ export async function deleteStreamChannel(id) {
 // creator's label). Prefers the default/lowest-sorted active row.
 export async function getActiveChannelMeta(platform, handle) {
   const row = await get(
-    `SELECT label, language FROM stream_channels
+    `SELECT id, platform, handle, label, scope, creator_key, language, sort_order, is_default
+       FROM stream_channels
       WHERE platform = $1 AND LOWER(handle) = LOWER($2) AND active = 1
       ORDER BY is_default DESC, sort_order ASC, id ASC
       LIMIT 1`,
     [platform, handle],
   );
-  return row ?? null;
+  if (!row) return null;
+  const label = row.label || row.handle;
+  return {
+    id: row.id,
+    platform: row.platform,
+    handle: row.handle,
+    label,
+    scope: row.scope,
+    creatorKey: row.creator_key || normalizeCreatorKey(label || row.handle),
+    language: row.language || null,
+    sortOrder: row.sort_order == null ? 0 : Number(row.sort_order),
+    isDefault: Boolean(row.is_default),
+  };
 }
 
 export async function listDistinctActiveHandles() {

@@ -198,6 +198,73 @@ test('announces offline -> live transitions once, with cooldown, in the configur
   assert.equal(sends.length, 2);
 });
 
+test('announces one default platform when one streamer has multiple live channels', async () => {
+  const GUILD = 'guild-multi-platform';
+  await createStreamChannel({
+    platform: 'twitch',
+    handle: 'brain_tw',
+    scope: 'ewc',
+    label: 'Brain',
+    creatorKey: 'brain',
+  });
+  await createStreamChannel({
+    platform: 'kick',
+    handle: 'brain_kick',
+    scope: 'ewc',
+    label: 'Brain',
+    creatorKey: 'brain',
+    isDefault: true,
+  });
+  await createStreamChannel({
+    platform: 'youtube',
+    handle: 'brain_yt',
+    scope: 'ewc',
+    label: 'Brain',
+    creatorKey: 'brain',
+  });
+  await setCostreamAnnounceChannel(GUILD, 'chan-brain');
+
+  const sends = [];
+  const client = {
+    channels: {
+      fetch: async (id) => ({
+        isTextBased: () => true,
+        send: async (payload) => sends.push({ id, payload }),
+      }),
+    },
+  };
+  const twitchSvc = {
+    isConfigured: () => true,
+    getLiveStreams: async () => new Map([['brain_tw', { isLive: true, title: 'same stream', category: 'Dota 2' }]]),
+  };
+  const kickSvc = {
+    isConfigured: () => true,
+    getLiveChannels: async () => new Map([['brain_kick', { isLive: true, title: 'same stream', category: 'Dota 2' }]]),
+  };
+  const youtubeSvc = {
+    isConfigured: () => true,
+    getLiveChannels: async () => new Map([['brain_yt', { isLive: true, title: 'same stream', category: 'Dota 2' }]]),
+  };
+
+  await refreshStreamStatus({
+    twitchSvc,
+    kickSvc,
+    youtubeSvc,
+    client,
+    now: () => 7_000_000_000,
+  });
+
+  const brainSends = sends.filter((send) => String(send.payload.embeds[0].toJSON().title).includes('Brain'));
+  assert.equal(brainSends.length, 2, 'one creator should produce one go-live announcement per configured guild');
+  assert.ok(brainSends.some((send) => send.id === 'chan-brain'));
+  for (const send of brainSends) {
+    const embed = send.payload.embeds[0].toJSON();
+    assert.match(embed.title, /Brain is live on Kick/);
+    assert.doesNotMatch(embed.title, /Twitch|YouTube/);
+    assert.match(embed.url, /kick\.com\/brain_kick/);
+  }
+});
+
 test('off-topic categories are not announced; no configured channel means no sends', async () => {
   await createStreamChannel({ platform: 'twitch', handle: 'offtopic', scope: 'ewc', label: 'OffTopic' });
   const sends = [];
