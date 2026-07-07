@@ -326,33 +326,59 @@ export async function deleteTournamentPlaceholderMatches(tournamentId, currentEx
 // but absent from the current set is a stale duplicate and safe to drop. A group
 // with NO current row is left untouched (it may be a transient parse gap), and
 // untimed rows are skipped because same-pair rematches cannot be separated safely.
+// Timestamp-keyed live-widget aliases are also retired when an already-finished
+// current scored row covers the same normalized pair/day at or after that widget
+// time, which clears stale redirect aliases like PTime -> PlayTime without
+// deleting a later same-day rematch.
 export async function deleteTournamentDuplicateMatches(tournamentId, currentExternalIds) {
   if (!currentExternalIds || !currentExternalIds.length) return 0;
   const current = new Set(currentExternalIds);
   const rows = await all(
-    'SELECT id, external_id, team_a, team_b, scheduled_at FROM matches WHERE tournament_id = $1',
+    'SELECT id, external_id, team_a, team_b, score_a, score_b, status, scheduled_at FROM matches WHERE tournament_id = $1',
     [tournamentId],
   );
+  const liveWidgetFallback = (r) => /^[^:]+:\d+:/i.test(String(r.external_id ?? ''));
   const keyOf = (r) => {
     if (!r.scheduled_at) return null;
     return `${[normalizeTeamName(r.team_a), normalizeTeamName(r.team_b)].sort().join('|')}|${r.scheduled_at}`;
   };
+  const dayKeyOf = (r) => {
+    if (!r.scheduled_at) return null;
+    const pair = [normalizeTeamName(r.team_a), normalizeTeamName(r.team_b)].sort().join('|');
+    return `${pair}|${Math.floor(Number(r.scheduled_at) / 86400)}`;
+  };
   const groups = new Map(); // key -> { hasCurrent, staleIds: [] }
+  const currentScoredByDay = new Map();
   for (const r of rows) {
     const key = keyOf(r);
-    if (!key) continue;
-    let g = groups.get(key);
-    if (!g) groups.set(key, (g = { hasCurrent: false, staleIds: [] }));
-    if (current.has(r.external_id)) g.hasCurrent = true;
-    else g.staleIds.push(r.id);
+    if (key) {
+      let g = groups.get(key);
+      if (!g) groups.set(key, (g = { hasCurrent: false, staleIds: [] }));
+      if (current.has(r.external_id)) g.hasCurrent = true;
+      else g.staleIds.push(r.id);
+    }
+
+    const dayKey = dayKeyOf(r);
+    const hasScoredResult = r.status === 'finished' && r.score_a != null && r.score_b != null;
+    if (dayKey && current.has(r.external_id) && hasScoredResult) {
+      const bucket = currentScoredByDay.get(dayKey);
+      if (bucket) bucket.push(r);
+      else currentScoredByDay.set(dayKey, [r]);
+    }
   }
-  const ids = [];
-  for (const g of groups.values()) if (g.hasCurrent) ids.push(...g.staleIds);
-  if (!ids.length) return 0;
+  const ids = new Set();
+  for (const g of groups.values()) if (g.hasCurrent) for (const id of g.staleIds) ids.add(id);
+  for (const r of rows) {
+    if (current.has(r.external_id) || !liveWidgetFallback(r)) continue;
+    const candidates = currentScoredByDay.get(dayKeyOf(r)) || [];
+    if (candidates.length !== 1) continue;
+    if (Number(r.scheduled_at) <= Number(candidates[0].scheduled_at)) ids.add(r.id);
+  }
+  if (!ids.size) return 0;
   await transaction(async (tx) => {
     for (const id of ids) await tx.run('DELETE FROM matches WHERE id = $1', [id]);
   });
-  return ids.length;
+  return ids.size;
 }
 
 // Distinct team names appearing in ACTIVE tournaments' matches for one game -
