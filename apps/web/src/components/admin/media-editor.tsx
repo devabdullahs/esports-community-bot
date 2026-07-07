@@ -197,7 +197,7 @@ export function MediaEditor({
                   id="media-logo"
                   value={logoUrl}
                   onChange={(e) => setLogoUrl(e.target.value)}
-                  placeholder="https://assets.moonbot.info/..."
+                  placeholder="https://assets.esportscommunity.net/..."
                   className="flex-1"
                 />
                 <input

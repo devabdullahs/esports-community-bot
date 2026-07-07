@@ -162,7 +162,7 @@ The web app uses only Thmanyah Sans:
 - Bold
 
 The font files are served from the configured asset base URL, usually
-`https://assets.moonbot.info/thmanyahsans/woff2`. Do not use the older
+`https://assets.esportscommunity.net/thmanyahsans/woff2`. Do not use the older
 Thmanyah display or serif families in the app.
 
 ## Image and Media Storage

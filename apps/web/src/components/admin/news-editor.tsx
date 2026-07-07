@@ -1071,7 +1071,7 @@ export function NewsEditor({
                     // Typed/pasted remote URLs cannot be re-cropped (canvas taint).
                     coverFileRef.current = null;
                   }}
-                  placeholder="https://assets.moonbot.info/..."
+                  placeholder="https://assets.esportscommunity.net/..."
                   className="mt-2"
                 />
               </Field>

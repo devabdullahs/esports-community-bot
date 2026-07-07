@@ -55,6 +55,48 @@ describe("tournament directory model", () => {
     ]);
   });
 
+  test("orders live/upcoming tournaments by nearest featured match before match counts", () => {
+    const soon = tournament({
+      id: 10,
+      name: "Soon event",
+      matchCounts: { running: 0, scheduled: 1, finished: 0 },
+      featuredMatch: {
+        id: 100,
+        name: null,
+        team_a: "All Gamers",
+        team_b: "Tidal Legends Gaming",
+        logo_a: null,
+        logo_b: null,
+        score_a: null,
+        score_b: null,
+        status: "scheduled",
+        scheduled_at: 1_900_000_000,
+      },
+    });
+    const laterWithMoreMatches = tournament({
+      id: 11,
+      name: "Later event",
+      matchCounts: { running: 0, scheduled: 10, finished: 0 },
+      featuredMatch: {
+        id: 101,
+        name: null,
+        team_a: "Titan Esports Club",
+        team_b: "UnKnights",
+        logo_a: null,
+        logo_b: null,
+        score_a: null,
+        score_b: null,
+        status: "scheduled",
+        scheduled_at: 1_900_500_000,
+      },
+    });
+
+    expect(filterTournamentDirectory([laterWithMoreMatches, soon], {}).map((item) => item.id)).toEqual([
+      10,
+      11,
+    ]);
+  });
+
   test("filters by canonical game/source while keeping result-only tournaments visible", () => {
     const events = [
       tournament({

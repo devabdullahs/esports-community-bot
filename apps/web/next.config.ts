@@ -15,7 +15,7 @@ export const contentSecurityPolicy = [
   "style-src 'self' 'unsafe-inline'",
   // Covers are admin-pasted https URLs (safe-url enforces scheme), so https: is deliberate.
   `img-src 'self' data: blob: https:`,
-  `font-src 'self' https://assets.moonbot.info${r2Host ? ` ${r2Host}` : ""}`,
+  `font-src 'self' https://assets.esportscommunity.net${r2Host ? ` ${r2Host}` : ""}`,
   "connect-src 'self' https://cloudflareinsights.com",
   "object-src 'none'",
   "base-uri 'self'",

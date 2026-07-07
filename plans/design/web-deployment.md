@@ -206,7 +206,7 @@ WAL's requirement for shared-memory-capable storage.
 | `R2_ACCESS_KEY_ID` | Optional | No | |
 | `R2_SECRET_ACCESS_KEY` | Optional | No | |
 | `R2_BUCKET` | Optional | No | |
-| `R2_PUBLIC_BASE_URL` | Optional | No | e.g. `https://assets.moonbot.info` |
+| `R2_PUBLIC_BASE_URL` | Optional | No | e.g. `https://assets.esportscommunity.net` |
 | `THMANYAH_FONT_BASE_URL` | Optional | No | Font proxy base URL |
 
 ---

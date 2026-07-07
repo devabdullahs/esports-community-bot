@@ -38,6 +38,7 @@ import {
 } from "@/lib/i18n";
 import { getRequestLocale } from "@/lib/request-locale";
 import { buildPageMetadata, siteDescription, siteName } from "@/lib/metadata";
+import { displayImageUrl } from "@/lib/logo-url";
 import { safeUrlOrUndefined } from "@/lib/safe-url";
 
 export const runtime = "nodejs";
@@ -85,9 +86,12 @@ export default async function Home() {
   const newsPostLogoSlug = (post: NewsPost) => post.gameSlug ?? post.mediaSlug ?? "news";
 
   const summaries = await listTournamentSummariesCached();
-  const live = summaries.filter((t) => t.matchCounts.running > 0);
+  const live = summaries
+    .filter((t) => t.matchCounts.running > 0)
+    .sort(compareTournamentPreviewStart);
   const upcoming = summaries
     .filter((t) => t.matchCounts.running === 0 && t.matchCounts.scheduled > 0)
+    .sort(compareTournamentPreviewStart)
     .slice(0, 6);
   const trackedGameCount = new Set(summaries.map((t) => t.game).filter(Boolean)).size || games.length;
   const totalLiveMatches = summaries.reduce((sum, t) => sum + t.matchCounts.running, 0);
@@ -583,9 +587,9 @@ function MatchPreview({ match, locale }: { match: FeaturedMatch; locale: Locale 
         </span>
       </div>
       <div className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-3">
-        <TeamPill name={match.team_a} fallback={text.tournaments.tbd} />
+        <TeamPill name={match.team_a} logo={match.logo_a} fallback={text.tournaments.tbd} />
         <span className="text-center text-sm font-semibold text-primary">{score}</span>
-        <TeamPill name={match.team_b} fallback={text.tournaments.tbd} align="end" />
+        <TeamPill name={match.team_b} logo={match.logo_b} fallback={text.tournaments.tbd} align="end" />
       </div>
     </div>
   );
@@ -593,10 +597,12 @@ function MatchPreview({ match, locale }: { match: FeaturedMatch; locale: Locale 
 
 function TeamPill({
   name,
+  logo,
   fallback,
   align = "start",
 }: {
   name: string | null;
+  logo: string | null;
   fallback: string;
   align?: "start" | "end";
 }) {
@@ -617,19 +623,54 @@ function TeamPill({
           : "flex min-w-0 items-center gap-2"
       }
     >
-      {align === "start" ? (
-        <span className="inline-flex size-8 shrink-0 items-center justify-center rounded-xl bg-muted text-[0.65rem] font-semibold text-muted-foreground">
-          {initials || "?"}
-        </span>
-      ) : null}
+      {align === "start" ? <TeamPillLogo name={label} logo={logo} initials={initials} /> : null}
       <span className="truncate text-sm font-semibold" dir="auto">
         {label}
       </span>
-      {align === "end" ? (
-        <span className="inline-flex size-8 shrink-0 items-center justify-center rounded-xl bg-muted text-[0.65rem] font-semibold text-muted-foreground">
-          {initials || "?"}
-        </span>
-      ) : null}
+      {align === "end" ? <TeamPillLogo name={label} logo={logo} initials={initials} /> : null}
     </span>
+  );
+}
+
+function TeamPillLogo({
+  name,
+  logo,
+  initials,
+}: {
+  name: string;
+  logo: string | null;
+  initials: string;
+}) {
+  const safe = safeUrlOrUndefined(logo);
+  if (safe) {
+    return (
+      // eslint-disable-next-line @next/next/no-img-element -- proxy/cached external crests, no sizing benefit from next/image here
+      <img
+        src={displayImageUrl(safe)}
+        alt=""
+        loading="lazy"
+        className="size-8 shrink-0 rounded-xl bg-muted object-contain p-1"
+      />
+    );
+  }
+
+  return (
+    <span
+      title={name}
+      className="inline-flex size-8 shrink-0 items-center justify-center rounded-xl bg-muted text-[0.65rem] font-semibold text-muted-foreground"
+    >
+      {initials || "?"}
+    </span>
+  );
+}
+
+function compareTournamentPreviewStart(a: TournamentSummary, b: TournamentSummary): number {
+  const startA = a.featuredMatch?.scheduled_at ?? Number.MAX_SAFE_INTEGER;
+  const startB = b.featuredMatch?.scheduled_at ?? Number.MAX_SAFE_INTEGER;
+  return (
+    startA - startB ||
+    b.matchCounts.running - a.matchCounts.running ||
+    b.matchCounts.scheduled - a.matchCounts.scheduled ||
+    (a.name ?? "").localeCompare(b.name ?? "")
   );
 }

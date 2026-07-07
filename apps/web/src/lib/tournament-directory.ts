@@ -119,8 +119,17 @@ export function tournamentDirectorySorter(
   a: TournamentDirectoryItem,
   b: TournamentDirectoryItem,
 ): number {
+  const primary = statusWeight(a) - statusWeight(b);
+  if (primary) return primary;
+
+  const status = tournamentPrimaryStatus(a);
+  const timeA = a.featuredMatch?.scheduled_at ?? Number.MAX_SAFE_INTEGER;
+  const timeB = b.featuredMatch?.scheduled_at ?? Number.MAX_SAFE_INTEGER;
+  const relevantTime =
+    status === "results" ? timeB - timeA : status === "live" || status === "upcoming" ? timeA - timeB : 0;
+  if (relevantTime) return relevantTime;
+
   return (
-    statusWeight(a) - statusWeight(b) ||
     b.matchCounts.running - a.matchCounts.running ||
     b.matchCounts.scheduled - a.matchCounts.scheduled ||
     b.matchCounts.finished - a.matchCounts.finished ||

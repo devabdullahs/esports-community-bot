@@ -15,8 +15,8 @@ const ACCESS_KEY_ID = process.env.R2_ACCESS_KEY_ID || "";
 const SECRET_ACCESS_KEY = process.env.R2_SECRET_ACCESS_KEY || "";
 const BUCKET = process.env.R2_BUCKET || "";
 
-// Accept the public base URL with or without a scheme (e.g. "assets.moonbot.info"
-// or "https://assets.moonbot.info") and always normalize to an absolute https URL.
+// Accept the public base URL with or without a scheme (e.g. "assets.esportscommunity.net"
+// or "https://assets.esportscommunity.net") and always normalize to an absolute https URL.
 function normalizeBaseUrl(raw: string | undefined): string {
   const value = (raw || "").trim().replace(/\/+$/, "");
   if (!value) return "";
