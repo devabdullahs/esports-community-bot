@@ -139,6 +139,7 @@ ensureColumns('guild_settings', [
   ['match_card_channel_id', 'TEXT'],
   ['match_card_message_id', 'TEXT'],
   ['ewc_predictions_channel_id', 'TEXT'],
+  ['costream_announce_channel_id', 'TEXT'],
   ['ewc_predictions_leaderboard_channel_id', 'TEXT'],
   ['ewc_predictions_leaderboard_message_id', 'TEXT'],
   ['ewc_predictions_leaderboard_season', 'TEXT'],

@@ -155,8 +155,10 @@ CREATE TABLE IF NOT EXISTS guild_settings (
   ewc_predictions_mentions_channel_id       TEXT,
   ewc_predictions_mentions_message_id       TEXT,
   ewc_predictions_mentions_season           TEXT,
-  ewc_news_channel_id                       TEXT
+  ewc_news_channel_id                       TEXT,
+  costream_announce_channel_id              TEXT
 );
+ALTER TABLE guild_settings ADD COLUMN IF NOT EXISTS costream_announce_channel_id TEXT;
 
 CREATE TABLE IF NOT EXISTS game_leaderboards (
   guild_id   TEXT NOT NULL,

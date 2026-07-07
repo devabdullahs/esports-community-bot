@@ -60,7 +60,7 @@ export function execute(client) {
   startEwcPredictions(client); // EWC prediction snapshots/scoring automation
   startNewsAnnouncer(client); // Auto-post published news to Discord (per-game / default channel)
   startMediaAnnouncer(client); // Auto-announce opted-in media channels to their Discord channel
-  startStreamStatusJob(); // Poll Twitch/Kick for which tracked co-stream channels are live
+  startStreamStatusJob(client); // Poll Twitch/Kick/YouTube live status + go-live announcements
   startPandaScoreProfileCache(); // Quiet-hours team/player profile cache.
   startLogoWarmup(); // Pre-download tracked-match crests so the web logo proxy can serve them.
   startNotifier(client); // Deliver follower notifications (site inbox rows -> Discord DMs).
