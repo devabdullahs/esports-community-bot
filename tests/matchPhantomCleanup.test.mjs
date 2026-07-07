@@ -15,9 +15,13 @@ process.env.LOG_LEVEL = 'error';
 
 const { closeDb } = await import('../src/db/index.js');
 const { addTournament } = await import('../src/db/tournaments.js');
-const { upsertMatch, getMatch, deleteResolvedDuplicateMatches, deleteTournamentDuplicateMatches } = await import(
-  '../src/db/matches.js'
-);
+const {
+  upsertMatch,
+  getMatch,
+  deleteResolvedDuplicateMatches,
+  deleteResolvedLiveAliasMatches,
+  deleteTournamentDuplicateMatches,
+} = await import('../src/db/matches.js');
 
 test.after(() => {
   closeDb();
@@ -215,6 +219,44 @@ test('keeps a later same-day live-widget alias as a possible rematch', async () 
   await liveAlias(t.id, 'dota2:1783437900:Team Liquid:PTime', 'Team Liquid', 'PTime', null, null, 1783437900);
 
   const removed = await deleteTournamentDuplicateMatches(t.id, ['Match:ID_B5F8Z45QjB_0002']);
+
+  assert.equal(removed, 0);
+  assert.ok(await getMatch('liquipedia', 'dota2:1783437900:Team Liquid:PTime'));
+});
+
+test('startup cleanup removes stale live-widget aliases covered by a scored stable result', async () => {
+  const t = await tournament('dota2/EWC/2026-playtime-startup');
+  await match(t.id, 'Match:ID_B5F8Z45QjB_0003', 'Team Liquid', 'PlayTime', 1, 1, 1783427100);
+  await liveAlias(t.id, 'dota2:1783423800:Team Liquid:PTime', 'Team Liquid', 'PTime', null, null, 1783423800);
+  await liveAlias(t.id, 'dota2:1783426500:Team Liquid:PTime', 'Team Liquid', 'PTime', 0, 0, 1783426500);
+  await liveAlias(t.id, 'dota2:1783427100:Team Liquid:PTime', 'Team Liquid', 'PTime', 1, 0, 1783427100);
+
+  const removed = await deleteResolvedLiveAliasMatches();
+
+  assert.equal(removed, 3);
+  assert.ok(await getMatch('liquipedia', 'Match:ID_B5F8Z45QjB_0003'));
+  assert.equal(await getMatch('liquipedia', 'dota2:1783423800:Team Liquid:PTime'), null);
+  assert.equal(await getMatch('liquipedia', 'dota2:1783426500:Team Liquid:PTime'), null);
+  assert.equal(await getMatch('liquipedia', 'dota2:1783427100:Team Liquid:PTime'), null);
+});
+
+test('startup cleanup keeps non-alias live-widget rows for the same pair', async () => {
+  const t = await tournament('dota2/EWC/2026-live-widget-same-name');
+  await match(t.id, 'Match:ID_SAME_PAIR_0001', 'Team Liquid', 'PlayTime', 1, 1, 1783427100);
+  await liveAlias(t.id, 'dota2:1783426500:Team Liquid:PlayTime', 'Team Liquid', 'PlayTime', 0, 0, 1783426500);
+
+  const removed = await deleteResolvedLiveAliasMatches();
+
+  assert.equal(removed, 0);
+  assert.ok(await getMatch('liquipedia', 'dota2:1783426500:Team Liquid:PlayTime'));
+});
+
+test('startup cleanup keeps later same-day alias rows as possible rematches', async () => {
+  const t = await tournament('dota2/EWC/2026-playtime-startup-rematch');
+  await match(t.id, 'Match:ID_B5F8Z45QjB_0004', 'Team Liquid', 'PlayTime', 1, 1, 1783427100);
+  await liveAlias(t.id, 'dota2:1783437900:Team Liquid:PTime', 'Team Liquid', 'PTime', null, null, 1783437900);
+
+  const removed = await deleteResolvedLiveAliasMatches();
 
   assert.equal(removed, 0);
   assert.ok(await getMatch('liquipedia', 'dota2:1783437900:Team Liquid:PTime'));

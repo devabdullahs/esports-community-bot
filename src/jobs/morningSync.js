@@ -11,6 +11,7 @@ import {
 } from '../db/tournaments.js';
 import {
   deleteResolvedDuplicateMatches,
+  deleteResolvedLiveAliasMatches,
   deleteTournamentPlaceholderMatches,
   deleteTournamentDuplicateMatches,
   upsertMatch,
@@ -123,6 +124,8 @@ export async function runMorningSync(client) {
   try {
     const retired = await deleteResolvedDuplicateMatches();
     if (retired) logger.info(`[morning-sync] retired ${retired} phantom finished match(es) (resolved elsewhere with a score).`);
+    const aliases = await deleteResolvedLiveAliasMatches();
+    if (aliases) logger.info(`[morning-sync] retired ${aliases} stale live alias match row(s).`);
   } catch (err) {
     logger.error(`[morning-sync] phantom cleanup failed: ${err.message}`);
   }
