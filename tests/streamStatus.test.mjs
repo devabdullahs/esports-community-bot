@@ -142,7 +142,7 @@ test('youtube polls on its own cadence, keeps previous status on fetch gaps, sto
 test('announces offline -> live transitions once, with cooldown, in the configured channel', async () => {
   const GUILD = 'guild-announce';
   await createStreamChannel({ platform: 'twitch', handle: 'goliver', scope: 'ewc', label: 'GoLiver' });
-  await setCostreamAnnounceChannel(GUILD, 'chan-live');
+  await setCostreamAnnounceChannel(GUILD, 'chan-live', { roleId: 'role-live' });
 
   const sends = [];
   const client = {
@@ -172,6 +172,8 @@ test('announces offline -> live transitions once, with cooldown, in the configur
   await refreshStreamStatus(opts); // offline -> live: announce once
   assert.equal(sends.length, 1, 'one go-live announcement');
   assert.equal(sends[0].id, 'chan-live');
+  assert.equal(sends[0].payload.content, '<@&role-live>');
+  assert.deepEqual(sends[0].payload.allowedMentions, { roles: ['role-live'], parse: [] });
   const embed = sends[0].payload.embeds[0].toJSON();
   assert.match(embed.title, /GoLiver is live on Twitch/);
   assert.match(embed.url, /twitch\.tv\/goliver/);

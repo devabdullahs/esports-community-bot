@@ -7,6 +7,11 @@ import {
 } from 'discord.js';
 import { setCostreamAnnounceChannel } from '../db/settings.js';
 import { sendAuditLog } from '../lib/auditLog.js';
+import {
+  botChannelPermissionMessage,
+  EMBED_BOARD_PERMISSIONS,
+  missingBotChannelPermissions,
+} from '../lib/botPermissions.js';
 
 // Configure "co-streamer went live" announcements. The stream-status poller
 // detects offline -> live transitions on tracked Twitch/Kick/YouTube channels
@@ -26,6 +31,12 @@ export const data = new SlashCommandBuilder()
           .setDescription('Text or announcement channel')
           .addChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement)
           .setRequired(true),
+      )
+      .addRoleOption((o) =>
+        o
+          .setName('mention_role')
+          .setDescription('Optional role to mention when a tracked co-streamer goes live')
+          .setRequired(false),
       ),
   )
   .addSubcommand((sc) => sc.setName('off').setDescription('Turn go-live announcements off'));
@@ -44,16 +55,38 @@ export async function execute(interaction) {
   }
 
   const channel = interaction.options.getChannel('channel', true);
-  await setCostreamAnnounceChannel(interaction.guildId, channel.id);
+  const role = interaction.options.getRole('mention_role');
+  const missing = missingBotChannelPermissions(interaction, channel, EMBED_BOARD_PERMISSIONS);
+  if (missing.length) {
+    await interaction.reply({ content: botChannelPermissionMessage(channel, missing), flags: MessageFlags.Ephemeral });
+    return;
+  }
+
+  if (role?.id === interaction.guildId) {
+    await interaction.reply({ content: 'Please select a server role, not @everyone.', flags: MessageFlags.Ephemeral });
+    return;
+  }
+
+  if (role && !role.mentionable && !interaction.appPermissions?.has?.(PermissionFlagsBits.MentionEveryone)) {
+    await interaction.reply({
+      content:
+        `${role} is not mentionable. Make the role mentionable, or give the bot **Mention Everyone** so it can mention that role.`,
+      flags: MessageFlags.Ephemeral,
+    });
+    return;
+  }
+
+  await setCostreamAnnounceChannel(interaction.guildId, channel.id, { roleId: role?.id ?? null });
   await interaction.reply({
     content:
       `✅ Co-stream go-live announcements set to ${channel}.\n` +
+      `${role ? `-# Mention role: ${role}\n` : ''}` +
       '-# Posts once when a tracked co-streamer goes live on Twitch, Kick, or YouTube (30 min re-announce cooldown).',
     flags: MessageFlags.Ephemeral,
   });
   await sendAuditLog(interaction.client, interaction.guildId, {
     action: 'Co-stream Announcements Set',
     actor: interaction.user,
-    details: `Channel: #${channel.name} (${channel.id})`,
+    details: `Channel: #${channel.name} (${channel.id})\nMention role: ${role ? `${role.name} (${role.id})` : 'none'}`,
   });
 }

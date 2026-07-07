@@ -35,15 +35,16 @@ export async function setAuditLogChannel(guildId, channelId) {
 }
 
 // Channel for "co-streamer went live" announcements (null disables them).
-export async function setCostreamAnnounceChannel(guildId, channelId) {
+export async function setCostreamAnnounceChannel(guildId, channelId, { roleId = null } = {}) {
   const now = nowText();
   await run(
-    `INSERT INTO guild_settings (guild_id, costream_announce_channel_id, updated_at)
-     VALUES ($1, $2, $3)
+    `INSERT INTO guild_settings (guild_id, costream_announce_channel_id, costream_announce_role_id, updated_at)
+     VALUES ($1, $2, $3, $4)
      ON CONFLICT (guild_id) DO UPDATE SET
        costream_announce_channel_id = excluded.costream_announce_channel_id,
+       costream_announce_role_id = excluded.costream_announce_role_id,
        updated_at = excluded.updated_at`,
-    [guildId, channelId, now],
+    [guildId, channelId, roleId, now],
   );
 }
 
