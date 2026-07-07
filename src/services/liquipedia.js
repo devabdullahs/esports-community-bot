@@ -16,6 +16,7 @@ export {
   parseMatchInfo,
   parseMatchlistMatch,
   parseMatchStream,
+  mergeLiveWidgetMatch,
   parseSwissMatches,
   parseTournamentEwcAffiliation,
   valveRankingRegions,

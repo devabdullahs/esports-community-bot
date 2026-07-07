@@ -10,16 +10,22 @@ export function scoreText(m) {
   return m.score_a != null && m.score_b != null ? `\`${m.score_a}–${m.score_b}\`` : '';
 }
 
+const NORMALIZED_TEAM_ALIASES = new Map([
+  ['l1team', 'l1gateam'],
+  ['ptime', 'playtime'],
+]);
+
 // Normalized key for recognizing the same team/player across sources and name forms — e.g.
 // the bracket says "Team Canada" while the upcoming-matches widget says "Canada", or Liquipedia
 // and PandaScore spell a team slightly differently. Used ONLY as a dedupe key, never displayed.
 export function normalizeTeamName(s) {
-  return String(s ?? '')
+  const key = String(s ?? '')
     .toLowerCase()
     .replace(/^team\s+/, '')
     .replace(/\([^)]*\)/g, '')
     .replace(/[^a-z0-9]+/g, '')
     .trim();
+  return NORMALIZED_TEAM_ALIASES.get(key) || key;
 }
 
 export function truncate(s, max) {

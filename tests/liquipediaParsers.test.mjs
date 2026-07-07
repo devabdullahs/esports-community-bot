@@ -26,6 +26,7 @@ const {
   parseBracketMatch,
   parseMatchInfo,
   parseMatchStream,
+  mergeLiveWidgetMatch,
   parseTournamentEwcAffiliation,
 } = await import('../src/services/liquipedia.js');
 
@@ -872,6 +873,59 @@ test('parseMatchInfo: stale unscored match is finished, not upcoming', () => {
   assert.equal(m.status, 'finished');
   assert.equal(m.scoreA, null);
   assert.equal(m.scoreB, null);
+});
+
+test('mergeLiveWidgetMatch does not reopen an authoritative scored result', () => {
+  const existing = {
+    teamA: 'Team Liquid',
+    teamB: 'PlayTime',
+    scoreA: 1,
+    scoreB: 1,
+    status: 'finished',
+    scheduledAt: 1_783_427_700,
+    winner: null,
+  };
+
+  const changed = mergeLiveWidgetMatch(existing, {
+    teamA: 'Team Liquid',
+    teamB: 'PTime',
+    scoreA: 0,
+    scoreB: 0,
+    status: 'running',
+    scheduledAt: 1_783_427_100,
+  });
+
+  assert.equal(changed, false);
+  assert.equal(existing.status, 'finished');
+  assert.equal(existing.scoreA, 1);
+  assert.equal(existing.scoreB, 1);
+});
+
+test('mergeLiveWidgetMatch can still start and enrich an unresolved row', () => {
+  const existing = {
+    teamA: 'Team Liquid',
+    teamB: 'PlayTime',
+    scoreA: null,
+    scoreB: null,
+    status: 'scheduled',
+    scheduledAt: null,
+    winner: null,
+  };
+
+  const changed = mergeLiveWidgetMatch(existing, {
+    teamA: 'Team Liquid',
+    teamB: 'PTime',
+    scoreA: 1,
+    scoreB: 0,
+    status: 'running',
+    scheduledAt: 1_783_427_100,
+  });
+
+  assert.equal(changed, true);
+  assert.equal(existing.status, 'running');
+  assert.equal(existing.scoreA, 1);
+  assert.equal(existing.scoreB, 0);
+  assert.equal(existing.scheduledAt, 1_783_427_100);
 });
 
 // ---------------------------------------------------------------------------
