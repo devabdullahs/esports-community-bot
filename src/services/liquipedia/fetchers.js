@@ -42,6 +42,7 @@ function titleFromPageSegment(page) {
 
 const CHILD_STAGE_SEGMENTS = new Set([
   'Group_Stage',
+  'Survival',
   'Survivor_Stage',
   'Finals',
   'Playoffs',
@@ -151,6 +152,7 @@ export async function fetchSchedule(tournament) {
   const seenIds = new Set();
   const pairIndex = new Map(); // pairKey -> kept authoritative matches
   const pairOf = (m) => [normalizeTeamName(m.teamA), normalizeTeamName(m.teamB)].sort().join('|');
+  const teamKeysOf = (m) => [normalizeTeamName(m.teamA), normalizeTeamName(m.teamB)].filter(Boolean);
   // A page can render the SAME match twice - once in a bracket widget and once in
   // a match-list widget. Only collapse cross-widget twins that share the exact
   // start timestamp; same-pair rematches later that day, or untimed rows where the
@@ -170,8 +172,18 @@ export async function fetchSchedule(tournament) {
   };
   const findExistingForLiveWidget = (m) => {
     const matches = pairIndex.get(pairOf(m)) || [];
-    if (!matches.length) return null;
     const ts = timestampOf(m);
+    if (!matches.length && ts != null) {
+      const keys = new Set(teamKeysOf(m));
+      const sameTimeOverlap = out.filter((candidate) => {
+        if (timestampOf(candidate) !== ts) return false;
+        const candidateKeys = teamKeysOf(candidate);
+        return candidateKeys.some((key) => keys.has(key));
+      });
+      if (sameTimeOverlap.length === 1) return sameTimeOverlap[0];
+      return null;
+    }
+    if (!matches.length) return null;
     if (ts != null) {
       const exact = matches.find((candidate) => timestampOf(candidate) === ts);
       if (exact) return exact;
@@ -188,8 +200,8 @@ export async function fetchSchedule(tournament) {
     if (m.status === 'finished') return 2;
     return hasScore ? 1 : 0;
   };
-  const addAuthoritative = (el, parser, structuralScope, widget) => {
-    const m = parser($, el, game, structuralScope || page);
+  const addAuthoritative = ($page, el, parser, structuralScope, widget) => {
+    const m = parser($page, el, game, structuralScope || page);
     if (!m || seenIds.has(m.externalId)) return;
     const key = authKeyOf(m);
     const kept = key ? (authByKey.get(key) || []).find((entry) => entry.widget !== widget)?.match : null;
@@ -214,56 +226,6 @@ export async function fetchSchedule(tournament) {
     out.push(m);
   };
 
-  // 1) Brackets AND match lists (group / Swiss / weekly schedules) = authoritative:
-  //    stable set, with winners + final scores.
-  $('.brkts-match').each((i, el) => addAuthoritative(el, parseBracketMatch, `${page}:bracket:${i}`, 'bracket'));
-  $('.brkts-matchlist-match').each((i, el) =>
-    addAuthoritative(el, parseMatchlistMatch, `${page}:matchlist:${i}`, 'matchlist'),
-  );
-
-  // 1c) Swiss group standings grids (RLCS etc.) — matches are encoded in the round cells.
-  for (const m of parseSwissMatches($, game)) {
-    if (seenIds.has(m.externalId) || pairIndex.has(pairOf(m))) continue;
-    seenIds.add(m.externalId);
-    addToPairIndex(m);
-    out.push(m);
-  }
-
-  // 2) "Upcoming Matches" widget = the live matchticker, our best LIVE signal. For a pair we
-  //    already have, don't duplicate it — but if the widget shows it live, UPGRADE the stored
-  //    entry to running. (A Swiss/bracket cell can show a live Bo3's partial score, e.g. 1-0,
-  //    which the score heuristic otherwise reads as "finished".) New matchups are added.
-  $('.match-info').each((_i, el) => {
-    const m = parseMatchInfo($, el, game);
-    if (!m || (m.teamA === 'TBD' && m.teamB === 'TBD')) return;
-    const existing = findExistingForLiveWidget(m);
-    if (existing) {
-      if (m.status === 'running' && existing.status !== 'running') {
-        existing.status = 'running';
-        existing.winner = null;
-        if (m.scoreA != null) existing.scoreA = m.scoreA;
-        if (m.scoreB != null) existing.scoreB = m.scoreB;
-        if (!existing.scheduledAt && m.scheduledAt) existing.scheduledAt = m.scheduledAt;
-      } else if (
-        m.status === 'finished' &&
-        existing.status !== 'finished' &&
-        existing.scoreA == null &&
-        existing.scoreB == null &&
-        m.scheduledAt
-      ) {
-        // Some widgets keep already-played matches in "Upcoming" with no score/winner.
-        // If the same pair is far past its start, retire the unresolved bracket row too.
-        existing.status = 'finished';
-        if (!existing.scheduledAt) existing.scheduledAt = m.scheduledAt;
-      }
-      return;
-    }
-    if (seenIds.has(m.externalId)) return;
-    seenIds.add(m.externalId);
-    addToPairIndex(m);
-    out.push(m);
-  });
-
   const addScheduleMatches = (matches) => {
     for (const m of matches) {
       if (!m || seenIds.has(m.externalId)) continue;
@@ -272,13 +234,74 @@ export async function fetchSchedule(tournament) {
     }
   };
 
-  addScheduleMatches(parseBattleRoyaleSchedules($, game, page));
+  const pages = [{ page, $, stageTitle: '' }];
 
   for (const child of childStagePages($, game, page)) {
     const childLoaded = await loadTournamentPage(game, child);
     if (!childLoaded) continue;
-    addScheduleMatches(parseBattleRoyaleSchedules(childLoaded.$, game, child, titleFromPageSegment(child)));
+    pages.push({ page: child, $: childLoaded.$, stageTitle: titleFromPageSegment(child) });
   }
+
+  const addAuthoritativePage = ({ page: pagePath, $: $page, stageTitle }) => {
+    // Brackets AND match lists (group / Swiss / weekly schedules) = authoritative:
+    // stable set, with winners + final scores.
+    $page('.brkts-match').each((i, el) =>
+      addAuthoritative($page, el, parseBracketMatch, `${pagePath}:bracket:${i}`, 'bracket'),
+    );
+    $page('.brkts-matchlist-match').each((i, el) =>
+      addAuthoritative($page, el, parseMatchlistMatch, `${pagePath}:matchlist:${i}`, 'matchlist'),
+    );
+
+    // Swiss group standings grids (RLCS etc.) — matches are encoded in the round cells.
+    for (const m of parseSwissMatches($page, game)) {
+      if (seenIds.has(m.externalId) || pairIndex.has(pairOf(m))) continue;
+      seenIds.add(m.externalId);
+      addToPairIndex(m);
+      out.push(m);
+    }
+
+    addScheduleMatches(parseBattleRoyaleSchedules($page, game, pagePath, stageTitle));
+  };
+
+  const addLiveWidgetsPage = ({ $: $page }) => {
+    // "Upcoming Matches" widget = the live matchticker, our best LIVE signal. For a pair we
+    // already have, don't duplicate it — but if the widget shows it live, UPGRADE the stored
+    // entry to running. (A Swiss/bracket cell can show a live Bo3's partial score, e.g. 1-0,
+    // which the score heuristic otherwise reads as "finished".) New matchups are added.
+    $page('.match-info').each((_i, el) => {
+      const m = parseMatchInfo($page, el, game);
+      if (!m || (m.teamA === 'TBD' && m.teamB === 'TBD')) return;
+      const existing = findExistingForLiveWidget(m);
+      if (existing) {
+        if (m.status === 'running' && existing.status !== 'running') {
+          existing.status = 'running';
+          existing.winner = null;
+          if (m.scoreA != null) existing.scoreA = m.scoreA;
+          if (m.scoreB != null) existing.scoreB = m.scoreB;
+          if (!existing.scheduledAt && m.scheduledAt) existing.scheduledAt = m.scheduledAt;
+        } else if (
+          m.status === 'finished' &&
+          existing.status !== 'finished' &&
+          existing.scoreA == null &&
+          existing.scoreB == null &&
+          m.scheduledAt
+        ) {
+          // Some widgets keep already-played matches in "Upcoming" with no score/winner.
+          // If the same pair is far past its start, retire the unresolved bracket row too.
+          existing.status = 'finished';
+          if (!existing.scheduledAt) existing.scheduledAt = m.scheduledAt;
+        }
+        return;
+      }
+      if (seenIds.has(m.externalId)) return;
+      seenIds.add(m.externalId);
+      addToPairIndex(m);
+      out.push(m);
+    });
+  };
+
+  for (const loadedPage of pages) addAuthoritativePage(loadedPage);
+  for (const loadedPage of pages) addLiveWidgetsPage(loadedPage);
 
   return out;
 }

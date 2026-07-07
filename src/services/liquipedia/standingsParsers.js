@@ -224,6 +224,24 @@ function scheduleExternalId(game, page, section, label) {
   return `${game}:br-schedule:${key}`;
 }
 
+function battleRoyaleScheduleStatus($, item, scheduledAt) {
+  const $item = $(item);
+  const iconClass = $item
+    .find('.panel-content__game-schedule__icon i, .navigation-tabs__list-item-icon, i')
+    .map((_, icon) => $(icon).attr('class') || '')
+    .get()
+    .join(' ');
+  const dataFinished = $item.find('[data-finished]').first().attr('data-finished') || '';
+
+  if (/\bfinished\b/i.test(dataFinished) || /\bfa-check\b/i.test(iconClass) || /\bicon--green\b/i.test(iconClass)) {
+    return 'finished';
+  }
+  if (/\bicon--red\b/i.test(iconClass) || /\bfa-circle\b/i.test(iconClass)) {
+    return 'running';
+  }
+  return deriveStatus({ scheduledAt });
+}
+
 export function parseBattleRoyaleSchedules($, game, page, stageTitle = '') {
   const matches = [];
   $('.panel-table').each((_, table) => {
@@ -237,6 +255,7 @@ export function parseBattleRoyaleSchedules($, game, page, stageTitle = '') {
       if (!label || !scheduledAt) return;
       const parts = [stageTitle, section, label].filter(Boolean);
       const name = parts.join(' - ');
+      const status = battleRoyaleScheduleStatus($, item, scheduledAt);
       matches.push({
         source: 'liquipedia',
         externalId: scheduleExternalId(game, page, stageTitle || section, `${section}:${label}`),
@@ -249,7 +268,7 @@ export function parseBattleRoyaleSchedules($, game, page, stageTitle = '') {
         scoreB: null,
         bestOf: null,
         scheduledAt,
-        status: deriveStatus({ scheduledAt }),
+        status,
       });
     });
   });

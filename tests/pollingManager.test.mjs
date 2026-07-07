@@ -32,6 +32,28 @@ test('armMatch skips projected start.gg preview rows but arms real set ids', (t)
   assert.equal(activeCount(), 1);
 });
 
+test('armMatch arms Liquipedia battle-royale schedule rows', (t) => {
+  t.after(() => stopAll());
+  stopAll();
+
+  assert.equal(
+    armMatch(
+      {
+        source: 'liquipedia',
+        external_id: 'apexlegends:br-schedule:group-stage:a-vs-b:game-6',
+        tournament_id: 1,
+        team_a: 'Group Stage - A vs B - Game 6',
+        team_b: 'Lobby',
+        status: 'scheduled',
+        scheduled_at: Math.floor(Date.now() / 1000) + 3600,
+      },
+      { id: 1, source: 'liquipedia' },
+    ),
+    true,
+  );
+  assert.equal(activeCount(), 1);
+});
+
 test('armMatch can delay the first poll for resumed live rows', (t) => {
   t.after(() => stopAll());
   stopAll();

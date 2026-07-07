@@ -99,7 +99,17 @@ export function dedupeMatches(rows) {
     const status =
       m.status === 'finished' && hasScore ? 300 : m.status === 'running' ? 200 : m.status === 'finished' ? 150 : 0;
     const stableMatchId = /^Match:/i.test(m.external_id || '') ? 40 : 0;
-    return status + stableMatchId + (hasScore ? 20 : 0) + (m.logo_a ? 1 : 0) + (m.logo_b ? 1 : 0);
+    const structural = /:(?:matchlist|bracket):/i.test(m.external_id || '') ? 10 : 0;
+    const liveWidgetFallback = /^[^:]+:\d+:/i.test(m.external_id || '') ? -10 : 0;
+    return (
+      status +
+      stableMatchId +
+      structural +
+      liveWidgetFallback +
+      (hasScore ? 20 : 0) +
+      (m.logo_a ? 1 : 0) +
+      (m.logo_b ? 1 : 0)
+    );
   };
   const best = new Map();
   for (const m of rows) {
@@ -110,7 +120,31 @@ export function dedupeMatches(rows) {
     if (!cur || rank(m) > rank(cur)) best.set(key, m);
   }
   const keep = new Set(best.values());
-  return rows.filter((r) => keep.has(r));
+  const exact = rows.filter((r) => keep.has(r));
+
+  const byTime = new Map();
+  for (const row of exact) {
+    if (!row.scheduled_at) continue;
+    const key = `${row.tournament_id ?? ''}|${row.game ?? ''}|${row.scheduled_at}`;
+    const group = byTime.get(key);
+    if (group) group.push(row);
+    else byTime.set(key, [row]);
+  }
+
+  const drop = new Set();
+  const teamKeys = (m) => [normalizeTeamName(m.team_a), normalizeTeamName(m.team_b)].filter(Boolean);
+  for (const group of byTime.values()) {
+    if (group.length < 2) continue;
+    const chosen = [];
+    for (const row of [...group].sort((a, b) => rank(b) - rank(a))) {
+      const keys = new Set(teamKeys(row));
+      const duplicate = chosen.some((kept) => teamKeys(kept).some((key) => keys.has(key)));
+      if (duplicate) drop.add(row);
+      else chosen.push(row);
+    }
+  }
+
+  return exact.filter((r) => !drop.has(r));
 }
 
 // All matches for a guild's active tournaments, with the tournament's game/name attached.
