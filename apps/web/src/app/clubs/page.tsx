@@ -89,16 +89,16 @@ function StatCard({ label, value, icon: Icon }: { label: string; value: string; 
 function GameChips({
   games,
   empty,
-  max = 8,
+  max,
   variant = "secondary",
 }: {
   games: EwcClubGame[];
   empty: string;
-  max?: number;
+  max?: number | null;
   variant?: "secondary" | "outline";
 }) {
   if (!games.length) return <p className="text-sm text-muted-foreground">{empty}</p>;
-  const visible = games.slice(0, max);
+  const visible = max == null ? games : games.slice(0, max);
   return (
     <div className="flex flex-wrap gap-1.5">
       {visible.map((game) => (
