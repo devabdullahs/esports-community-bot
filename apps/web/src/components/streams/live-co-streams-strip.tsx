@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { RadioIcon, EyeIcon } from "lucide-react";
+import { ArrowRightIcon, EyeIcon, RadioIcon } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { getAllCoStreamsCached, type CoStream } from "@/lib/co-streams";
 import { copy, localizedPath, type Locale } from "@/lib/i18n";
@@ -58,8 +58,12 @@ export async function LiveCoStreamsStrip({ locale }: { locale: Locale }) {
             </Link>
           ) : null}
         </div>
-        <Link href={href} className="shrink-0 text-sm font-medium text-red-500 hover:text-red-400">
-          {text.common.watchCoStreams} →
+        <Link
+          href={href}
+          className="inline-flex shrink-0 items-center gap-1.5 text-sm font-medium text-red-500 hover:text-red-400"
+        >
+          {text.common.watchCoStreams}
+          <ArrowRightIcon className="size-3.5 shrink-0 rtl:rotate-180" aria-hidden="true" />
         </Link>
       </div>
     </section>

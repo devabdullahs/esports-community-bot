@@ -1,4 +1,4 @@
-import { isSafeUrl } from "@/lib/safe-url";
+import { canonicalPublicAssetUrl, isSafeUrl } from "@/lib/safe-url";
 import { isSnowflake } from "@/lib/validate";
 import {
   isNewsCoverPlacement,
@@ -53,13 +53,14 @@ export function validateNewsInput(
   let coverImageUrl: string | null = null;
   const rawCover = body.coverImageUrl;
   if (typeof rawCover === "string" && rawCover.trim() !== "") {
-    if (rawCover.trim().length > 512) {
+    const canonicalCover = canonicalPublicAssetUrl(rawCover);
+    if (canonicalCover.length > 512) {
       return { ok: false, error: "Cover image URL must be 512 characters or fewer" };
     }
     if (!isSafeUrl(rawCover)) {
       return { ok: false, error: "Cover image must be a valid http(s) URL" };
     }
-    coverImageUrl = rawCover.trim();
+    coverImageUrl = canonicalCover;
   }
 
   // Cover placement is optional; absent/blank falls back to the default ('top').
@@ -118,7 +119,7 @@ export function validateNewsInput(
     authors.push({
       discordId,
       name: rawName.slice(0, NEWS_AUTHOR_NAME_MAX_LENGTH),
-      avatarUrl: rawAvatar && isSafeUrl(rawAvatar) ? rawAvatar : null,
+      avatarUrl: rawAvatar && isSafeUrl(rawAvatar) ? canonicalPublicAssetUrl(rawAvatar) : null,
     });
     if (authors.length >= NEWS_MAX_AUTHORS) break;
   }
