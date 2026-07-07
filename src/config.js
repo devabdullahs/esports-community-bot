@@ -67,6 +67,11 @@ export const config = {
   },
   streams: {
     pollSeconds: Math.max(30, Number(get('STREAM_STATUS_POLL_SECONDS', '60')) || 60),
+    // YouTube has no affordable live-status API (100 quota units per lookup);
+    // status comes from fetching each channel's public /live page instead, so
+    // it polls on its own, slower cadence.
+    youtubeEnabled: get('STREAM_STATUS_YOUTUBE_ENABLED', 'true') === 'true',
+    youtubePollSeconds: Math.max(120, Number(get('STREAM_STATUS_YOUTUBE_POLL_SECONDS', '180')) || 180),
   },
   liquipedia: {
     // REQUIRED by Liquipedia's API ToS: identify the app and a contact.

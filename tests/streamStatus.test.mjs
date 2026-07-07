@@ -98,3 +98,42 @@ test('refreshStreamStatus polls the injected services and writes per-channel sta
   assert.ok(liveKeys.has('twitch:twlive') && liveKeys.has('kick:kklive'));
   assert.ok(!liveKeys.has('twitch:twoff'));
 });
+
+test('youtube polls on its own cadence, keeps previous status on fetch gaps, stores video id', async () => {
+  await createStreamChannel({ platform: 'youtube', handle: 'ytlive', scope: 'ewc' });
+
+  const noopSvc = { isConfigured: () => false };
+  let ytCalls = 0;
+  const youtubeSvc = {
+    isConfigured: () => true,
+    getLiveChannels: async () => {
+      ytCalls += 1;
+      // First refresh: live with a video id. Later refreshes: fetch failed -> empty map.
+      return ytCalls === 1
+        ? new Map([['ytlive', { isLive: true, title: 'YT live', viewerCount: 42, videoId: 'vid123abc' }]])
+        : new Map();
+    },
+  };
+
+  let clock = 1_000_000_000;
+  const now = () => clock;
+  const opts = { twitchSvc: noopSvc, kickSvc: noopSvc, youtubeSvc, now };
+
+  const first = await refreshStreamStatus(opts);
+  assert.deepEqual(first, ['youtube 1/1']);
+  const status = await getStreamStatus('youtube', 'ytlive');
+  assert.equal(status.isLive, true);
+  assert.equal(status.videoId, 'vid123abc');
+
+  // Within the youtube cadence window: the platform is skipped entirely.
+  clock += 30_000;
+  await refreshStreamStatus(opts);
+  assert.equal(ytCalls, 1, 'second tick inside the cadence window skips youtube');
+
+  // Past the cadence window: polled again, but the empty map (fetch failure)
+  // must keep the previous LIVE status instead of flapping it offline.
+  clock += 400_000;
+  await refreshStreamStatus(opts);
+  assert.equal(ytCalls, 2);
+  assert.equal((await getStreamStatus('youtube', 'ytlive')).isLive, true, 'fetch gap keeps previous status');
+});

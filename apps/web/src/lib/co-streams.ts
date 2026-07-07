@@ -1,7 +1,7 @@
 import "server-only";
 
 import { unstable_cache } from "next/cache";
-import { listEwcStreamChannels } from "@bot/db/streamChannels.js";
+import { listEwcStreamChannels, listStreamChannels } from "@bot/db/streamChannels.js";
 import { getStreamStatuses } from "@bot/db/streamChannelStatus.js";
 import { categoryToGameSlug, gameName } from "@bot/lib/games.js";
 import type { CoStream, CoStreamChannel, StreamChannel, StreamPlatform } from "@/lib/stream-types";
@@ -17,9 +17,11 @@ type StatusRow = {
   viewerCount: number | null;
   startedAt: number | null;
   category: string | null;
+  videoId: string | null;
 };
 
 const listEwc = listEwcStreamChannels as unknown as (opts?: { activeOnly?: boolean }) => Promise<StreamChannel[]>;
+const listAll = listStreamChannels as unknown as (opts?: { activeOnly?: boolean }) => Promise<StreamChannel[]>;
 const getStatuses = getStreamStatuses as unknown as (
   pairs: Array<{ platform: string; handle: string }>,
 ) => Promise<Map<string, StatusRow>>;
@@ -27,6 +29,13 @@ const catToSlug = categoryToGameSlug as unknown as (category: string | null) => 
 const slugToName = gameName as unknown as (slug: string) => string;
 
 const EMBEDDABLE = new Set<StreamPlatform>(["twitch", "kick"]);
+
+// YouTube is embeddable only once the poller has resolved the LIVE video id
+// (the iframe needs youtube.com/embed/<videoId>; a channel URL cannot embed).
+function canEmbed(channel: CoStreamChannel): boolean {
+  if (channel.platform === "youtube") return Boolean(channel.videoId);
+  return EMBEDDABLE.has(channel.platform);
+}
 
 function uniq(values: string[]): string[] {
   return [...new Set(values.filter(Boolean))];
@@ -44,10 +53,10 @@ function groupKey(channel: StreamChannel): string {
 
 function pickEmbedChannel(channels: CoStreamChannel[]): CoStreamChannel | null {
   return (
-    channels.find((c) => c.isLive && c.isDefault && EMBEDDABLE.has(c.platform)) ??
-    channels.find((c) => c.isLive && EMBEDDABLE.has(c.platform)) ??
-    channels.find((c) => c.isDefault && EMBEDDABLE.has(c.platform)) ??
-    channels.find((c) => EMBEDDABLE.has(c.platform)) ??
+    channels.find((c) => c.isLive && c.isDefault && canEmbed(c)) ??
+    channels.find((c) => c.isLive && canEmbed(c)) ??
+    channels.find((c) => c.isDefault && canEmbed(c)) ??
+    channels.find((c) => canEmbed(c)) ??
     null
   );
 }
@@ -102,29 +111,40 @@ export function buildCoStreamGroups(merged: CoStreamChannel[]): CoStream[] {
   return out;
 }
 
-export async function getEwcCoStreams(): Promise<CoStream[]> {
-  const channels = await listEwc({ activeOnly: true });
+async function mergeWithStatus(channels: StreamChannel[]): Promise<CoStream[]> {
   if (!channels.length) return [];
-
   const statuses = await getStatuses(channels.map((c) => ({ platform: c.platform, handle: c.handle })));
 
   const merged: CoStreamChannel[] = channels.map((c) => {
     const s = statuses.get(`${c.platform}:${c.handle}`);
     // Relevance gate: a channel streaming an off-topic / non-esports category
-    // (e.g. Just Chatting, GTA) is NOT a live co-stream here. Only count it live
-    // when the current category maps to a game we track.
+    // (e.g. Just Chatting, GTA) is NOT a live co-stream here. Only gate when the
+    // platform REPORTS a category (Twitch/Kick always do): YouTube's page probe
+    // has none, so an unknown category passes rather than hiding a live stream.
     const gameSlug = s?.isLive ? catToSlug(s.category) : null;
+    const relevant = Boolean(s?.isLive && (gameSlug || s?.category == null));
     return {
       ...c,
-      isLive: Boolean(s?.isLive && gameSlug),
+      isLive: relevant,
       liveTitle: s?.title ?? null,
       liveGame: gameSlug ? slugToName(gameSlug) : null,
       viewerCount: s?.viewerCount ?? null,
       startedAt: s?.startedAt ?? null,
+      videoId: s?.videoId ?? null,
     };
   });
 
   return buildCoStreamGroups(merged);
+}
+
+export async function getEwcCoStreams(): Promise<CoStream[]> {
+  return mergeWithStatus(await listEwc({ activeOnly: true }));
+}
+
+// EVERY active co-stream channel (all scopes: ewc + game + team + match) — the
+// site-wide surfaces (co-streams page, homepage strip, nav badge) read this.
+export async function getAllCoStreams(): Promise<CoStream[]> {
+  return mergeWithStatus(await listAll({ activeOnly: true }));
 }
 
 // The /co-streams page and the /api/co-streams poll both read this. Live status is
@@ -135,3 +155,15 @@ export const getEwcCoStreamsCached = unstable_cache(
   ["ewc-co-streams"],
   { revalidate: 30 },
 );
+
+export const getAllCoStreamsCached = unstable_cache(
+  async () => getAllCoStreams(),
+  ["all-co-streams"],
+  { revalidate: 30 },
+);
+
+// Cheap header signal: how many co-stream groups are live right now.
+export async function countLiveCoStreams(): Promise<number> {
+  const streams = await getAllCoStreamsCached();
+  return streams.filter((s) => s.isLive).length;
+}

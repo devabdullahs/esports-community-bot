@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { headers } from "next/headers";
 import { CoStreamsView } from "@/components/streams/co-streams-view";
-import { getEwcCoStreamsCached } from "@/lib/co-streams";
+import { getAllCoStreamsCached } from "@/lib/co-streams";
 import { dashboardPublicUrl } from "@/lib/env";
 import { localizedPath, type Locale } from "@/lib/i18n";
 import { buildPageMetadata } from "@/lib/metadata";
@@ -12,13 +12,14 @@ export const dynamic = "force-dynamic";
 
 const META: Record<Locale, { title: string; description: string }> = {
   en: {
-    title: "EWC co-streams",
-    description: "Watch the official Esports World Cup co-streamers — live Twitch and Kick channels, all in one place.",
+    title: "Co-streams",
+    description:
+      "Watch the community's co-streamers — live Twitch, Kick, and YouTube channels for the Esports World Cup and every tracked event, all in one place.",
   },
   ar: {
-    title: "البث المصاحب لكأس العالم للرياضات الإلكترونية",
+    title: "البث المصاحب",
     description:
-      "شاهد المذيعين المصاحبين الرسميين لكأس العالم للرياضات الإلكترونية — قنوات تويتش وكيك المباشرة في مكان واحد.",
+      "شاهد المذيعين المصاحبين للمجتمع — قنوات تويتش وكيك ويوتيوب المباشرة لكأس العالم للرياضات الإلكترونية وكل البطولات المتابعة في مكان واحد.",
   },
 };
 
@@ -54,6 +55,6 @@ export async function generateMetadata(): Promise<Metadata> {
 
 export default async function CoStreamsPage() {
   const locale = await getRequestLocale();
-  const streams = await getEwcCoStreamsCached();
+  const streams = await getAllCoStreamsCached();
   return <CoStreamsView streams={streams} parent={await parentHost()} locale={locale} />;
 }

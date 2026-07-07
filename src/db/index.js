@@ -677,6 +677,7 @@ db.exec(`
     viewer_count  INTEGER,
     category      TEXT,
     thumbnail_url TEXT,
+    video_id      TEXT,
     started_at    INTEGER,
     checked_at    INTEGER,
     updated_at    TEXT    NOT NULL DEFAULT (datetime('now')),
@@ -700,6 +701,8 @@ ensureColumns('stream_channels', [
   ['game_slugs', "TEXT NOT NULL DEFAULT '[]'"],
   ['is_default', 'INTEGER NOT NULL DEFAULT 0'],
 ]);
+// Live VIDEO id (YouTube): the embed needs it — youtube.com/embed/<video_id>.
+ensureColumns('stream_channel_status', [['video_id', 'TEXT']]);
 db.exec('CREATE INDEX IF NOT EXISTS idx_stream_channels_creator ON stream_channels(creator_key, active)');
 ensureColumns('ewc_news_posts', [
   ['content_mode', "TEXT NOT NULL DEFAULT 'shared' CHECK (content_mode IN ('shared','translated'))"],

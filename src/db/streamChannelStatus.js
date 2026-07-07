@@ -22,6 +22,7 @@ function hydrate(row) {
     viewerCount: row.viewer_count == null ? null : Number(row.viewer_count),
     category: row.category || null,
     thumbnailUrl: row.thumbnail_url || null,
+    videoId: row.video_id || null,
     startedAt: row.started_at == null ? null : Number(row.started_at),
     checkedAt: row.checked_at == null ? null : Number(row.checked_at),
     updatedAt: row.updated_at,
@@ -38,19 +39,21 @@ export async function upsertStreamStatus({
   viewerCount = null,
   category = null,
   thumbnailUrl = null,
+  videoId = null,
   startedAt = null,
 }) {
   const live = isLive ? 1 : 0;
   await run(
     `INSERT INTO stream_channel_status
-       (platform, handle, is_live, title, viewer_count, category, thumbnail_url, started_at, checked_at, updated_at)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+       (platform, handle, is_live, title, viewer_count, category, thumbnail_url, video_id, started_at, checked_at, updated_at)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
      ON CONFLICT (platform, handle) DO UPDATE SET
        is_live       = excluded.is_live,
        title         = excluded.title,
        viewer_count  = excluded.viewer_count,
        category      = excluded.category,
        thumbnail_url = excluded.thumbnail_url,
+       video_id      = excluded.video_id,
        started_at    = excluded.started_at,
        checked_at    = excluded.checked_at,
        updated_at    = excluded.updated_at`,
@@ -62,6 +65,7 @@ export async function upsertStreamStatus({
       live ? viewerCount : null,
       live ? category : null,
       live ? thumbnailUrl : null,
+      live ? videoId : null,
       live ? startedAt : null,
       nowSeconds(),
       nowText(),
@@ -102,7 +106,7 @@ export async function markStaleStatusesOffline(maxAgeSeconds) {
   const info = await run(
     `UPDATE stream_channel_status
        SET is_live = 0, title = NULL, viewer_count = NULL, category = NULL,
-           thumbnail_url = NULL, started_at = NULL, updated_at = $1
+           thumbnail_url = NULL, video_id = NULL, started_at = NULL, updated_at = $1
      WHERE is_live = 1 AND (checked_at IS NULL OR checked_at < $2)`,
     [nowText(), cutoff],
   );
