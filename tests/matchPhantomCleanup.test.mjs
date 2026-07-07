@@ -213,6 +213,41 @@ test('removes stale live-widget aliases covered by a current scored result', asy
   assert.equal(await getMatch('liquipedia', 'dota2:1783427100:Team Liquid:PTime'), null);
 });
 
+test('removes Inner Circle live-widget aliases covered by a current 1w Team result', async () => {
+  const t = await tournament('dota2/EWC/2026-inner-circle');
+  await match(
+    t.id,
+    'dota2:Esports_World_Cup/2026/Group_Stage:matchlist:47:1w team vs inner circle x insanity',
+    'Inner Circle x Insanity',
+    '1w Team',
+    0,
+    2,
+    1783447200,
+  );
+  await liveAlias(
+    t.id,
+    'dota2:1783447200:Inner Circle x Insanity:1w',
+    'Inner Circle x Insanity',
+    '1w',
+    0,
+    0,
+    1783447200,
+  );
+
+  const removed = await deleteTournamentDuplicateMatches(t.id, [
+    'dota2:Esports_World_Cup/2026/Group_Stage:matchlist:47:1w team vs inner circle x insanity',
+  ]);
+
+  assert.equal(removed, 1);
+  assert.ok(
+    await getMatch(
+      'liquipedia',
+      'dota2:Esports_World_Cup/2026/Group_Stage:matchlist:47:1w team vs inner circle x insanity',
+    ),
+  );
+  assert.equal(await getMatch('liquipedia', 'dota2:1783447200:Inner Circle x Insanity:1w'), null);
+});
+
 test('keeps a later same-day live-widget alias as a possible rematch', async () => {
   const t = await tournament('dota2/EWC/2026-playtime-rematch');
   await match(t.id, 'Match:ID_B5F8Z45QjB_0002', 'Team Liquid', 'PlayTime', 1, 1, 1783427100);
