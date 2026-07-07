@@ -1,5 +1,5 @@
 import { createCanvas, GlobalFonts } from '@napi-rs/canvas';
-import { matchTag, matchTagEwc } from './games.js';
+import { isEwcMatch, matchTag, matchTagEwc } from './games.js';
 import { loadLogoImage } from './logoCache.js';
 import { isLobbyMatch, matchLabel } from './render.js';
 
@@ -348,9 +348,68 @@ export async function renderScheduleCard({ title, subtitle, matches, accent, sho
   return canvas.toBuffer('image/png');
 }
 
+// Riyadh calendar-day key + display label for grouping the status card's
+// upcoming list ("TODAY · MON 7 JUL" instead of a full date repeated per row).
+function riyadhDayKey(sec) {
+  if (!sec) return null;
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Riyadh',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(new Date(sec * 1000));
+}
+
+function riyadhDayLabel(sec, nowMs) {
+  const parts = new Intl.DateTimeFormat('en-GB', {
+    timeZone: 'Asia/Riyadh',
+    weekday: 'short',
+    day: 'numeric',
+    month: 'short',
+  }).format(new Date(sec * 1000));
+  const key = riyadhDayKey(sec);
+  const todayKey = riyadhDayKey(Math.floor(nowMs / 1000));
+  const tomorrowKey = riyadhDayKey(Math.floor(nowMs / 1000) + 86400);
+  const relative = key === todayKey ? 'TODAY · ' : key === tomorrowKey ? 'TOMORROW · ' : '';
+  return `${relative}${parts.toUpperCase()}`;
+}
+
+// Fixed-width game-tag pill. EWC events get the gold treatment so the World Cup
+// matches stand out from regular-circuit ones at a glance.
+function drawTagPill(ctx, x, centerY, tag, { ewc = false, width = 170, height = 30 } = {}) {
+  ctx.save();
+  ctx.fillStyle = ewc ? 'rgba(241,196,15,0.14)' : 'rgba(88,101,242,0.16)';
+  roundRect(ctx, x, centerY - height / 2, width, height, height / 2);
+  ctx.fill();
+  ctx.fillStyle = ewc ? '#f1c40f' : '#8ab4ff';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(fit(ctx, tag || 'Game', width - 24, `bold 17px ${HEAD}`), x + width / 2, centerY + 1);
+  ctx.textBaseline = 'alphabetic';
+  ctx.textAlign = 'left';
+  ctx.restore();
+}
+
 export function renderAllGamesStatusCard({ live = [], upcoming = [], updatedAt = Date.now(), accent }) {
   const W = 1200;
-  const H = 920;
+  // Size the canvas to the CONTENT: fixed header + live section + one header
+  // per upcoming day + one row per match + footer. The old fixed 920px height
+  // silently dropped later days once the compact day-grouped layout landed.
+  const HEADER_H = 44;
+  const ROW_H = 46;
+  const liveRows = live.slice(0, 4);
+  const groups = new Map();
+  for (const m of upcoming.slice(0, 12)) {
+    const key = riyadhDayKey(m.scheduled_at) ?? 'tbd';
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(m);
+  }
+  const upcomingMatches = [...groups.values()].reduce((sum, list) => sum + list.length, 0);
+  const liveSectionH = liveRows.length ? liveRows.length * 50 : 66;
+  const upcomingSectionH = groups.size
+    ? groups.size * HEADER_H + upcomingMatches * ROW_H + 30
+    : 80;
+  const H = Math.max(600, 224 + 36 + liveSectionH + 56 + upcomingSectionH + 92);
   const canvas = createCanvas(W, H);
   const ctx = canvas.getContext('2d');
 
@@ -392,7 +451,6 @@ export function renderAllGamesStatusCard({ live = [], upcoming = [], updatedAt =
   ctx.lineTo(W - 54, 184);
   ctx.stroke();
 
-  const liveRows = live.slice(0, 4);
   let y = 224;
   ctx.textAlign = 'left';
   ctx.fillStyle = '#ffffff';
@@ -402,7 +460,8 @@ export function renderAllGamesStatusCard({ live = [], upcoming = [], updatedAt =
   y += 36;
   if (liveRows.length) {
     for (const m of liveRows) {
-      const tag = matchTagEwc(m);
+      // Plain tag: the pill's gold styling already marks EWC (no "- EWC" suffix).
+      const tag = matchTag(m);
       const label = matchLabel(m);
       const score = m.score_a != null && m.score_b != null ? `${m.score_a} - ${m.score_b}` : 'Live';
       ctx.fillStyle = 'rgba(255,255,255,0.035)';
@@ -414,13 +473,11 @@ export function renderAllGamesStatusCard({ live = [], upcoming = [], updatedAt =
       ctx.arc(82, y - 4, 8, 0, Math.PI * 2);
       ctx.fill();
 
-      ctx.fillStyle = '#8ab4ff';
-      ctx.font = `bold 20px ${HEAD}`;
-      ctx.fillText(fit(ctx, tag || 'Game', 150, `bold 20px ${HEAD}`), 108, y + 3);
+      drawTagPill(ctx, 104, y - 4, tag, { ewc: isEwcMatch(m) });
 
       ctx.fillStyle = '#ffffff';
       ctx.font = `bold 22px ${HEAD}`;
-      ctx.fillText(fit(ctx, label, 658, `bold 22px ${HEAD}`), 282, y + 3);
+      ctx.fillText(fit(ctx, label, 640, `bold 22px ${HEAD}`), 296, y + 3);
 
       ctx.textAlign = 'right';
       ctx.fillStyle = '#cdd8ec';
@@ -446,26 +503,63 @@ export function renderAllGamesStatusCard({ live = [], upcoming = [], updatedAt =
   ctx.fillStyle = '#ffffff';
   ctx.font = `bold 28px ${HEAD}`;
   ctx.fillText('Upcoming', 64, nextY);
-  const maxUpcomingRows = Math.max(4, Math.min(10, Math.floor((H - (nextY + 72)) / 32)));
-  const upcomingRows = upcoming.slice(0, maxUpcomingRows);
-  if (upcomingRows.length) {
-    let rowY = nextY + 35;
-    for (const m of upcomingRows) {
-      const tag = matchTagEwc(m);
-      const time = formatRiyadhDateTime(m.scheduled_at);
+
+  // Group by Riyadh calendar day: one small day header ("TODAY · MON 7 JUL"),
+  // then compact zebra rows showing only the TIME — instead of repeating the
+  // full date on every line. Undated matches sort last under "DATE TBD".
+  // (`groups`, HEADER_H, ROW_H are computed up top to size the canvas.)
+  if (groups.size) {
+    let rowY = nextY + 30;
+    const bottom = H - 44;
+    let zebra = 0;
+    outer: for (const [key, matches] of groups) {
+      if (rowY + HEADER_H > bottom) break;
+      rowY += 12;
       ctx.textAlign = 'left';
-      ctx.fillStyle = '#8ab4ff';
+      ctx.fillStyle = '#7d92b5';
       ctx.font = `bold 18px ${HEAD}`;
-      ctx.fillText(fit(ctx, tag || 'Game', 150, `bold 18px ${HEAD}`), 64, rowY);
-      ctx.fillStyle = '#ffffff';
-      ctx.font = `bold 20px ${HEAD}`;
-      ctx.fillText(fit(ctx, matchLabel(m), 560, `bold 20px ${HEAD}`), 230, rowY);
-      ctx.textAlign = 'right';
-      ctx.fillStyle = '#9fb3d1';
-      ctx.font = `19px ${BODY}`;
-      ctx.fillText(time.text, W - 64, rowY);
-      rowY += 32;
+      const label = key === 'tbd' ? 'DATE TBD' : riyadhDayLabel(matches[0].scheduled_at, updatedAt);
+      ctx.fillText(label, 64, rowY + 14);
+      ctx.strokeStyle = 'rgba(130,160,210,0.14)';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(84 + ctx.measureText(label).width, rowY + 8);
+      ctx.lineTo(W - 64, rowY + 8);
+      ctx.stroke();
+      rowY += HEADER_H - 12;
+
+      for (const m of matches) {
+        if (rowY + ROW_H > bottom) break outer;
+        ctx.fillStyle = zebra % 2 === 0 ? 'rgba(255,255,255,0.035)' : 'rgba(255,255,255,0.016)';
+        roundRect(ctx, 54, rowY, W - 108, ROW_H - 6, 10);
+        ctx.fill();
+        zebra += 1;
+        const centerY = rowY + (ROW_H - 6) / 2;
+
+        drawTagPill(ctx, 68, centerY, matchTag(m), { ewc: isEwcMatch(m) });
+
+        ctx.textAlign = 'left';
+        ctx.textBaseline = 'middle';
+        ctx.fillStyle = '#ffffff';
+        ctx.font = `bold 21px ${HEAD}`;
+        ctx.fillText(fit(ctx, matchLabel(m), 700, `bold 21px ${HEAD}`), 262, centerY + 1);
+
+        ctx.textAlign = 'right';
+        ctx.fillStyle = '#8ab4ff';
+        ctx.font = `bold 21px ${HEAD}`;
+        const time = m.scheduled_at ? formatRiyadhDateTime(m.scheduled_at).time : 'TBD';
+        ctx.fillText(time, W - 78, centerY + 1);
+        ctx.textBaseline = 'alphabetic';
+        ctx.textAlign = 'left';
+        rowY += ROW_H;
+      }
     }
+    // One footer note replaces the per-row "UTC+3" repetition.
+    ctx.textAlign = 'right';
+    ctx.fillStyle = '#66799a';
+    ctx.font = `16px ${BODY}`;
+    ctx.fillText('All times UTC+3 (Riyadh)', W - 64, H - 34);
+    ctx.textAlign = 'left';
   } else {
     ctx.textAlign = 'left';
     ctx.fillStyle = '#9fb3d1';
