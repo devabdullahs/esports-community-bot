@@ -24,6 +24,7 @@ import {
 import { DateTime } from "@/components/date-time";
 import { GameLogoMark } from "@/components/game-logo-mark";
 import { PartnerPlacement } from "@/components/partners/partner-placement";
+import { LiveCoStreamsStrip } from "@/components/streams/live-co-streams-strip";
 import { localizeText } from "@/lib/community-content";
 import { gameTitleForSlug, listGamesCached } from "@/lib/games";
 import { listLatestPublishedNewsPostsCached, type NewsPost } from "@/lib/news";
@@ -175,6 +176,8 @@ export default async function Home() {
           </div>
         </div>
       </section>
+
+      <LiveCoStreamsStrip locale={locale} />
 
       <section className="border-t">
         <div className="mx-auto flex max-w-6xl flex-col gap-8 px-4 py-10 sm:px-8">

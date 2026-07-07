@@ -595,12 +595,15 @@ CREATE TABLE IF NOT EXISTS stream_channel_status (
   viewer_count  INTEGER,
   category      TEXT,
   thumbnail_url TEXT,
+  video_id      TEXT,
   started_at    BIGINT,
   checked_at    BIGINT,
   updated_at    TEXT    NOT NULL DEFAULT (to_char(now() AT TIME ZONE 'UTC', 'YYYY-MM-DD HH24:MI:SS')),
   PRIMARY KEY (platform, handle)
 );
 CREATE INDEX IF NOT EXISTS idx_stream_status_live ON stream_channel_status(is_live);
+-- Live VIDEO id (YouTube): the embed needs it — youtube.com/embed/<video_id>.
+ALTER TABLE stream_channel_status ADD COLUMN IF NOT EXISTS video_id TEXT;
 
 -- Follows + notifications. A member (by Discord id) follows games / tournaments /
 -- teams / players; match transitions fan out one notification row per follower.

@@ -67,10 +67,12 @@ function MobileNavLink({
   destination,
   locale,
   active,
+  badge = null,
 }: {
   destination: Destination;
   locale: Locale;
   active: boolean;
+  badge?: React.ReactNode;
 }) {
   const { href, label, icon: Icon } = destination;
 
@@ -86,6 +88,7 @@ function MobileNavLink({
     >
       <Icon className="size-4 text-muted-foreground" />
       <span className="min-w-0 truncate">{label}</span>
+      {badge}
     </SheetClose>
   );
 }
@@ -94,10 +97,12 @@ export function SiteHeaderClient({
   hasSession,
   isAdmin,
   locale,
+  liveCoStreams = 0,
 }: {
   hasSession: boolean;
   isAdmin: boolean;
   locale: Locale;
+  liveCoStreams?: number;
 }) {
   const router = useRouter();
   const pathname = usePathname();
@@ -124,14 +129,26 @@ export function SiteHeaderClient({
     { href: "/media", label: text.common.media, icon: Tv2Icon },
     { href: "/tournaments", label: text.common.tournaments, icon: TrophyIcon },
     { href: "/teams", label: text.common.teams, icon: UsersIcon },
+    // Co-streams is a top-level destination (it spans every tracked event, not
+    // just EWC) and carries a live indicator when any co-streamer is on air.
+    { href: "/co-streams", label: text.common.coStreams, icon: RadioIcon },
   ];
   const ewcLinks: Destination[] = [
     { href: "/news/ewc", label: text.common.ewcNews, icon: NewspaperIcon },
     { href: "/tournaments/ewc", label: text.common.ewcTournaments, icon: TrophyIcon },
-    { href: "/co-streams", label: text.common.coStreams, icon: RadioIcon },
     { href: "/predictions", label: text.common.predictions, icon: TargetIcon },
     { href: "/leaderboard", label: text.common.publicLeaderboard, icon: CrownIcon },
   ];
+  const liveBadge = (href: string) =>
+    href === "/co-streams" && liveCoStreams > 0 ? (
+      <span className="ms-0.5 inline-flex items-center gap-1 rounded-full bg-red-500/15 px-1.5 py-0.5 text-[0.65rem] font-semibold leading-none text-red-500">
+        <span className="relative flex size-1.5">
+          <span className="absolute inline-flex size-full animate-ping rounded-full bg-red-500 opacity-60" />
+          <span className="relative inline-flex size-1.5 rounded-full bg-red-500" />
+        </span>
+        {liveCoStreams}
+      </span>
+    ) : null;
   const ewcActive = ewcLinks.some((d) =>
     isActivePath(pathname, localizedPath(d.href, locale)),
   );
@@ -193,6 +210,7 @@ export function SiteHeaderClient({
                   >
                     <Icon />
                     {label}
+                    {liveBadge(href)}
                   </NavigationMenuLink>
                 </NavigationMenuItem>
               );
@@ -345,6 +363,7 @@ export function SiteHeaderClient({
                     destination={destination}
                     locale={locale}
                     active={linkActive(destination.href)}
+                    badge={liveBadge(destination.href)}
                   />
                 ))}
                 <p className="px-3 pb-1 pt-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">

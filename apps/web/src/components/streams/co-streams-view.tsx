@@ -144,7 +144,12 @@ export function CoStreamsView({
 
       {selected?.embedChannel ? (
         <div className="flex flex-col gap-2">
-          <StreamEmbed platform={selected.embedChannel.platform} handle={selected.embedChannel.handle} parent={parent} />
+          <StreamEmbed
+            platform={selected.embedChannel.platform}
+            handle={selected.embedChannel.handle}
+            parent={parent}
+            videoId={selected.embedChannel.videoId}
+          />
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div className="flex min-w-0 flex-wrap items-center gap-2">
               <span className="font-medium">{selected.label}</span>

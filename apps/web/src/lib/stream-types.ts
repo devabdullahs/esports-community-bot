@@ -64,6 +64,8 @@ export type CoStreamChannel = StreamChannel & {
   liveGame: string | null;
   viewerCount: number | null;
   startedAt: number | null;
+  // Live VIDEO id (YouTube only) — required to embed; null while offline.
+  videoId: string | null;
 };
 
 export type CoStream = {

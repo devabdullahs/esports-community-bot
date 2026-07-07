@@ -35,6 +35,7 @@ function channel(overrides: Partial<CoStreamChannel> = {}): CoStreamChannel {
     liveGame: overrides.liveGame ?? null,
     viewerCount: overrides.viewerCount ?? null,
     startedAt: overrides.startedAt ?? null,
+    videoId: overrides.videoId ?? null,
   };
 }
 
@@ -128,5 +129,31 @@ describe("buildCoStreamGroups — group sort order", () => {
       channel({ platform: "twitch", handle: "high", creatorKey: "high-live", isDefault: true, isLive: true, viewerCount: 900 }),
     ]);
     expect(groups.map((g) => g.creatorKey)).toEqual(["high-live", "low-live", "offline"]);
+  });
+});
+
+describe("buildCoStreamGroups — YouTube embeddability", () => {
+  test("a live YouTube channel WITH a video id becomes the embed channel", () => {
+    const groups = buildCoStreamGroups([
+      channel({ platform: "youtube", creatorKey: "solo", isLive: true, videoId: "vid123" }),
+    ]);
+    expect(groups[0].embedChannel?.platform).toBe("youtube");
+    expect(groups[0].embedChannel?.videoId).toBe("vid123");
+  });
+
+  test("a YouTube channel WITHOUT a video id can never embed (falls back to twitch)", () => {
+    const groups = buildCoStreamGroups([
+      channel({ platform: "youtube", creatorKey: "duo", isLive: true, isDefault: true, videoId: null }),
+      channel({ platform: "twitch", creatorKey: "duo", isLive: true }),
+    ]);
+    expect(groups[0].embedChannel?.platform).toBe("twitch");
+  });
+
+  test("youtube-only group with no video id has no embed but still counts live", () => {
+    const groups = buildCoStreamGroups([
+      channel({ platform: "youtube", creatorKey: "yt-only", isLive: true, videoId: null }),
+    ]);
+    expect(groups[0].embedChannel).toBeNull();
+    expect(groups[0].isLive).toBe(true);
   });
 });

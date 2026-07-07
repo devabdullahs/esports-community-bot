@@ -4,15 +4,22 @@ import { listDistinctActiveHandles } from '../db/streamChannels.js';
 import { markStaleStatusesOffline, upsertStreamStatus } from '../db/streamChannelStatus.js';
 import * as twitch from '../services/twitch.js';
 import * as kick from '../services/kick.js';
+import * as youtube from '../services/youtube.js';
 
 // Poll every active channel's live status into stream_channel_status. Batched: one
 // Get Streams call per 100 Twitch logins, one channels call per 50 Kick slugs.
+// YouTube has no batch API (status comes from each channel's public /live page),
+// so it refreshes on its own, slower cadence inside the same tick.
 
-async function refreshPlatform(platform, handles, fetchLive) {
+async function refreshPlatform(platform, handles, fetchLive, { absentMeansOffline = true } = {}) {
   const liveMap = await fetchLive(handles);
   let live = 0;
   for (const handle of handles) {
     const info = liveMap.get(handle);
+    // Twitch's API returns LIVE channels only, so absence there means offline
+    // (absentMeansOffline). YouTube's page probe omits a handle only when the
+    // FETCH failed — keep its previous status instead of flapping a live embed.
+    if (!info && !absentMeansOffline) continue;
     const isLive = Boolean(info?.isLive);
     if (isLive) live += 1;
     await upsertStreamStatus({ platform, handle, ...(info ?? {}), isLive });
@@ -20,10 +27,14 @@ async function refreshPlatform(platform, handles, fetchLive) {
   return { live, checked: handles.length };
 }
 
-// `twitchSvc`/`kickSvc` are injectable for tests (no network).
-export async function refreshStreamStatus({ twitchSvc = twitch, kickSvc = kick } = {}) {
+// YouTube's page probe is heavier than the Twitch/Kick APIs — skip most ticks so
+// it effectively refreshes every streams.youtubePollSeconds.
+let lastYoutubeRunAt = 0;
+
+// `twitchSvc`/`kickSvc`/`youtubeSvc` are injectable for tests (no network).
+export async function refreshStreamStatus({ twitchSvc = twitch, kickSvc = kick, youtubeSvc = youtube, now = Date.now } = {}) {
   const handles = await listDistinctActiveHandles();
-  const byPlatform = { twitch: [], kick: [] };
+  const byPlatform = { twitch: [], kick: [], youtube: [] };
   for (const h of handles) if (byPlatform[h.platform]) byPlatform[h.platform].push(h.handle);
 
   const summary = [];
@@ -41,6 +52,18 @@ export async function refreshStreamStatus({ twitchSvc = twitch, kickSvc = kick }
       summary.push(`kick ${r.live}/${r.checked}`);
     } catch (e) {
       logger.warn(`[stream-status] kick refresh failed: ${e.message}`);
+    }
+  }
+
+  if (youtubeSvc.isConfigured() && byPlatform.youtube.length && now() - lastYoutubeRunAt >= config.streams.youtubePollSeconds * 1000) {
+    lastYoutubeRunAt = now();
+    try {
+      const r = await refreshPlatform('youtube', byPlatform.youtube, (hs) => youtubeSvc.getLiveChannels(hs), {
+        absentMeansOffline: false,
+      });
+      summary.push(`youtube ${r.live}/${r.checked}`);
+    } catch (e) {
+      logger.warn(`[stream-status] youtube refresh failed: ${e.message}`);
     }
   }
 
@@ -63,8 +86,8 @@ let firstReported = false;
 let timer = null;
 
 export function startStreamStatusJob() {
-  if (!twitch.isConfigured() && !kick.isConfigured()) {
-    logger.info('[stream-status] no Twitch/Kick credentials set — live co-stream status disabled.');
+  if (!twitch.isConfigured() && !kick.isConfigured() && !youtube.isConfigured()) {
+    logger.info('[stream-status] no stream platform enabled — live co-stream status disabled.');
     return;
   }
   const sec = config.streams.pollSeconds;

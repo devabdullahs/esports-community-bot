@@ -12,6 +12,7 @@ process.env.LOG_LEVEL = 'error';
 
 const twitch = await import('../src/services/twitch.js');
 const kick = await import('../src/services/kick.js');
+const youtube = await import('../src/services/youtube.js');
 
 // A fake axios-like client. `get` reads the handle list from the query string and
 // returns only the configured channels — no network.
@@ -109,4 +110,56 @@ test('kick.getLiveChannels batches slugs by 50', async () => {
   const slugs = Array.from({ length: 120 }, (_, i) => `s${i}`);
   await kick.getLiveChannels(slugs, { client });
   assert.equal(client.calls.get, 3, '120 slugs -> three batched calls');
+});
+
+// ---------------------------------------------------------------------------
+// youtube (credential-free /live page probe)
+// ---------------------------------------------------------------------------
+
+const LIVE_PAGE = `
+<html><head>
+<link rel="canonical" href="https://www.youtube.com/watch?v=dQw4w9WgXcQ">
+<meta name="title" content="EWC Finals Watch Party &amp; More">
+</head><body>
+<script>var ytInitialPlayerResponse = {"videoDetails":{"videoId":"dQw4w9WgXcQ","isLiveContent":true},"microformat":{"liveBroadcastDetails":{"isLiveNow":true}}};</script>
+<span>12,345 watching now</span>
+</body></html>`;
+
+const UPCOMING_PAGE = `
+<html><head>
+<link rel="canonical" href="https://www.youtube.com/watch?v=abc123def45">
+<meta name="title" content="Starting soon">
+</head><body>
+<script>{"liveBroadcastDetails":{"isLiveNow":false,"startTimestamp":"2026-08-01T00:00:00+00:00"}}</script>
+</body></html>`;
+
+const OFFLINE_PAGE = '<html><head><link rel="canonical" href="https://www.youtube.com/@someone/streams"></head><body></body></html>';
+
+test('youtube.parseLivePage detects a current broadcast with video id, title, viewers', () => {
+  const parsed = youtube.parseLivePage(LIVE_PAGE);
+  assert.equal(parsed.isLive, true);
+  assert.equal(parsed.videoId, 'dQw4w9WgXcQ');
+  assert.equal(parsed.title, 'EWC Finals Watch Party & More'); // entity decoded
+  assert.equal(parsed.viewerCount, 12345);
+  assert.match(parsed.thumbnailUrl, /dQw4w9WgXcQ/);
+});
+
+test('youtube.parseLivePage treats upcoming/offline pages as not live', () => {
+  assert.equal(youtube.parseLivePage(UPCOMING_PAGE).isLive, false, 'scheduled stream is not live');
+  assert.equal(youtube.parseLivePage(OFFLINE_PAGE).isLive, false, 'no broadcast is not live');
+});
+
+test('youtube.getLiveChannels maps handles and OMITS handles whose fetch failed', async () => {
+  const client = {
+    async get(url) {
+      if (url.includes('gooddude')) return { status: 200, data: LIVE_PAGE };
+      if (url.includes('offdude')) return { status: 200, data: OFFLINE_PAGE };
+      throw new Error('network down');
+    },
+  };
+  const map = await youtube.getLiveChannels(['gooddude', 'offdude', 'brokendude'], { client, gapMs: 0 });
+  assert.equal(map.get('gooddude').isLive, true);
+  assert.equal(map.get('gooddude').videoId, 'dQw4w9WgXcQ');
+  assert.equal(map.get('offdude').isLive, false);
+  assert.equal(map.has('brokendude'), false, 'failed fetch reports nothing (keep previous status)');
 });
