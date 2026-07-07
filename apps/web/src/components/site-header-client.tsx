@@ -40,6 +40,7 @@ import {
   NavigationMenuLink,
   NavigationMenuList,
   NavigationMenuTrigger,
+  navigationMenuTriggerStyle,
 } from "@/components/ui/navigation-menu";
 import {
   Sheet,
@@ -121,17 +122,22 @@ export function SiteHeaderClient({
     }
   }
 
-  // General destinations stay as top-level links; the EWC-specific pages (news,
-  // tournaments, predictions, leaderboard) group under one "EWC" menu.
-  const primary: Destination[] = [
+  const contentLinks: Destination[] = [
     { href: "/games", label: text.common.games, icon: Gamepad2Icon },
     { href: "/news", label: text.common.news, icon: NewspaperIcon },
     { href: "/media", label: text.common.media, icon: Tv2Icon },
+  ];
+  const competitionLinks: Destination[] = [
     { href: "/tournaments", label: text.common.tournaments, icon: TrophyIcon },
     { href: "/teams", label: text.common.teams, icon: UsersIcon },
-    // Co-streams is a top-level destination (it spans every tracked event, not
-    // just EWC) and carries a live indicator when any co-streamer is on air.
-    { href: "/co-streams", label: text.common.coStreams, icon: RadioIcon },
+  ];
+  // Co-streams stays top-level because it spans every tracked event and carries
+  // a live indicator when any co-streamer is on air.
+  const coStreamsLink: Destination = { href: "/co-streams", label: text.common.coStreams, icon: RadioIcon };
+  const primary: Destination[] = [...contentLinks, ...competitionLinks, coStreamsLink];
+  const desktopGroups = [
+    { label: text.common.content, icon: NewspaperIcon, links: contentLinks },
+    { label: text.common.competition, icon: TrophyIcon, links: competitionLinks },
   ];
   const ewcLinks: Destination[] = [
     { href: "/news/ewc", label: text.common.ewcNews, icon: NewspaperIcon },
@@ -197,25 +203,53 @@ export function SiteHeaderClient({
           </span>
         </Link>
 
-        {/* Desktop (lg+): general links + an EWC dropdown grouping the EWC pages. */}
+        {/* Desktop (lg+): grouped general links + a dedicated EWC dropdown. */}
         <NavigationMenu className="ms-2 hidden lg:flex">
           <NavigationMenuList className="gap-0.5">
-            {primary.map(({ href, label, icon: Icon }) => {
-              const active = linkActive(href);
+            {desktopGroups.map(({ label, icon: Icon, links }) => {
+              const groupActive = links.some((destination) => linkActive(destination.href));
               return (
-                <NavigationMenuItem key={href}>
-                  <NavigationMenuLink
-                    data-active={active || undefined}
-                    aria-current={active ? "page" : undefined}
-                    render={<Link href={localizedPath(href, locale)} />}
+                <NavigationMenuItem key={label}>
+                  <NavigationMenuTrigger
+                    className={`gap-1.5 ${groupActive ? "bg-muted/50" : ""}`}
                   >
                     <Icon />
                     {label}
-                    {liveBadge(href)}
-                  </NavigationMenuLink>
+                  </NavigationMenuTrigger>
+                  <NavigationMenuContent>
+                    <ul className="grid w-48 gap-0.5">
+                      {links.map(({ href, label: linkLabel, icon: LinkIcon }) => {
+                        const active = linkActive(href);
+                        return (
+                          <li key={href}>
+                            <NavigationMenuLink
+                              data-active={active || undefined}
+                              aria-current={active ? "page" : undefined}
+                              render={<Link href={localizedPath(href, locale)} />}
+                            >
+                              <LinkIcon />
+                              {linkLabel}
+                            </NavigationMenuLink>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  </NavigationMenuContent>
                 </NavigationMenuItem>
               );
             })}
+            <NavigationMenuItem>
+              <NavigationMenuLink
+                data-active={linkActive(coStreamsLink.href) || undefined}
+                aria-current={linkActive(coStreamsLink.href) ? "page" : undefined}
+                render={<Link href={localizedPath(coStreamsLink.href, locale)} />}
+                className={navigationMenuTriggerStyle()}
+              >
+                <RadioIcon />
+                {coStreamsLink.label}
+                {liveBadge(coStreamsLink.href)}
+              </NavigationMenuLink>
+            </NavigationMenuItem>
             <NavigationMenuItem>
               <NavigationMenuTrigger
                 className={`gap-1.5 ${ewcActive ? "bg-muted/50" : ""}`}
