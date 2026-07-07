@@ -11,7 +11,10 @@ export function scoreText(m) {
 }
 
 const NORMALIZED_TEAM_ALIASES = new Map([
+  ['icxi', 'innercirclexinsanity'],
+  ['icxinsanity', 'innercirclexinsanity'],
   ['l1team', 'l1gateam'],
+  ['1wteam', '1w'],
   ['ptime', 'playtime'],
 ]);
 
