@@ -235,6 +235,53 @@ test('battle-royale schedule rows parse as lobby calendar items', () => {
   assert.match(match.externalId, /^apexlegends:br-schedule:/);
 });
 
+test('battle-royale schedule rows trust Liquipedia game state icons', () => {
+  const now = Math.floor(Date.now() / 1000);
+  const $ = cheerio.load(`
+    <div class="brkts-br-wrapper battle-royale">
+      <div class="navigation-tabs">
+        <ul class="navigation-tabs__list">
+          <li class="navigation-tabs__list-item"><i class="fas fa-circle icon--red navigation-tabs__list-item-icon"></i>A vs B</li>
+        </ul>
+      </div>
+      <div class="navigation-content-container">
+        <div class="navigation-content">
+          <div class="panel-content">
+            <ul class="panel-content__game-schedule">
+              <li class="panel-content__game-schedule__list-item">
+                <span class="panel-content__game-schedule__icon"><i class="fas fa-check icon--green"></i></span>
+                <span class="panel-content__game-schedule__title">Game 1:</span>
+                <span class="timer-object" data-timestamp="${now - 1800}" data-finished="finished"></span>
+              </li>
+              <li class="panel-content__game-schedule__list-item">
+                <span class="panel-content__game-schedule__icon"><i class="fas fa-circle icon--red"></i></span>
+                <span class="panel-content__game-schedule__title">Game 2:</span>
+                <span class="timer-object" data-timestamp="${now + 3600}"></span>
+              </li>
+              <li class="panel-content__game-schedule__list-item">
+                <span class="panel-content__game-schedule__icon"><i class="far fa-clock"></i></span>
+                <span class="panel-content__game-schedule__title">Game 3:</span>
+                <span class="timer-object" data-timestamp="${now + 7200}"></span>
+              </li>
+            </ul>
+            <div class="panel-table">
+              <div class="panel-table__row row--header"></div>
+              <div class="panel-table__row">
+                <div class="cell--rank" data-sort-val="1"></div>
+                <div class="cell--team" data-sort-val="Team Falcons"></div>
+                <div class="cell--total-points" data-sort-val="31"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  `);
+
+  const matches = parseBattleRoyaleSchedules($, 'apexlegends', 'Apex/Page/Group_Stage', 'Group Stage');
+  assert.deepEqual(matches.map((match) => match.status), ['finished', 'running', 'scheduled']);
+});
+
 test('group-table parses group title, aria-label team, match + game scores', () => {
   const sections = parseGroupTableStandings(group$);
   assert.equal(sections.length, 1);

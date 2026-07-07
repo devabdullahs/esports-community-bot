@@ -498,6 +498,45 @@ test('parseMatchlistMatch: preserves score sides for normal two-cell score rows'
   assert.equal(m.status, 'running');
 });
 
+test('parseMatchlistMatch: Bo2 partial result stays running until both games are played', () => {
+  const partial = load(`
+    <div class="brkts-matchlist-match">
+      <div class="brkts-matchlist-opponent brkts-matchlist-slot-winner" aria-label="Rune Eaters">
+        <span class="name">Rune Eaters</span>
+      </div>
+      <div class="brkts-matchlist-score">
+        <span class="brkts-matchlist-cell-content">1</span>
+        <span class="brkts-matchlist-cell-content">0</span>
+      </div>
+      <div class="brkts-matchlist-opponent" aria-label="Xtreme Gaming">
+        <span class="name">Xtreme Gaming</span>
+      </div>
+      <div class="brkts-popup">(Bo2)</div>
+    </div>
+  `);
+  const running = parseMatchlistMatch(partial, partial('.brkts-matchlist-match')[0], 'dota2', 'EWC/2026');
+  assert.equal(running.status, 'running');
+  assert.equal(running.bestOf, 2);
+
+  const draw = load(`
+    <div class="brkts-matchlist-match">
+      <div class="brkts-matchlist-opponent bg-draw" aria-label="Rune Eaters">
+        <span class="name">Rune Eaters</span>
+      </div>
+      <div class="brkts-matchlist-score">
+        <span class="brkts-matchlist-cell-content">1</span>
+        <span class="brkts-matchlist-cell-content">1</span>
+      </div>
+      <div class="brkts-matchlist-opponent bg-draw" aria-label="Xtreme Gaming">
+        <span class="name">Xtreme Gaming</span>
+      </div>
+      <div class="brkts-popup">(Bo2)</div>
+    </div>
+  `);
+  const finished = parseMatchlistMatch(draw, draw('.brkts-matchlist-match')[0], 'dota2', 'EWC/2026');
+  assert.equal(finished.status, 'finished');
+});
+
 test('parseMatchlistMatch: unplayed match has status scheduled', () => {
   const futureTs = Math.floor(Date.now() / 1000) + 7200; // 2h from now
   const html = `

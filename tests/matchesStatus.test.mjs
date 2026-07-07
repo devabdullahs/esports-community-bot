@@ -9,12 +9,63 @@ process.env.DB_PATH = ':memory:';
 const { run, closeDbClient } = await import('../src/db/client.js');
 const {
   deleteTournamentPlaceholderMatches,
+  dedupeMatches,
   getActiveMatches,
   getMatch,
   getMatchesForGuild,
   markStaleActiveFinished,
   upsertMatch,
 } = await import('../src/db/matches.js');
+
+test('dedupeMatches collapses live-widget alias rows by timestamp and shared team', () => {
+  const scheduledAt = 1_783_427_100;
+  const rows = [
+    {
+      id: 1,
+      tournament_id: 10,
+      game: 'dota2',
+      external_id: 'dota2:1783427100:Team Liquid:PTime',
+      team_a: 'Team Liquid',
+      team_b: 'PTime',
+      score_a: 1,
+      score_b: 0,
+      status: 'running',
+      scheduled_at: scheduledAt,
+    },
+    {
+      id: 2,
+      tournament_id: 10,
+      game: 'dota2',
+      external_id: 'dota2:Esports_World_Cup/2026/Group_Stage:matchlist:15:playtime vs team liquid',
+      team_a: 'Team Liquid',
+      team_b: 'PlayTime',
+      score_a: 1,
+      score_b: 0,
+      status: 'running',
+      scheduled_at: scheduledAt,
+    },
+    {
+      id: 3,
+      tournament_id: 10,
+      game: 'dota2',
+      external_id: 'dota2:Esports_World_Cup/2026/Group_Stage:matchlist:16:l1ga team vs nigma galaxy',
+      team_a: 'L1GA TEAM',
+      team_b: 'Nigma Galaxy',
+      score_a: 0,
+      score_b: 1,
+      status: 'running',
+      scheduled_at: scheduledAt - 600,
+    },
+  ];
+
+  assert.deepEqual(
+    dedupeMatches(rows).map((row) => row.external_id),
+    [
+      'dota2:Esports_World_Cup/2026/Group_Stage:matchlist:15:playtime vs team liquid',
+      'dota2:Esports_World_Cup/2026/Group_Stage:matchlist:16:l1ga team vs nigma galaxy',
+    ],
+  );
+});
 
 test('markStaleActiveFinished retires old scheduled and running rows only', async (t) => {
   t.after(async () => {

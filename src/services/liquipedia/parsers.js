@@ -76,9 +76,14 @@ export function deriveStatus({
   live = false,
 }) {
   const winAt = bestOf ? Math.floor(bestOf / 2) + 1 : null;
+  const played = (scoreA ?? 0) + (scoreB ?? 0);
   const reachedWin = winAt != null && ((scoreA ?? 0) >= winAt || (scoreB ?? 0) >= winAt);
-  if (winA || winB || reachedWin) return 'finished';
-  if ((scoreA ?? 0) + (scoreB ?? 0) > 0) return 'running'; // has a partial score → in progress
+  if (bestOf) {
+    if (reachedWin || played >= bestOf) return 'finished';
+    if (played > 0) return 'running';
+  }
+  if (winA || winB) return 'finished';
+  if (played > 0) return 'running'; // has a partial score → in progress
   if (live) return 'running';
   if (placeholder) return 'scheduled';
   const now = nowSec();
