@@ -2,7 +2,7 @@ import { config } from '../config.js';
 import { logger } from '../lib/logger.js';
 import { EmbedBuilder } from 'discord.js';
 import { channelUrl, getActiveChannelMeta, listDistinctActiveHandles } from '../db/streamChannels.js';
-import { getStreamStatus, listLiveStreamStatuses, markStaleStatusesOffline, upsertStreamStatus } from '../db/streamChannelStatus.js';
+import { listLiveStreamStatuses, markStaleStatusesOffline, upsertStreamStatus } from '../db/streamChannelStatus.js';
 import { getGuildsWithCostreamAnnounce, getSettings } from '../db/settings.js';
 import { categoryToGameSlug, gameName } from '../lib/games.js';
 import * as twitch from '../services/twitch.js';
@@ -40,28 +40,55 @@ let lastYoutubeRunAt = 0;
 // against status flaps; the DB-persisted previous status means a bot RESTART
 // never re-announces channels that were already live.
 const ANNOUNCE_COOLDOWN_MS = 30 * 60 * 1000;
-const lastAnnouncedAt = new Map(); // `${platform}:${handle}` -> ms epoch
+const lastAnnouncedAt = new Map(); // creator key -> ms epoch
 
 const PLATFORM_LABELS = { twitch: 'Twitch', kick: 'Kick', youtube: 'YouTube', soop: 'SOOP' };
+const PLATFORM_RANK = { twitch: 0, kick: 1, youtube: 2, soop: 3 };
 
-async function announceGoLive(client, newlyLive, now = Date.now) {
-  if (!client || !newlyLive.length) return 0;
+async function liveCreatorGroups(statuses) {
+  const groups = new Map();
+  for (const status of statuses) {
+    const meta = await getActiveChannelMeta(status.platform, status.handle);
+    if (!meta) continue;
+    const creatorKey = meta.creatorKey || `${status.platform}:${status.handle}`;
+    const entries = groups.get(creatorKey) ?? [];
+    entries.push({ status, meta });
+    groups.set(creatorKey, entries);
+  }
+  return groups;
+}
+
+function selectAnnouncementEntry(entries) {
+  return entries
+    .map(({ status, meta }) => {
+      const gameSlug = status.category ? categoryToGameSlug(status.category) : null;
+      if (status.category && !gameSlug) return null;
+      return { status, meta, gameSlug };
+    })
+    .filter(Boolean)
+    .sort((a, b) => {
+      if (a.meta.isDefault !== b.meta.isDefault) return a.meta.isDefault ? -1 : 1;
+      if (a.meta.sortOrder !== b.meta.sortOrder) return a.meta.sortOrder - b.meta.sortOrder;
+      return (PLATFORM_RANK[a.meta.platform] ?? 99) - (PLATFORM_RANK[b.meta.platform] ?? 99);
+    })[0] ?? null;
+}
+
+async function announceGoLive(client, liveBefore, liveAfter, now = Date.now) {
+  if (!client || !liveAfter.length) return 0;
   const guildIds = await getGuildsWithCostreamAnnounce();
   if (!guildIds.length) return 0;
 
+  const beforeGroups = await liveCreatorGroups(liveBefore);
+  const afterGroups = await liveCreatorGroups(liveAfter);
   let sent = 0;
-  for (const key of newlyLive) {
-    const at = lastAnnouncedAt.get(key);
+  for (const [creatorKey, entries] of afterGroups) {
+    if (beforeGroups.has(creatorKey)) continue;
+    const candidate = selectAnnouncementEntry(entries);
+    if (!candidate) continue;
+    const at = lastAnnouncedAt.get(creatorKey);
     if (at && now() - at < ANNOUNCE_COOLDOWN_MS) continue;
-    const [platform, ...rest] = key.split(':');
-    const handle = rest.join(':');
-    const status = await getStreamStatus(platform, handle);
-    if (!status?.isLive) continue;
-    // Same relevance rule as the website: skip channels live in an off-topic
-    // category; an UNKNOWN category (YouTube's probe) passes.
-    const gameSlug = status.category ? categoryToGameSlug(status.category) : null;
-    if (status.category && !gameSlug) continue;
-    const meta = await getActiveChannelMeta(platform, handle);
+    const { status, meta, gameSlug } = candidate;
+    const { platform, handle } = status;
     const watchUrl = channelUrl(platform, handle);
 
     const embed = new EmbedBuilder()
@@ -96,7 +123,7 @@ async function announceGoLive(client, newlyLive, now = Date.now) {
         logger.warn(`[stream-status] go-live announce failed in ${guildId}: ${e.message}`);
       }
     }
-    if (delivered) lastAnnouncedAt.set(key, now());
+    if (delivered) lastAnnouncedAt.set(creatorKey, now());
   }
   return sent;
 }
@@ -111,7 +138,7 @@ export async function refreshStreamStatus({
 } = {}) {
   // Snapshot who was live BEFORE this refresh so offline -> live transitions
   // can be announced afterwards.
-  const liveBefore = new Set((await listLiveStreamStatuses()).map((s) => `${s.platform}:${s.handle}`));
+  const liveBefore = await listLiveStreamStatuses();
   const handles = await listDistinctActiveHandles();
   const byPlatform = { twitch: [], kick: [], youtube: [] };
   for (const h of handles) if (byPlatform[h.platform]) byPlatform[h.platform].push(h.handle);
@@ -149,10 +176,9 @@ export async function refreshStreamStatus({
   // Channels removed from the registry stop being polled — force them offline.
   await markStaleStatusesOffline(Math.max(600, config.streams.pollSeconds * 5));
 
-  const liveAfter = (await listLiveStreamStatuses()).map((s) => `${s.platform}:${s.handle}`);
-  const newlyLive = liveAfter.filter((key) => !liveBefore.has(key));
+  const liveAfter = await listLiveStreamStatuses();
   try {
-    await announceGoLive(client, newlyLive, now);
+    await announceGoLive(client, liveBefore, liveAfter, now);
   } catch (e) {
     logger.warn(`[stream-status] go-live announce pass failed: ${e.message}`);
   }
