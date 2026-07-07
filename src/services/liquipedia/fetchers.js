@@ -22,6 +22,7 @@ import {
   VRS_REGIONS,
   normalizeValveRankingRegion,
   parseValveRankingTable,
+  mergeLiveWidgetMatch,
 } from './parsers.js';
 import { hasStandingsRows, parseBattleRoyaleSchedules, parseEventStandings } from './standingsParsers.js';
 
@@ -273,24 +274,7 @@ export async function fetchSchedule(tournament) {
       if (!m || (m.teamA === 'TBD' && m.teamB === 'TBD')) return;
       const existing = findExistingForLiveWidget(m);
       if (existing) {
-        if (m.status === 'running' && existing.status !== 'running') {
-          existing.status = 'running';
-          existing.winner = null;
-          if (m.scoreA != null) existing.scoreA = m.scoreA;
-          if (m.scoreB != null) existing.scoreB = m.scoreB;
-          if (!existing.scheduledAt && m.scheduledAt) existing.scheduledAt = m.scheduledAt;
-        } else if (
-          m.status === 'finished' &&
-          existing.status !== 'finished' &&
-          existing.scoreA == null &&
-          existing.scoreB == null &&
-          m.scheduledAt
-        ) {
-          // Some widgets keep already-played matches in "Upcoming" with no score/winner.
-          // If the same pair is far past its start, retire the unresolved bracket row too.
-          existing.status = 'finished';
-          if (!existing.scheduledAt) existing.scheduledAt = m.scheduledAt;
-        }
+        mergeLiveWidgetMatch(existing, m);
         return;
       }
       if (seenIds.has(m.externalId)) return;

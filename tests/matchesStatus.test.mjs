@@ -16,6 +16,14 @@ const {
   markStaleActiveFinished,
   upsertMatch,
 } = await import('../src/db/matches.js');
+const { normalizeTeamName } = await import('../src/lib/render.js');
+
+test('normalizeTeamName resolves known Liquipedia short-name redirects', () => {
+  assert.equal(normalizeTeamName('PTime'), 'playtime');
+  assert.equal(normalizeTeamName('PlayTime'), 'playtime');
+  assert.equal(normalizeTeamName('L1 TEAM'), 'l1gateam');
+  assert.equal(normalizeTeamName('L1GA TEAM'), 'l1gateam');
+});
 
 test('dedupeMatches collapses live-widget alias rows by timestamp and shared team', () => {
   const scheduledAt = 1_783_427_100;
@@ -65,6 +73,37 @@ test('dedupeMatches collapses live-widget alias rows by timestamp and shared tea
       'dota2:Esports_World_Cup/2026/Group_Stage:matchlist:16:l1ga team vs nigma galaxy',
     ],
   );
+});
+
+test('dedupeMatches prefers scored PlayTime result over stale PTime live row', () => {
+  const rows = [
+    {
+      id: 1,
+      tournament_id: 10,
+      game: 'dota2',
+      external_id: 'dota2:1783427100:Team Liquid:PTime',
+      team_a: 'Team Liquid',
+      team_b: 'PTime',
+      score_a: 0,
+      score_b: 0,
+      status: 'running',
+      scheduled_at: 1_783_427_100,
+    },
+    {
+      id: 2,
+      tournament_id: 10,
+      game: 'dota2',
+      external_id: 'dota2:Esports_World_Cup/2026/Group_Stage:matchlist:15:playtime vs team liquid',
+      team_a: 'Team Liquid',
+      team_b: 'PlayTime',
+      score_a: 1,
+      score_b: 1,
+      status: 'finished',
+      scheduled_at: 1_783_427_700,
+    },
+  ];
+
+  assert.deepEqual(dedupeMatches(rows), [rows[1]]);
 });
 
 test('markStaleActiveFinished retires old scheduled and running rows only', async (t) => {

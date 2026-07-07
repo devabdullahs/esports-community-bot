@@ -297,6 +297,36 @@ export function parseMatchInfo($, el, game) {
   };
 }
 
+export function mergeLiveWidgetMatch(existing, liveMatch) {
+  const existingHasScoredResult =
+    existing.status === 'finished' && existing.scoreA != null && existing.scoreB != null;
+
+  if (liveMatch.status === 'running' && !existingHasScoredResult) {
+    existing.status = 'running';
+    existing.winner = null;
+    if (liveMatch.scoreA != null) existing.scoreA = liveMatch.scoreA;
+    if (liveMatch.scoreB != null) existing.scoreB = liveMatch.scoreB;
+    if (!existing.scheduledAt && liveMatch.scheduledAt) existing.scheduledAt = liveMatch.scheduledAt;
+    return true;
+  }
+
+  if (
+    liveMatch.status === 'finished' &&
+    existing.status !== 'finished' &&
+    existing.scoreA == null &&
+    existing.scoreB == null &&
+    liveMatch.scheduledAt
+  ) {
+    // Some widgets keep already-played matches in "Upcoming" with no score/winner.
+    // If the same pair is far past its start, retire the unresolved bracket row too.
+    existing.status = 'finished';
+    if (!existing.scheduledAt) existing.scheduledAt = liveMatch.scheduledAt;
+    return true;
+  }
+
+  return false;
+}
+
 // Parse one bracket/matchlist match (.brkts-match).
 export function parseBracketMatch($, el, game, scope = '') {
   const $m = $(el);
