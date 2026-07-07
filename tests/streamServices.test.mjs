@@ -163,3 +163,17 @@ test('youtube.getLiveChannels maps handles and OMITS handles whose fetch failed'
   assert.equal(map.get('offdude').isLive, false);
   assert.equal(map.has('brokendude'), false, 'failed fetch reports nothing (keep previous status)');
 });
+
+test('youtube.getLiveChannels omits transient non-200s but keeps parsed offline pages', async () => {
+  const client = {
+    async get(url) {
+      if (url.includes('ratelimited')) return { status: 429, data: '' };
+      if (url.includes('offdude')) return { status: 200, data: OFFLINE_PAGE };
+      throw new Error('unexpected handle');
+    },
+  };
+  const map = await youtube.getLiveChannels(['ratelimited', 'offdude'], { client, gapMs: 0 });
+  assert.equal(map.has('ratelimited'), false, 'non-200 reports nothing (keep previous status)');
+  assert.equal(map.has('offdude'), true, 'parsed 200 offline page is still reported');
+  assert.equal(map.get('offdude').isLive, false);
+});

@@ -593,3 +593,23 @@ Second audit (at `c260e10`):
 Not audited in the second run: prediction system internals, Liquipedia
 parsers/client (covered by the first audit + tests), canvas rendering,
 deploy infra.
+
+---
+
+## Fourth audit — `/improve deep` @ `fc0df08` (2026-07-07)
+
+Seven-agent deep sweep after the July co-stream + club-tracker PRs (#150–#160).
+Schema-drift check ran clean (all new columns present in both backends). Most
+"critical" subagent findings were rejected on vetting (false NULLS-LAST/SQLite
+claim, non-committed `.env`, unreachable `canManageGame` branch, documented
+tradeoffs). One consolidated plan of four safe, low-risk fixes:
+
+| Plan | Title | Priority | Effort | Status |
+|------|-------|----------|--------|--------|
+| 061  | Deep-audit fixes: YouTube non-200 status, homepage parallel fetch, session cache() dedup, canvas render smoke test | P2 | S (each) | TODO |
+
+Considered and rejected (do not re-audit): N+1 tournament-summary queries (low
+leverage — cached, single-guild, bounded N); CSP `img-src https:` tightening
+(would break admin-pasted covers); Postgres TLS fail-fast (server lacks SSL —
+decided). Direction options (prediction lock reminders, match follows, tier
+roles) recorded but not planned — need product decisions.
