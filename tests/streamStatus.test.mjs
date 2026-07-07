@@ -35,12 +35,14 @@ test('upsertStreamStatus stores a live snapshot, then clears it when offline', a
     title: 'Ranked',
     viewerCount: 42,
     category: 'Overwatch 2',
+    thumbnailUrl: 'https://static-cdn.jtvnw.net/previews-ttv/live_user_live1-1280x720.jpg',
     startedAt: 1_700_000_000,
   });
   let s = await getStreamStatus('twitch', 'live1');
   assert.equal(s.isLive, true);
   assert.equal(s.viewerCount, 42);
   assert.equal(s.title, 'Ranked');
+  assert.equal(s.thumbnailUrl, 'https://static-cdn.jtvnw.net/previews-ttv/live_user_live1-1280x720.jpg');
   assert.ok(s.checkedAt > 0);
 
   await upsertStreamStatus({ platform: 'twitch', handle: 'live1', isLive: false, title: 'stale', viewerCount: 99 });
@@ -159,7 +161,18 @@ test('announces offline -> live transitions once, with cooldown, in the configur
     isConfigured: () => true,
     getLiveStreams: async () =>
       liveNow
-        ? new Map([['goliver', { isLive: true, title: 'EWC finals!', viewerCount: 99, category: 'VALORANT' }]])
+        ? new Map([
+            [
+              'goliver',
+              {
+                isLive: true,
+                title: 'EWC finals!',
+                viewerCount: 99,
+                category: 'VALORANT',
+                thumbnailUrl: 'https://static-cdn.jtvnw.net/previews-ttv/live_user_goliver-1280x720.jpg',
+              },
+            ],
+          ])
         : new Map(),
   };
   let clock = 5_000_000_000;
@@ -177,6 +190,7 @@ test('announces offline -> live transitions once, with cooldown, in the configur
   const embed = sends[0].payload.embeds[0].toJSON();
   assert.match(embed.title, /GoLiver is live on Twitch/);
   assert.match(embed.url, /twitch\.tv\/goliver/);
+  assert.equal(embed.image.url, 'https://static-cdn.jtvnw.net/previews-ttv/live_user_goliver-1280x720.jpg');
 
   await refreshStreamStatus(opts); // still live: no transition, no announce
   assert.equal(sends.length, 1);
