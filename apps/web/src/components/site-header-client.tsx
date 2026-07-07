@@ -197,8 +197,8 @@ export function SiteHeaderClient({
           </span>
         </Link>
 
-        {/* Desktop (md+): general links + an EWC dropdown grouping the EWC pages. */}
-        <NavigationMenu className="ms-2 hidden md:flex">
+        {/* Desktop (lg+): general links + an EWC dropdown grouping the EWC pages. */}
+        <NavigationMenu className="ms-2 hidden lg:flex">
           <NavigationMenuList className="gap-0.5">
             {primary.map(({ href, label, icon: Icon }) => {
               const active = linkActive(href);
@@ -254,7 +254,7 @@ export function SiteHeaderClient({
                 <Button
                   variant="outline"
                   size="sm"
-                  className="hidden gap-1.5 px-2.5 md:inline-flex"
+                  className="hidden gap-1.5 px-2.5 lg:inline-flex"
                   aria-label={text.common.account}
                 />
               }
@@ -315,14 +315,14 @@ export function SiteHeaderClient({
           </Button>
           <ModeToggle label={text.common.themeToggle} />
 
-          {/* Mobile (<md): hamburger opens a sheet with every destination. */}
+          {/* Mobile/tablet (<lg): hamburger opens a sheet with every destination. */}
           <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
             <SheetTrigger
               render={
                 <Button
                   variant="ghost"
                   size="sm"
-                  className="size-9 px-0 md:hidden"
+                  className="size-9 px-0 lg:hidden"
                   aria-label={text.common.menu}
                 />
               }

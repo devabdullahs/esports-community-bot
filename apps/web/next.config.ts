@@ -8,7 +8,7 @@ const r2Host = (() => {
   }
 })();
 
-const csp = [
+export const contentSecurityPolicy = [
   "default-src 'self'",
   // Next.js App Router requires inline scripts/styles without a nonce pipeline.
   "script-src 'self' 'unsafe-inline' https://static.cloudflareinsights.com",
@@ -22,7 +22,7 @@ const csp = [
   "form-action 'self'",
   "frame-ancestors 'none'",
   // Live co-stream players are embedded as iframes; allow only those hosts.
-  "frame-src 'self' https://player.twitch.tv https://*.twitch.tv https://player.kick.com https://*.kick.com",
+  "frame-src 'self' https://player.twitch.tv https://*.twitch.tv https://player.kick.com https://*.kick.com https://www.youtube.com https://www.youtube-nocookie.com",
 ].join("; ");
 
 const isProd = process.env.NODE_ENV === "production";
@@ -34,7 +34,7 @@ const securityHeaders = [
   { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=()" },
   // RFC 8288 discovery: point agents at the API catalog (RFC 9727).
   { key: "Link", value: '</.well-known/api-catalog>; rel="api-catalog"' },
-  ...(isProd ? [{ key: "Content-Security-Policy", value: csp }] : []),
+  ...(isProd ? [{ key: "Content-Security-Policy", value: contentSecurityPolicy }] : []),
 ];
 
 const nextConfig: NextConfig = {
