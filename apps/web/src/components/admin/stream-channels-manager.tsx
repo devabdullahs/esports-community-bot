@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useMemo, useState, type FormEvent } from "react";
-import { CheckIcon, PencilIcon, PlusIcon, StarIcon, Trash2Icon } from "lucide-react";
+import { CheckIcon, PencilIcon, PlusIcon, SearchIcon, StarIcon, Trash2Icon } from "lucide-react";
 import { getAdminCopy } from "@/lib/admin-copy";
 import type { Locale } from "@/lib/i18n";
 import {
@@ -86,30 +86,66 @@ function GamePicker({
   copy: StreamManagerCopy;
 }) {
   const selectedSet = new Set(selected);
+  const [query, setQuery] = useState("");
+  const normalizedQuery = query.trim().toLowerCase();
+  const selectedGames = games.filter((game) => selectedSet.has(game.slug));
+  const matchingGames = games.filter((game) => {
+    if (!normalizedQuery) return true;
+    return [game.name, game.slug, game.tag].some((value) => value?.toLowerCase().includes(normalizedQuery));
+  });
+  const availableGames = matchingGames.filter((game) => !selectedSet.has(game.slug));
+
+  function toggleGame(slug: string) {
+    onChange(selectedSet.has(slug) ? selected.filter((selectedSlug) => selectedSlug !== slug) : [...selected, slug]);
+  }
+
+  function renderGameButton(game: GameOption) {
+    const active = selectedSet.has(game.slug);
+    return (
+      <Button
+        key={game.slug}
+        type="button"
+        variant={active ? "default" : "outline"}
+        size="sm"
+        className="max-w-full justify-start"
+        title={game.name}
+        onClick={() => toggleGame(game.slug)}
+      >
+        {active ? <CheckIcon data-icon="inline-start" /> : null}
+        <span className="truncate">{game.name}</span>
+      </Button>
+    );
+  }
+
   return (
-    <div className="flex flex-col gap-2 sm:col-span-2">
+    <div className="flex min-w-0 flex-col gap-2 sm:col-span-2">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <Label>{required ? copy.games : copy.gameTagsOptional}</Label>
         <span className="text-xs text-muted-foreground">{copy.selectedCount(selected.length)}</span>
       </div>
-      <div className="flex flex-wrap gap-2 rounded-lg border border-border/70 bg-background/40 p-2">
-        {games.map((game) => {
-          const active = selectedSet.has(game.slug);
-          return (
-            <Button
-              key={game.slug}
-              type="button"
-              variant={active ? "default" : "outline"}
-              size="sm"
-              onClick={() =>
-                onChange(active ? selected.filter((slug) => slug !== game.slug) : [...selected, game.slug])
-              }
-            >
-              {active ? <CheckIcon data-icon="inline-start" /> : null}
-              {game.name}
-            </Button>
-          );
-        })}
+      <div className="flex min-w-0 flex-col gap-2 rounded-lg border border-border/70 bg-background/40 p-2">
+        <div className="relative">
+          <SearchIcon className="pointer-events-none absolute start-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder={copy.gameSearchPlaceholder}
+            autoComplete="off"
+            className="h-9 ps-9"
+          />
+        </div>
+        {selectedGames.length ? (
+          <div className="flex max-h-24 flex-wrap gap-2 overflow-y-auto border-b border-border/60 pb-2">
+            {selectedGames.map(renderGameButton)}
+          </div>
+        ) : null}
+        <div className="max-h-56 overflow-y-auto pe-1">
+          {availableGames.length ? (
+            <div className="flex min-w-0 flex-wrap gap-2">{availableGames.map(renderGameButton)}</div>
+          ) : normalizedQuery && !matchingGames.length ? (
+            <p className="px-1 py-2 text-sm text-muted-foreground">{copy.gameSearchNoResults}</p>
+          ) : null}
+        </div>
       </div>
       <p className="text-xs text-muted-foreground">{copy.gamePickerHelp}</p>
     </div>
@@ -364,8 +400,8 @@ export function StreamChannelsManager({
   }
 
   return (
-    <div className="flex flex-col gap-8">
-      <form onSubmit={add} className="flex flex-col gap-5 rounded-xl border border-border/70 bg-card/70 p-5 shadow-sm">
+    <div className="flex min-w-0 flex-col gap-8">
+      <form onSubmit={add} className="flex min-w-0 flex-col gap-5 rounded-xl border border-border/70 bg-card/70 p-4 shadow-sm sm:p-5">
         <div>
           <h2 className="text-lg font-semibold">{copy.addTitle}</h2>
           <p className="mt-1 max-w-3xl text-sm text-muted-foreground">{copy.addDescription}</p>
@@ -498,13 +534,13 @@ export function StreamChannelsManager({
       {SCOPE_ORDER.map((s) => {
         const creators = grouped.get(s) ?? [];
         return (
-          <section key={s} className="flex flex-col gap-3">
+          <section key={s} className="flex min-w-0 flex-col gap-3">
             <div className="flex items-baseline justify-between gap-3">
               <h2 className="text-lg font-semibold">{copy.scopeLabels[s]}</h2>
               <Badge variant="secondary">{copy.streamersCount(creators.length)}</Badge>
             </div>
             {creators.length ? (
-              <div className="grid gap-3">
+              <div className="grid min-w-0 gap-3">
                 {creators.map((group) => {
                   const label = groupLabel(group);
                   const targets = groupTargets(group);
@@ -514,22 +550,22 @@ export function StreamChannelsManager({
                   return (
                     <div
                       key={group.key}
-                      className={`flex flex-col gap-3 rounded-xl border border-border/70 bg-card/60 p-4 shadow-sm ${
+                      className={`flex min-w-0 flex-col gap-3 rounded-xl border border-border/70 bg-card/60 p-3 shadow-sm sm:p-4 ${
                         allInactive ? "opacity-60" : ""
                       }`}
                     >
                       {/* Streamer header: one identity line + creator-level actions. */}
-                      <div className="flex flex-wrap items-center gap-2">
-                        <span className="text-base font-semibold" dir="auto">{label}</span>
+                      <div className="flex min-w-0 flex-wrap items-center gap-2">
+                        <span className="min-w-0 max-w-full truncate text-base font-semibold" dir="auto">{label}</span>
                         <span className="text-xs text-muted-foreground">
                           {copy.platformsCount(group.channels.length)}
                         </span>
                         {targets.map((target) => (
-                          <Badge key={target} variant="outline">{target}</Badge>
+                          <Badge key={target} variant="outline" className="max-w-full truncate">{target}</Badge>
                         ))}
                         {language ? <Badge variant="outline">{language}</Badge> : null}
                         {allInactive ? <Badge variant="outline">{copy.inactive}</Badge> : null}
-                        <div className="ms-auto flex flex-wrap gap-1">
+                        <div className="ms-auto flex shrink-0 flex-wrap gap-1">
                           <Button
                             variant="ghost"
                             size="icon-sm"
@@ -555,42 +591,48 @@ export function StreamChannelsManager({
                       </div>
 
                       {/* One compact row per platform. */}
-                      <div className="flex flex-col divide-y divide-border/60 rounded-lg border border-border/60 bg-background/40">
+                      <div className="flex min-w-0 flex-col divide-y divide-border/60 rounded-lg border border-border/60 bg-background/40">
                         {group.channels.map((channel) => (
                           <div
                             key={channel.id}
-                            className={`flex flex-wrap items-center gap-2 px-3 py-2 ${channel.active ? "" : "opacity-55"}`}
+                            className={`grid min-w-0 gap-2 px-3 py-2 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center ${channel.active ? "" : "opacity-55"}`}
                           >
-                            <span className="inline-flex w-24 items-center gap-1.5 text-sm font-medium">
-                              <PlatformIcon platform={channel.platform} className="size-3.5" />
-                              {PLATFORM_LABELS[channel.platform]}
-                            </span>
-                            {channel.url ? (
-                              <a
-                                href={channel.url}
-                                target="_blank"
-                                rel="noreferrer"
-                                className="font-mono text-xs text-muted-foreground hover:text-foreground"
-                              >
-                                {channel.handle}
-                              </a>
-                            ) : (
-                              <span className="font-mono text-xs text-muted-foreground">{channel.handle}</span>
-                            )}
-                            {channel.isDefault ? (
-                              <Badge>
-                                <StarIcon data-icon="inline-start" />
-                                {copy.defaultBadge}
-                              </Badge>
-                            ) : null}
-                            {!channel.active ? <Badge variant="outline">{copy.inactive}</Badge> : null}
-                            <div className="ms-auto flex flex-wrap gap-1">
+                            <div className="grid min-w-0 gap-1.5 sm:grid-cols-[6rem_minmax(0,1fr)] sm:items-center">
+                              <span className="inline-flex min-w-0 items-center gap-1.5 text-sm font-medium">
+                                <PlatformIcon platform={channel.platform} className="size-3.5 shrink-0" />
+                                <span className="truncate">{PLATFORM_LABELS[channel.platform]}</span>
+                              </span>
+                              <div className="flex min-w-0 flex-wrap items-center gap-2">
+                                {channel.url ? (
+                                  <a
+                                    href={channel.url}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    className="min-w-0 max-w-full truncate font-mono text-xs text-muted-foreground hover:text-foreground"
+                                  >
+                                    {channel.handle}
+                                  </a>
+                                ) : (
+                                  <span className="min-w-0 max-w-full truncate font-mono text-xs text-muted-foreground">
+                                    {channel.handle}
+                                  </span>
+                                )}
+                                {channel.isDefault ? (
+                                  <Badge>
+                                    <StarIcon data-icon="inline-start" />
+                                    {copy.defaultBadge}
+                                  </Badge>
+                                ) : null}
+                                {!channel.active ? <Badge variant="outline">{copy.inactive}</Badge> : null}
+                              </div>
+                            </div>
+                            <div className="flex min-w-0 flex-wrap gap-1 sm:justify-end">
                               {!channel.isDefault && DEFAULT_EMBED_PLATFORM_SET.has(channel.platform) ? (
-                                <Button variant="ghost" size="sm" disabled={busy} onClick={() => patchChannel(channel, { isDefault: true } as Partial<StreamChannel>)}>
+                                <Button variant="ghost" size="sm" className="shrink-0 px-2" disabled={busy} onClick={() => patchChannel(channel, { isDefault: true } as Partial<StreamChannel>)}>
                                   {copy.setDefault}
                                 </Button>
                               ) : null}
-                              <Button variant="ghost" size="sm" disabled={busy} onClick={() => patchChannel(channel, { active: !channel.active } as Partial<StreamChannel>)}>
+                              <Button variant="ghost" size="sm" className="shrink-0 px-2" disabled={busy} onClick={() => patchChannel(channel, { active: !channel.active } as Partial<StreamChannel>)}>
                                 {channel.active ? copy.disable : copy.enable}
                               </Button>
                               <Button

@@ -335,6 +335,8 @@ const en = {
     embedHelp: "Embeds are available for Twitch, Kick, and live YouTube channels. SOOP is saved as a link.",
     games: "Games",
     gameTagsOptional: "Game tags (optional)",
+    gameSearchPlaceholder: "Search game tags",
+    gameSearchNoResults: "No game tags match.",
     selectedCount: (count: number) => `${count} selected`,
     gamePickerHelp:
       "Pick with buttons instead of typing separators. One streamer can appear under multiple games.",
@@ -739,6 +741,8 @@ const ar: typeof en = {
     embedHelp: "التضمين متاح لتويتش وكيك وقنوات يوتيوب المباشرة. سوب يحفظ كرابط.",
     games: "الألعاب",
     gameTagsOptional: "وسوم الألعاب (اختياري)",
+    gameSearchPlaceholder: "ابحث في وسوم الألعاب",
+    gameSearchNoResults: "لا توجد وسوم ألعاب مطابقة.",
     selectedCount: (count: number) =>
       count === 0
         ? "لا توجد ألعاب محددة"
