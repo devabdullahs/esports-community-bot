@@ -133,7 +133,7 @@ export default async function TournamentDetailPage({
               </div>
             </div>
           </div>
-          <Card className="min-w-0 bg-background/35 py-0 lg:w-80">
+          <Card className="min-w-0 bg-background/35 py-0 lg:w-72 lg:shrink-0 xl:w-80">
             {standingsOnly ? (
               <CardContent className="grid grid-cols-1 gap-2 p-3">
                 <DetailMetric
@@ -184,7 +184,7 @@ function DetailMetric({
       >
         {formatNumber(value, locale)}
       </div>
-      <div className="mt-0.5 truncate text-[0.68rem] text-muted-foreground">{label}</div>
+      <div className="mt-0.5 text-[0.68rem] leading-tight text-muted-foreground">{label}</div>
     </div>
   );
 }
