@@ -62,7 +62,12 @@ export default async function NewNewsPostPage({
   // Game post: scoped to the admin's games.
   const games =
     access.games === "ALL" ? allGames : allGames.filter((g) => access.games.includes(g.slug));
-  if (games.length === 0) redirect("/admin");
+  const canManageMediaPosts =
+    access.media === "ALL" || (Array.isArray(access.media) && access.media.length > 0);
+  if (games.length === 0) {
+    if (canManageMediaPosts) redirect("/admin/news/new/media");
+    redirect("/admin");
+  }
 
   return (
     <main className="mx-auto flex w-full max-w-6xl flex-1 flex-col gap-6 px-4 py-8 sm:px-8 sm:py-10">

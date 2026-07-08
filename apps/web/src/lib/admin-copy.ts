@@ -42,7 +42,10 @@ const en = {
     inactiveDescription:
       "Add Discord user IDs to EWC_DASHBOARD_ADMIN_DISCORD_IDS before enabling dashboard management tools.",
     roleScoped: "Scoped admin",
-    quickNewPost: "New post",
+    quickNewPost: "New game post",
+    quickNewMediaPost: "New media post",
+    quickNewMediaPostDescription:
+      "Choose a media channel, then draft a channel-owned post.",
     quickComments: "Review comments",
     quickGames: "Manage games",
     quickAnalytics: "Analytics",
@@ -161,6 +164,10 @@ const en = {
       "The esports media accounts shown in the public directory. You can edit your assigned channels.",
     channelPostsDescription:
       "Articles published by this channel. They appear on the channel's public page and post to its Discord channel when published.",
+    newPostTitle: "New media post",
+    newPostDescription: "Choose which media channel should own this post.",
+    newPostAction: "Write post",
+    noAssignedChannels: "No media channels are assigned to your admin account.",
     count: (count: number) => `${count} channel${count === 1 ? "" : "s"}`,
     linkCount: (count: number) => `${count} link${count === 1 ? "" : "s"}`,
     newAction: "New channel",
@@ -453,7 +460,10 @@ const ar: typeof en = {
     inactiveDescription:
       "أضف معرفات مستخدمي ديسكورد إلى EWC_DASHBOARD_ADMIN_DISCORD_IDS قبل تفعيل أدوات إدارة اللوحة.",
     roleScoped: "إداري مخصص",
-    quickNewPost: "منشور جديد",
+    quickNewPost: "منشور لعبة جديد",
+    quickNewMediaPost: "منشور إعلامي جديد",
+    quickNewMediaPostDescription:
+      "اختر قناة إعلامية ثم اكتب منشورًا تابعًا لها.",
     quickComments: "مراجعة التعليقات",
     quickGames: "إدارة الألعاب",
     quickAnalytics: "الإحصائيات",
@@ -571,6 +581,10 @@ const ar: typeof en = {
       "حسابات الإعلام الخاصة بالرياضات الإلكترونية المعروضة في الدليل العام. يمكنك تعديل القنوات المسندة لك.",
     channelPostsDescription:
       "المقالات المنشورة بواسطة هذه القناة. تظهر في صفحة القناة العامة وتنشر في قناة ديسكورد عند نشرها.",
+    newPostTitle: "منشور إعلامي جديد",
+    newPostDescription: "اختر قناة الإعلام التي سيُنشر باسمها هذا المنشور.",
+    newPostAction: "كتابة منشور",
+    noAssignedChannels: "لا توجد قنوات إعلام مخصصة لحسابك الإداري.",
     count: (count: number) => `${count} قناة`,
     linkCount: (count: number) => `${count} رابط`,
     newAction: "قناة جديدة",

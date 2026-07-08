@@ -12,11 +12,17 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   const locale = await getRequestLocale();
   const t = getAdminCopy(locale);
   const roleLabel = access.isSuper ? t.common.superAdmin : t.dashboard.roleScoped;
+  const canManageGamePosts =
+    access.games === "ALL" || (Array.isArray(access.games) && access.games.length > 0);
+  const canManageMediaPosts =
+    access.media === "ALL" || (Array.isArray(access.media) && access.media.length > 0);
 
   return (
     <AdminDashboardShell
       locale={locale}
       isSuper={access.isSuper}
+      canManageGamePosts={canManageGamePosts}
+      canManageMediaPosts={canManageMediaPosts}
       displayName={access.displayName}
       roleLabel={roleLabel}
     >
