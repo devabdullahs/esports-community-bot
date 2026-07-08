@@ -44,6 +44,8 @@ describe("MCP assistant links", () => {
 
   it("exposes localized MCP markdown copy", () => {
     expect(getAdminMcpCopyPage("en")).toContain("# Admin MCP");
+    expect(getAdminMcpCopyPage("en")).toContain("all public read-only tools");
+    expect(getAdminMcpCopyPage("en")).toContain("list_games");
     expect(getAdminMcpCopyPage("ar")).toContain("# MCP");
 
     expect(getPublicMcpCopyPage("en")).toContain("# Public MCP");

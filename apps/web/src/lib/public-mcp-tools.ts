@@ -41,6 +41,28 @@ type ToolResult = {
   isError?: boolean;
 };
 
+export const PUBLIC_MCP_TOOL_NAMES = [
+  "get_site_overview",
+  "list_games",
+  "search_news",
+  "get_tournament_status",
+  "list_tournaments",
+  "get_ewc_club_summary",
+  "list_co_streams",
+  "search_teams",
+  "search_players",
+  "get_public_ewc_leaderboard",
+] as const;
+
+export const PUBLIC_ONLY_MCP_TOOL_NAMES = [
+  "list_games",
+  "list_tournaments",
+  "list_co_streams",
+  "search_teams",
+  "search_players",
+  "get_public_ewc_leaderboard",
+] as const;
+
 const LocaleSchema = z.enum(["en", "ar"]).optional();
 
 function jsonResult(data: Record<string, unknown>): ToolResult {
@@ -241,7 +263,17 @@ export function createPublicMcpServer() {
     version: "0.1.0",
   });
 
-  server.registerTool(
+  registerPublicMcpTools(server);
+  return server;
+}
+
+export function registerPublicMcpTools(
+  server: McpServer,
+  options: { exclude?: Iterable<string> } = {},
+) {
+  const excluded = new Set(options.exclude ?? []);
+
+  if (!excluded.has("get_site_overview")) server.registerTool(
     "get_site_overview",
     {
       title: "Get Public Site Overview",
@@ -266,7 +298,7 @@ export function createPublicMcpServer() {
     },
   );
 
-  server.registerTool(
+  if (!excluded.has("list_games")) server.registerTool(
     "list_games",
     {
       title: "List Games",
@@ -279,7 +311,7 @@ export function createPublicMcpServer() {
     },
   );
 
-  server.registerTool(
+  if (!excluded.has("search_news")) server.registerTool(
     "search_news",
     {
       title: "Search Published News",
@@ -322,7 +354,7 @@ export function createPublicMcpServer() {
     },
   );
 
-  server.registerTool(
+  if (!excluded.has("get_tournament_status")) server.registerTool(
     "get_tournament_status",
     {
       title: "Get Tournament Status",
@@ -340,7 +372,7 @@ export function createPublicMcpServer() {
     },
   );
 
-  server.registerTool(
+  if (!excluded.has("list_tournaments")) server.registerTool(
     "list_tournaments",
     {
       title: "List Tournaments",
@@ -377,7 +409,7 @@ export function createPublicMcpServer() {
     },
   );
 
-  server.registerTool(
+  if (!excluded.has("get_ewc_club_summary")) server.registerTool(
     "get_ewc_club_summary",
     {
       title: "Get EWC Club Summary",
@@ -411,7 +443,7 @@ export function createPublicMcpServer() {
     },
   );
 
-  server.registerTool(
+  if (!excluded.has("list_co_streams")) server.registerTool(
     "list_co_streams",
     {
       title: "List Co-streams",
@@ -433,7 +465,7 @@ export function createPublicMcpServer() {
     },
   );
 
-  server.registerTool(
+  if (!excluded.has("search_teams")) server.registerTool(
     "search_teams",
     {
       title: "Search Teams",
@@ -456,7 +488,7 @@ export function createPublicMcpServer() {
     },
   );
 
-  server.registerTool(
+  if (!excluded.has("search_players")) server.registerTool(
     "search_players",
     {
       title: "Search Players",
@@ -479,7 +511,7 @@ export function createPublicMcpServer() {
     },
   );
 
-  server.registerTool(
+  if (!excluded.has("get_public_ewc_leaderboard")) server.registerTool(
     "get_public_ewc_leaderboard",
     {
       title: "Get Public EWC Leaderboard",

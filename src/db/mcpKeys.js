@@ -3,9 +3,15 @@ import { all, get, run } from './client.js';
 
 export const MCP_TOOL_NAMES = [
   'get_site_overview',
+  'list_games',
   'search_news',
   'get_tournament_status',
+  'list_tournaments',
   'get_ewc_club_summary',
+  'list_co_streams',
+  'search_teams',
+  'search_players',
+  'get_public_ewc_leaderboard',
   'list_admin_queue',
   'create_news_draft',
   'update_stream_channel',

@@ -7,7 +7,8 @@ import { getTournamentById } from "@bot/db/tournaments.js";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { listReportedModerationComments } from "@/lib/comments";
-import { getEwcClubTrackerForMcp } from "@/lib/ewc-clubs";
+import { filterEwcClubTracker, getEwcClubTrackerForMcp } from "@/lib/ewc-clubs";
+import { CLUB_REGION_IDS } from "@/lib/ewc-club-regions";
 import { listGames } from "@/lib/games";
 import {
   canMcpManageGame,
@@ -18,6 +19,7 @@ import {
 } from "@/lib/mcp-auth";
 import { listAdminNewsPosts, createNewsPost } from "@/lib/news";
 import { listMediaChannels } from "@/lib/media";
+import { registerPublicMcpTools } from "@/lib/public-mcp-tools";
 import { getStreamChannel, updateStreamChannel } from "@/lib/stream-channels";
 
 type ToolResult = {
@@ -35,6 +37,12 @@ function jsonResult(data: Record<string, unknown>): ToolResult {
 
 function errorResult(message: string): ToolResult {
   return { content: [{ type: "text", text: message }], isError: true };
+}
+
+function clampInt(value: unknown, min: number, max: number, fallback: number) {
+  const n = Math.trunc(Number(value));
+  if (!Number.isFinite(n)) return fallback;
+  return Math.max(min, Math.min(max, n));
 }
 
 function assertTool(access: McpAccess, tool: string) {
@@ -78,6 +86,13 @@ function scopedPropagationGameSlugs(access: McpAccess) {
   return access.isSuper || access.games === "ALL" ? undefined : access.games;
 }
 
+const ADMIN_PUBLIC_OVERLAP_TOOL_NAMES = [
+  "get_site_overview",
+  "search_news",
+  "get_tournament_status",
+  "get_ewc_club_summary",
+] as const;
+
 export function createAdminMcpServer(access: McpAccess) {
   const server = new McpServer({
     name: "esports-community-admin",
@@ -103,12 +118,18 @@ export function createAdminMcpServer(access: McpAccess) {
            (SELECT COUNT(*) FROM ewc_news_posts WHERE status = 'draft') AS draft_news,
            (SELECT COUNT(*) FROM stream_channels WHERE active = 1) AS active_stream_channels,
            (SELECT COUNT(*) FROM comment_reports WHERE status = 'open') AS open_reports`,
-        [],
+          [],
       );
+      const row = (counts[0] ?? {}) as Record<string, unknown>;
       const data: Record<string, unknown> = {
         games: games.length,
         mediaChannels: media.length,
-        ...(counts[0] ?? {}),
+        ...row,
+        activeTournaments: Number(row.active_tournaments ?? 0),
+        liveMatches: Number(row.live_matches ?? 0),
+        upcomingMatches: Number(row.upcoming_matches ?? 0),
+        publishedNews: Number(row.published_news ?? 0),
+        activeStreamChannels: Number(row.active_stream_channels ?? 0),
       };
       if (access.isSuper) {
         data.recentAudit = await all(
@@ -129,16 +150,36 @@ export function createAdminMcpServer(access: McpAccess) {
       title: "Search News",
       description: "Search admin-visible news posts for the MCP key owner.",
       inputSchema: {
-        query: z.string().optional(),
+        query: z.string().max(120).optional(),
         status: z.enum(["draft", "published"]).optional(),
+        locale: z.enum(["en", "ar"]).optional(),
+        gameSlug: z.string().max(40).optional(),
+        mediaSlug: z.string().max(80).optional(),
+        ewcOnly: z.boolean().optional(),
         limit: z.number().int().min(1).max(25).optional(),
       },
     },
-    async ({ query = "", status, limit = 10 }) => {
+    async ({
+      query = "",
+      status,
+      locale,
+      gameSlug = "",
+      mediaSlug = "",
+      ewcOnly = false,
+      limit = 10,
+    }) => {
       assertTool(access, "search_news");
       const q = query.trim().toLowerCase();
-      const posts = (await listAdminNewsPosts({ status: status ?? null }))
+      const cleanGame = gameSlug.trim().toLowerCase();
+      const cleanMedia = mediaSlug.trim().toLowerCase();
+      const posts = (await listAdminNewsPosts({
+        status: status ?? null,
+        gameSlug: cleanGame || null,
+        mediaSlug: cleanMedia || null,
+      }))
         .filter((post) => postVisibleToAccess(access, post))
+        .filter((post) => !locale || post.locale === locale)
+        .filter((post) => !ewcOnly || post.ewc)
         .filter((post) => {
           if (!q) return true;
           return [post.title, post.summary, post.body].some((value) => value.toLowerCase().includes(q));
@@ -163,15 +204,19 @@ export function createAdminMcpServer(access: McpAccess) {
       description: "Return matches and standings for one tracked tournament.",
       inputSchema: {
         tournamentId: z.number().int().positive(),
+        limit: z.number().int().min(1).max(100).optional(),
+        offset: z.number().int().min(0).optional(),
       },
     },
-    async ({ tournamentId }) => {
+    async ({ tournamentId, limit = 100, offset = 0 }) => {
       assertTool(access, "get_tournament_status");
       const tournament = await getTournamentById(tournamentId);
       if (!tournament) return errorResult("Tournament not found.");
       if (tournament.game && !canMcpManageGame(access, tournament.game) && !access.isSuper) {
         return errorResult("This MCP key cannot view that tournament game.");
       }
+      const cleanLimit = clampInt(limit, 1, 100, 100);
+      const cleanOffset = clampInt(offset, 0, 100_000, 0);
       const [matches, standings] = await Promise.all([
         all(
           `SELECT id, external_id, name, team_a, team_b, score_a, score_b, status, scheduled_at, stream_platform, stream_url
@@ -179,12 +224,12 @@ export function createAdminMcpServer(access: McpAccess) {
             WHERE tournament_id = $1
             ORDER BY CASE status WHEN 'running' THEN 0 WHEN 'scheduled' THEN 1 ELSE 2 END,
                      scheduled_at ASC, id ASC
-            LIMIT 100`,
-          [tournamentId],
+            LIMIT $2 OFFSET $3`,
+          [tournamentId, cleanLimit, cleanOffset],
         ),
         listStandingsForTournament(tournamentId),
       ]);
-      return jsonResult({ tournament, matches, standings });
+      return jsonResult({ tournament, matches, standings, limit: cleanLimit, offset: cleanOffset });
     },
   );
 
@@ -194,27 +239,50 @@ export function createAdminMcpServer(access: McpAccess) {
       title: "Get EWC Club Summary",
       description: "Return EWC club points, qualified games, wins, and region metadata.",
       inputSchema: {
-        query: z.string().optional(),
-        limit: z.number().int().min(1).max(40).optional(),
+        query: z.string().max(120).optional(),
+        region: z.enum(CLUB_REGION_IDS).optional(),
+        scope: z.enum(["featured", "all"]).optional(),
+        limit: z.number().int().min(1).max(60).optional(),
       },
     },
-    async ({ query = "", limit = 12 }) => {
+    async ({ query = "", region = "all", scope = "featured", limit = 20 }) => {
       assertTool(access, "get_ewc_club_summary");
-      const q = query.trim().toLowerCase();
-      const tracker = await getEwcClubTrackerForMcp();
-      const clubs = tracker.clubs
-        .filter((club) => !q || club.name.toLowerCase().includes(q))
-        .slice(0, limit)
+      const tracker = await getEwcClubTrackerForMcp(8_000);
+      const clubs = filterEwcClubTracker(tracker, { region, q: query, scope })
+        .slice(0, clampInt(limit, 1, 60, 20))
         .map((club) => ({
           name: club.name,
+          pageUrl: club.pageUrl,
+          logo: club.logo,
           region: club.region,
+          regionSource: club.regionSource,
+          locationLabel: club.locationLabel,
           featured: club.featured,
+          supportProgram: club.supportProgram,
           points: club.points,
           rank: club.rank,
-          qualifiedGames: club.qualifiedGames.map((game) => game.shortLabel || game.label),
+          eligibility: club.eligibility,
+          qualifiedCount: club.qualifiedCount,
+          possibleEvents: club.possibleEvents,
+          totalTeams: club.totalTeams,
+          qualifiedGames: club.qualifiedGames.map((game) => ({
+            label: game.label,
+            shortLabel: game.shortLabel,
+            pageUrl: game.pageUrl,
+            status: game.status,
+          })),
+          possibleGames: club.possibleGames.map((game) => ({
+            label: game.label,
+            shortLabel: game.shortLabel,
+            pageUrl: game.pageUrl,
+            status: game.status,
+          })),
           wins: club.wins,
         }));
       return jsonResult({
+        sourceUrl: tracker.sourceUrl,
+        standingsSourceUrl: tracker.standingsSourceUrl,
+        updatedAt: tracker.updatedAt,
         summary: tracker.summary,
         dataSource: tracker.dataSource ?? "liquipedia",
         warning: tracker.warning ?? null,
@@ -321,6 +389,8 @@ export function createAdminMcpServer(access: McpAccess) {
       return jsonResult({ channel: updated });
     },
   );
+
+  registerPublicMcpTools(server, { exclude: ADMIN_PUBLIC_OVERLAP_TOOL_NAMES });
 
   return server;
 }
