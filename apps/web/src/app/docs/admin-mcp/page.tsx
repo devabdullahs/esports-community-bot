@@ -19,7 +19,7 @@ const COPY = {
       "Public setup documentation for the Esports Community admin MCP server. The endpoint still requires approved admin bearer keys.",
     badge: "Admin tools",
     security:
-      "This page is public so AI assistants can read the setup guide. It does not expose MCP keys, sessions, admin data, or dashboard-only actions. Every MCP request still requires a valid scoped bearer key.",
+      "This page is public so AI assistants can read the setup guide. It contains setup instructions only; every MCP request still requires a valid scoped bearer key.",
   },
   ar: {
     title: "خادم MCP الإداري",
@@ -27,7 +27,7 @@ const COPY = {
       "شرح عام لإعداد خادم MCP الإداري الخاص بموقع Esports Community. نقطة النهاية ما زالت تتطلب مفاتيح Bearer إدارية معتمدة.",
     badge: "أدوات الإدارة",
     security:
-      "هذه الصفحة عامة حتى تتمكن أدوات الذكاء الاصطناعي من قراءة شرح الإعداد. لا تعرض الصفحة مفاتيح MCP أو الجلسات أو بيانات الإدارة أو إجراءات لوحة التحكم. كل طلب MCP ما زال يتطلب مفتاح Bearer صالحا ومحدد الصلاحيات.",
+      "هذه الصفحة عامة حتى تتمكن أدوات الذكاء الاصطناعي من قراءة شرح الإعداد. تحتوي على تعليمات الإعداد فقط؛ وكل طلب MCP ما زال يتطلب مفتاح Bearer صالحا ومحدد الصلاحيات.",
   },
 } satisfies Record<Locale, { title: string; description: string; badge: string; security: string }>;
 

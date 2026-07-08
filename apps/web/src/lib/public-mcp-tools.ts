@@ -469,7 +469,7 @@ export function registerPublicMcpTools(
     "search_teams",
     {
       title: "Search Teams",
-      description: "Search the public team directory without raw enrichment payloads.",
+      description: "Search the public team directory with safe public fields.",
       inputSchema: {
         query: z.string().max(80).optional(),
         gameSlug: z.string().max(40).optional(),
@@ -492,7 +492,7 @@ export function registerPublicMcpTools(
     "search_players",
     {
       title: "Search Players",
-      description: "Search the public player directory without raw enrichment payloads.",
+      description: "Search the public player directory with safe public fields.",
       inputSchema: {
         query: z.string().max(80).optional(),
         gameSlug: z.string().max(40).optional(),
