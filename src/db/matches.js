@@ -277,7 +277,7 @@ export async function deleteResolvedDuplicateMatches() {
 }
 
 // Live widgets can use redirected short names before the stable match row resolves
-// (for example PTime -> PlayTime). Once a single stable, scored result exists for
+// (for example PTime -> PlayTime). Once a single stable, scored row exists for
 // the same normalized pair/day, retire older timestamp-keyed alias rows immediately
 // so they do not stay live while waiting for the next Liquipedia fetch.
 export async function deleteResolvedLiveAliasMatches() {
@@ -287,7 +287,7 @@ export async function deleteResolvedLiveAliasMatches() {
      WHERE source = 'liquipedia'
        AND scheduled_at IS NOT NULL
        AND (
-         (status = 'finished' AND score_a IS NOT NULL AND score_b IS NOT NULL)
+         (status IN ('running','finished') AND score_a IS NOT NULL AND score_b IS NOT NULL)
          OR status IN ('scheduled','running')
        )`,
   );
@@ -309,7 +309,13 @@ export async function deleteResolvedLiveAliasMatches() {
 
   const canonicalByDay = new Map();
   for (const r of rows) {
-    if (liveWidgetFallback(r) || r.status !== 'finished' || r.score_a == null || r.score_b == null) continue;
+    if (
+      liveWidgetFallback(r) ||
+      !['running', 'finished'].includes(r.status) ||
+      r.score_a == null ||
+      r.score_b == null
+    )
+      continue;
     const key = normalizedDayKeyOf(r);
     const bucket = canonicalByDay.get(key);
     if (bucket) bucket.push(r);
@@ -382,10 +388,11 @@ export async function deleteTournamentPlaceholderMatches(tournamentId, currentEx
 // but absent from the current set is a stale duplicate and safe to drop. A group
 // with NO current row is left untouched (it may be a transient parse gap), and
 // untimed rows are skipped because same-pair rematches cannot be separated safely.
-// Timestamp-keyed live-widget aliases are also retired when an already-finished
-// current scored row covers the same normalized pair/day at or after that widget
+// Timestamp-keyed live-widget aliases are also retired when a current scored
+// row covers the same normalized pair/day at or after that widget
 // time, which clears stale redirect aliases like PTime -> PlayTime without
-// deleting a later same-day rematch.
+// deleting a later same-day rematch. Current stable rows with live scores count
+// too, so old alias rows do not survive until the match fully finishes.
 export async function deleteTournamentDuplicateMatches(tournamentId, currentExternalIds) {
   if (!currentExternalIds || !currentExternalIds.length) return 0;
   const current = new Set(currentExternalIds);
@@ -415,7 +422,8 @@ export async function deleteTournamentDuplicateMatches(tournamentId, currentExte
     }
 
     const dayKey = dayKeyOf(r);
-    const hasScoredResult = r.status === 'finished' && r.score_a != null && r.score_b != null;
+    const hasScoredResult =
+      ['running', 'finished'].includes(r.status) && r.score_a != null && r.score_b != null;
     if (dayKey && current.has(r.external_id) && hasScoredResult) {
       const bucket = currentScoredByDay.get(dayKey);
       if (bucket) bucket.push(r);
