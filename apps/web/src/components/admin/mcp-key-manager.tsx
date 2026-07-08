@@ -314,14 +314,14 @@ export function McpKeyManager({
               </div>
               <FieldDescription>{t.expiryDescription}</FieldDescription>
             </Field>
-            <Field>
+            <Field data-disabled>
               <FieldLabel>{t.owner}</FieldLabel>
-              <Input value={ownerDiscordId} readOnly className="bg-muted/40" />
+              <Input value={ownerDiscordId} readOnly disabled />
               <FieldDescription>{t.ownerDescription}</FieldDescription>
             </Field>
-            <Field>
+            <Field data-disabled>
               <FieldLabel>{t.ownerName}</FieldLabel>
-              <Input value={ownerName} readOnly className="bg-muted/40" />
+              <Input value={ownerName} readOnly disabled />
             </Field>
           </div>
           <Chips

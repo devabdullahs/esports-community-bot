@@ -3,7 +3,6 @@ import { AdminPageShell } from "@/components/admin/admin-page-shell";
 import { McpKeyManager } from "@/components/admin/mcp-key-manager";
 import { McpPageActions } from "@/components/admin/mcp-page-actions";
 import { getAdminAccess } from "@/lib/admin";
-import { ADMIN_MCP_COPY_PAGE } from "@/lib/admin-mcp-copy-page";
 import { getAdminCopy } from "@/lib/admin-copy";
 import { localizeText } from "@/lib/community-content";
 import { listGames } from "@/lib/games";
@@ -39,7 +38,7 @@ export default async function AdminMcpPage() {
           : "Create, monitor, and revoke secure bearer keys for admin AI tools."
       }
       maxWidth="5xl"
-      actions={<McpPageActions markdown={ADMIN_MCP_COPY_PAGE} />}
+      actions={<McpPageActions variant="keys" />}
     >
       <McpKeyManager
         keys={keys}
