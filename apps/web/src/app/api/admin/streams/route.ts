@@ -11,7 +11,7 @@ export const dynamic = "force-dynamic";
 export async function GET(request: Request) {
   const access = await getAdminAccess();
   if (!access.session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  if (!access.allowed) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  if (!isSuper(access)) return NextResponse.json({ error: "Super admin only" }, { status: 403 });
 
   const url = new URL(request.url);
   const rawScope = url.searchParams.get("scope");

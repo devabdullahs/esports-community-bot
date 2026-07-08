@@ -638,6 +638,25 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_admin_audit_created
     ON ewc_admin_audit_log(created_at DESC);
 
+  CREATE TABLE IF NOT EXISTS ewc_mcp_keys (
+    id               INTEGER PRIMARY KEY AUTOINCREMENT,
+    key_hash         TEXT NOT NULL UNIQUE,
+    key_prefix       TEXT NOT NULL,
+    label            TEXT NOT NULL DEFAULT '',
+    owner_discord_id TEXT NOT NULL,
+    owner_name       TEXT,
+    tools_json       TEXT NOT NULL DEFAULT '[]',
+    game_scopes_json TEXT NOT NULL DEFAULT '[]',
+    media_scopes_json TEXT NOT NULL DEFAULT '[]',
+    expires_at       INTEGER,
+    revoked_at       TEXT,
+    last_used_at     TEXT,
+    created_by       TEXT,
+    created_at       TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+  CREATE INDEX IF NOT EXISTS idx_ewc_mcp_keys_owner
+    ON ewc_mcp_keys(owner_discord_id, revoked_at);
+
   -- Admin-curated live-stream / co-stream channels (Twitch, Kick, YouTube, SOOP).
   -- A channel is attached at one SCOPE: 'game' (every match of game_slug),
   -- 'team' (every match a team plays, keyed by normalized team_key), 'match'

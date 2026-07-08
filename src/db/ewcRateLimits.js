@@ -1,9 +1,12 @@
-import { transaction } from './client.js';
+import { isPostgres, transaction } from './client.js';
 
 // Fixed-window limiter. Returns { allowed, remaining, retryAfterSec }.
 // `amount` lets callers meter bytes as well as counts.
 export async function consumeRateLimit({ key, limit, windowSec, amount = 1, nowSec = Math.floor(Date.now() / 1000) }) {
   return transaction(async (tx) => {
+    if (isPostgres()) {
+      await tx.get('SELECT pg_advisory_xact_lock(hashtext($1)) AS locked', [key]);
+    }
     const row = await tx.get('SELECT window_start, amount FROM ewc_rate_limits WHERE key = $1', [key]);
     if (!row || nowSec - row.window_start >= windowSec) {
       await tx.run(

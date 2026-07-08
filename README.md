@@ -149,9 +149,13 @@ The dashboard provides:
 - Discord login through Better Auth
 - Admin CMS for games, media, news, and staff scopes
 - Audit log for administrative actions
+- Admin MCP keys and tools for approved AI/admin workflows
 
 The dashboard is bilingual. Arabic pages use RTL layout and the same Thmanyah
 Sans font stack as English pages.
+
+Admin MCP setup, client examples, and security notes live in
+[`docs/ADMIN_MCP.md`](docs/ADMIN_MCP.md).
 
 ## Fonts
 

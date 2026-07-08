@@ -9,6 +9,7 @@ import {
   Gamepad2Icon,
   HandshakeIcon,
   HomeIcon,
+  KeyRoundIcon,
   LayoutDashboardIcon,
   MenuIcon,
   MessagesSquareIcon,
@@ -153,6 +154,15 @@ function navSections(
           label: t.links.teamTitle,
           description: t.links.teamDescription,
           icon: ShieldIcon,
+        },
+        {
+          href: "/admin/mcp",
+          label: locale === "ar" ? "مفاتيح MCP" : "MCP keys",
+          description:
+            locale === "ar"
+              ? "مفاتيح آمنة لأدوات الذكاء الاصطناعي الإدارية."
+              : "Secure keys for admin AI tooling.",
+          icon: KeyRoundIcon,
         },
         {
           href: "/admin/audit",
