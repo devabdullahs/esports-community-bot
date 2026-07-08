@@ -23,6 +23,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import type { Locale } from "@/lib/i18n";
 import { buildMcpAssistantUrl } from "@/lib/mcp-assistant-links";
 
 async function writeClipboard(value: string) {
@@ -45,18 +46,50 @@ async function writeClipboard(value: string) {
   }
 }
 
+const COPY = {
+  en: {
+    docs: "Docs",
+    copied: "Copied",
+    copyPage: "Copy Page",
+    moreActions: "More MCP copy actions",
+    viewMarkdown: "View as Markdown",
+    copyMcpUrl: "Copy MCP URL",
+    copiedMcpUrl: "Copied MCP URL",
+    openV0: "Open in v0",
+    openChatGpt: "Open in ChatGPT",
+    openClaude: "Open in Claude",
+    openScira: "Open in Scira",
+  },
+  ar: {
+    docs: "الشرح",
+    copied: "تم النسخ",
+    copyPage: "نسخ الصفحة",
+    moreActions: "خيارات MCP إضافية",
+    viewMarkdown: "عرض كـ Markdown",
+    copyMcpUrl: "نسخ رابط MCP",
+    copiedMcpUrl: "تم نسخ رابط MCP",
+    openV0: "فتح في v0",
+    openChatGpt: "فتح في ChatGPT",
+    openClaude: "فتح في Claude",
+    openScira: "فتح في Scira",
+  },
+} satisfies Record<Locale, Record<string, string>>;
+
 export function McpPageActions({
   markdown = "",
   docsHref = "/docs/admin-mcp",
+  locale = "en",
   variant = "docs",
   showDocsLink = true,
 }: {
   markdown?: string;
   docsHref?: string;
+  locale?: Locale;
   variant?: "keys" | "docs";
   showDocsLink?: boolean;
 }) {
   const [copied, setCopied] = useState<"page" | "endpoint" | null>(null);
+  const text = COPY[locale];
   const endpoint = useMemo(() => {
     if (typeof window === "undefined") return "/api/mcp";
     return new URL("/api/mcp", window.location.origin).toString();
@@ -81,9 +114,9 @@ export function McpPageActions({
 
   const openAssistant = useCallback(
     (url: string) => {
-      window.open(buildMcpAssistantUrl(url, docsUrl), "_blank", "noopener,noreferrer");
+      window.open(buildMcpAssistantUrl(url, docsUrl, locale), "_blank", "noopener,noreferrer");
     },
-    [docsUrl],
+    [docsUrl, locale],
   );
 
   if (variant === "keys") {
@@ -95,7 +128,7 @@ export function McpPageActions({
         size="sm"
       >
         <BookOpenIcon data-icon="inline-start" />
-        Docs
+        {text.docs}
       </Button>
     ) : null;
   }
@@ -111,7 +144,7 @@ export function McpPageActions({
           className="flex-1 sm:flex-none"
         >
           <BookOpenIcon data-icon="inline-start" />
-          Docs
+          {text.docs}
         </Button>
       ) : null}
 
@@ -127,7 +160,7 @@ export function McpPageActions({
         ) : (
           <CopyIcon data-icon="inline-start" />
         )}
-        <span aria-live="polite">{copied === "page" ? "Copied" : "Copy Page"}</span>
+        <span aria-live="polite">{copied === "page" ? text.copied : text.copyPage}</span>
       </Button>
 
       <DropdownMenu>
@@ -137,7 +170,7 @@ export function McpPageActions({
               type="button"
               variant="outline"
               size="icon-sm"
-              aria-label="More MCP copy actions"
+              aria-label={text.moreActions}
             />
           }
         >
@@ -147,30 +180,30 @@ export function McpPageActions({
           <DropdownMenuGroup>
             <DropdownMenuItem onClick={viewMarkdown}>
               <FileTextIcon />
-              View as Markdown
+              {text.viewMarkdown}
             </DropdownMenuItem>
             <DropdownMenuItem onClick={() => copyValue("endpoint", endpoint)}>
               {copied === "endpoint" ? <CheckIcon /> : <LinkIcon />}
-              {copied === "endpoint" ? "Copied MCP URL" : "Copy MCP URL"}
+              {copied === "endpoint" ? text.copiedMcpUrl : text.copyMcpUrl}
             </DropdownMenuItem>
           </DropdownMenuGroup>
           <DropdownMenuSeparator />
           <DropdownMenuGroup>
             <DropdownMenuItem onClick={() => openAssistant("https://v0.dev/")}>
               <SparklesIcon />
-              Open in v0
+              {text.openV0}
             </DropdownMenuItem>
             <DropdownMenuItem onClick={() => openAssistant("https://chatgpt.com/")}>
               <BotIcon />
-              Open in ChatGPT
+              {text.openChatGpt}
             </DropdownMenuItem>
             <DropdownMenuItem onClick={() => openAssistant("https://claude.ai/new")}>
               <WandSparklesIcon />
-              Open in Claude
+              {text.openClaude}
             </DropdownMenuItem>
             <DropdownMenuItem onClick={() => openAssistant("https://scira.ai/")}>
               <CircleDotDashedIcon />
-              Open in Scira
+              {text.openScira}
             </DropdownMenuItem>
           </DropdownMenuGroup>
         </DropdownMenuContent>

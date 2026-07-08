@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { getAdminMcpCopyPage } from "@/lib/admin-mcp-copy-page";
 import { buildMcpAssistantUrl } from "@/lib/mcp-assistant-links";
 
 describe("MCP assistant links", () => {
@@ -18,5 +19,20 @@ describe("MCP assistant links", () => {
     );
     expect(url.searchParams.get("q")).not.toContain("/admin/mcp/docs");
     expect(url.searchParams.get("q")).toContain("Help me understand how to use it.");
+  });
+
+  it("builds Arabic assistant prompts for Arabic docs", () => {
+    const arabicDocsUrl = "https://esportscommunity.net/ar/docs/admin-mcp";
+    const url = new URL(buildMcpAssistantUrl("https://chatgpt.com/", arabicDocsUrl, "ar"));
+
+    expect(url.searchParams.get("q")).toContain(`أقرأ الآن شرح Esports Community admin MCP هنا: ${arabicDocsUrl}.`);
+    expect(url.searchParams.get("q")).toContain("ساعدني في فهم طريقة استخدامه.");
+    expect(url.searchParams.get("q")).not.toContain("I'm looking at this");
+  });
+
+  it("exposes localized admin MCP markdown copy", () => {
+    expect(getAdminMcpCopyPage("en")).toContain("# Admin MCP");
+    expect(getAdminMcpCopyPage("ar")).toContain("# MCP الإداري");
+    expect(getAdminMcpCopyPage("ar")).toContain("## ملاحظات الأمان");
   });
 });

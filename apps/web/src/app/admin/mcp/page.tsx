@@ -6,6 +6,7 @@ import { getAdminAccess } from "@/lib/admin";
 import { getAdminCopy } from "@/lib/admin-copy";
 import { localizeText } from "@/lib/community-content";
 import { listGames } from "@/lib/games";
+import { localizedPath } from "@/lib/i18n";
 import { getRequestLocale } from "@/lib/request-locale";
 import { listMediaChannels } from "@/lib/media";
 import { MCP_TOOL_NAMES, listMcpKeys } from "@/lib/mcp-keys";
@@ -38,7 +39,13 @@ export default async function AdminMcpPage() {
           : "Create, monitor, and revoke secure bearer keys for admin AI tools."
       }
       maxWidth="5xl"
-      actions={<McpPageActions variant="keys" />}
+      actions={
+        <McpPageActions
+          variant="keys"
+          locale={locale}
+          docsHref={localizedPath("/docs/admin-mcp", locale)}
+        />
+      }
     >
       <McpKeyManager
         keys={keys}
