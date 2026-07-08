@@ -19,7 +19,7 @@ const {
   listLiveStreamStatuses,
   markStaleStatusesOffline,
 } = await import('../src/db/streamChannelStatus.js');
-const { refreshStreamStatus } = await import('../src/jobs/streamStatus.js');
+const { refreshStreamStatus, resetStreamStatusStateForTests } = await import('../src/jobs/streamStatus.js');
 const { setCostreamAnnounceChannel } = await import('../src/db/settings.js');
 
 test.after(() => {
@@ -277,6 +277,85 @@ test('announces one default platform when one streamer has multiple live channel
     assert.doesNotMatch(embed.title, /Twitch|YouTube/);
     assert.match(embed.url, /kick\.com\/brain_kick/);
   }
+});
+
+test('creator announcement cooldown survives restart and suppresses a second platform', async () => {
+  resetStreamStatusStateForTests();
+  const GUILD = 'guild-persistent-creator-dedupe';
+  await createStreamChannel({
+    platform: 'twitch',
+    handle: 'abunajd_tw',
+    scope: 'ewc',
+    label: 'Abu Najd',
+    creatorKey: 'abu-najd-persistent-test',
+  });
+  await createStreamChannel({
+    platform: 'youtube',
+    handle: 'AbuNajdYT',
+    scope: 'ewc',
+    label: 'Abu Najd',
+    creatorKey: 'abu-najd-persistent-test',
+    isDefault: true,
+  });
+  await setCostreamAnnounceChannel(GUILD, 'chan-persistent-dedupe');
+
+  const sends = [];
+  const client = {
+    channels: {
+      fetch: async (id) => ({
+        isTextBased: () => true,
+        send: async (payload) => sends.push({ id, payload }),
+      }),
+    },
+  };
+  const noop = { isConfigured: () => false };
+  let twitchLive = true;
+  let youtubeLive = false;
+  const twitchSvc = {
+    isConfigured: () => true,
+    getLiveStreams: async () =>
+      twitchLive
+        ? new Map([['abunajd_tw', { isLive: true, title: 'same stream', category: 'Dota 2' }]])
+        : new Map(),
+  };
+  const youtubeSvc = {
+    isConfigured: () => true,
+    getLiveChannels: async () =>
+      youtubeLive
+        ? new Map([['AbuNajdYT', { isLive: true, title: 'same stream', videoId: 'abc123xyz' }]])
+        : new Map([['AbuNajdYT', { isLive: false }]]),
+  };
+  let clock = 8_000_000_000;
+
+  await refreshStreamStatus({
+    twitchSvc,
+    kickSvc: noop,
+    youtubeSvc,
+    client,
+    now: () => clock,
+  });
+  const firstAbuNajdSends = sends.filter((send) => String(send.payload.embeds[0].toJSON().title).includes('Abu Najd')).length;
+  assert.ok(firstAbuNajdSends >= 1, 'first live platform announces');
+
+  // Simulate a bot restart/status gap: the in-memory cooldown is gone, Twitch is
+  // no longer live in the status table, then the YouTube copy appears shortly after.
+  resetStreamStatusStateForTests();
+  twitchLive = false;
+  youtubeLive = true;
+  clock += 31 * 60 * 1000;
+  await refreshStreamStatus({
+    twitchSvc,
+    kickSvc: noop,
+    youtubeSvc,
+    client,
+    now: () => clock,
+  });
+
+  assert.equal(
+    sends.filter((send) => String(send.payload.embeds[0].toJSON().title).includes('Abu Najd')).length,
+    firstAbuNajdSends,
+    'persistent creator cooldown suppresses the second platform',
+  );
 });
 
 test('off-topic categories are not announced; no configured channel means no sends', async () => {

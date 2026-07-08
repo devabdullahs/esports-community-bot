@@ -57,6 +57,7 @@ const appTables = [
   'ewc_admin_audit_log',
   'stream_channels',
   'stream_channel_status',
+  'stream_creator_announce_state',
   'user_follows',
   'user_notification_prefs',
   'user_notifications',
