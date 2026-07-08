@@ -1,6 +1,7 @@
 import {
   ActivityIcon,
   ArrowRightIcon,
+  BarChart3Icon,
   CheckCircle2Icon,
   ClipboardListIcon,
   FileTextIcon,
@@ -118,6 +119,17 @@ export default async function AdminPage() {
                   <Gamepad2Icon data-icon="inline-start" />
                   {t.dashboard.quickGames}
                 </Button>
+                {access.isSuper ? (
+                  <Button
+                    render={<Link href="/admin/analytics" />}
+                    nativeButton={false}
+                    variant="outline"
+                    className="w-full sm:w-auto"
+                  >
+                    <BarChart3Icon data-icon="inline-start" />
+                    {t.dashboard.quickAnalytics}
+                  </Button>
+                ) : null}
               </div>
             ) : null}
           </CardHeader>
@@ -279,6 +291,14 @@ export default async function AdminPage() {
               title={t.dashboard.links.commentsTitle}
               description={t.dashboard.links.commentsDescription}
             />
+            {access.isSuper ? (
+              <ManageLink
+                href="/admin/analytics"
+                icon={BarChart3Icon}
+                title={t.dashboard.links.analyticsTitle}
+                description={t.dashboard.links.analyticsDescription}
+              />
+            ) : null}
             {access.isSuper ? (
               <ManageLink
                 href="/admin/users"

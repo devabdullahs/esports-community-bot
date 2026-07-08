@@ -29,7 +29,7 @@ export async function generateMetadata(): Promise<Metadata> {
   });
 }
 
-const LAST_UPDATED = "2026-07-03";
+const LAST_UPDATED = "2026-07-08";
 
 const CONTENT = {
   en: {
@@ -91,9 +91,10 @@ const CONTENT = {
         list: [
           "ewc_locale — stores your language preference (English or Arabic). This is a first-party cookie with a one-year expiry.",
           "Better Auth session cookies — HttpOnly, with Secure flag enabled in production, used to maintain your login session.",
+          "Anonymous website analytics IDs — browser-local random visitor and session IDs used to count daily, weekly, and monthly visitors and engagement on public pages.",
         ],
         after: [
-          "No third-party tracking cookies, ad-network scripts, or analytics scripts are used.",
+          "The first-party analytics tracker records public page paths, anonymous visitor/session IDs, engagement seconds, browser user-agent, and country code from Cloudflare headers. Raw IP addresses are not stored in analytics events. No third-party tracking cookies, ad-network scripts, or third-party analytics scripts are used.",
         ],
       },
       {
@@ -210,9 +211,10 @@ const CONTENT = {
         list: [
           "ewc_locale — يخزّن تفضيل اللغة (الإنجليزية أو العربية). ملف تعريف ارتباط من الطرف الأول بصلاحية سنة واحدة.",
           "ملفات تعريف ارتباط الجلسة لـ Better Auth — HttpOnly مع علامة Secure في الإنتاج، تُستخدم للحفاظ على جلسة تسجيل دخولك.",
+          "معرّفات إحصائيات الموقع المجهولة — معرّف زائر ومعرّف جلسة عشوائيان داخل المتصفح لاحتساب الزوار يوميًا وأسبوعيًا وشهريًا ومدة التفاعل في الصفحات العامة.",
         ],
         after: [
-          "لا تُستخدم ملفات تعريف ارتباط تتبع أو سكريبتات شبكات إعلانية أو تحليلات خارجية.",
+          "يسجل التتبع الداخلي مسارات الصفحات العامة، ومعرّفات الزائر والجلسة المجهولة، وثواني التفاعل، ووكيل المتصفح، ورمز الدولة من ترويسات Cloudflare. لا يتم تخزين عناوين IP في أحداث الإحصائيات، ولا تُستخدم ملفات تعريف ارتباط تتبع أو سكريبتات شبكات إعلانية أو تحليلات خارجية.",
         ],
       },
       {

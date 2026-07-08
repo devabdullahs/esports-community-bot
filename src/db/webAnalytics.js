@@ -1,0 +1,231 @@
+import { all, run } from './client.js';
+
+const RIYADH_OFFSET_SECONDS = 3 * 60 * 60;
+const EVENT_TYPES = new Set(['pageview', 'engagement']);
+
+function clampInt(value, min, max) {
+  const n = Math.trunc(Number(value) || 0);
+  return Math.max(min, Math.min(max, n));
+}
+
+function cleanString(value, maxLength) {
+  if (value == null) return null;
+  const s = String(value).trim();
+  if (!s) return null;
+  return s.slice(0, maxLength);
+}
+
+function cleanPath(value) {
+  const s = cleanString(value, 300);
+  if (!s || !s.startsWith('/')) return '/';
+  return s.split('#')[0].slice(0, 300) || '/';
+}
+
+function cleanCountry(value) {
+  const s = cleanString(value, 16);
+  if (!s) return null;
+  const upper = s.toUpperCase();
+  if (/^[A-Z]{2}$/.test(upper)) return upper;
+  if (upper === 'XX' || upper === 'T1') return upper;
+  return null;
+}
+
+function dayKeyFor(sec) {
+  return Math.floor((Number(sec) + RIYADH_OFFSET_SECONDS) / 86400);
+}
+
+function startOfRiyadhDay(sec) {
+  const key = dayKeyFor(sec);
+  return key * 86400 - RIYADH_OFFSET_SECONDS;
+}
+
+function dateLabelForDayKey(key) {
+  return new Date((key * 86400 - RIYADH_OFFSET_SECONDS) * 1000).toISOString().slice(0, 10);
+}
+
+function emptyMetric(label, since) {
+  return {
+    label,
+    since,
+    pageviews: 0,
+    visitors: 0,
+    sessions: 0,
+    returningVisitors: 0,
+    engagementSeconds: 0,
+    avgSecondsPerSession: 0,
+    avgSecondsPerPageview: 0,
+  };
+}
+
+function summarizePeriod(label, rows, firstSeenByVisitor, since) {
+  const metric = emptyMetric(label, since);
+  const visitors = new Set();
+  const sessions = new Set();
+
+  for (const row of rows) {
+    if (Number(row.occurred_at) < since) continue;
+    if (row.visitor_id) visitors.add(row.visitor_id);
+    if (row.session_id) sessions.add(row.session_id);
+    if (row.event_type === 'pageview') metric.pageviews += 1;
+    metric.engagementSeconds += clampInt(row.duration_seconds, 0, 300);
+  }
+
+  metric.visitors = visitors.size;
+  metric.sessions = sessions.size;
+  metric.returningVisitors = [...visitors].filter((id) => {
+    const firstSeen = firstSeenByVisitor.get(id);
+    return Number.isFinite(firstSeen) && firstSeen < since;
+  }).length;
+  metric.avgSecondsPerSession = sessions.size ? Math.round(metric.engagementSeconds / sessions.size) : 0;
+  metric.avgSecondsPerPageview = metric.pageviews ? Math.round(metric.engagementSeconds / metric.pageviews) : 0;
+  return metric;
+}
+
+function topCountries(rows, since, limit) {
+  const countries = new Map();
+  for (const row of rows) {
+    if (Number(row.occurred_at) < since) continue;
+    const country = cleanCountry(row.country) || 'XX';
+    const entry = countries.get(country) || { country, visitors: new Set(), pageviews: 0, sessions: new Set() };
+    if (row.visitor_id) entry.visitors.add(row.visitor_id);
+    if (row.session_id) entry.sessions.add(row.session_id);
+    if (row.event_type === 'pageview') entry.pageviews += 1;
+    countries.set(country, entry);
+  }
+  return [...countries.values()]
+    .map((entry) => ({
+      country: entry.country,
+      visitors: entry.visitors.size,
+      sessions: entry.sessions.size,
+      pageviews: entry.pageviews,
+    }))
+    .sort((a, b) => b.visitors - a.visitors || b.pageviews - a.pageviews || a.country.localeCompare(b.country))
+    .slice(0, limit);
+}
+
+function topPages(rows, since, limit) {
+  const pages = new Map();
+  for (const row of rows) {
+    if (Number(row.occurred_at) < since || row.event_type !== 'pageview') continue;
+    const path = cleanPath(row.path);
+    const entry = pages.get(path) || { path, visitors: new Set(), pageviews: 0 };
+    if (row.visitor_id) entry.visitors.add(row.visitor_id);
+    entry.pageviews += 1;
+    pages.set(path, entry);
+  }
+  return [...pages.values()]
+    .map((entry) => ({
+      path: entry.path,
+      visitors: entry.visitors.size,
+      pageviews: entry.pageviews,
+    }))
+    .sort((a, b) => b.pageviews - a.pageviews || b.visitors - a.visitors || a.path.localeCompare(b.path))
+    .slice(0, limit);
+}
+
+function dailySeries(rows, nowSec, days) {
+  const endKey = dayKeyFor(nowSec);
+  const byDay = new Map();
+  for (let offset = days - 1; offset >= 0; offset -= 1) {
+    const key = endKey - offset;
+    byDay.set(key, {
+      day: dateLabelForDayKey(key),
+      pageviews: 0,
+      visitors: new Set(),
+      sessions: new Set(),
+      engagementSeconds: 0,
+    });
+  }
+
+  for (const row of rows) {
+    const entry = byDay.get(dayKeyFor(row.occurred_at));
+    if (!entry) continue;
+    if (row.visitor_id) entry.visitors.add(row.visitor_id);
+    if (row.session_id) entry.sessions.add(row.session_id);
+    if (row.event_type === 'pageview') entry.pageviews += 1;
+    entry.engagementSeconds += clampInt(row.duration_seconds, 0, 300);
+  }
+
+  return [...byDay.values()].map((entry) => ({
+    day: entry.day,
+    pageviews: entry.pageviews,
+    visitors: entry.visitors.size,
+    sessions: entry.sessions.size,
+    engagementSeconds: entry.engagementSeconds,
+  }));
+}
+
+export async function recordWebAnalyticsEvent({
+  visitorId,
+  sessionId,
+  eventType,
+  path,
+  referrer = null,
+  country = null,
+  userAgent = null,
+  durationSeconds = 0,
+  occurredAt = Math.floor(Date.now() / 1000),
+}) {
+  const type = String(eventType || '').trim();
+  if (!EVENT_TYPES.has(type)) throw new Error(`Invalid analytics event type: ${eventType}`);
+  const visitor = cleanString(visitorId, 80);
+  const session = cleanString(sessionId, 80);
+  if (!visitor || !session) throw new Error('visitorId and sessionId are required');
+
+  await run(
+    `INSERT INTO web_analytics_events (
+       visitor_id, session_id, event_type, path, referrer, country, user_agent,
+       duration_seconds, occurred_at
+     ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+    [
+      visitor,
+      session,
+      type,
+      cleanPath(path),
+      cleanString(referrer, 300),
+      cleanCountry(country),
+      cleanString(userAgent, 240),
+      type === 'engagement' ? clampInt(durationSeconds, 1, 300) : 0,
+      clampInt(occurredAt, 1, 4_102_444_800),
+    ],
+  );
+}
+
+export async function getWebAnalyticsDashboard({ nowSec = Math.floor(Date.now() / 1000), days = 30 } = {}) {
+  const safeDays = clampInt(days, 7, 120);
+  const todaySince = startOfRiyadhDay(nowSec);
+  const sevenDaySince = todaySince - 6 * 86400;
+  const thirtyDaySince = todaySince - 29 * 86400;
+  const periodSince = todaySince - (safeDays - 1) * 86400;
+  const fetchSince = Math.min(periodSince, thirtyDaySince);
+  const rows = await all(
+    `SELECT visitor_id, session_id, event_type, path, country, duration_seconds, occurred_at
+     FROM web_analytics_events
+     WHERE occurred_at >= $1
+     ORDER BY occurred_at ASC`,
+    [fetchSince],
+  );
+  const firstSeenRows = await all(
+    `SELECT visitor_id, MIN(occurred_at) AS first_seen
+     FROM web_analytics_events
+     GROUP BY visitor_id`,
+  );
+  const firstSeenByVisitor = new Map(
+    firstSeenRows.map((row) => [row.visitor_id, Number(row.first_seen)]),
+  );
+
+  return {
+    generatedAt: nowSec,
+    timezone: 'Asia/Riyadh',
+    periods: {
+      today: summarizePeriod('Today', rows, firstSeenByVisitor, todaySince),
+      sevenDays: summarizePeriod('Last 7 days', rows, firstSeenByVisitor, sevenDaySince),
+      thirtyDays: summarizePeriod('Last 30 days', rows, firstSeenByVisitor, thirtyDaySince),
+      selected: summarizePeriod(`Last ${safeDays} days`, rows, firstSeenByVisitor, periodSince),
+    },
+    countries: topCountries(rows, periodSince, 12),
+    pages: topPages(rows, periodSince, 12),
+    daily: dailySeries(rows, nowSec, Math.min(30, safeDays)),
+    totalKnownVisitors: firstSeenByVisitor.size,
+  };
+}
