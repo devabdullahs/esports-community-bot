@@ -101,7 +101,7 @@ const PUBLIC_MCP_COPY_PAGE_EN = [
 ].join("\n");
 
 const PUBLIC_MCP_COPY_PAGE_AR = [
-  "# MCP العام",
+  "# خادم MCP العام",
   "",
   "نقطة نهاية MCP العامة تتيح لأدوات الذكاء الاصطناعي قراءة نفس بيانات Esports Community العامة الظاهرة في الموقع، بدون جلسة لوحة تحكم وبدون مفتاح إداري.",
   "",

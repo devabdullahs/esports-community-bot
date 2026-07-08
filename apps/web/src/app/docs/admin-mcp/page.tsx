@@ -47,10 +47,11 @@ export default async function PublicAdminMcpDocsPage() {
   const text = COPY[locale];
   const markdown = getAdminMcpCopyPage(locale);
   const docsHref = localizedPath("/docs/admin-mcp", locale);
+  const dir = directionForLocale(locale);
 
   return (
     <main
-      dir={directionForLocale(locale)}
+      dir={dir}
       className="mx-auto flex w-full max-w-5xl flex-1 flex-col gap-7 px-4 py-8 sm:px-8 sm:py-10"
     >
       <section className="flex flex-col gap-5 md:flex-row md:items-start md:justify-between">
@@ -87,6 +88,7 @@ export default async function PublicAdminMcpDocsPage() {
         <CardContent className="p-5 sm:p-7">
           <PostBody
             markdown={markdown}
+            dir={dir}
             className="max-w-none [&_h1]:mt-0 [&_pre]:overflow-x-auto"
           />
         </CardContent>

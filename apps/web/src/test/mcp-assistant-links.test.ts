@@ -46,12 +46,12 @@ describe("MCP assistant links", () => {
     expect(getAdminMcpCopyPage("en")).toContain("# Admin MCP");
     expect(getAdminMcpCopyPage("en")).toContain("all public read-only tools");
     expect(getAdminMcpCopyPage("en")).toContain("list_games");
-    expect(getAdminMcpCopyPage("ar")).toContain("# MCP");
+    expect(getAdminMcpCopyPage("ar")).toContain("# خادم MCP الإداري");
 
     expect(getPublicMcpCopyPage("en")).toContain("# Public MCP");
     expect(getPublicMcpCopyPage("en")).toContain("https://esportscommunity.net/api/public-mcp");
     expect(getPublicMcpCopyPage("en")).toContain("trusted edge IP");
-    expect(getPublicMcpCopyPage("ar")).toContain("# MCP العام");
+    expect(getPublicMcpCopyPage("ar")).toContain("# خادم MCP العام");
     expect(getPublicMcpCopyPage("ar")).toContain("للقراءة فقط");
     expect(getPublicMcpCopyPage("ar")).toContain("IP الموثوق");
   });

@@ -1,3 +1,4 @@
+import type { ComponentPropsWithoutRef } from "react";
 import Markdown from "react-markdown";
 import type { Components } from "react-markdown";
 import rehypeHighlight from "rehype-highlight";
@@ -31,12 +32,22 @@ const components: Components = {
 export function PostBody({
   markdown,
   className,
+  dir,
 }: {
   markdown: string;
   className?: string;
+  dir?: ComponentPropsWithoutRef<"div">["dir"];
 }) {
   return (
-    <div className={cn("article-copy post-body text-start", className)}>
+    <div
+      dir={dir}
+      className={cn(
+        "article-copy post-body text-start",
+        dir === "rtl" &&
+          "[&_h1]:text-right [&_h2]:text-right [&_h3]:text-right [&_h4]:text-right [&_h1]:[unicode-bidi:isolate] [&_h2]:[unicode-bidi:isolate] [&_h3]:[unicode-bidi:isolate] [&_h4]:[unicode-bidi:isolate] [&_pre]:text-left [&_pre]:[direction:ltr]",
+        className,
+      )}
+    >
       <Markdown
         remarkPlugins={[remarkGfm, remarkSmartypants, [remarkEmoji, { emoticon: true }]]}
         rehypePlugins={[[rehypeHighlight, { ignoreMissing: true }]]}
