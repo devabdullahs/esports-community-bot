@@ -201,6 +201,28 @@ export async function getStreamChannel(id) {
   return hydrate(await get('SELECT * FROM stream_channels WHERE id = $1', [id]));
 }
 
+async function allowedSiblingIds({ creatorKey, scope = null, excludedId, gameSlugs }) {
+  const params = [creatorKey, excludedId];
+  const where = ['creator_key = $1', 'id <> $2'];
+  if (scope) {
+    params.push(scope);
+    where.push(`scope = $${params.length}`);
+  }
+  const rows = await all(`SELECT * FROM stream_channels WHERE ${where.join(' AND ')}`, params);
+  if (gameSlugs === undefined) return rows.map((row) => row.id);
+
+  const allowed = new Set(parseGameSlugs(gameSlugs));
+  if (!allowed.size) return [];
+  return rows
+    .map(hydrate)
+    .filter((channel) => (
+      channel?.scope === 'game' &&
+      channel.gameSlugs.length > 0 &&
+      channel.gameSlugs.every((slug) => allowed.has(slug))
+    ))
+    .map((channel) => channel.id);
+}
+
 // Admin listing, optionally filtered by scope / game / active-only.
 export async function listStreamChannels({ scope = null, gameSlug = null, activeOnly = false } = {}) {
   const where = [];
@@ -306,7 +328,16 @@ export async function channelsForTournament({ gameSlug = null, teams = [], match
   return rows.map(hydrate);
 }
 
-export async function updateStreamChannel(id, { label, language, sortOrder, active, gameSlugs, isDefault, creatorKey } = {}) {
+export async function updateStreamChannel(id, {
+  label,
+  language,
+  sortOrder,
+  active,
+  gameSlugs,
+  isDefault,
+  creatorKey,
+  propagateToGameSlugs,
+} = {}) {
   const sets = [];
   const params = [];
   const push = (col, value) => {
@@ -336,6 +367,12 @@ export async function updateStreamChannel(id, { label, language, sortOrder, acti
   // touch is_default/active/sort_order (those stay per-row). Push every value with
   // a distinct placeholder — reusing a $n across clauses crashes Postgres.
   if (updated?.creatorKey && (label !== undefined || language !== undefined || gameSlugs !== undefined)) {
+    const siblingIds = await allowedSiblingIds({
+      creatorKey: updated.creatorKey,
+      scope: updated.scope,
+      excludedId: id,
+      gameSlugs: propagateToGameSlugs,
+    });
     const sib = [];
     const sp = [];
     const spush = (col, value) => {
@@ -350,17 +387,26 @@ export async function updateStreamChannel(id, { label, language, sortOrder, acti
       spush('game_slugs', gameSlugsJson(games));
     }
     spush('updated_at', nowText());
-    sp.push(updated.creatorKey);
-    sp.push(updated.scope);
-    sp.push(id);
-    await run(
-      `UPDATE stream_channels SET ${sib.join(', ')} WHERE creator_key = $${sp.length - 2} AND scope = $${sp.length - 1} AND id <> $${sp.length}`,
-      sp,
-    );
+    if (siblingIds.length) {
+      const placeholders = siblingIds.map((siblingId) => {
+        sp.push(siblingId);
+        return `$${sp.length}`;
+      });
+      await run(`UPDATE stream_channels SET ${sib.join(', ')} WHERE id IN (${placeholders.join(',')})`, sp);
+    }
   }
 
   if (updated?.isDefault && updated.creatorKey) {
-    await run('UPDATE stream_channels SET is_default = 0 WHERE creator_key = $1 AND id <> $2', [updated.creatorKey, id]);
+    const defaultSiblingIds = await allowedSiblingIds({
+      creatorKey: updated.creatorKey,
+      excludedId: id,
+      gameSlugs: propagateToGameSlugs,
+    });
+    if (defaultSiblingIds.length) {
+      const params = defaultSiblingIds;
+      const placeholders = params.map((_siblingId, index) => `$${index + 1}`);
+      await run(`UPDATE stream_channels SET is_default = 0 WHERE id IN (${placeholders.join(',')})`, params);
+    }
   }
   return getStreamChannel(id);
 }

@@ -56,6 +56,7 @@ export type UpdateStreamChannelInput = {
   gameSlugs?: string[];
   creatorKey?: string;
   isDefault?: boolean;
+  propagateToGameSlugs?: string[];
 };
 
 // A channel joined with its current live status (for the public co-streams page).

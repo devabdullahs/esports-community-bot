@@ -31,6 +31,7 @@
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1064.0",
+    "@modelcontextprotocol/sdk": "^1.29.0",
     "@napi-rs/canvas": "^1.0.0",
     "axios": "^1.16.1",
     "better-sqlite3": "^12.10.0",
@@ -38,7 +39,8 @@
     "discord.js": "^14.26.4",
     "node-cron": "^4.2.1",
     "pg": "^8.21.0",
-    "qrcode": "^1.5.4"
+    "qrcode": "^1.5.4",
+    "zod": "^4.4.3"
   },
   "devDependencies": {
     "@types/pg": "^8.20.0",

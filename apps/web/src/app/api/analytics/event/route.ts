@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { ensureAnalyticsSchema, recordAnalyticsEvent } from "@/lib/web-analytics";
+import { clientIp } from "@/lib/community";
 import { rateLimitOr429 } from "@/lib/rate-limit";
 
 export const runtime = "nodejs";
@@ -21,6 +22,11 @@ const BLOCKED_PATHS = [
 ];
 const BOT_UA_RE =
   /\b(bot|crawler|spider|preview|facebookexternalhit|discordbot|slackbot|twitterbot|whatsapp|telegrambot|googlebot|bingbot|bytespider|ahrefs|semrush|yandex)\b/i;
+
+function positiveIntEnv(name: string, fallback: number) {
+  const value = Number(process.env[name]);
+  return Number.isFinite(value) && value > 0 ? Math.floor(value) : fallback;
+}
 
 function empty(status = 204) {
   return new NextResponse(null, {
@@ -99,12 +105,19 @@ export async function POST(request: Request) {
   if (!ID_RE.test(visitorId) || !ID_RE.test(sessionId) || !eventType || !isTrackablePath(path)) return empty();
 
   await ensureAnalyticsSchema();
-  const limited = await rateLimitOr429({
-    key: `analytics:${visitorId}`,
-    limit: 300,
+  const sourceLimited = await rateLimitOr429({
+    key: `analytics:source:${clientIp(request)}`,
+    limit: positiveIntEnv("EWC_ANALYTICS_SOURCE_RATE_LIMIT_PER_HOUR", 600),
     windowSec: 3600,
   });
-  if (limited) return limited;
+  if (sourceLimited) return sourceLimited;
+
+  const visitorLimited = await rateLimitOr429({
+    key: `analytics:${visitorId}`,
+    limit: positiveIntEnv("EWC_ANALYTICS_VISITOR_RATE_LIMIT_PER_HOUR", 300),
+    windowSec: 3600,
+  });
+  if (visitorLimited) return visitorLimited;
 
   try {
     await recordAnalyticsEvent({
