@@ -7,6 +7,16 @@ credentials.
 This MCP server is admin-only. Public read-only MCP access should be a separate
 endpoint if we add it later.
 
+The setup documentation is intentionally public at:
+
+```text
+https://esportscommunity.net/mcp
+```
+
+That page is public so AI assistants can read the guide. It does not expose
+MCP keys, sessions, admin data, or dashboard-only actions. The MCP endpoint
+still requires a valid scoped bearer key.
+
 ## Endpoint
 
 Use the dashboard origin plus `/api/mcp`:
@@ -165,6 +175,19 @@ args = [
   "Authorization: Bearer <MCP_KEY>",
 ]
 ```
+
+For Codex versions with native Streamable HTTP support, keep the raw key in an
+environment variable and reference the variable name:
+
+```toml
+[mcp_servers.esports_community]
+enabled = true
+url = "https://esportscommunity.net/api/mcp"
+bearer_token_env_var = "ESPORTS_COMMUNITY_MCP_TOKEN"
+```
+
+`ESPORTS_COMMUNITY_MCP_TOKEN` should contain the raw `ec_mcp_live_...` key,
+without the `Bearer ` prefix.
 
 Restart Codex after changing MCP configuration.
 
