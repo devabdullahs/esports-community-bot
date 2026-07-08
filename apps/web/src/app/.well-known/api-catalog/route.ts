@@ -21,6 +21,10 @@ export function GET() {
       anchor: absoluteUrl("/api/ewc/{guildId}/{season}/leaderboard"),
       "service-doc": [{ href: absoluteUrl("/leaderboard"), title: "Prediction leaderboard" }],
     },
+    {
+      anchor: absoluteUrl("/api/public-mcp"),
+      "service-doc": [{ href: absoluteUrl("/docs/mcp"), title: "Public MCP server" }],
+    },
   ];
 
   return new Response(JSON.stringify({ linkset }, null, 2), {
