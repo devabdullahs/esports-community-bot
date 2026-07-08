@@ -24,7 +24,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import type { Locale } from "@/lib/i18n";
-import { buildMcpAssistantUrl } from "@/lib/mcp-assistant-links";
+import { buildMcpAssistantUrl, type McpAssistantKind } from "@/lib/mcp-assistant-links";
 
 async function writeClipboard(value: string) {
   try {
@@ -78,12 +78,16 @@ const COPY = {
 export function McpPageActions({
   markdown = "",
   docsHref = "/docs/admin-mcp",
+  endpointPath = "/api/mcp",
+  assistantKind = "admin",
   locale = "en",
   variant = "docs",
   showDocsLink = true,
 }: {
   markdown?: string;
   docsHref?: string;
+  endpointPath?: string;
+  assistantKind?: McpAssistantKind;
   locale?: Locale;
   variant?: "keys" | "docs";
   showDocsLink?: boolean;
@@ -91,9 +95,9 @@ export function McpPageActions({
   const [copied, setCopied] = useState<"page" | "endpoint" | null>(null);
   const text = COPY[locale];
   const endpoint = useMemo(() => {
-    if (typeof window === "undefined") return "/api/mcp";
-    return new URL("/api/mcp", window.location.origin).toString();
-  }, []);
+    if (typeof window === "undefined") return endpointPath;
+    return new URL(endpointPath, window.location.origin).toString();
+  }, [endpointPath]);
   const docsUrl = useMemo(() => {
     if (typeof window === "undefined") return docsHref;
     return new URL(docsHref, window.location.origin).toString();
@@ -114,9 +118,13 @@ export function McpPageActions({
 
   const openAssistant = useCallback(
     (url: string) => {
-      window.open(buildMcpAssistantUrl(url, docsUrl, locale), "_blank", "noopener,noreferrer");
+      window.open(
+        buildMcpAssistantUrl(url, docsUrl, locale, assistantKind),
+        "_blank",
+        "noopener,noreferrer",
+      );
     },
-    [docsUrl, locale],
+    [assistantKind, docsUrl, locale],
   );
 
   if (variant === "keys") {
