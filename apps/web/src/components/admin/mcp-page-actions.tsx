@@ -23,6 +23,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { buildMcpAssistantUrl } from "@/lib/mcp-assistant-links";
 
 async function writeClipboard(value: string) {
   try {
@@ -53,10 +54,14 @@ export function McpPageActions({
   variant?: "keys" | "docs";
   showDocsLink?: boolean;
 }) {
-  const [copied, setCopied] = useState<"page" | "endpoint" | "assistant" | null>(null);
+  const [copied, setCopied] = useState<"page" | "endpoint" | null>(null);
   const endpoint = useMemo(() => {
     if (typeof window === "undefined") return "/api/mcp";
     return new URL("/api/mcp", window.location.origin).toString();
+  }, []);
+  const docsUrl = useMemo(() => {
+    if (typeof window === "undefined") return "/admin/mcp/docs";
+    return new URL("/admin/mcp/docs", window.location.origin).toString();
   }, []);
 
   const copyValue = useCallback(async (kind: NonNullable<typeof copied>, value: string) => {
@@ -73,16 +78,10 @@ export function McpPageActions({
   }, [markdown]);
 
   const openAssistant = useCallback(
-    async (url: string) => {
-      const opened = window.open(url, "_blank", "noopener,noreferrer");
-      await writeClipboard(
-        `Use this Admin MCP documentation and help me configure or use the Esports Community MCP server:\n\n${markdown}`,
-      );
-      setCopied("assistant");
-      if (!opened) window.open(url, "_blank", "noopener,noreferrer");
-      window.setTimeout(() => setCopied(null), 1600);
+    (url: string) => {
+      window.open(buildMcpAssistantUrl(url, docsUrl), "_blank", "noopener,noreferrer");
     },
-    [markdown],
+    [docsUrl],
   );
 
   if (variant === "keys") {
@@ -155,9 +154,9 @@ export function McpPageActions({
           </DropdownMenuGroup>
           <DropdownMenuSeparator />
           <DropdownMenuGroup>
-            <DropdownMenuItem onClick={() => openAssistant("https://v0.dev/chat")}>
+            <DropdownMenuItem onClick={() => openAssistant("https://v0.dev/")}>
               <SparklesIcon />
-              {copied === "assistant" ? "Copied context" : "Open in v0"}
+              Open in v0
             </DropdownMenuItem>
             <DropdownMenuItem onClick={() => openAssistant("https://chatgpt.com/")}>
               <BotIcon />
