@@ -58,9 +58,9 @@ export function AdminPageShell({
         </Button>
       ) : null}
 
-      <Card className="overflow-hidden border-border/70 bg-card/70 shadow-sm">
-        <CardHeader className="gap-5 border-b border-border/60 bg-muted/10 p-5 sm:p-7">
-          <div className="flex flex-col items-start justify-between gap-5 sm:flex-row">
+      <Card className="overflow-hidden border-border/70 bg-card/70 py-0 shadow-sm">
+        <CardHeader className="gap-4 bg-muted/10 p-5 sm:p-6">
+          <div className="flex flex-col items-start justify-between gap-4 sm:flex-row">
             <div className="flex min-w-0 flex-col gap-3">
               {eyebrow ? (
                 <p className="text-sm font-medium text-primary">{eyebrow}</p>

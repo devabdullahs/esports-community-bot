@@ -1364,7 +1364,7 @@ export function NewsEditor({
 
       {/* Sticky action bar: the form is tall, so the save/publish controls and any
           save error stay visible without scrolling to the bottom. */}
-      <div className="sticky bottom-0 z-20 -mx-1 flex flex-col gap-3 rounded-t-xl border border-b-0 bg-background/95 p-3 shadow-[0_-8px_24px_-12px_rgb(0_0_0/0.4)] backdrop-blur supports-[backdrop-filter]:bg-background/85 sm:mx-0">
+      <div className="sticky bottom-3 z-20 flex w-fit max-w-full flex-col gap-2 rounded-xl border bg-card/95 p-2 shadow-lg backdrop-blur supports-[backdrop-filter]:bg-card/85">
         {error ? (
           <Alert variant="destructive">
             <AlertTitle>{t.couldNotSave}</AlertTitle>

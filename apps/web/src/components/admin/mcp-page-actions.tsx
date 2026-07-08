@@ -1,7 +1,8 @@
 "use client";
 
 import { useCallback, useMemo, useState } from "react";
-import { CheckIcon, ChevronDownIcon, CopyIcon, FileTextIcon, LinkIcon } from "lucide-react";
+import Link from "next/link";
+import { BookOpenIcon, CheckIcon, ChevronDownIcon, CopyIcon, FileTextIcon, LinkIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -30,7 +31,13 @@ async function writeClipboard(value: string) {
   }
 }
 
-export function McpPageActions({ markdown }: { markdown: string }) {
+export function McpPageActions({
+  markdown,
+  showDocsLink = true,
+}: {
+  markdown: string;
+  showDocsLink?: boolean;
+}) {
   const [copied, setCopied] = useState<"page" | "markdown" | "endpoint" | null>(null);
   const endpoint = useMemo(() => {
     if (typeof window === "undefined") return "/api/mcp";
@@ -45,6 +52,19 @@ export function McpPageActions({ markdown }: { markdown: string }) {
 
   return (
     <div className="flex w-full items-stretch gap-1 sm:w-auto">
+      {showDocsLink ? (
+        <Button
+          render={<Link href="/admin/mcp/docs" />}
+          nativeButton={false}
+          variant="outline"
+          size="sm"
+          className="flex-1 sm:flex-none"
+        >
+          <BookOpenIcon data-icon="inline-start" />
+          Docs
+        </Button>
+      ) : null}
+
       <Button
         type="button"
         variant="outline"

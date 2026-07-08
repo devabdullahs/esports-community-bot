@@ -7,7 +7,7 @@ import { getTournamentById } from "@bot/db/tournaments.js";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { listReportedModerationComments } from "@/lib/comments";
-import { getEwcClubTrackerCached } from "@/lib/ewc-clubs";
+import { getEwcClubTrackerForMcp } from "@/lib/ewc-clubs";
 import { listGames } from "@/lib/games";
 import {
   canMcpManageGame,
@@ -201,7 +201,7 @@ export function createAdminMcpServer(access: McpAccess) {
     async ({ query = "", limit = 12 }) => {
       assertTool(access, "get_ewc_club_summary");
       const q = query.trim().toLowerCase();
-      const tracker = await getEwcClubTrackerCached();
+      const tracker = await getEwcClubTrackerForMcp();
       const clubs = tracker.clubs
         .filter((club) => !q || club.name.toLowerCase().includes(q))
         .slice(0, limit)
@@ -214,7 +214,12 @@ export function createAdminMcpServer(access: McpAccess) {
           qualifiedGames: club.qualifiedGames.map((game) => game.shortLabel || game.label),
           wins: club.wins,
         }));
-      return jsonResult({ summary: tracker.summary, clubs });
+      return jsonResult({
+        summary: tracker.summary,
+        dataSource: tracker.dataSource ?? "liquipedia",
+        warning: tracker.warning ?? null,
+        clubs,
+      });
     },
   );
 
