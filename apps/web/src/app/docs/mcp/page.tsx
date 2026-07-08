@@ -19,7 +19,7 @@ const COPY = {
       "Read-only MCP documentation for public Esports Community website data. No key or dashboard login required.",
     badge: "Read-only public data",
     security:
-      "This endpoint only exposes public website data and never returns drafts, admin queues, audit logs, MCP keys, sessions, secrets, auth rows, Discord tokens, or raw enrichment payloads.",
+      "This endpoint is read-only and returns public website data intended for visitors. It does not require an admin key and cannot perform dashboard actions.",
   },
   ar: {
     title: "خادم MCP العام",
@@ -27,7 +27,7 @@ const COPY = {
       "شرح MCP للقراءة فقط من بيانات موقع Esports Community العامة. لا يحتاج إلى مفتاح أو تسجيل دخول للوحة التحكم.",
     badge: "بيانات عامة للقراءة فقط",
     security:
-      "هذه النقطة تعرض بيانات الموقع العامة فقط ولا ترجع المسودات أو طوابير الإدارة أو سجلات التدقيق أو مفاتيح MCP أو الجلسات أو الأسرار أو جداول المصادقة أو رموز Discord أو بيانات الإثراء الخام.",
+      "هذه النقطة للقراءة فقط وتعرض بيانات عامة مخصصة لزوار الموقع. لا تحتاج إلى مفتاح إداري ولا يمكنها تنفيذ إجراءات لوحة التحكم.",
   },
 } satisfies Record<Locale, { title: string; description: string; badge: string; security: string }>;
 

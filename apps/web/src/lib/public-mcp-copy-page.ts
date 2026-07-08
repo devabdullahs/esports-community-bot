@@ -5,7 +5,7 @@ const PUBLIC_MCP_COPY_PAGE_EN = [
   "",
   "The public MCP endpoint lets AI assistants read the same public Esports Community data that appears on the website, without a dashboard session or admin key.",
   "",
-  "It is read-only. It cannot create drafts, publish posts, moderate comments, manage streams, view admin queues, read audit logs, or access MCP keys, sessions, secrets, auth tables, or raw enrichment payloads.",
+  "It is read-only and returns public website data intended for visitors.",
   "",
   "Docs page:",
   "",
@@ -45,8 +45,8 @@ const PUBLIC_MCP_COPY_PAGE_EN = [
   "- list_tournaments: public active tournament summaries.",
   "- get_ewc_club_summary: public EWC club points, qualified games, wins, and region metadata.",
   "- list_co_streams: public co-stream groups, live-first.",
-  "- search_teams: public team directory search without raw Liquipedia payloads.",
-  "- search_players: public player directory search without raw Liquipedia payloads.",
+  "- search_teams: public team directory search with safe public fields.",
+  "- search_players: public player directory search with safe public fields.",
   "- get_public_ewc_leaderboard: existing public prediction leaderboard projection.",
   "",
   "## Client Setup",
@@ -97,7 +97,7 @@ const PUBLIC_MCP_COPY_PAGE_EN = [
   "- This endpoint is public and read-only.",
   "- Browser-origin requests are origin-checked.",
   "- Requests are rate-limited by trusted edge IP. If no trusted IP header is present, requests share one fallback bucket.",
-  "- The endpoint never returns drafts, admin queues, audit logs, auth rows, sessions, secrets, raw Discord tokens, or raw Liquipedia enrichment payloads.",
+  "- Responses are limited to public website fields.",
 ].join("\n");
 
 const PUBLIC_MCP_COPY_PAGE_AR = [
@@ -105,7 +105,7 @@ const PUBLIC_MCP_COPY_PAGE_AR = [
   "",
   "نقطة نهاية MCP العامة تتيح لأدوات الذكاء الاصطناعي قراءة نفس بيانات Esports Community العامة الظاهرة في الموقع، بدون جلسة لوحة تحكم وبدون مفتاح إداري.",
   "",
-  "هذه النقطة للقراءة فقط. لا يمكنها إنشاء مسودات، نشر أخبار، إدارة التعليقات، تعديل البثوث، عرض طوابير الإدارة، قراءة سجلات التدقيق، أو الوصول إلى مفاتيح MCP أو الجلسات أو الأسرار أو جداول المصادقة أو بيانات الإثراء الخام.",
+  "هذه النقطة للقراءة فقط وتعرض بيانات عامة مخصصة لزوار الموقع.",
   "",
   "صفحة الشرح:",
   "",
@@ -145,8 +145,8 @@ const PUBLIC_MCP_COPY_PAGE_AR = [
   "- list_tournaments: ملخصات البطولات العامة النشطة.",
   "- get_ewc_club_summary: نقاط أندية EWC، الألعاب المتأهلة، الانتصارات، وبيانات المناطق.",
   "- list_co_streams: مجموعات البثوث المشتركة العامة، مع عرض المباشر أولا.",
-  "- search_teams: البحث في دليل الفرق العام بدون بيانات Liquipedia الخام.",
-  "- search_players: البحث في دليل اللاعبين العام بدون بيانات Liquipedia الخام.",
+  "- search_teams: البحث في دليل الفرق العام بحقول عامة آمنة.",
+  "- search_players: البحث في دليل اللاعبين العام بحقول عامة آمنة.",
   "- get_public_ewc_leaderboard: عرض لوحة توقعات EWC العامة الحالية.",
   "",
   "## إعداد العميل",
@@ -197,7 +197,7 @@ const PUBLIC_MCP_COPY_PAGE_AR = [
   "- هذه النقطة عامة وللقراءة فقط.",
   "- طلبات المتصفح يتم التحقق من Origin لها.",
   "- الطلبات محددة المعدل حسب عنوان IP الموثوق من الطرف. عند عدم وجود ترويسة IP موثوقة، تشترك الطلبات في حاوية معدل واحدة.",
-  "- لا ترجع هذه النقطة المسودات، طوابير الإدارة، سجلات التدقيق، جداول المصادقة، الجلسات، الأسرار، رموز Discord الخام، أو بيانات Liquipedia الخام.",
+  "- تقتصر الاستجابات على حقول الموقع العامة.",
 ].join("\n");
 
 export const PUBLIC_MCP_COPY_PAGE_BY_LOCALE: Record<Locale, string> = {
