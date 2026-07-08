@@ -686,6 +686,19 @@ db.exec(`
     PRIMARY KEY (platform, handle)
   );
   CREATE INDEX IF NOT EXISTS idx_stream_status_live ON stream_channel_status(is_live);
+
+  -- Persistent creator-level go-live cooldown. This prevents duplicate Discord
+  -- announcements when the same streamer is live on multiple platforms and one
+  -- platform status arrives later or the bot restarts between polls.
+  CREATE TABLE IF NOT EXISTS stream_creator_announce_state (
+    creator_key     TEXT PRIMARY KEY,
+    announced_at    INTEGER NOT NULL,
+    platform        TEXT,
+    handle          TEXT,
+    title           TEXT,
+    live_started_at INTEGER,
+    updated_at      TEXT NOT NULL DEFAULT (datetime('now'))
+  );
 `);
 
 ensureColumns('ewc_prediction_weeks', [

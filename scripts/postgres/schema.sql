@@ -609,6 +609,19 @@ CREATE INDEX IF NOT EXISTS idx_stream_status_live ON stream_channel_status(is_li
 -- Live VIDEO id (YouTube): the embed needs it — youtube.com/embed/<video_id>.
 ALTER TABLE stream_channel_status ADD COLUMN IF NOT EXISTS video_id TEXT;
 
+-- Persistent creator-level go-live cooldown. This prevents duplicate Discord
+-- announcements when the same streamer is live on multiple platforms and one
+-- platform status arrives later or the bot restarts between polls.
+CREATE TABLE IF NOT EXISTS stream_creator_announce_state (
+  creator_key     TEXT PRIMARY KEY,
+  announced_at    BIGINT NOT NULL,
+  platform        TEXT,
+  handle          TEXT,
+  title           TEXT,
+  live_started_at BIGINT,
+  updated_at      TEXT NOT NULL DEFAULT (to_char(now() AT TIME ZONE 'UTC', 'YYYY-MM-DD HH24:MI:SS'))
+);
+
 -- Follows + notifications. A member (by Discord id) follows games / tournaments /
 -- teams / players; match transitions fan out one notification row per follower.
 -- user_notifications is BOTH the site inbox and the Discord-DM outbox (dm_status).

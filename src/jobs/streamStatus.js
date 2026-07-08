@@ -3,6 +3,7 @@ import { logger } from '../lib/logger.js';
 import { EmbedBuilder } from 'discord.js';
 import { channelUrl, getActiveChannelMeta, listDistinctActiveHandles } from '../db/streamChannels.js';
 import { listLiveStreamStatuses, markStaleStatusesOffline, upsertStreamStatus } from '../db/streamChannelStatus.js';
+import { getStreamCreatorAnnouncement, recordStreamCreatorAnnouncement } from '../db/streamAnnouncements.js';
 import { getGuildsWithCostreamAnnounce, getSettings } from '../db/settings.js';
 import { categoryToGameSlug, gameName } from '../lib/games.js';
 import * as twitch from '../services/twitch.js';
@@ -40,6 +41,7 @@ let lastYoutubeRunAt = 0;
 // against status flaps; the DB-persisted previous status means a bot RESTART
 // never re-announces channels that were already live.
 const ANNOUNCE_COOLDOWN_MS = 30 * 60 * 1000;
+const CROSS_PLATFORM_DEDUP_MS = 6 * 60 * 60 * 1000;
 const lastAnnouncedAt = new Map(); // creator key -> ms epoch
 
 const PLATFORM_LABELS = { twitch: 'Twitch', kick: 'Kick', youtube: 'YouTube', soop: 'SOOP' };
@@ -85,10 +87,18 @@ async function announceGoLive(client, liveBefore, liveAfter, now = Date.now) {
     if (beforeGroups.has(creatorKey)) continue;
     const candidate = selectAnnouncementEntry(entries);
     if (!candidate) continue;
+    const nowMs = now();
     const at = lastAnnouncedAt.get(creatorKey);
-    if (at && now() - at < ANNOUNCE_COOLDOWN_MS) continue;
+    if (at && nowMs - at < ANNOUNCE_COOLDOWN_MS) continue;
     const { status, meta, gameSlug } = candidate;
     const { platform, handle } = status;
+    const stored = await getStreamCreatorAnnouncement(creatorKey);
+    const storedWindow =
+      stored?.platform && stored.platform !== platform ? CROSS_PLATFORM_DEDUP_MS : ANNOUNCE_COOLDOWN_MS;
+    if (stored?.announcedAt && nowMs - stored.announcedAt * 1000 < storedWindow) {
+      lastAnnouncedAt.set(creatorKey, stored.announcedAt * 1000);
+      continue;
+    }
     const watchUrl = channelUrl(platform, handle);
 
     const embed = new EmbedBuilder()
@@ -123,7 +133,18 @@ async function announceGoLive(client, liveBefore, liveAfter, now = Date.now) {
         logger.warn(`[stream-status] go-live announce failed in ${guildId}: ${e.message}`);
       }
     }
-    if (delivered) lastAnnouncedAt.set(creatorKey, now());
+    if (delivered) {
+      const announcedAt = Math.floor(nowMs / 1000);
+      lastAnnouncedAt.set(creatorKey, nowMs);
+      await recordStreamCreatorAnnouncement({
+        creatorKey,
+        announcedAt,
+        platform,
+        handle,
+        title: status.title || null,
+        liveStartedAt: status.startedAt,
+      });
+    }
   }
   return sent;
 }
@@ -219,4 +240,10 @@ export function stopStreamStatusJob() {
     clearInterval(timer);
     timer = null;
   }
+}
+
+export function resetStreamStatusStateForTests() {
+  lastAnnouncedAt.clear();
+  lastYoutubeRunAt = 0;
+  firstReported = false;
 }
