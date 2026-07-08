@@ -47,7 +47,7 @@ async function writeClipboard(value: string) {
 
 export function McpPageActions({
   markdown = "",
-  docsHref = "/mcp",
+  docsHref = "/docs/admin-mcp",
   variant = "docs",
   showDocsLink = true,
 }: {

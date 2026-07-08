@@ -8,7 +8,7 @@ export const ADMIN_MCP_COPY_PAGE = [
   "Public docs page:",
   "",
   "```text",
-  "https://esportscommunity.net/mcp",
+  "https://esportscommunity.net/docs/admin-mcp",
   "```",
   "",
   "## Endpoint",

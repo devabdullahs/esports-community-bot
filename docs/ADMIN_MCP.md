@@ -10,7 +10,7 @@ endpoint if we add it later.
 The setup documentation is intentionally public at:
 
 ```text
-https://esportscommunity.net/mcp
+https://esportscommunity.net/docs/admin-mcp
 ```
 
 That page is public so AI assistants can read the guide. It does not expose
