@@ -119,6 +119,41 @@ describe("/api/mcp auth", () => {
 });
 
 describe("/api/mcp tools", () => {
+  test("lists public read tools on the admin MCP endpoint", async () => {
+    const key = await createKey({ tools: ["get_site_overview"] });
+    const response = await mcpPOST(
+      mcpRequest(key.secret, {
+        jsonrpc: "2.0",
+        id: 1,
+        method: "tools/list",
+      }),
+    );
+
+    expect(response.status).toBe(200);
+    const body = await parseMcpResponse(response);
+    const names = body.result.tools.map((tool: { name: string }) => tool.name);
+    expect(names).toEqual(
+      expect.arrayContaining([
+        "list_games",
+        "list_tournaments",
+        "list_co_streams",
+        "search_teams",
+        "search_players",
+        "get_public_ewc_leaderboard",
+      ]),
+    );
+  });
+
+  test("runs public-only read tools through admin MCP without a second MCP config", async () => {
+    const key = await createKey({ tools: ["get_site_overview"] });
+    const response = await mcpPOST(mcpRequest(key.secret, toolCall("list_games", { locale: "en" })));
+
+    expect(response.status).toBe(200);
+    const body = await parseMcpResponse(response);
+    expect(body.result.isError).not.toBe(true);
+    expect(body.result.structuredContent.games).toEqual(expect.any(Array));
+  });
+
   test("runs a read-only overview tool for a valid super-admin key", async () => {
     const key = await createKey({ tools: ["get_site_overview"] });
     const { recordAdminAudit } = await import("@bot/db/ewcAdminAuditLog.js");
