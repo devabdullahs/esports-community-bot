@@ -1,22 +1,16 @@
 import {
   ActivityIcon,
-  ArrowRightIcon,
   BarChart3Icon,
   CheckCircle2Icon,
-  ClipboardListIcon,
   FileTextIcon,
   Gamepad2Icon,
-  HandshakeIcon,
   ListChecksIcon,
   type LucideIcon,
   MessagesSquareIcon,
   NewspaperIcon,
   PenLineIcon,
-  RadioIcon,
   ShieldIcon,
   SparklesIcon,
-  Tv2Icon,
-  UsersIcon,
 } from "lucide-react";
 import Link from "next/link";
 import { NewsList } from "@/components/admin/news-list";
@@ -265,85 +259,6 @@ export default async function AdminPage() {
       ) : null}
 
       {access.allowed ? (
-        <section className="flex min-w-0 flex-col gap-4 rounded-xl border border-border/70 bg-card/40 p-4 shadow-sm sm:p-6">
-          <div className="flex flex-col gap-1">
-            <h2 className="text-xl font-semibold">{t.dashboard.workspaceTitle}</h2>
-            <p className="text-sm text-muted-foreground">
-              {t.dashboard.workspaceDescription}
-            </p>
-          </div>
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            <ManageLink
-              href="/admin/games"
-              icon={Gamepad2Icon}
-              title={t.dashboard.links.gamesTitle}
-              description={t.dashboard.links.gamesDescription}
-            />
-            <ManageLink
-              href="/admin/media"
-              icon={Tv2Icon}
-              title={t.dashboard.links.mediaTitle}
-              description={t.dashboard.links.mediaDescription}
-            />
-            <ManageLink
-              href="/admin/comments"
-              icon={MessagesSquareIcon}
-              title={t.dashboard.links.commentsTitle}
-              description={t.dashboard.links.commentsDescription}
-            />
-            {access.isSuper ? (
-              <ManageLink
-                href="/admin/analytics"
-                icon={BarChart3Icon}
-                title={t.dashboard.links.analyticsTitle}
-                description={t.dashboard.links.analyticsDescription}
-              />
-            ) : null}
-            {access.isSuper ? (
-              <ManageLink
-                href="/admin/users"
-                icon={UsersIcon}
-                title={t.dashboard.links.usersTitle}
-                description={t.dashboard.links.usersDescription}
-              />
-            ) : null}
-            {access.isSuper ? (
-              <ManageLink
-                href="/admin/partners"
-                icon={HandshakeIcon}
-                title={t.dashboard.links.partnersTitle}
-                description={t.dashboard.links.partnersDescription}
-              />
-            ) : null}
-            {access.isSuper ? (
-              <ManageLink
-                href="/admin/streams"
-                icon={RadioIcon}
-                title={t.dashboard.links.streamsTitle}
-                description={t.dashboard.links.streamsDescription}
-              />
-            ) : null}
-            {access.isSuper ? (
-              <ManageLink
-                href="/admin/team"
-                icon={UsersIcon}
-                title={t.dashboard.links.teamTitle}
-                description={t.dashboard.links.teamDescription}
-              />
-            ) : null}
-            {access.isSuper ? (
-              <ManageLink
-                href="/admin/audit"
-                icon={ClipboardListIcon}
-                title={t.dashboard.links.auditTitle}
-                description={t.dashboard.links.auditDescription}
-              />
-            ) : null}
-          </div>
-        </section>
-      ) : null}
-
-      {access.allowed ? (
         <section className="flex min-w-0 flex-col gap-4 overflow-hidden rounded-xl border border-border/70 bg-card/40 p-4 shadow-sm sm:p-6">
           <div>
             <h2 className="text-xl font-semibold">{t.dashboard.newsTitle}</h2>
@@ -425,39 +340,5 @@ function StatCard({
         <p className="text-sm leading-6 text-muted-foreground">{description}</p>
       </CardContent>
     </Card>
-  );
-}
-
-function ManageLink({
-  href,
-  icon: Icon,
-  title,
-  description,
-}: {
-  href: string;
-  icon: LucideIcon;
-  title: string;
-  description: string;
-}) {
-  return (
-    <Link
-      href={href}
-      className="group min-w-0 rounded-xl border border-border/70 bg-card/70 p-3 shadow-sm transition-colors hover:bg-card sm:p-4"
-    >
-      <span className="flex items-start gap-3">
-        <span className="rounded-lg border border-primary/20 bg-primary/10 p-2 text-primary">
-          <Icon data-icon="inline-start" />
-        </span>
-        <span className="min-w-0 flex-1">
-          <span className="flex items-center gap-2 font-semibold">
-            {title}
-            <ArrowRightIcon className="ms-auto size-4 text-muted-foreground transition-transform group-hover:translate-x-0.5 rtl:rotate-180 rtl:group-hover:-translate-x-0.5" />
-          </span>
-          <span className="mt-1 block text-sm leading-6 text-muted-foreground">
-            {description}
-          </span>
-        </span>
-      </span>
-    </Link>
   );
 }

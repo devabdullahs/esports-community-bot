@@ -541,6 +541,9 @@ const baseCopy = {
       failedTitle: "Sign in failed",
       failedMessage: "Discord sign-in failed.",
       continue: "Continue with Discord",
+      pending: "Opening Discord...",
+      legalPrefix: "By continuing, you agree to our",
+      legalAnd: "and",
     },
     adminErrors: {
       "title-required": "Title is required in both English and Arabic",
@@ -1023,6 +1026,9 @@ const baseCopy = {
       failedTitle: "\u0641\u0634\u0644 \u062a\u0633\u062c\u064a\u0644 \u0627\u0644\u062f\u062e\u0648\u0644",
       failedMessage: "\u0641\u0634\u0644 \u062a\u0633\u062c\u064a\u0644 \u0627\u0644\u062f\u062e\u0648\u0644 \u0639\u0628\u0631 \u062f\u064a\u0633\u0643\u0648\u0631\u062f.",
       continue: "\u0627\u0644\u0645\u062a\u0627\u0628\u0639\u0629 \u0639\u0628\u0631 \u062f\u064a\u0633\u0643\u0648\u0631\u062f",
+      pending: "\u062c\u0627\u0631\u064a \u0641\u062a\u062d \u062f\u064a\u0633\u0643\u0648\u0631\u062f...",
+      legalPrefix: "\u0628\u0627\u0644\u0645\u062a\u0627\u0628\u0639\u0629\u060c \u0623\u0646\u062a \u062a\u0648\u0627\u0641\u0642 \u0639\u0644\u0649",
+      legalAnd: "\u0648",
     },
     adminErrors: {
       "title-required": "\u0639\u0646\u0648\u0627\u0646 \u0627\u0644\u0644\u0639\u0628\u0629 \u0645\u0637\u0644\u0648\u0628 \u0628\u0627\u0644\u0644\u063a\u062a\u064a\u0646 \u0627\u0644\u0639\u0631\u0628\u064a\u0629 \u0648\u0627\u0644\u0625\u0646\u062c\u0644\u064a\u0632\u064a\u0629",
