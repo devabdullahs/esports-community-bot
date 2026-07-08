@@ -47,10 +47,12 @@ async function writeClipboard(value: string) {
 
 export function McpPageActions({
   markdown = "",
+  docsHref = "/mcp",
   variant = "docs",
   showDocsLink = true,
 }: {
   markdown?: string;
+  docsHref?: string;
   variant?: "keys" | "docs";
   showDocsLink?: boolean;
 }) {
@@ -60,9 +62,9 @@ export function McpPageActions({
     return new URL("/api/mcp", window.location.origin).toString();
   }, []);
   const docsUrl = useMemo(() => {
-    if (typeof window === "undefined") return "/admin/mcp/docs";
-    return new URL("/admin/mcp/docs", window.location.origin).toString();
-  }, []);
+    if (typeof window === "undefined") return docsHref;
+    return new URL(docsHref, window.location.origin).toString();
+  }, [docsHref]);
 
   const copyValue = useCallback(async (kind: NonNullable<typeof copied>, value: string) => {
     await writeClipboard(value);
@@ -87,7 +89,7 @@ export function McpPageActions({
   if (variant === "keys") {
     return showDocsLink ? (
       <Button
-        render={<Link href="/admin/mcp/docs" />}
+        render={<Link href={docsHref} />}
         nativeButton={false}
         variant="outline"
         size="sm"
@@ -102,7 +104,7 @@ export function McpPageActions({
     <div className="flex w-full items-stretch gap-1 sm:w-auto">
       {showDocsLink ? (
         <Button
-          render={<Link href="/admin/mcp/docs" />}
+          render={<Link href={docsHref} />}
           nativeButton={false}
           variant="outline"
           size="sm"

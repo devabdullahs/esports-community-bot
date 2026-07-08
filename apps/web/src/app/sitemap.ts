@@ -20,6 +20,7 @@ const STATIC_PATHS = [
   "/tournaments/ewc",
   "/clubs",
   "/predictions",
+  "/mcp",
   "/terms",
   "/privacy",
 ];
