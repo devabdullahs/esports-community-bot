@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { buildMcpAssistantUrl } from "@/lib/mcp-assistant-links";
 
 describe("MCP assistant links", () => {
-  const docsUrl = "https://esportscommunity.net/mcp";
+  const docsUrl = "https://esportscommunity.net/docs/admin-mcp";
 
   it.each([
     ["ChatGPT", "https://chatgpt.com/", "https://chatgpt.com/"],

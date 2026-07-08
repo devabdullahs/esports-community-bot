@@ -3,5 +3,5 @@ import { redirect } from "next/navigation";
 export const runtime = "nodejs";
 
 export default function AdminMcpDocsRedirectPage() {
-  redirect("/mcp");
+  redirect("/docs/admin-mcp");
 }
