@@ -11,6 +11,7 @@ import {
   PenLineIcon,
   ShieldIcon,
   SparklesIcon,
+  Tv2Icon,
 } from "lucide-react";
 import Link from "next/link";
 import { NewsList } from "@/components/admin/news-list";
@@ -55,6 +56,10 @@ export default async function AdminPage() {
       ? games.length
       : access.games.length
     : 0;
+  const canManageGamePosts = access.allowed && managedGames > 0;
+  const canManageMediaPosts =
+    access.allowed &&
+    (access.media === "ALL" || (Array.isArray(access.media) && access.media.length > 0));
   const roleLabel = access.isSuper
     ? t.common.superAdmin
     : access.allowed
@@ -87,14 +92,27 @@ export default async function AdminPage() {
             </div>
             {access.allowed ? (
               <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:flex-wrap">
-                <Button
-                  render={<Link href="/admin/news/new" />}
-                  nativeButton={false}
-                  className="w-full sm:w-auto"
-                >
-                  <PenLineIcon data-icon="inline-start" />
-                  {t.dashboard.quickNewPost}
-                </Button>
+                {canManageGamePosts ? (
+                  <Button
+                    render={<Link href="/admin/news/new" />}
+                    nativeButton={false}
+                    className="w-full sm:w-auto"
+                  >
+                    <PenLineIcon data-icon="inline-start" />
+                    {t.dashboard.quickNewPost}
+                  </Button>
+                ) : null}
+                {canManageMediaPosts ? (
+                  <Button
+                    render={<Link href="/admin/news/new/media" />}
+                    nativeButton={false}
+                    variant="outline"
+                    className="w-full sm:w-auto"
+                  >
+                    <Tv2Icon data-icon="inline-start" />
+                    {t.dashboard.quickNewMediaPost}
+                  </Button>
+                ) : null}
                 <Button
                   render={<Link href="/admin/comments" />}
                   nativeButton={false}

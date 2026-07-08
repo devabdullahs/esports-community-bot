@@ -55,33 +55,51 @@ type AdminNavSection = {
   items: AdminNavItem[];
 };
 
-function navSections(locale: Locale, isSuper: boolean): AdminNavSection[] {
+function navSections(
+  locale: Locale,
+  isSuper: boolean,
+  canManageGamePosts: boolean,
+  canManageMediaPosts: boolean,
+): AdminNavSection[] {
   const t = getAdminCopy(locale).dashboard;
+  const workspaceItems: AdminNavItem[] = [
+    {
+      href: "/admin",
+      label: t.title,
+      description: t.description,
+      icon: LayoutDashboardIcon,
+      exact: true,
+    },
+  ];
+  if (canManageGamePosts) {
+    workspaceItems.push({
+      href: "/admin/news/new",
+      label: t.quickNewPost,
+      description: t.newsDescription,
+      icon: PenLineIcon,
+      exact: true,
+    });
+  }
+  if (canManageMediaPosts) {
+    workspaceItems.push({
+      href: "/admin/news/new/media",
+      label: t.quickNewMediaPost,
+      description: t.quickNewMediaPostDescription,
+      icon: Tv2Icon,
+      exact: true,
+    });
+  }
+  workspaceItems.push({
+    href: "/admin/comments",
+    label: t.links.commentsTitle,
+    description: t.links.commentsDescription,
+    icon: MessagesSquareIcon,
+  });
+
   const sections: AdminNavSection[] = [
     {
       title: t.workspaceTitle,
-      items: [
-        {
-          href: "/admin",
-          label: t.title,
-          description: t.description,
-          icon: LayoutDashboardIcon,
-          exact: true,
-        },
-        {
-          href: "/admin/news/new",
-          label: t.quickNewPost,
-          description: t.newsDescription,
-          icon: PenLineIcon,
-          exact: true,
-        },
-        {
-          href: "/admin/comments",
-          label: t.links.commentsTitle,
-          description: t.links.commentsDescription,
-          icon: MessagesSquareIcon,
-        },
-      ],
+      items: workspaceItems,
     },
     {
       title: copy[locale].common.content,
@@ -157,14 +175,23 @@ function isActivePath(pathname: string, item: AdminNavItem) {
 function AdminNavigation({
   locale,
   isSuper,
+  canManageGamePosts,
+  canManageMediaPosts,
   onNavigate,
 }: {
   locale: Locale;
   isSuper: boolean;
+  canManageGamePosts: boolean;
+  canManageMediaPosts: boolean;
   onNavigate?: () => void;
 }) {
   const pathname = usePathname();
-  const sections = navSections(locale, isSuper);
+  const sections = navSections(
+    locale,
+    isSuper,
+    canManageGamePosts,
+    canManageMediaPosts,
+  );
 
   return (
     <nav className="flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto px-2 py-2">
@@ -203,7 +230,7 @@ function AdminNavigation({
 function AdminBreadcrumb({ locale }: { locale: Locale }) {
   const pathname = usePathname();
   const t = getAdminCopy(locale).dashboard;
-  const sections = navSections(locale, true);
+  const sections = navSections(locale, true, true, true);
   const activeItem =
     sections
       .flatMap((section) => section.items)
@@ -229,12 +256,16 @@ export function AdminDashboardShell({
   children,
   locale,
   isSuper,
+  canManageGamePosts,
+  canManageMediaPosts,
   displayName,
   roleLabel,
 }: {
   children: ReactNode;
   locale: Locale;
   isSuper: boolean;
+  canManageGamePosts: boolean;
+  canManageMediaPosts: boolean;
   displayName: string | null;
   roleLabel: string;
 }) {
@@ -257,7 +288,12 @@ export function AdminDashboardShell({
             </span>
           </span>
         </div>
-        <AdminNavigation locale={locale} isSuper={isSuper} />
+        <AdminNavigation
+          locale={locale}
+          isSuper={isSuper}
+          canManageGamePosts={canManageGamePosts}
+          canManageMediaPosts={canManageMediaPosts}
+        />
         <div className="border-t border-border p-3">
           <Button
             render={<Link href="/" />}
@@ -298,6 +334,8 @@ export function AdminDashboardShell({
               <AdminNavigation
                 locale={locale}
                 isSuper={isSuper}
+                canManageGamePosts={canManageGamePosts}
+                canManageMediaPosts={canManageMediaPosts}
                 onNavigate={() => setMobileOpen(false)}
               />
             </SheetContent>
