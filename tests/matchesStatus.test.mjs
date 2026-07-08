@@ -28,6 +28,10 @@ test('normalizeTeamName resolves known Liquipedia short-name redirects', () => {
   assert.equal(normalizeTeamName('Inner Circle x Insanity'), 'innercirclexinsanity');
   assert.equal(normalizeTeamName('1w'), '1w');
   assert.equal(normalizeTeamName('1w Team'), '1w');
+  assert.equal(normalizeTeamName('Poor Rangers'), 'powerrangers');
+  assert.equal(normalizeTeamName('Power Rangers'), 'powerrangers');
+  assert.equal(normalizeTeamName('BB Team'), 'betboomteam');
+  assert.equal(normalizeTeamName('BetBoom Team'), 'betboomteam');
 });
 
 test('dedupeMatches collapses live-widget alias rows by timestamp and shared team', () => {
@@ -136,6 +140,37 @@ test('dedupeMatches prefers scored 1w result over stale Inner Circle live row', 
       score_b: 2,
       status: 'finished',
       scheduled_at: 1_783_447_200,
+    },
+  ];
+
+  assert.deepEqual(dedupeMatches(rows), [rows[1]]);
+});
+
+test('dedupeMatches prefers scored Power Rangers result over stale Poor Rangers live row', () => {
+  const rows = [
+    {
+      id: 1,
+      tournament_id: 10,
+      game: 'dota2',
+      external_id: 'dota2:1783505700:Poor Rangers:BB Team',
+      team_a: 'Poor Rangers',
+      team_b: 'BB Team',
+      score_a: 0,
+      score_b: 0,
+      status: 'running',
+      scheduled_at: 1_783_505_700,
+    },
+    {
+      id: 2,
+      tournament_id: 10,
+      game: 'dota2',
+      external_id: 'dota2:Esports_World_Cup/2026/Group_Stage:matchlist:22:power rangers vs betboom team',
+      team_a: 'Power Rangers',
+      team_b: 'BetBoom Team',
+      score_a: 0,
+      score_b: 1,
+      status: 'running',
+      scheduled_at: 1_783_505_700,
     },
   ];
 

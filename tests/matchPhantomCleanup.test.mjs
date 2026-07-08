@@ -248,6 +248,41 @@ test('removes Inner Circle live-widget aliases covered by a current 1w Team resu
   assert.equal(await getMatch('liquipedia', 'dota2:1783447200:Inner Circle x Insanity:1w'), null);
 });
 
+test('removes Poor Rangers live-widget aliases covered by a current live Power Rangers result', async () => {
+  const t = await tournament('dota2/EWC/2026-power-rangers');
+  await liveAlias(
+    t.id,
+    'dota2:Esports_World_Cup/2026/Group_Stage:matchlist:22:power rangers vs betboom team',
+    'Power Rangers',
+    'BetBoom Team',
+    0,
+    1,
+    1783505700,
+  );
+  await liveAlias(
+    t.id,
+    'dota2:1783505700:Poor Rangers:BB Team',
+    'Poor Rangers',
+    'BB Team',
+    0,
+    0,
+    1783505700,
+  );
+
+  const removed = await deleteTournamentDuplicateMatches(t.id, [
+    'dota2:Esports_World_Cup/2026/Group_Stage:matchlist:22:power rangers vs betboom team',
+  ]);
+
+  assert.equal(removed, 1);
+  assert.ok(
+    await getMatch(
+      'liquipedia',
+      'dota2:Esports_World_Cup/2026/Group_Stage:matchlist:22:power rangers vs betboom team',
+    ),
+  );
+  assert.equal(await getMatch('liquipedia', 'dota2:1783505700:Poor Rangers:BB Team'), null);
+});
+
 test('keeps a later same-day live-widget alias as a possible rematch', async () => {
   const t = await tournament('dota2/EWC/2026-playtime-rematch');
   await match(t.id, 'Match:ID_B5F8Z45QjB_0002', 'Team Liquid', 'PlayTime', 1, 1, 1783427100);
@@ -273,6 +308,39 @@ test('startup cleanup removes stale live-widget aliases covered by a scored stab
   assert.equal(await getMatch('liquipedia', 'dota2:1783423800:Team Liquid:PTime'), null);
   assert.equal(await getMatch('liquipedia', 'dota2:1783426500:Team Liquid:PTime'), null);
   assert.equal(await getMatch('liquipedia', 'dota2:1783427100:Team Liquid:PTime'), null);
+});
+
+test('startup cleanup removes stale live-widget aliases covered by a scored live stable result', async () => {
+  const t = await tournament('dota2/EWC/2026-power-rangers-startup');
+  await liveAlias(
+    t.id,
+    'dota2:Esports_World_Cup/2026/Group_Stage:matchlist:22:power rangers vs betboom team',
+    'Power Rangers',
+    'BetBoom Team',
+    0,
+    1,
+    1783505700,
+  );
+  await liveAlias(
+    t.id,
+    'dota2:1783505700:Poor Rangers:BB Team',
+    'Poor Rangers',
+    'BB Team',
+    0,
+    0,
+    1783505700,
+  );
+
+  const removed = await deleteResolvedLiveAliasMatches();
+
+  assert.equal(removed, 1);
+  assert.ok(
+    await getMatch(
+      'liquipedia',
+      'dota2:Esports_World_Cup/2026/Group_Stage:matchlist:22:power rangers vs betboom team',
+    ),
+  );
+  assert.equal(await getMatch('liquipedia', 'dota2:1783505700:Poor Rangers:BB Team'), null);
 });
 
 test('startup cleanup keeps non-alias live-widget rows for the same pair', async () => {

@@ -16,6 +16,8 @@ const NORMALIZED_TEAM_ALIASES = new Map([
   ['l1team', 'l1gateam'],
   ['1wteam', '1w'],
   ['ptime', 'playtime'],
+  ['poorrangers', 'powerrangers'],
+  ['bbteam', 'betboomteam'],
 ]);
 
 // Normalized key for recognizing the same team/player across sources and name forms — e.g.
