@@ -824,6 +824,27 @@ db.exec(`
   );
   CREATE INDEX IF NOT EXISTS idx_user_notifications_user ON user_notifications(discord_user_id, created_at DESC);
   CREATE INDEX IF NOT EXISTS idx_user_notifications_dm   ON user_notifications(dm_status);
+
+  CREATE TABLE IF NOT EXISTS web_analytics_events (
+    id               INTEGER PRIMARY KEY AUTOINCREMENT,
+    visitor_id       TEXT NOT NULL,
+    session_id       TEXT NOT NULL,
+    event_type       TEXT NOT NULL CHECK (event_type IN ('pageview','engagement')),
+    path             TEXT NOT NULL,
+    referrer         TEXT,
+    country          TEXT,
+    user_agent       TEXT,
+    duration_seconds INTEGER NOT NULL DEFAULT 0,
+    occurred_at      INTEGER NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS idx_web_analytics_occurred
+    ON web_analytics_events(occurred_at DESC);
+  CREATE INDEX IF NOT EXISTS idx_web_analytics_visitor
+    ON web_analytics_events(visitor_id, occurred_at DESC);
+  CREATE INDEX IF NOT EXISTS idx_web_analytics_session
+    ON web_analytics_events(session_id, occurred_at DESC);
+  CREATE INDEX IF NOT EXISTS idx_web_analytics_country
+    ON web_analytics_events(country, occurred_at DESC);
 `);
 
 // Canonicalize old game keys after slug changes. Keep this tiny and explicit so existing

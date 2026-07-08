@@ -60,6 +60,7 @@ const appTables = [
   'user_follows',
   'user_notification_prefs',
   'user_notifications',
+  'web_analytics_events',
   'tournament_standings',
 ];
 
@@ -86,6 +87,7 @@ const identityColumns = new Map([
   ['stream_channels', 'id'],
   ['user_follows', 'id'],
   ['user_notifications', 'id'],
+  ['web_analytics_events', 'id'],
   ['tournament_standings', 'id'],
 ]);
 

@@ -45,6 +45,7 @@ const en = {
     quickNewPost: "New post",
     quickComments: "Review comments",
     quickGames: "Manage games",
+    quickAnalytics: "Analytics",
     workflowEyebrow: "Daily flow",
     workflowTitle: "Publish with fewer missed steps",
     workflowDescription:
@@ -94,6 +95,8 @@ const en = {
       mediaDescription: "Edit the media channels you manage.",
       commentsTitle: "Comments",
       commentsDescription: "Review flagged and pending community comments.",
+      analyticsTitle: "Website analytics",
+      analyticsDescription: "See visitors, returning users, engagement, countries, and top pages.",
       teamTitle: "Admin team",
       teamDescription: "Add admins and assign their games and channels.",
       auditTitle: "Audit log",
@@ -453,6 +456,7 @@ const ar: typeof en = {
     quickNewPost: "منشور جديد",
     quickComments: "مراجعة التعليقات",
     quickGames: "إدارة الألعاب",
+    quickAnalytics: "الإحصائيات",
     workflowEyebrow: "مسار العمل اليومي",
     workflowTitle: "انشر التحديثات بدون خطوات ناقصة",
     workflowDescription:
@@ -501,6 +505,8 @@ const ar: typeof en = {
       mediaDescription: "عدّل قنوات الإعلام التي تديرها.",
       commentsTitle: "التعليقات",
       commentsDescription: "راجع تعليقات المجتمع المعلقة أو التي تحتاج مراجعة.",
+      analyticsTitle: "إحصائيات الموقع",
+      analyticsDescription: "اعرف الزوار، المستخدمين العائدين، وقت التفاعل، الدول، وأعلى الصفحات.",
       teamTitle: "فريق الإدارة",
       teamDescription: "أضف الإداريين وحدد ألعابهم وقنواتهم.",
       auditTitle: "سجل التدقيق",

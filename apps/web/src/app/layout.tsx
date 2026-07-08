@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { Suspense } from "react";
+import { AnalyticsTracker } from "@/components/analytics/analytics-tracker";
 import { DeploymentUpdateAlert } from "@/components/deployment-update-alert";
 import { Providers } from "@/components/providers";
 import { RouteFreshnessGuard } from "@/components/route-freshness-guard";
@@ -146,6 +147,9 @@ export default async function RootLayout({
             </Suspense>
             <Suspense fallback={null}>
               <RouteFreshnessGuard />
+            </Suspense>
+            <Suspense fallback={null}>
+              <AnalyticsTracker />
             </Suspense>
             <DeploymentUpdateAlert initialVersion={deploymentVersion} locale={locale} />
           </Providers>
