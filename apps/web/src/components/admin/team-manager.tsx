@@ -17,6 +17,10 @@ import { Input } from "@/components/ui/input";
 
 type Opt = { slug: string; label: string };
 
+function digitsOnly(value: string) {
+  return value.replace(/\D/g, "");
+}
+
 function Chips({
   title,
   options,
@@ -190,7 +194,10 @@ export function TeamManager({
               <Input
                 id="add-id"
                 value={addId}
-                onChange={(e) => setAddId(e.target.value)}
+                onChange={(e) => setAddId(digitsOnly(e.target.value).slice(0, 20))}
+                inputMode="numeric"
+                pattern="[0-9]*"
+                maxLength={20}
                 placeholder={t.team.discordIdPlaceholder}
               />
               <FieldDescription>{t.team.discordIdDescription}</FieldDescription>

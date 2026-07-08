@@ -33,7 +33,6 @@ import {
   BreadcrumbPage,
   BreadcrumbSeparator,
 } from "@/components/ui/breadcrumb";
-import { Separator } from "@/components/ui/separator";
 import {
   Sheet,
   SheetContent,
@@ -351,7 +350,6 @@ export function AdminDashboardShell({
             </SheetContent>
           </Sheet>
 
-          <Separator orientation="vertical" className="hidden h-4 lg:block" />
           <AdminBreadcrumb locale={locale} />
           <div className="ms-auto flex min-w-0 items-center gap-2">
             <Badge variant={isSuper ? "default" : "secondary"} className="hidden sm:inline-flex">

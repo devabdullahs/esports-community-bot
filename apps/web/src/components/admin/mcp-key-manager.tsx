@@ -2,17 +2,19 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { CopyIcon, KeyRoundIcon, Trash2Icon } from "lucide-react";
+import { CalendarIcon, CopyIcon, KeyRoundIcon, Trash2Icon, XIcon } from "lucide-react";
 import type { Locale } from "@/lib/i18n";
 import type { McpKey } from "@/lib/mcp-keys";
 import { cn } from "@/lib/utils";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Calendar } from "@/components/ui/calendar";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Field, FieldDescription, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 
 type Opt = { slug: string; label: string };
 
@@ -23,7 +25,12 @@ function text(locale: Locale) {
         label: "التسمية",
         owner: "معرّف ديسكورد للمالك",
         ownerName: "اسم المالك",
-        expiresAt: "ينتهي في Unix seconds",
+        ownerDescription: "يصدر المفتاح لحسابك الإداري المسجل حاليا.",
+        expiresAt: "ينتهي في",
+        expiryDescription: "اختر تاريخا ووقتا أو اتركه بلا انتهاء.",
+        noExpiry: "بلا انتهاء",
+        clearExpiry: "مسح الانتهاء",
+        expiryPast: "اختر وقت انتهاء في المستقبل.",
         tools: "الأدوات",
         games: "الألعاب",
         media: "قنوات الإعلام",
@@ -43,7 +50,12 @@ function text(locale: Locale) {
         label: "Label",
         owner: "Owner Discord ID",
         ownerName: "Owner name",
-        expiresAt: "Expires at Unix seconds",
+        ownerDescription: "Keys are issued to your signed-in admin account.",
+        expiresAt: "Expires at",
+        expiryDescription: "Pick a date and time, or leave blank for no expiry.",
+        noExpiry: "No expiry",
+        clearExpiry: "Clear expiry",
+        expiryPast: "Pick a future expiry time.",
         tools: "Tools",
         games: "Games",
         media: "Media channels",
@@ -98,6 +110,19 @@ function Chips({
   );
 }
 
+function getExpirySeconds(date: Date | undefined, time: string) {
+  if (!date) return null;
+  const [rawHours, rawMinutes] = time.split(":").map((part) => Number(part));
+  const expiresAt = new Date(date);
+  expiresAt.setHours(
+    Number.isFinite(rawHours) ? rawHours : 23,
+    Number.isFinite(rawMinutes) ? rawMinutes : 59,
+    0,
+    0,
+  );
+  return Math.floor(expiresAt.getTime() / 1000);
+}
+
 export function McpKeyManager({
   keys,
   tools,
@@ -123,12 +148,18 @@ export function McpKeyManager({
   const [copied, setCopied] = useState(false);
   const [removeTarget, setRemoveTarget] = useState<McpKey | null>(null);
   const [label, setLabel] = useState("");
-  const [ownerDiscordId, setOwnerDiscordId] = useState(defaultOwnerDiscordId);
-  const [ownerName, setOwnerName] = useState(defaultOwnerName);
-  const [expiresAt, setExpiresAt] = useState("");
+  const ownerDiscordId = defaultOwnerDiscordId;
+  const ownerName = defaultOwnerName;
+  const [expiresOn, setExpiresOn] = useState<Date | undefined>();
+  const [expiresTime, setExpiresTime] = useState("23:59");
   const [selectedTools, setSelectedTools] = useState<Set<string>>(new Set(tools));
   const [selectedGames, setSelectedGames] = useState<Set<string>>(new Set());
   const [selectedMedia, setSelectedMedia] = useState<Set<string>>(new Set());
+  const dateFormatter = new Intl.DateTimeFormat(locale === "ar" ? "ar-SA" : "en-US", {
+    dateStyle: "medium",
+  });
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
 
   const toggle = (set: Set<string>, setFn: (next: Set<string>) => void, value: string) => {
     const next = new Set(set);
@@ -142,6 +173,10 @@ export function McpKeyManager({
     setError(null);
     setSecret(null);
     try {
+      const expiresAt = getExpirySeconds(expiresOn, expiresTime);
+      if (expiresAt !== null && expiresAt <= Math.floor(Date.now() / 1000)) {
+        throw new Error(t.expiryPast);
+      }
       const res = await fetch("/api/admin/mcp-keys", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -149,7 +184,7 @@ export function McpKeyManager({
           label,
           ownerDiscordId,
           ownerName,
-          expiresAt: expiresAt.trim() ? Number(expiresAt) : null,
+          expiresAt,
           tools: [...selectedTools],
           games: [...selectedGames],
           media: [...selectedMedia],
@@ -159,6 +194,8 @@ export function McpKeyManager({
       if (!res.ok) throw new Error(data.error || t.failed);
       setSecret(data.secret);
       setLabel("");
+      setExpiresOn(undefined);
+      setExpiresTime("23:59");
       router.refresh();
     } catch (err) {
       setError((err as Error).message);
@@ -229,16 +266,62 @@ export function McpKeyManager({
             </Field>
             <Field>
               <FieldLabel>{t.expiresAt}</FieldLabel>
-              <Input value={expiresAt} onChange={(event) => setExpiresAt(event.target.value)} inputMode="numeric" />
-              <FieldDescription>Leave blank for no expiry.</FieldDescription>
+              <div className="flex flex-col gap-2 sm:flex-row">
+                <Popover>
+                  <PopoverTrigger
+                    render={
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className={cn(
+                          "justify-start text-start sm:min-w-48",
+                          !expiresOn && "text-muted-foreground",
+                        )}
+                      />
+                    }
+                  >
+                    <CalendarIcon data-icon="inline-start" />
+                    {expiresOn ? dateFormatter.format(expiresOn) : t.noExpiry}
+                  </PopoverTrigger>
+                  <PopoverContent align="start" className="w-auto p-0">
+                    <Calendar
+                      mode="single"
+                      selected={expiresOn}
+                      onSelect={setExpiresOn}
+                      disabled={{ before: today }}
+                    />
+                  </PopoverContent>
+                </Popover>
+                <Input
+                  type="time"
+                  value={expiresTime}
+                  onChange={(event) => setExpiresTime(event.target.value)}
+                  disabled={!expiresOn}
+                  className="sm:w-32"
+                />
+                {expiresOn ? (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => setExpiresOn(undefined)}
+                    aria-label={t.clearExpiry}
+                    title={t.clearExpiry}
+                  >
+                    <XIcon />
+                  </Button>
+                ) : null}
+              </div>
+              <FieldDescription>{t.expiryDescription}</FieldDescription>
             </Field>
             <Field>
               <FieldLabel>{t.owner}</FieldLabel>
-              <Input value={ownerDiscordId} onChange={(event) => setOwnerDiscordId(event.target.value)} />
+              <Input value={ownerDiscordId} readOnly className="bg-muted/40" />
+              <FieldDescription>{t.ownerDescription}</FieldDescription>
             </Field>
             <Field>
               <FieldLabel>{t.ownerName}</FieldLabel>
-              <Input value={ownerName} onChange={(event) => setOwnerName(event.target.value)} />
+              <Input value={ownerName} readOnly className="bg-muted/40" />
             </Field>
           </div>
           <Chips
