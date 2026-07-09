@@ -13,7 +13,6 @@ const {
   MCP_TOOL_NAMES,
   createMcpKey,
   getMcpKey,
-  hashMcpKeySecret,
   listMcpKeys,
   revokeMcpKey,
   touchMcpKey,
@@ -24,6 +23,11 @@ test.after(() => {
   closeDb();
   rmSync(dir, { recursive: true, force: true });
 });
+
+function assertNoVerifier(value) {
+  assert.equal(Object.hasOwn(value, 'keyHash'), false);
+  assert.equal(Object.hasOwn(value, 'key_hash'), false);
+}
 
 test('creates one-time MCP key secret and stores only hash metadata', async () => {
   const { key, secret } = await createMcpKey({
@@ -38,14 +42,14 @@ test('creates one-time MCP key secret and stores only hash metadata', async () =
 
   assert.match(secret, /^ec_mcp_live_/);
   assert.equal(key.keyPrefix, secret.slice(0, 18));
-  assert.notEqual(key.keyHash, secret);
-  assert.equal(key.keyHash, hashMcpKeySecret(secret));
+  assertNoVerifier(key);
   assert.deepEqual(key.tools, ['get_site_overview']);
   assert.deepEqual(key.games, ['valorant']);
   assert.deepEqual(key.media, ['newsroom']);
 
   const verified = await verifyMcpKeySecret(secret);
   assert.equal(verified.id, key.id);
+  assertNoVerifier(verified);
   assert.equal(await verifyMcpKeySecret(`${secret}wrong`), null);
 });
 
@@ -65,6 +69,7 @@ test('touch updates last-used timestamp', async () => {
   await touchMcpKey(key.id);
   const updated = await getMcpKey(key.id);
   assert.ok(updated.lastUsedAt, 'last-used timestamp should be set');
+  assertNoVerifier(updated);
 });
 
 test('revoked and expired MCP keys do not verify', async () => {
@@ -79,12 +84,15 @@ test('revoked and expired MCP keys do not verify', async () => {
     expiresAt: 100,
   });
   assert.equal(await verifyMcpKeySecret(expired.secret, 101), null);
-  assert.ok(await verifyMcpKeySecret(expired.secret, 99));
+  const validBeforeExpiry = await verifyMcpKeySecret(expired.secret, 99);
+  assert.ok(validBeforeExpiry);
+  assertNoVerifier(validBeforeExpiry);
 });
 
 test('lists active keys before revoked keys', async () => {
   const keys = await listMcpKeys();
   assert.ok(keys.length >= 4);
+  keys.forEach(assertNoVerifier);
   const firstRevoked = keys.findIndex((key) => key.revokedAt);
   if (firstRevoked !== -1) {
     assert.ok(keys.slice(0, firstRevoked).every((key) => !key.revokedAt));

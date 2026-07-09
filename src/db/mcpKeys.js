@@ -44,7 +44,31 @@ function normalizeArray(values, allowed = null) {
   ].sort();
 }
 
-function hydrate(row) {
+/**
+ * @typedef {object} StoredMcpKey
+ * @property {number} id
+ * @property {string} keyHash
+ * @property {string} keyPrefix
+ * @property {string} label
+ * @property {string} ownerDiscordId
+ * @property {string|null} ownerName
+ * @property {string[]} tools
+ * @property {string[]} games
+ * @property {string[]} media
+ * @property {number|null} expiresAt
+ * @property {string|null} revokedAt
+ * @property {string|null} lastUsedAt
+ * @property {string|null} createdBy
+ * @property {string} createdAt
+ *
+ * @typedef {Omit<StoredMcpKey, 'keyHash'>} SafeMcpKey
+ */
+
+/**
+ * @param {Record<string, any>|null|undefined} row
+ * @returns {StoredMcpKey|null}
+ */
+function hydrateStoredKey(row) {
   if (!row) return null;
   return {
     id: Number(row.id),
@@ -61,6 +85,29 @@ function hydrate(row) {
     lastUsedAt: row.last_used_at || null,
     createdBy: row.created_by || null,
     createdAt: row.created_at,
+  };
+}
+
+/**
+ * @param {StoredMcpKey|null} stored
+ * @returns {SafeMcpKey|null}
+ */
+function safeKeyMetadata(stored) {
+  if (!stored) return null;
+  return {
+    id: stored.id,
+    keyPrefix: stored.keyPrefix,
+    label: stored.label,
+    ownerDiscordId: stored.ownerDiscordId,
+    ownerName: stored.ownerName,
+    tools: stored.tools,
+    games: stored.games,
+    media: stored.media,
+    expiresAt: stored.expiresAt,
+    revokedAt: stored.revokedAt,
+    lastUsedAt: stored.lastUsedAt,
+    createdBy: stored.createdBy,
+    createdAt: stored.createdAt,
   };
 }
 
@@ -113,7 +160,7 @@ export async function createMcpKey({
       createdBy || null,
     ],
   );
-  return { key: hydrate(row), secret };
+  return { key: safeKeyMetadata(hydrateStoredKey(row)), secret };
 }
 
 export async function listMcpKeys() {
@@ -121,24 +168,24 @@ export async function listMcpKeys() {
     `SELECT * FROM ewc_mcp_keys
      ORDER BY revoked_at IS NOT NULL ASC, created_at DESC, id DESC`,
   );
-  return rows.map(hydrate);
+  return rows.map(hydrateStoredKey).map(safeKeyMetadata);
 }
 
 export async function getMcpKey(id) {
-  return hydrate(await get('SELECT * FROM ewc_mcp_keys WHERE id = $1', [id]));
+  return safeKeyMetadata(hydrateStoredKey(await get('SELECT * FROM ewc_mcp_keys WHERE id = $1', [id])));
 }
 
-export async function getMcpKeyByHash(hash) {
-  return hydrate(await get('SELECT * FROM ewc_mcp_keys WHERE key_hash = $1', [hash]));
+async function getMcpKeyByHash(hash) {
+  return hydrateStoredKey(await get('SELECT * FROM ewc_mcp_keys WHERE key_hash = $1', [hash]));
 }
 
 export async function verifyMcpKeySecret(secret, nowSec = Math.floor(Date.now() / 1000)) {
   const hash = hashMcpKeySecret(secret);
-  const row = await getMcpKeyByHash(hash);
-  if (!row || !timingSafeHashEqual(row.keyHash, hash)) return null;
-  if (row.revokedAt) return null;
-  if (row.expiresAt != null && row.expiresAt <= nowSec) return null;
-  return row;
+  const stored = await getMcpKeyByHash(hash);
+  if (!stored || !timingSafeHashEqual(stored.keyHash, hash)) return null;
+  if (stored.revokedAt) return null;
+  if (stored.expiresAt != null && stored.expiresAt <= nowSec) return null;
+  return safeKeyMetadata(stored);
 }
 
 export async function touchMcpKey(id) {

@@ -90,7 +90,84 @@ or optimize for guild counts.
 | 059  | Per-match co-stream strip on live match cards | P3 | M | 057 | DONE — executor (worktree, reviewed/APPROVED). Reviewer re-ran gates: bot 244, web 264, lint+build green; scope clean (7 files). Batched `channelsForTournament` (distinct placeholders) + `match-co-streams.ts` (`liveCoStreamsByMatch` + pure `coStreamApplies`, tested) attached server-side to running matches; logo-link strip on the tournament-detail "Live now" cards (live-only, EWC list on EWC tournaments only). Planned @ `30d4a5e`. |
 | 066  | One-tap EWC weekly picks entry (leaderboard button + default week) | P2 | M | — | DONE — executor (worktree, reviewed/APPROVED); shipped PR #64 (squash `7aea8cf`), CI green, deployed. #1 "🎯 Open my picks" button on the auto-updating leaderboard (not owner-gated, clears when no week open) + #3 `/ewc_predict weekly` defaults to current open week via shared `currentOpenWeek`. Reviewer re-ran gates: bot 267 pass. Planned @ `11f5320`. |
 | 067  | Guided season picker (replace raw 10 slash options) | P3 | M-L | 066 | DONE — executor (worktree, reviewed/APPROVED); shipped PR #64 (squash `7aea8cf`), CI green, deployed. #2 guided slots + club modal mirroring the weekly picker (owner-gated, distinct-club guard, in-place re-render); incremental `upsertSeasonClubPick` (no schema change); raw 10-option path kept for back-compat. Reviewer verified all builders imported (UI not covered by tests). Planned @ `11f5320`. |
+| 068  | Keep MCP key verifier hashes server-private | P1 | S | - | DONE |
+| 069  | Derive MCP permissions, UI, tests, and docs from one tool manifest | P1 | M | 068 | TODO |
+| 070  | Apply canonical news validation to MCP-created drafts | P1 | S | - | DONE |
+| 071  | Make admin MCP news search honor locale and combined owner filters | P2 | M | - | TODO |
+| 072  | Make MCP writes atomic, audited, and idempotent | P1 | L | 070 | TODO |
+| 073  | Let admin MCP clients discover usable scopes and resource IDs | P2 | M | 069 | TODO |
+| 074  | Confirm client-side admin navigation when a news draft is dirty | P1 | M | - | DONE |
+| 075  | Redesign MCP key creation around purpose, least privilege, and setup success | P2 | L | 069, 073 | TODO |
+| 076  | Standardize the admin workspace with shadcn Sidebar and entity-aware navigation | P2 | L | 074 | TODO |
 Status values: TODO | IN PROGRESS | DONE | BLOCKED (reason) | REJECTED (rationale) | SUPERSEDED.
+
+## MCP + admin experience audit (2026-07-09 @ `5091ff1`)
+
+Source-only audit of the admin/public MCP implementation and the admin dashboard
+shell, key-management workflow, news editor navigation, bilingual docs, and
+Base UI shadcn composition. The operator selected all nine vetted findings for
+planning. Plans 068-076 are self-contained handoffs; no application code was
+changed during the audit.
+
+Recommended execution order:
+
+1. **Immediate boundaries and correctness**: 068, 070, and 074 can run in
+   parallel. They close the verifier DTO leak, invalid MCP draft writes, and
+   client-navigation data loss.
+2. **Shared MCP contract**: 069 after 068, then 073. This establishes one tool
+   manifest before adding always-on capability discovery.
+3. **Write integrity**: 072 after 070. It is the highest-risk plan and must use
+   one dual-backend transaction for mutation, audit, and retry receipt.
+4. **Experience work**: 075 after 069+073; 076 after 074. The key workflow must
+   understand real capability classes, and the Sidebar migration must preserve
+   the shared dirty-navigation guard.
+
+Findings mapped to plans:
+
+- **068**: runtime `keyHash` survived TypeScript casts and object spreads into
+  admin API/page objects. The stored secret has high entropy, so forced key
+  rotation is not part of the plan; explicit safe DTOs are.
+- **069**: tool names, grant semantics, UI, tests, and bilingual docs drifted
+  across several sources. Existing public-only reads intentionally remain
+  always available through admin MCP.
+- **070**: `create_news_draft` bypassed canonical content limits and owner
+  existence checks.
+- **071**: combined game+media news filters generated impossible SQL and locale
+  search ran against the default-language projection.
+- **072**: MCP writes, audit rows, stream sibling propagation, and retries were
+  not one atomic/idempotent operation.
+- **073**: write tools required media slugs and numeric stream IDs that clients
+  could not discover safely.
+- **074**: `beforeunload` covered tab close/hard navigation but not normal Next
+  Link navigation in the admin workspace.
+- **075**: the key form defaulted to maximum access and used inaccessible,
+  unsearchable custom chips instead of Base UI shadcn controls.
+- **076**: the custom admin shell/static breadcrumb/manual page headers caused
+  dynamic-route ambiguity, RTL arrow regressions, and excess vertical space.
+
+Considered and not planned in this pass:
+
+- **Brute-forcing a leaked verifier into a bearer secret**: impractical with
+  the current 32-byte random secret; the concrete issue is verifier disclosure
+  and unsafe serialization, addressed by 068.
+- **Public MCP exposing raw enrichment/auth fields**: current team/player,
+  co-stream, and leaderboard projections are explicit and tests cover public
+  fields. No concrete leak was found.
+- **Admin news-list N+1/per-request filtering rewrite**: cached, bounded, and
+  previously accepted for the single-guild deployment. Plan 071 changes only
+  the semantics needed for correct MCP locale/owner filtering.
+- **Next/PostCSS moderate audit advisory**: no high/critical production
+  advisory and no stable framework target verified in this audit; retain the
+  existing upgrade watch rather than forcing a canary.
+- **A new DOM test stack**: the current Vitest environment is node-only. Plans
+  074/075 extract pure models and require browser acceptance; adding jsdom or
+  React Testing Library remains a separate workflow decision.
+- **New MCP publishing/moderation powers**: deferred. V1 writes stay draft-only
+  or narrowly scoped stream updates.
+
+Not audited in this pass: Discord bot match/fetch behavior, unrelated public
+website pages, production CranL runtime state, and the unrelated untracked
+Discord image assets in `apps/web/src/app`.
 
 ## Ninth pass (2026-06-24 @ `11f5320`) — EWC command interaction UX (operator: "execute all 3")
 

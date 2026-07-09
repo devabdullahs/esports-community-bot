@@ -114,6 +114,13 @@ const en = {
     newsTitle: "News & posts",
     newsDescription: "Draft, edit, publish, and remove the updates shown on game pages.",
   },
+  navigationGuard: {
+    title: "Discard unsaved draft?",
+    description:
+      "This news draft has unsaved changes. Leave this page and discard them?",
+    cancel: "Stay on page",
+    discard: "Discard and continue",
+  },
   newsList: {
     newPost: "New post",
     editPost: "Edit post",
@@ -530,6 +537,13 @@ const ar: typeof en = {
     },
     newsTitle: "الأخبار والمنشورات",
     newsDescription: "أنشئ وعدّل وانشر واحذف التحديثات المعروضة في صفحات الألعاب.",
+  },
+  navigationGuard: {
+    title: "تجاهل المسودة غير المحفوظة؟",
+    description:
+      "تحتوي مسودة الخبر على تغييرات غير محفوظة. هل تريد مغادرة الصفحة وتجاهلها؟",
+    cancel: "البقاء في الصفحة",
+    discard: "تجاهل ومتابعة",
   },
   newsList: {
     newPost: "منشور جديد",

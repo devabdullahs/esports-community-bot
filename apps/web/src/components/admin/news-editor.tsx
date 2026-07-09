@@ -54,6 +54,7 @@ import {
   NEWS_SUMMARY_MAX_LENGTH,
   NEWS_TITLE_MAX_LENGTH,
 } from "@/lib/news-validation";
+import { useAdminNavigationGuard } from "@/components/admin/admin-navigation-guard";
 import { ImageCropDialog } from "@/components/admin/image-crop-dialog";
 import { AuthorAvatar } from "@/components/news/author-avatar";
 import { PostBody } from "@/components/news/post-body";
@@ -758,16 +759,11 @@ export function NewsEditor({
     contentSnapshot !== contentBaselineRef.current ||
     (authorsBaselineRef.current !== null && authorsSnapshot !== authorsBaselineRef.current);
 
-  // Warn before losing unsaved work on tab close / hard navigation. Client-side
-  // router.push after a successful save does not trigger beforeunload.
-  useEffect(() => {
-    if (!isDirty || busy !== null) return;
-    const handler = (event: BeforeUnloadEvent) => {
-      event.preventDefault();
-    };
-    window.addEventListener("beforeunload", handler);
-    return () => window.removeEventListener("beforeunload", handler);
-  }, [isDirty, busy]);
+  const dirtySourceId = useMemo(
+    () => `news-editor:${post?.id ?? mode}:${mediaChannel?.slug ?? "game"}`,
+    [mediaChannel?.slug, mode, post?.id],
+  );
+  useAdminNavigationGuard(dirtySourceId, isDirty && busy === null);
 
   // Ctrl/Cmd+S saves a draft. The handler reads through a ref so the listener
   // doesn't need to re-bind on every state change persist() closes over.
