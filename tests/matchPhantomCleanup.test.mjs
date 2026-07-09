@@ -283,6 +283,41 @@ test('removes Poor Rangers live-widget aliases covered by a current live Power R
   assert.equal(await getMatch('liquipedia', 'dota2:1783505700:Poor Rangers:BB Team'), null);
 });
 
+test('removes Rune Eaters short-name live-widget aliases covered by a current full-name result', async () => {
+  const t = await tournament('dota2/EWC/2026-rune-eaters');
+  await liveAlias(
+    t.id,
+    'dota2:Esports_World_Cup/2026/Group_Stage:matchlist:24:betboom team vs rune eaters esports',
+    'BetBoom Team',
+    'Rune Eaters Esports',
+    0,
+    0,
+    1783587600,
+  );
+  await liveAlias(
+    t.id,
+    'dota2:1783587600:BB Team:Rune Eaters',
+    'BB Team',
+    'Rune Eaters',
+    0,
+    0,
+    1783587600,
+  );
+
+  const removed = await deleteTournamentDuplicateMatches(t.id, [
+    'dota2:Esports_World_Cup/2026/Group_Stage:matchlist:24:betboom team vs rune eaters esports',
+  ]);
+
+  assert.equal(removed, 1);
+  assert.ok(
+    await getMatch(
+      'liquipedia',
+      'dota2:Esports_World_Cup/2026/Group_Stage:matchlist:24:betboom team vs rune eaters esports',
+    ),
+  );
+  assert.equal(await getMatch('liquipedia', 'dota2:1783587600:BB Team:Rune Eaters'), null);
+});
+
 test('keeps a later same-day live-widget alias as a possible rematch', async () => {
   const t = await tournament('dota2/EWC/2026-playtime-rematch');
   await match(t.id, 'Match:ID_B5F8Z45QjB_0002', 'Team Liquid', 'PlayTime', 1, 1, 1783427100);
@@ -341,6 +376,39 @@ test('startup cleanup removes stale live-widget aliases covered by a scored live
     ),
   );
   assert.equal(await getMatch('liquipedia', 'dota2:1783505700:Poor Rangers:BB Team'), null);
+});
+
+test('startup cleanup removes Rune Eaters short-name live-widget aliases', async () => {
+  const t = await tournament('dota2/EWC/2026-rune-eaters-startup');
+  await liveAlias(
+    t.id,
+    'dota2:Esports_World_Cup/2026/Group_Stage:matchlist:24:betboom team vs rune eaters esports',
+    'BetBoom Team',
+    'Rune Eaters Esports',
+    0,
+    0,
+    1783587600,
+  );
+  await liveAlias(
+    t.id,
+    'dota2:1783587600:BB Team:Rune Eaters',
+    'BB Team',
+    'Rune Eaters',
+    0,
+    0,
+    1783587600,
+  );
+
+  const removed = await deleteResolvedLiveAliasMatches();
+
+  assert.equal(removed, 1);
+  assert.ok(
+    await getMatch(
+      'liquipedia',
+      'dota2:Esports_World_Cup/2026/Group_Stage:matchlist:24:betboom team vs rune eaters esports',
+    ),
+  );
+  assert.equal(await getMatch('liquipedia', 'dota2:1783587600:BB Team:Rune Eaters'), null);
 });
 
 test('startup cleanup keeps non-alias live-widget rows for the same pair', async () => {
