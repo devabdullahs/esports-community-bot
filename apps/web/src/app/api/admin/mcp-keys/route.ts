@@ -5,7 +5,7 @@ import { sameOriginOr403 } from "@/lib/community";
 import { listGames } from "@/lib/games";
 import { listMediaChannels } from "@/lib/media";
 import { MCP_NO_SCOPE_SENTINEL } from "@/lib/mcp-auth";
-import { createMcpKey, listMcpKeys, MCP_TOOL_NAMES } from "@/lib/mcp-keys";
+import { createMcpKey, listMcpKeys, MCP_TOOL_NAMES, toMcpKeyDto, type McpKey } from "@/lib/mcp-keys";
 import { rateLimitOr429 } from "@/lib/rate-limit";
 
 export const runtime = "nodejs";
@@ -39,11 +39,22 @@ function storedScopes(selected: string[], allowed: string[]) {
   return allowed.length > 0 ? [MCP_NO_SCOPE_SENTINEL] : [];
 }
 
-function publicKey(key: Awaited<ReturnType<typeof createMcpKey>>["key"]) {
+function publicKey(key: McpKey) {
+  const dto = toMcpKeyDto(key);
   return {
-    ...key,
-    games: key.games.filter((scope) => scope !== MCP_NO_SCOPE_SENTINEL),
-    media: key.media.filter((scope) => scope !== MCP_NO_SCOPE_SENTINEL),
+    id: dto.id,
+    keyPrefix: dto.keyPrefix,
+    label: dto.label,
+    ownerDiscordId: dto.ownerDiscordId,
+    ownerName: dto.ownerName,
+    tools: dto.tools,
+    games: dto.games.filter((scope) => scope !== MCP_NO_SCOPE_SENTINEL),
+    media: dto.media.filter((scope) => scope !== MCP_NO_SCOPE_SENTINEL),
+    expiresAt: dto.expiresAt,
+    revokedAt: dto.revokedAt,
+    lastUsedAt: dto.lastUsedAt,
+    createdBy: dto.createdBy,
+    createdAt: dto.createdAt,
   };
 }
 
@@ -110,5 +121,5 @@ export async function POST(request: Request) {
     games,
     media,
   });
-  return NextResponse.json({ ...created, key: publicKey(created.key) }, { status: 201 });
+  return NextResponse.json({ key: publicKey(created.key), secret: created.secret }, { status: 201 });
 }

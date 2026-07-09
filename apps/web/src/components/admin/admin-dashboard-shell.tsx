@@ -23,6 +23,7 @@ import {
 import { cn } from "@/lib/utils";
 import { copy, type Locale } from "@/lib/i18n";
 import { getAdminCopy } from "@/lib/admin-copy";
+import { AdminNavigationGuardProvider } from "@/components/admin/admin-navigation-guard";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -291,86 +292,88 @@ export function AdminDashboardShell({
   const side = locale === "ar" ? "right" : "left";
 
   return (
-    <div className="flex min-h-svh bg-background">
-      <aside className="sticky top-0 hidden h-svh w-72 shrink-0 border-e border-border bg-card/60 lg:flex lg:flex-col">
-        <div className="flex h-16 shrink-0 items-center gap-3 border-b border-border px-4">
-          <span className="flex size-9 items-center justify-center rounded-lg bg-primary text-primary-foreground">
-            <ShieldIcon className="size-5" />
-          </span>
-          <span className="min-w-0">
-            <span className="block truncate font-semibold">{common.brand}</span>
-            <span className="block truncate text-xs text-muted-foreground">
-              {common.admin}
+    <AdminNavigationGuardProvider locale={locale}>
+      <div className="flex min-h-svh bg-background">
+        <aside className="sticky top-0 hidden h-svh w-72 shrink-0 border-e border-border bg-card/60 lg:flex lg:flex-col">
+          <div className="flex h-16 shrink-0 items-center gap-3 border-b border-border px-4">
+            <span className="flex size-9 items-center justify-center rounded-lg bg-primary text-primary-foreground">
+              <ShieldIcon className="size-5" />
             </span>
-          </span>
-        </div>
-        <AdminNavigation
-          locale={locale}
-          isSuper={isSuper}
-          canManageGamePosts={canManageGamePosts}
-          canManageMediaPosts={canManageMediaPosts}
-        />
-        <div className="border-t border-border p-3">
-          <Button
-            render={<Link href="/" />}
-            nativeButton={false}
-            variant="outline"
-            className="w-full justify-start"
-          >
-            <HomeIcon data-icon="inline-start" />
-            {common.home}
-          </Button>
-        </div>
-      </aside>
-
-      <div className="flex min-w-0 flex-1 flex-col">
-        <header className="sticky top-0 z-30 flex h-16 shrink-0 items-center gap-2 border-b border-border bg-background/95 px-4 backdrop-blur supports-backdrop-filter:bg-background/80 sm:px-6">
-          <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
-            <SheetTrigger
-              render={
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="lg:hidden"
-                  aria-label={common.menu}
-                />
-              }
-            >
-              <MenuIcon />
-            </SheetTrigger>
-            <SheetContent
-              side={side}
-              className="w-[20rem] max-w-[85vw] gap-0 p-0"
-              showCloseButton
-            >
-              <SheetHeader className="border-b border-border px-4 py-4">
-                <SheetTitle>{common.admin}</SheetTitle>
-                <SheetDescription>{dashboard.description}</SheetDescription>
-              </SheetHeader>
-              <AdminNavigation
-                locale={locale}
-                isSuper={isSuper}
-                canManageGamePosts={canManageGamePosts}
-                canManageMediaPosts={canManageMediaPosts}
-                onNavigate={() => setMobileOpen(false)}
-              />
-            </SheetContent>
-          </Sheet>
-
-          <AdminBreadcrumb locale={locale} />
-          <div className="ms-auto flex min-w-0 items-center gap-2">
-            <Badge variant={isSuper ? "default" : "secondary"} className="hidden sm:inline-flex">
-              {roleLabel}
-            </Badge>
-            {displayName ? (
-              <span className="hidden max-w-40 truncate text-sm text-muted-foreground md:block">
-                {displayName}
+            <span className="min-w-0">
+              <span className="block truncate font-semibold">{common.brand}</span>
+              <span className="block truncate text-xs text-muted-foreground">
+                {common.admin}
               </span>
-            ) : null}
+            </span>
           </div>
-        </header>
-        <div className="min-w-0 flex-1">{children}</div>
+          <AdminNavigation
+            locale={locale}
+            isSuper={isSuper}
+            canManageGamePosts={canManageGamePosts}
+            canManageMediaPosts={canManageMediaPosts}
+          />
+          <div className="border-t border-border p-3">
+            <Button
+              render={<Link href="/" />}
+              nativeButton={false}
+              variant="outline"
+              className="w-full justify-start"
+            >
+              <HomeIcon data-icon="inline-start" />
+              {common.home}
+            </Button>
+          </div>
+        </aside>
+
+        <div className="flex min-w-0 flex-1 flex-col">
+          <header className="sticky top-0 z-30 flex h-16 shrink-0 items-center gap-2 border-b border-border bg-background/95 px-4 backdrop-blur supports-backdrop-filter:bg-background/80 sm:px-6">
+            <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
+              <SheetTrigger
+                render={
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="lg:hidden"
+                    aria-label={common.menu}
+                  />
+                }
+              >
+                <MenuIcon />
+              </SheetTrigger>
+              <SheetContent
+                side={side}
+                className="w-[20rem] max-w-[85vw] gap-0 p-0"
+                showCloseButton
+              >
+                <SheetHeader className="border-b border-border px-4 py-4">
+                  <SheetTitle>{common.admin}</SheetTitle>
+                  <SheetDescription>{dashboard.description}</SheetDescription>
+                </SheetHeader>
+                <AdminNavigation
+                  locale={locale}
+                  isSuper={isSuper}
+                  canManageGamePosts={canManageGamePosts}
+                  canManageMediaPosts={canManageMediaPosts}
+                  onNavigate={() => setMobileOpen(false)}
+                />
+              </SheetContent>
+            </Sheet>
+
+            <AdminBreadcrumb locale={locale} />
+            <div className="ms-auto flex min-w-0 items-center gap-2">
+              <Badge variant={isSuper ? "default" : "secondary"} className="hidden sm:inline-flex">
+                {roleLabel}
+              </Badge>
+              {displayName ? (
+                <span className="hidden max-w-40 truncate text-sm text-muted-foreground md:block">
+                  {displayName}
+                </span>
+              ) : null}
+            </div>
+          </header>
+          <div className="min-w-0 flex-1">{children}</div>
+        </div>
       </div>
-    </div>
+    </AdminNavigationGuardProvider>
   );
 }

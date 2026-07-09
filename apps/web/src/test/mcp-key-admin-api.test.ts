@@ -18,6 +18,21 @@ const GAME_BLOCKED = "mcp-self-dota";
 const MEDIA_ALLOWED = "mcp-self-media";
 const MEDIA_BLOCKED = "mcp-self-blocked-media";
 const SCOPED_ID = "123456789012345679";
+const PUBLIC_KEY_FIELDS = [
+  "createdAt",
+  "createdBy",
+  "expiresAt",
+  "games",
+  "id",
+  "keyPrefix",
+  "label",
+  "lastUsedAt",
+  "media",
+  "ownerDiscordId",
+  "ownerName",
+  "revokedAt",
+  "tools",
+].sort();
 
 function req(method: string, body?: unknown) {
   return new Request("http://localhost/api/admin/mcp-keys", {
@@ -43,6 +58,13 @@ function scopedAccess(): AdminAccess {
     media: [MEDIA_ALLOWED],
     allowed: true,
   };
+}
+
+function expectPublicKeyShape(key: Record<string, unknown>) {
+  expect(Object.keys(key).sort()).toEqual(PUBLIC_KEY_FIELDS);
+  expect(key).not.toHaveProperty("keyHash");
+  expect(key).not.toHaveProperty("key_hash");
+  expect(key).not.toHaveProperty("secret");
 }
 
 async function seedGame(slug: string) {
@@ -109,7 +131,9 @@ describe("/api/admin/mcp-keys self-service", () => {
 
     expect(response.status).toBe(201);
     const body = await response.json();
+    expect(Object.keys(body).sort()).toEqual(["key", "secret"]);
     expect(body.secret).toMatch(/^ec_mcp_live_/);
+    expectPublicKeyShape(body.key);
     expect(body.key).toMatchObject({
       ownerDiscordId: SCOPED_ID,
       ownerName: "Scoped MCP Admin",
@@ -131,6 +155,7 @@ describe("/api/admin/mcp-keys self-service", () => {
 
     expect(response.status).toBe(201);
     const body = await response.json();
+    expectPublicKeyShape(body.key);
     expect(body.key.games).toEqual([]);
     expect(body.key.media).toEqual([]);
 
@@ -162,6 +187,7 @@ describe("/api/admin/mcp-keys self-service", () => {
     const ids = body.keys.map((key: { id: number }) => key.id);
     expect(ids).toContain(own.key.id);
     expect(ids).not.toContain(other.key.id);
+    body.keys.forEach((key: Record<string, unknown>) => expectPublicKeyShape(key));
     expect(body.keys.every((key: { ownerDiscordId: string }) => key.ownerDiscordId === SCOPED_ID)).toBe(true);
   });
 
@@ -189,6 +215,7 @@ describe("/api/admin/mcp-keys self-service", () => {
     expect(response.status).toBe(200);
     const body = await response.json();
     expect(body.keys.length).toBeGreaterThan(0);
+    body.keys.forEach((key: Record<string, unknown>) => expectPublicKeyShape(key));
     expect(new Set(body.keys.map((key: { ownerDiscordId: string }) => key.ownerDiscordId)).size).toBeGreaterThan(1);
   });
 });

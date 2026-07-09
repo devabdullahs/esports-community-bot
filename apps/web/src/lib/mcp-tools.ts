@@ -9,7 +9,7 @@ import { z } from "zod";
 import { listReportedModerationComments } from "@/lib/comments";
 import { filterEwcClubTracker, getEwcClubTrackerForMcp } from "@/lib/ewc-clubs";
 import { CLUB_REGION_IDS } from "@/lib/ewc-club-regions";
-import { listGames } from "@/lib/games";
+import { getGame, listGames } from "@/lib/games";
 import {
   canMcpManageGame,
   canMcpManageMedia,
@@ -18,7 +18,13 @@ import {
   type McpAccess,
 } from "@/lib/mcp-auth";
 import { listAdminNewsPosts, createNewsPost } from "@/lib/news";
-import { listMediaChannels } from "@/lib/media";
+import { getMediaChannel, listMediaChannels } from "@/lib/media";
+import {
+  NEWS_BODY_MAX_LENGTH,
+  NEWS_SUMMARY_MAX_LENGTH,
+  NEWS_TITLE_MAX_LENGTH,
+  validateNewsInput,
+} from "@/lib/news-validation";
 import { registerPublicMcpTools } from "@/lib/public-mcp-tools";
 import { getStreamChannel, updateStreamChannel } from "@/lib/stream-channels";
 
@@ -321,9 +327,9 @@ export function createAdminMcpServer(access: McpAccess) {
       title: "Create News Draft",
       description: "Create a draft news post in an allowed game or media channel.",
       inputSchema: {
-        title: z.string().min(1).max(140),
-        summary: z.string().max(280).optional(),
-        body: z.string().max(20000).optional(),
+        title: z.string().min(1).max(NEWS_TITLE_MAX_LENGTH),
+        summary: z.string().max(NEWS_SUMMARY_MAX_LENGTH).optional(),
+        body: z.string().max(NEWS_BODY_MAX_LENGTH).optional(),
         locale: z.enum(["en", "ar"]).optional(),
         gameSlug: z.string().optional(),
         mediaSlug: z.string().optional(),
@@ -334,25 +340,38 @@ export function createAdminMcpServer(access: McpAccess) {
       assertTool(access, "create_news_draft");
       const cleanGame = gameSlug.trim();
       const cleanMedia = mediaSlug.trim();
-      if (!cleanGame && !cleanMedia) return errorResult("gameSlug or mediaSlug is required.");
-      if (cleanMedia && !canMcpManageMedia(access, cleanMedia)) return errorResult("This MCP key cannot draft for that media channel.");
-      if (!cleanMedia && cleanGame && !canMcpManageGame(access, cleanGame)) return errorResult("This MCP key cannot draft for that game.");
-      const post = await createNewsPost({
-        gameSlug: cleanGame || null,
-        mediaSlug: cleanMedia || null,
+      const validated = validateNewsInput({
+        gameSlug: cleanGame,
+        mediaSlug: cleanMedia,
         contentMode: "shared",
         defaultLocale: locale,
         translations: {
-          [locale]: { title: title.trim(), summary: summary.trim(), body: body.trim() },
+          [locale]: { title, summary, body },
         },
+        status: "draft",
+        ewc,
+      });
+      if (!validated.ok) return errorResult(validated.error);
+
+      const value = validated.value;
+      if (value.mediaSlug) {
+        if (!(await getMediaChannel(value.mediaSlug))) return errorResult("Unknown media channel");
+        if (!canMcpManageMedia(access, value.mediaSlug)) return errorResult("This MCP key cannot draft for that media channel.");
+        if (value.gameSlug && !(await getGame(value.gameSlug))) return errorResult("Unknown game");
+      } else {
+        if (!value.gameSlug || !(await getGame(value.gameSlug))) return errorResult("Unknown game");
+        if (!canMcpManageGame(access, value.gameSlug)) return errorResult("This MCP key cannot draft for that game.");
+      }
+
+      const post = await createNewsPost({
+        ...value,
         status: "draft",
         authorDiscordId: access.discordUserId,
         authorName: access.displayName,
-        ewc,
       });
       await auditMcp(access, "mcp.news.create_draft", String(post.id), {
-        gameSlug: cleanGame || null,
-        mediaSlug: cleanMedia || null,
+        gameSlug: value.gameSlug,
+        mediaSlug: value.mediaSlug,
       });
       return jsonResult({ post });
     },
