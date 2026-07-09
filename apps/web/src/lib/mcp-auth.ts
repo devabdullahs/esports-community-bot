@@ -8,10 +8,12 @@ import {
   verifyMcpKeySecret,
 } from "@bot/db/mcpKeys.js";
 import { getAdmin } from "@/lib/admins";
+import { ADMIN_ALWAYS_ON_MCP_TOOL_NAMES } from "@/lib/mcp-tool-manifest";
 
 type McpKeyRow = Awaited<ReturnType<typeof verifyMcpKeySecret>>;
 
 export const MCP_NO_SCOPE_SENTINEL = "__ec_no_scope__";
+const ADMIN_ALWAYS_ON_MCP_TOOL_SET = new Set<string>(ADMIN_ALWAYS_ON_MCP_TOOL_NAMES);
 
 export type McpAccess = {
   key: NonNullable<McpKeyRow>;
@@ -135,7 +137,7 @@ export async function resolveMcpAccess(request: Request): Promise<
 }
 
 export function canUseMcpTool(access: McpAccess, tool: string) {
-  return access.tools.has(tool);
+  return ADMIN_ALWAYS_ON_MCP_TOOL_SET.has(tool) || access.tools.has(tool);
 }
 
 export function canMcpManageGame(access: McpAccess, slug: string) {

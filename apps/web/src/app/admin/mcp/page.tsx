@@ -9,7 +9,8 @@ import { listGames } from "@/lib/games";
 import { localizedPath } from "@/lib/i18n";
 import { getRequestLocale } from "@/lib/request-locale";
 import { listMediaChannels } from "@/lib/media";
-import { MCP_TOOL_NAMES, listMcpKeys } from "@/lib/mcp-keys";
+import { ADMIN_SELECTABLE_MCP_TOOL_NAMES } from "@/lib/mcp-tool-manifest";
+import { listMcpKeys } from "@/lib/mcp-keys";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -64,7 +65,7 @@ export default async function AdminMcpPage() {
     >
       <McpKeyManager
         keys={keys}
-        tools={MCP_TOOL_NAMES}
+        tools={[...ADMIN_SELECTABLE_MCP_TOOL_NAMES]}
         games={visibleGames.map((game) => ({ slug: game.slug, label: localizeText(game.title, locale) }))}
         media={visibleMedia.map((channel) => ({ slug: channel.slug, label: localizeText(channel.name, locale) }))}
         locale={locale}

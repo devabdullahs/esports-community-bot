@@ -1,4 +1,11 @@
+import { MCP_TOOL_MANIFEST } from "@/lib/mcp-tool-manifest";
 import type { Locale } from "@/lib/i18n";
+
+function publicMcpToolLines(locale: Locale) {
+  return MCP_TOOL_MANIFEST
+    .filter((tool) => tool.surfaces.includes("public"))
+    .map((tool) => `- \`${tool.name}\`: ${tool.description[locale]}`);
+}
 
 const PUBLIC_MCP_COPY_PAGE_EN = [
   "# Public MCP",
@@ -38,16 +45,7 @@ const PUBLIC_MCP_COPY_PAGE_EN = [
   "",
   "## Tools",
   "",
-  "- get_site_overview: public counts for games, tournaments, live/upcoming matches, published news, and live co-streams.",
-  "- list_games: localized public game directory.",
-  "- search_news: published news only, with query, locale, game/media, EWC, and limit filters.",
-  "- get_tournament_status: public matches and standings for one tracked tournament.",
-  "- list_tournaments: public active tournament summaries.",
-  "- get_ewc_club_summary: public EWC club points, qualified games, wins, and region metadata.",
-  "- list_co_streams: public co-stream groups, live-first.",
-  "- search_teams: public team directory search with safe public fields.",
-  "- search_players: public player directory search with safe public fields.",
-  "- get_public_ewc_leaderboard: existing public prediction leaderboard projection.",
+  ...publicMcpToolLines("en"),
   "",
   "## Client Setup",
   "",
@@ -138,16 +136,7 @@ const PUBLIC_MCP_COPY_PAGE_AR = [
   "",
   "## الأدوات",
   "",
-  "- أعداد عامة للألعاب، البطولات، المباريات المباشرة والقادمة، الأخبار المنشورة، والبثوث المشتركة المباشرة: `get_site_overview`.",
-  "- دليل الألعاب العام حسب اللغة: `list_games`.",
-  "- البحث في الأخبار المنشورة فقط مع فلاتر البحث، اللغة، اللعبة أو المنصة الإعلامية، EWC، والحد الأقصى: `search_news`.",
-  "- المباريات والترتيب العام لبطولة متتبعة واحدة: `get_tournament_status`.",
-  "- ملخصات البطولات العامة النشطة: `list_tournaments`.",
-  "- نقاط أندية EWC، الألعاب المتأهلة، الانتصارات، وبيانات المناطق: `get_ewc_club_summary`.",
-  "- مجموعات البثوث المشتركة العامة، مع عرض المباشر أولا: `list_co_streams`.",
-  "- البحث في دليل الفرق العام بحقول عامة آمنة: `search_teams`.",
-  "- البحث في دليل اللاعبين العام بحقول عامة آمنة: `search_players`.",
-  "- عرض لوحة توقعات EWC العامة الحالية: `get_public_ewc_leaderboard`.",
+  ...publicMcpToolLines("ar"),
   "",
   "## إعداد العميل",
   "",
