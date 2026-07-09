@@ -9,7 +9,7 @@ import { z } from "zod";
 import { listReportedModerationComments } from "@/lib/comments";
 import { filterEwcClubTracker, getEwcClubTrackerForMcp } from "@/lib/ewc-clubs";
 import { CLUB_REGION_IDS } from "@/lib/ewc-club-regions";
-import { getGame, listGames } from "@/lib/games";
+import { getGame, listGames, type GameRecord } from "@/lib/games";
 import {
   canMcpManageGame,
   canMcpManageMedia,
@@ -17,8 +17,9 @@ import {
   mcpAuditActor,
   type McpAccess,
 } from "@/lib/mcp-auth";
+import { ADMIN_PUBLIC_OVERLAP_TOOL_NAMES, MCP_TOOL_MANIFEST } from "@/lib/mcp-tool-manifest";
 import { listAdminNewsPosts, createNewsPost } from "@/lib/news";
-import { getMediaChannel, listMediaChannels } from "@/lib/media";
+import { getMediaChannel, listMediaChannels, type MediaChannelRecord } from "@/lib/media";
 import {
   NEWS_BODY_MAX_LENGTH,
   NEWS_SUMMARY_MAX_LENGTH,
@@ -26,13 +27,15 @@ import {
   validateNewsInput,
 } from "@/lib/news-validation";
 import { registerPublicMcpTools } from "@/lib/public-mcp-tools";
-import { getStreamChannel, updateStreamChannel } from "@/lib/stream-channels";
+import { getStreamChannel, listStreamChannels, updateStreamChannel, type StreamChannel } from "@/lib/stream-channels";
 
 type ToolResult = {
   content: Array<{ type: "text"; text: string }>;
   structuredContent?: Record<string, unknown>;
   isError?: boolean;
 };
+
+type CapabilityLocale = "en" | "ar";
 
 function jsonResult(data: Record<string, unknown>): ToolResult {
   return {
@@ -49,6 +52,10 @@ function clampInt(value: unknown, min: number, max: number, fallback: number) {
   const n = Math.trunc(Number(value));
   if (!Number.isFinite(n)) return fallback;
   return Math.max(min, Math.min(max, n));
+}
+
+function localizedText(value: Record<string, string | undefined>, locale: CapabilityLocale) {
+  return value[locale] || value.en || value.ar || "";
 }
 
 function assertTool(access: McpAccess, tool: string) {
@@ -80,7 +87,7 @@ async function auditMcp(access: McpAccess, action: string, target: string | null
   });
 }
 
-function streamAllowed(access: McpAccess, channel: Awaited<ReturnType<typeof getStreamChannel>>) {
+function streamAllowed(access: McpAccess, channel: StreamChannel | null) {
   if (!channel) return false;
   if (access.isSuper) return true;
   if (channel.scope !== "game") return false;
@@ -92,18 +99,97 @@ function scopedPropagationGameSlugs(access: McpAccess) {
   return access.isSuper || access.games === "ALL" ? undefined : access.games;
 }
 
-const ADMIN_PUBLIC_OVERLAP_TOOL_NAMES = [
-  "get_site_overview",
-  "search_news",
-  "get_tournament_status",
-  "get_ewc_club_summary",
-] as const;
+function capabilityGame(game: GameRecord, locale: CapabilityLocale) {
+  return {
+    slug: game.slug,
+    title: localizedText(game.title, locale),
+  };
+}
+
+function capabilityMedia(channel: MediaChannelRecord, locale: CapabilityLocale) {
+  return {
+    slug: channel.slug,
+    name: localizedText(channel.name, locale),
+    ...(channel.gameSlug ? { gameSlug: channel.gameSlug } : {}),
+  };
+}
+
+function capabilityStream(channel: StreamChannel) {
+  return {
+    id: channel.id,
+    platform: channel.platform,
+    handle: channel.handle,
+    label: channel.label,
+    scope: channel.scope,
+    creatorKey: channel.creatorKey,
+    gameSlugs: channel.gameSlugs,
+    active: channel.active,
+    isDefault: channel.isDefault,
+  };
+}
+
+function effectiveTools(access: McpAccess) {
+  return MCP_TOOL_MANIFEST
+    .filter((tool) => tool.surfaces.includes("admin"))
+    .filter((tool) => tool.adminGrant === "always" || access.tools.has(tool.name))
+    .map((tool) => ({
+      name: tool.name,
+      kind: tool.kind,
+      scope: tool.scope,
+      adminGrant: tool.adminGrant,
+      alwaysAvailable: tool.adminGrant === "always",
+      explicitlyGranted: access.tools.has(tool.name),
+    }));
+}
 
 export function createAdminMcpServer(access: McpAccess) {
   const server = new McpServer({
     name: "esports-community-admin",
     version: "0.1.0",
   });
+
+  server.registerTool(
+    "get_admin_capabilities",
+    {
+      title: "Get Admin Capabilities",
+      description: "Discover this MCP key's usable tools, allowed game/media slugs, and writable stream channel IDs.",
+      inputSchema: {
+        locale: z.enum(["en", "ar"]).optional(),
+        limit: z.number().int().min(1).max(100).optional(),
+        offset: z.number().int().min(0).optional(),
+      },
+    },
+    async ({ locale = "en", limit = 50, offset = 0 }) => {
+      const cleanLimit = clampInt(limit, 1, 100, 50);
+      const cleanOffset = clampInt(offset, 0, 100_000, 0);
+      const [games, media, streams] = await Promise.all([
+        listGames(),
+        listMediaChannels(),
+        listStreamChannels(),
+      ]);
+      const visibleGames = games
+        .filter((game) => access.isSuper || canMcpManageGame(access, game.slug))
+        .map((game) => capabilityGame(game, locale));
+      const visibleMedia = media
+        .filter((channel) => access.isSuper || canMcpManageMedia(access, channel.slug))
+        .map((channel) => capabilityMedia(channel, locale));
+      const writableStreams = streams.filter((channel) => streamAllowed(access, channel));
+
+      return jsonResult({
+        games: visibleGames,
+        media: visibleMedia,
+        tools: effectiveTools(access),
+        streamChannels: {
+          total: writableStreams.length,
+          limit: cleanLimit,
+          offset: cleanOffset,
+          channels: writableStreams
+            .slice(cleanOffset, cleanOffset + cleanLimit)
+            .map(capabilityStream),
+        },
+      });
+    },
+  );
 
   server.registerTool(
     "get_site_overview",
@@ -325,7 +411,7 @@ export function createAdminMcpServer(access: McpAccess) {
     "create_news_draft",
     {
       title: "Create News Draft",
-      description: "Create a draft news post in an allowed game or media channel.",
+      description: "Create a draft news post in an allowed game or media channel. Call get_admin_capabilities for valid slugs.",
       inputSchema: {
         title: z.string().min(1).max(NEWS_TITLE_MAX_LENGTH),
         summary: z.string().max(NEWS_SUMMARY_MAX_LENGTH).optional(),
@@ -381,7 +467,7 @@ export function createAdminMcpServer(access: McpAccess) {
     "update_stream_channel",
     {
       title: "Update Stream Channel",
-      description: "Update a stream channel. Non-super keys may only update game-scoped channels they manage.",
+      description: "Update a stream channel. Call get_admin_capabilities for valid channel IDs. Non-super keys may only update game-scoped channels they manage.",
       inputSchema: {
         id: z.number().int().positive(),
         label: z.string().max(100).optional(),

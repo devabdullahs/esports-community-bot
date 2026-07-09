@@ -91,11 +91,11 @@ or optimize for guild counts.
 | 066  | One-tap EWC weekly picks entry (leaderboard button + default week) | P2 | M | — | DONE — executor (worktree, reviewed/APPROVED); shipped PR #64 (squash `7aea8cf`), CI green, deployed. #1 "🎯 Open my picks" button on the auto-updating leaderboard (not owner-gated, clears when no week open) + #3 `/ewc_predict weekly` defaults to current open week via shared `currentOpenWeek`. Reviewer re-ran gates: bot 267 pass. Planned @ `11f5320`. |
 | 067  | Guided season picker (replace raw 10 slash options) | P3 | M-L | 066 | DONE — executor (worktree, reviewed/APPROVED); shipped PR #64 (squash `7aea8cf`), CI green, deployed. #2 guided slots + club modal mirroring the weekly picker (owner-gated, distinct-club guard, in-place re-render); incremental `upsertSeasonClubPick` (no schema change); raw 10-option path kept for back-compat. Reviewer verified all builders imported (UI not covered by tests). Planned @ `11f5320`. |
 | 068  | Keep MCP key verifier hashes server-private | P1 | S | - | DONE |
-| 069  | Derive MCP permissions, UI, tests, and docs from one tool manifest | P1 | M | 068 | TODO |
+| 069  | Derive MCP permissions, UI, tests, and docs from one tool manifest | P1 | M | 068 | DONE |
 | 070  | Apply canonical news validation to MCP-created drafts | P1 | S | - | DONE |
 | 071  | Make admin MCP news search honor locale and combined owner filters | P2 | M | - | TODO |
 | 072  | Make MCP writes atomic, audited, and idempotent | P1 | L | 070 | TODO |
-| 073  | Let admin MCP clients discover usable scopes and resource IDs | P2 | M | 069 | TODO |
+| 073  | Let admin MCP clients discover usable scopes and resource IDs | P2 | M | 069 | DONE |
 | 074  | Confirm client-side admin navigation when a news draft is dirty | P1 | M | - | DONE |
 | 075  | Redesign MCP key creation around purpose, least privilege, and setup success | P2 | L | 069, 073 | TODO |
 | 076  | Standardize the admin workspace with shadcn Sidebar and entity-aware navigation | P2 | L | 074 | TODO |

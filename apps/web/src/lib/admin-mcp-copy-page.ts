@@ -1,4 +1,22 @@
+import { MCP_TOOL_MANIFEST } from "@/lib/mcp-tool-manifest";
 import type { Locale } from "@/lib/i18n";
+
+const ADMIN_GRANT_LABELS: Record<Locale, Record<"always" | "selectable", string>> = {
+  en: {
+    always: "always-on",
+    selectable: "key-selected",
+  },
+  ar: {
+    always: "متاحة دائما",
+    selectable: "تتطلب اختيارها في المفتاح",
+  },
+};
+
+function adminMcpToolLines(locale: Locale) {
+  return MCP_TOOL_MANIFEST
+    .filter((tool) => tool.surfaces.includes("admin"))
+    .map((tool) => `- \`${tool.name}\` (${ADMIN_GRANT_LABELS[locale][tool.adminGrant]}): ${tool.description[locale]}`);
+}
 
 const ADMIN_MCP_COPY_PAGE_EN = [
   "# Admin MCP",
@@ -50,22 +68,17 @@ const ADMIN_MCP_COPY_PAGE_EN = [
   "## Tools",
   "",
   "Admin MCP includes all public read-only tools, so admins do not need to configure the public MCP separately.",
+  "Always-on tools are available to every valid admin MCP key. Key-selected tools require an explicit grant on the key.",
   "",
-  "- get_site_overview: read site/bot counts. Super keys also see extra admin context.",
-  "- list_games: localized public game directory.",
-  "- search_news: search admin-visible news posts within scope.",
-  "- get_tournament_status: read one tournament's matches and standings within scope.",
-  "- list_tournaments: list public active tournament summaries.",
-  "- get_ewc_club_summary: read EWC club points, qualified games, wins, and region metadata.",
-  "- list_co_streams: list public co-stream groups, live-first.",
-  "- search_teams: public team directory search with safe public fields.",
-  "- search_players: public player directory search with safe public fields.",
-  "- get_public_ewc_leaderboard: existing public prediction leaderboard projection.",
-  "- list_admin_queue: list reported comments needing moderation review.",
-  "- create_news_draft: create a draft news post only. It never publishes directly.",
-  "- update_stream_channel: update allowed co-stream rows.",
+  ...adminMcpToolLines("en"),
   "",
   "Every successful write records an admin audit entry with actor id mcp:<key-id>:<owner-discord-id>.",
+  "",
+  "## Workflow Example",
+  "",
+  "1. Call `get_admin_capabilities`.",
+  "2. Pick an allowed game slug, media slug, or stream channel id from the response.",
+  "3. Call `create_news_draft` or `update_stream_channel` with that allowed resource.",
   "",
   "## Client Setup",
   "",
@@ -178,22 +191,17 @@ const ADMIN_MCP_COPY_PAGE_AR = [
   "## الأدوات",
   "",
   "يتضمن MCP الإداري كل أدوات القراءة العامة، لذلك لا يحتاج المسؤولون إلى إضافة MCP العام بشكل منفصل.",
+  "الأدوات المتاحة دائما تعمل مع أي مفتاح MCP إداري صالح. الأدوات التي تتطلب اختيارها تحتاج إلى منح صريح في المفتاح.",
   "",
-  "- قراءة أعداد الموقع والبوت. مفاتيح المسؤول الأعلى ترى أيضا سياقا إداريا إضافيا: `get_site_overview`.",
-  "- دليل الألعاب العام حسب اللغة: `list_games`.",
-  "- البحث في الأخبار الظاهرة للمسؤول ضمن نطاق صلاحيات المفتاح: `search_news`.",
-  "- قراءة مباريات وترتيب بطولة واحدة ضمن النطاق المسموح: `get_tournament_status`.",
-  "- عرض ملخصات البطولات النشطة العامة: `list_tournaments`.",
-  "- قراءة نقاط أندية EWC، والألعاب المتأهلة، والانتصارات، وبيانات المنطقة: `get_ewc_club_summary`.",
-  "- عرض مجموعات البث المشترك العامة مع إظهار المباشر أولا: `list_co_streams`.",
-  "- البحث في دليل الفرق العام بحقول عامة آمنة: `search_teams`.",
-  "- البحث في دليل اللاعبين العام بحقول عامة آمنة: `search_players`.",
-  "- عرض لوحة توقعات EWC العامة الحالية: `get_public_ewc_leaderboard`.",
-  "- عرض التعليقات المبلغ عنها التي تحتاج مراجعة: `list_admin_queue`.",
-  "- إنشاء مسودة خبر فقط. لا ينشر مباشرة أبدا: `create_news_draft`.",
-  "- تحديث صفوف البث المشترك المسموح بها: `update_stream_channel`.",
+  ...adminMcpToolLines("ar"),
   "",
   "كل عملية كتابة ناجحة تسجل إدخالا في سجل تدقيق الإدارة باستخدام actor id بالشكل mcp:<key-id>:<owner-discord-id>.",
+  "",
+  "## مثال سير عمل",
+  "",
+  "1. استدع `get_admin_capabilities`.",
+  "2. اختر slug لعبة أو قناة إعلامية أو id قناة بث مسموحا به من الاستجابة.",
+  "3. استدع `create_news_draft` أو `update_stream_channel` باستخدام المورد المسموح.",
   "",
   "## إعداد العميل",
   "",

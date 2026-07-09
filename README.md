@@ -154,8 +154,8 @@ The dashboard provides:
 The dashboard is bilingual. Arabic pages use RTL layout and the same Thmanyah
 Sans font stack as English pages.
 
-Admin MCP setup, client examples, and security notes live in
-[`docs/ADMIN_MCP.md`](docs/ADMIN_MCP.md).
+Website users should start with the public Admin MCP guide at `/docs/admin-mcp`.
+[`docs/ADMIN_MCP.md`](docs/ADMIN_MCP.md) is the maintainer-oriented repo guide.
 
 ## Fonts
 

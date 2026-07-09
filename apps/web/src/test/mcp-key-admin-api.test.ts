@@ -1,5 +1,9 @@
 import { beforeAll, beforeEach, describe, expect, test, vi } from "vitest";
 import type { AdminAccess } from "@/lib/admin";
+import {
+  ADMIN_SELECTABLE_MCP_TOOL_NAMES,
+  PUBLIC_ONLY_MCP_TOOL_NAMES,
+} from "@/lib/mcp-tool-manifest";
 import { gamesAdmin, nonAdmin, superAdmin } from "./access";
 
 vi.mock("@/lib/admin", async (importOriginal) => {
@@ -184,11 +188,35 @@ describe("/api/admin/mcp-keys self-service", () => {
 
     expect(response.status).toBe(200);
     const body = await response.json();
+    expect([...body.tools].sort()).toEqual([...ADMIN_SELECTABLE_MCP_TOOL_NAMES].sort());
     const ids = body.keys.map((key: { id: number }) => key.id);
     expect(ids).toContain(own.key.id);
     expect(ids).not.toContain(other.key.id);
     body.keys.forEach((key: Record<string, unknown>) => expectPublicKeyShape(key));
     expect(body.keys.every((key: { ownerDiscordId: string }) => key.ownerDiscordId === SCOPED_ID)).toBe(true);
+  });
+
+  test("key creation accepts only selectable admin grants", async () => {
+    mockAccess.mockResolvedValue(scopedAccess());
+
+    const rejected = await keysPOST(req("POST", {
+      label: "Only always-on",
+      tools: [PUBLIC_ONLY_MCP_TOOL_NAMES[0]],
+      games: [GAME_ALLOWED],
+      media: [MEDIA_ALLOWED],
+    }));
+    expect(rejected.status).toBe(400);
+
+    const mixed = await keysPOST(req("POST", {
+      label: "Mixed grants",
+      tools: [PUBLIC_ONLY_MCP_TOOL_NAMES[0], "create_news_draft"],
+      games: [GAME_ALLOWED],
+      media: [MEDIA_ALLOWED],
+    }));
+    expect(mixed.status).toBe(201);
+    const body = await mixed.json();
+    expectPublicKeyShape(body.key);
+    expect(body.key.tools).toEqual(["create_news_draft"]);
   });
 
   test("scoped admins can revoke their own keys but not another owner's key", async () => {

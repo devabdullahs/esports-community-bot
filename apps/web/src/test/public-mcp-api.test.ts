@@ -1,4 +1,5 @@
 import { beforeAll, describe, expect, test, vi } from "vitest";
+import { PUBLIC_MCP_TOOL_NAMES } from "@/lib/mcp-tool-manifest";
 
 vi.mock("@bot/services/liquipedia.js", () => ({
   fetchEwcClubs: async () => ({
@@ -183,18 +184,8 @@ describe("/api/public-mcp access", () => {
     expect(response.status).toBe(200);
     const body = await parseMcpResponse(response);
     const names = body.result.tools.map((tool: { name: string }) => tool.name);
-    expect(names).toEqual(
-      expect.arrayContaining([
-        "get_site_overview",
-        "search_news",
-        "get_tournament_status",
-        "get_ewc_club_summary",
-        "list_co_streams",
-        "search_teams",
-        "search_players",
-        "get_public_ewc_leaderboard",
-      ]),
-    );
+    expect([...names].sort()).toEqual([...PUBLIC_MCP_TOOL_NAMES].sort());
+    expect(names).not.toContain("get_admin_capabilities");
   });
 
   test("ignores invalid bearer headers on the public endpoint", async () => {

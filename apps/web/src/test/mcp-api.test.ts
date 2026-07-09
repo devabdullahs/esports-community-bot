@@ -1,5 +1,9 @@
 import { beforeAll, describe, expect, test } from "vitest";
 import {
+  ADMIN_MCP_TOOL_NAMES,
+  PUBLIC_ONLY_MCP_TOOL_NAMES,
+} from "@/lib/mcp-tool-manifest";
+import {
   NEWS_BODY_MAX_LENGTH,
   NEWS_SUMMARY_MAX_LENGTH,
   NEWS_TITLE_MAX_LENGTH,
@@ -12,6 +16,9 @@ const SCOPED_ID = "223456789012345678";
 const GAME_ALLOWED = "valorant";
 const GAME_OUTSIDE_SCOPE = "rocket-league";
 const MEDIA_ALLOWED = "echo-mena";
+const MEDIA_OUTSIDE_SCOPE = "outside-media";
+const DEPROVISIONED_ID = "323456789012345678";
+const FORBIDDEN_DISCOVERY_FIELDS = new Set(["keyHash", "secret", "token", "addedBy", "ownerDiscordId"]);
 
 beforeAll(async () => {
   process.env.EWC_DASHBOARD_SUPER_ADMIN_DISCORD_IDS = SUPER_ID;
@@ -23,9 +30,45 @@ beforeAll(async () => {
   await admins.upsertEwcAdmin({ discordId: SCOPED_ID, displayName: "Scoped Admin" });
   await admins.setEwcAdminGameScopes(SCOPED_ID, [GAME_ALLOWED]);
   await admins.setEwcAdminMediaScopes(SCOPED_ID, [MEDIA_ALLOWED]);
+  await Promise.all([
+    seedGame(GAME_ALLOWED),
+    seedGame(GAME_OUTSIDE_SCOPE),
+    seedMedia(MEDIA_ALLOWED),
+    seedMedia(MEDIA_OUTSIDE_SCOPE),
+  ]);
 
   ({ POST: mcpPOST } = await import("@/app/api/mcp/route"));
 });
+
+async function seedGame(slug: string) {
+  const { createEwcGame } = await import("@bot/db/ewcGames.js");
+  try {
+    await createEwcGame({
+      slug,
+      title: { en: slug, ar: slug },
+      description: { en: "", ar: "" },
+      status: { en: "", ar: "" },
+      owner: { en: "", ar: "" },
+      focus: [],
+    });
+  } catch {
+    // already exists
+  }
+}
+
+async function seedMedia(slug: string) {
+  const { createEwcMediaChannel } = await import("@bot/db/ewcMediaChannels.js");
+  try {
+    await createEwcMediaChannel({
+      slug,
+      name: { en: slug, ar: slug },
+      description: { en: "", ar: "" },
+      links: [],
+    });
+  } catch {
+    // already exists
+  }
+}
 
 function mcpRequest(secret: string | null, body: unknown, origin = "http://localhost") {
   const headers: Record<string, string> = {
@@ -115,6 +158,18 @@ async function expectCreateDraftErrorWithoutWrite(
   return body;
 }
 
+function expectNoForbiddenDiscoveryFields(value: unknown) {
+  if (Array.isArray(value)) {
+    value.forEach(expectNoForbiddenDiscoveryFields);
+    return;
+  }
+  if (!value || typeof value !== "object") return;
+  for (const [key, child] of Object.entries(value)) {
+    expect(FORBIDDEN_DISCOVERY_FIELDS.has(key)).toBe(false);
+    expectNoForbiddenDiscoveryFields(child);
+  }
+}
+
 describe("/api/mcp auth", () => {
   test("rejects missing bearer key", async () => {
     const response = await mcpPOST(mcpRequest(null, toolCall("get_site_overview")));
@@ -159,7 +214,7 @@ describe("/api/mcp auth", () => {
 });
 
 describe("/api/mcp tools", () => {
-  test("lists public read tools on the admin MCP endpoint", async () => {
+  test("lists manifest admin tools on the admin MCP endpoint", async () => {
     const key = await createKey({ tools: ["get_site_overview"] });
     const response = await mcpPOST(
       mcpRequest(key.secret, {
@@ -172,16 +227,9 @@ describe("/api/mcp tools", () => {
     expect(response.status).toBe(200);
     const body = await parseMcpResponse(response);
     const names = body.result.tools.map((tool: { name: string }) => tool.name);
-    expect(names).toEqual(
-      expect.arrayContaining([
-        "list_games",
-        "list_tournaments",
-        "list_co_streams",
-        "search_teams",
-        "search_players",
-        "get_public_ewc_leaderboard",
-      ]),
-    );
+    expect([...names].sort()).toEqual([...ADMIN_MCP_TOOL_NAMES].sort());
+    expect(names).toEqual(expect.arrayContaining([...PUBLIC_ONLY_MCP_TOOL_NAMES]));
+    expect(names).toContain("get_admin_capabilities");
   });
 
   test("runs public-only read tools through admin MCP without a second MCP config", async () => {
@@ -192,6 +240,138 @@ describe("/api/mcp tools", () => {
     const body = await parseMcpResponse(response);
     expect(body.result.isError).not.toBe(true);
     expect(body.result.structuredContent.games).toEqual(expect.any(Array));
+  });
+
+  test("discovers scoped capabilities without an explicit discovery grant", async () => {
+    const { createStreamChannel } = await import("@bot/db/streamChannels.js");
+    const allowed = await createStreamChannel({
+      platform: "twitch",
+      handle: "cap_scoped_valorant_tw",
+      label: "Capability Scoped",
+      creatorKey: "cap-scoped",
+      scope: "game",
+      gameSlug: GAME_ALLOWED,
+    });
+    const blockedGame = await createStreamChannel({
+      platform: "kick",
+      handle: "cap_scoped_rocket_kk",
+      label: "Capability Other Game",
+      creatorKey: "cap-scoped",
+      scope: "game",
+      gameSlug: GAME_OUTSIDE_SCOPE,
+    });
+    const ewc = await createStreamChannel({
+      platform: "youtube",
+      handle: "capScopedEwc",
+      label: "Capability EWC",
+      creatorKey: "cap-ewc",
+      scope: "ewc",
+    });
+    const team = await createStreamChannel({
+      platform: "twitch",
+      handle: "cap_scoped_team_tw",
+      label: "Capability Team",
+      creatorKey: "cap-team",
+      scope: "team",
+      team: "Team Falcons",
+      gameSlug: GAME_ALLOWED,
+    });
+    const key = await createKey({
+      ownerDiscordId: SCOPED_ID,
+      tools: ["create_news_draft", "update_stream_channel"],
+      games: [GAME_ALLOWED],
+      media: [MEDIA_ALLOWED],
+    });
+
+    const response = await mcpPOST(
+      mcpRequest(key.secret, toolCall("get_admin_capabilities", { locale: "en", limit: 100 })),
+    );
+
+    expect(response.status).toBe(200);
+    const body = await parseMcpResponse(response);
+    expect(body.result.isError).not.toBe(true);
+    const data = body.result.structuredContent;
+    expectNoForbiddenDiscoveryFields(data);
+
+    const gameSlugs = data.games.map((game: { slug: string }) => game.slug);
+    const mediaSlugs = data.media.map((channel: { slug: string }) => channel.slug);
+    const streamIds = data.streamChannels.channels.map((channel: { id: number }) => channel.id);
+    expect(gameSlugs).toContain(GAME_ALLOWED);
+    expect(gameSlugs).not.toContain(GAME_OUTSIDE_SCOPE);
+    expect(mediaSlugs).toContain(MEDIA_ALLOWED);
+    expect(mediaSlugs).not.toContain(MEDIA_OUTSIDE_SCOPE);
+    expect(streamIds).toContain(allowed.id);
+    expect(streamIds).not.toEqual(expect.arrayContaining([blockedGame.id, ewc.id, team.id]));
+    expect(data.streamChannels.total).toBeGreaterThanOrEqual(streamIds.length);
+    expect(data.tools.find((tool: { name: string }) => tool.name === "get_admin_capabilities")).toMatchObject({
+      alwaysAvailable: true,
+      explicitlyGranted: false,
+    });
+    expect(data.tools.find((tool: { name: string }) => tool.name === "update_stream_channel")).toMatchObject({
+      alwaysAvailable: false,
+      explicitlyGranted: true,
+    });
+  });
+
+  test("discovers all safe resources for super keys", async () => {
+    const { createStreamChannel } = await import("@bot/db/streamChannels.js");
+    const ewc = await createStreamChannel({
+      platform: "youtube",
+      handle: "capSuperEwc",
+      label: "Capability Super EWC",
+      creatorKey: "cap-super-ewc",
+      scope: "ewc",
+    });
+    const team = await createStreamChannel({
+      platform: "twitch",
+      handle: "cap_super_team_tw",
+      label: "Capability Super Team",
+      creatorKey: "cap-super-team",
+      scope: "team",
+      team: "Team Falcons",
+      gameSlug: GAME_ALLOWED,
+    });
+    const otherGame = await createStreamChannel({
+      platform: "kick",
+      handle: "cap_super_rocket_kk",
+      label: "Capability Super Other",
+      creatorKey: "cap-super-other",
+      scope: "game",
+      gameSlug: GAME_OUTSIDE_SCOPE,
+    });
+    const key = await createKey({ tools: ["update_stream_channel"] });
+
+    const response = await mcpPOST(
+      mcpRequest(key.secret, toolCall("get_admin_capabilities", { locale: "en", limit: 100 })),
+    );
+
+    expect(response.status).toBe(200);
+    const body = await parseMcpResponse(response);
+    const data = body.result.structuredContent;
+    expectNoForbiddenDiscoveryFields(data);
+    expect(data.games.map((game: { slug: string }) => game.slug)).toEqual(
+      expect.arrayContaining([GAME_ALLOWED, GAME_OUTSIDE_SCOPE]),
+    );
+    expect(data.media.map((channel: { slug: string }) => channel.slug)).toEqual(
+      expect.arrayContaining([MEDIA_ALLOWED, MEDIA_OUTSIDE_SCOPE]),
+    );
+    expect(data.streamChannels.channels.map((channel: { id: number }) => channel.id)).toEqual(
+      expect.arrayContaining([ewc.id, team.id, otherGame.id]),
+    );
+  });
+
+  test("blocks deprovisioned owners before discovery runs", async () => {
+    const key = await createKey({
+      ownerDiscordId: DEPROVISIONED_ID,
+      tools: ["get_site_overview"],
+    });
+
+    const response = await mcpPOST(mcpRequest(key.secret, toolCall("get_admin_capabilities")));
+
+    expect(response.status).toBe(403);
+    await expect(response.json()).resolves.toMatchObject({
+      error: expect.stringMatching(/no longer an admin/i),
+    });
   });
 
   test("runs a read-only overview tool for a valid super-admin key", async () => {

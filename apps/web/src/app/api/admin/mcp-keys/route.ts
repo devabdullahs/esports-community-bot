@@ -5,13 +5,14 @@ import { sameOriginOr403 } from "@/lib/community";
 import { listGames } from "@/lib/games";
 import { listMediaChannels } from "@/lib/media";
 import { MCP_NO_SCOPE_SENTINEL } from "@/lib/mcp-auth";
-import { createMcpKey, listMcpKeys, MCP_TOOL_NAMES, toMcpKeyDto, type McpKey } from "@/lib/mcp-keys";
+import { ADMIN_SELECTABLE_MCP_TOOL_NAMES } from "@/lib/mcp-tool-manifest";
+import { createMcpKey, listMcpKeys, toMcpKeyDto, type McpKey } from "@/lib/mcp-keys";
 import { rateLimitOr429 } from "@/lib/rate-limit";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-function sanitizeList(input: unknown, valid: string[]) {
+function sanitizeList(input: unknown, valid: readonly string[]) {
   if (!Array.isArray(input)) return [];
   const allowed = new Set(valid);
   return [...new Set(input.filter((value): value is string => typeof value === "string" && allowed.has(value)))];
@@ -63,7 +64,7 @@ export async function GET() {
   if (!access.session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   if (!access.allowed) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   const keys = keysVisibleTo(access, await listMcpKeys()).map(publicKey);
-  return NextResponse.json({ keys, tools: MCP_TOOL_NAMES });
+  return NextResponse.json({ keys, tools: ADMIN_SELECTABLE_MCP_TOOL_NAMES });
 }
 
 export async function POST(request: Request) {
@@ -99,7 +100,7 @@ export async function POST(request: Request) {
   const allowedMedia = allowedScopes(access, allMedia.map((channel) => channel.slug), "media");
   const games = sanitizeList(body.games, allowedGames);
   const media = sanitizeList(body.media, allowedMedia);
-  const tools = sanitizeList(body.tools, MCP_TOOL_NAMES);
+  const tools = sanitizeList(body.tools, ADMIN_SELECTABLE_MCP_TOOL_NAMES);
   if (tools.length === 0) {
     return NextResponse.json({ error: "Select at least one MCP tool" }, { status: 400 });
   }

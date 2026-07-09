@@ -33,6 +33,10 @@ import {
   listTournamentSummariesCached,
   type TournamentSummary,
 } from "@/lib/tournaments";
+import {
+  PUBLIC_MCP_TOOL_NAMES,
+  PUBLIC_ONLY_MCP_TOOL_NAMES,
+} from "@/lib/mcp-tool-manifest";
 import { isSeason, isSnowflake } from "@/lib/validate";
 
 type ToolResult = {
@@ -41,27 +45,7 @@ type ToolResult = {
   isError?: boolean;
 };
 
-export const PUBLIC_MCP_TOOL_NAMES = [
-  "get_site_overview",
-  "list_games",
-  "search_news",
-  "get_tournament_status",
-  "list_tournaments",
-  "get_ewc_club_summary",
-  "list_co_streams",
-  "search_teams",
-  "search_players",
-  "get_public_ewc_leaderboard",
-] as const;
-
-export const PUBLIC_ONLY_MCP_TOOL_NAMES = [
-  "list_games",
-  "list_tournaments",
-  "list_co_streams",
-  "search_teams",
-  "search_players",
-  "get_public_ewc_leaderboard",
-] as const;
+export { PUBLIC_MCP_TOOL_NAMES, PUBLIC_ONLY_MCP_TOOL_NAMES };
 
 const LocaleSchema = z.enum(["en", "ar"]).optional();
 

@@ -4,8 +4,10 @@ The admin MCP endpoint lets approved AI/admin clients read site state and run
 small, audited admin actions without sharing dashboard sessions or database
 credentials.
 
-This MCP server is admin-only. Public read-only MCP access should be a separate
-endpoint if we add it later.
+The admin MCP server is admin-only and includes all public read-only tools, so
+admins do not need to configure two MCP endpoints. Public read-only MCP already
+exists separately at `/api/public-mcp` for clients that do not need an admin
+key.
 
 The setup documentation is intentionally public at:
 
@@ -58,10 +60,10 @@ Requests from the same host as the dashboard are allowed automatically.
 
 ## Create A Key
 
-1. Sign in to the dashboard as a super admin.
+1. Sign in to the dashboard with an approved admin account.
 2. Open `/admin/mcp`.
-3. Create a key for an existing dashboard admin or super admin Discord ID.
-4. Choose tools and optional game/media scopes.
+3. Create a key for your signed-in Discord account.
+4. Choose key-selected tools and the smallest useful game/media scopes.
 5. Copy the generated `ec_mcp_live_...` key immediately.
 
 The full key is shown once. The database stores only a SHA-256 hash, a short
@@ -69,10 +71,15 @@ prefix, owner metadata, scopes, timestamps, and revocation state.
 
 Scope rules:
 
-- A key inherits the owner's dashboard permissions.
+- Any approved signed-in admin can create keys only for their own account.
+- Super admins can view and revoke all keys; scoped admins can view and revoke
+  only their own keys.
+- A key can never exceed the owner's dashboard permissions.
 - Selecting specific games or media channels narrows the key.
-- Leaving game/media scopes empty means "inherit the owner's full scope".
-- For a super-admin-owned key, empty game/media scopes mean all games/media.
+- Clearing all selected games or media stores no scope for that resource type;
+  it is not inheritance.
+- Admin MCP public-only reads are always available. Admin-enriched reads and
+  writes require an explicit key-selected tool grant.
 
 To rotate a key, create a replacement key, update the client, then revoke the
 old key in `/admin/mcp`.
@@ -81,13 +88,20 @@ old key in `/admin/mcp`.
 
 | Tool | Purpose | Write? |
 | --- | --- | --- |
-| `get_site_overview` | Counts games, tournaments, matches, news, streams, and open reports. Super keys also see recent audit rows. | No |
-| `search_news` | Search admin-visible news posts within the key owner's scopes. | No |
-| `get_tournament_status` | Read one tournament's matches and standings if the key can view that game. | No |
-| `get_ewc_club_summary` | Read EWC club points, qualified games, wins, and region metadata. | No |
-| `list_admin_queue` | List reported comments that need moderation review. | No |
-| `create_news_draft` | Create a draft news post in an allowed game or media channel. It never publishes directly. | Yes |
-| `update_stream_channel` | Update allowed game-scoped co-stream rows. Super keys can update all stream rows. | Yes |
+| `get_admin_capabilities` | Discover this key's usable tools, allowed game/media slugs, and writable stream channel IDs. Always-on. | No |
+| `get_site_overview` | Counts games, tournaments, matches, news, streams, and open reports. Super keys also see recent audit rows. Key-selected. | No |
+| `list_games` | Localized public game directory. Always-on. | No |
+| `search_news` | Search public published news or admin-visible news posts within the key owner's scopes. Key-selected for admin MCP. | No |
+| `get_tournament_status` | Read one tournament's matches and standings if the key can view that game. Key-selected for admin MCP. | No |
+| `list_tournaments` | Public active tournament summaries. Always-on. | No |
+| `get_ewc_club_summary` | Read EWC club points, qualified games, wins, and region metadata. Key-selected for admin MCP. | No |
+| `list_co_streams` | Public co-stream groups, live-first. Always-on. | No |
+| `search_teams` | Public team directory search with safe public fields. Always-on. | No |
+| `search_players` | Public player directory search with safe public fields. Always-on. | No |
+| `get_public_ewc_leaderboard` | Public EWC prediction leaderboard projection. Always-on. | No |
+| `list_admin_queue` | List reported comments that need moderation review. Key-selected. | No |
+| `create_news_draft` | Create a draft news post in an allowed game or media channel. It never publishes directly. Key-selected. | Yes |
+| `update_stream_channel` | Update allowed game-scoped co-stream rows. Super keys can update all stream rows. Key-selected. | Yes |
 
 Every successful write records an admin audit entry with an MCP actor id like:
 
@@ -232,7 +246,7 @@ Authorization header without the bridge.
 | `403 Forbidden` | A browser `Origin` header is not allowed, or the key owner no longer has dashboard access. |
 | `429 Too many requests` | The key hit `EWC_MCP_RATE_LIMIT_PER_MINUTE`. Wait for `Retry-After`. |
 | `400 MCP JSON-RPC batching is not supported` | Send one MCP request at a time. |
-| Connected but tool fails | Confirm the key has that tool selected and the owner's game/media scope covers the target. |
+| Connected but tool fails | Confirm the key has that key-selected tool grant and the owner's game/media scope covers the target. |
 | No tools appear | Restart the MCP client and check the client logs. For Claude Code, use `/mcp`. |
 
 ## Security Notes
