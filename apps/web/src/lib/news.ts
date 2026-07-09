@@ -6,6 +6,7 @@ import "server-only";
 // imported functions at this boundary to get full type-safety in the web app.
 import {
   createEwcNewsPost as _create,
+  createEwcNewsPostInTx as _createInTx,
   deleteEwcNewsPost as _delete,
   getEwcNewsPostById as _getById,
   getPublishedEwcNewsPost as _getPublished,
@@ -97,6 +98,7 @@ const listLatest = _listLatest as (args: {
   offset?: number;
 }) => Promise<NewsPost[]>;
 const create = _create as (input: NewsPostInput) => Promise<NewsPost>;
+const createInTx = _createInTx as (tx: unknown, input: NewsPostInput) => Promise<number>;
 const update = _update as (id: number, input: NewsPostInput) => Promise<NewsPost | null>;
 const setStatus = _setStatus as (id: number, status: NewsStatus) => Promise<NewsPost | null>;
 const remove = _delete as (id: number) => Promise<{ changes: number }>;
@@ -136,6 +138,10 @@ export function listLatestPublishedNewsPosts(
 
 export function createNewsPost(input: NewsPostInput): Promise<NewsPost> {
   return create(input);
+}
+
+export function createNewsPostInTx(tx: unknown, input: NewsPostInput): Promise<number> {
+  return createInTx(tx, input);
 }
 
 export function updateNewsPost(id: number, input: NewsPostInput): Promise<NewsPost | null> {

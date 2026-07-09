@@ -3,11 +3,14 @@ import {
   ADMIN_MCP_TOOL_NAMES,
   PUBLIC_ONLY_MCP_TOOL_NAMES,
 } from "@/lib/mcp-tool-manifest";
+import type { DbTxClient } from "@/lib/mcp-write";
 import {
   NEWS_BODY_MAX_LENGTH,
   NEWS_SUMMARY_MAX_LENGTH,
   NEWS_TITLE_MAX_LENGTH,
 } from "@/lib/news-validation";
+
+type McpWriteHooks = Parameters<typeof import("@/lib/mcp-write").setMcpWriteTestHooksForTests>[0];
 
 let mcpPOST: (request: Request) => Promise<Response>;
 
@@ -128,16 +131,41 @@ function toolCall(name: string, args: Record<string, unknown> = {}) {
   };
 }
 
+let idempotencyCounter = 0;
+
+function nextIdempotencyKey(label = "mcp-api") {
+  idempotencyCounter += 1;
+  return `${label}-${String(idempotencyCounter).padStart(4, "0")}`;
+}
+
 async function writeCounts() {
   const { all } = await import("@bot/db/client.js");
-  const [postRows, auditRows] = await Promise.all([
+  const [postRows, auditRows, receiptRows] = await Promise.all([
     all("SELECT COUNT(*) AS c FROM ewc_news_posts"),
     all("SELECT COUNT(*) AS c FROM ewc_admin_audit_log"),
+    all("SELECT COUNT(*) AS c FROM ewc_mcp_write_receipts"),
   ]);
   return {
     posts: Number(postRows[0]?.c ?? 0),
     audit: Number(auditRows[0]?.c ?? 0),
+    receipts: Number(receiptRows[0]?.c ?? 0),
   };
+}
+
+async function callMcpTool(secret: string, name: string, args: Record<string, unknown>) {
+  const response = await mcpPOST(mcpRequest(secret, toolCall(name, args)));
+  expect(response.status).toBe(200);
+  return parseMcpResponse(response);
+}
+
+async function withMcpWriteHooks(hooks: McpWriteHooks, fn: () => Promise<void>) {
+  const { setMcpWriteTestHooksForTests } = await import("@/lib/mcp-write");
+  const restore = setMcpWriteTestHooksForTests(hooks);
+  try {
+    await fn();
+  } finally {
+    restore();
+  }
 }
 
 async function expectCreateDraftErrorWithoutWrite(
@@ -146,7 +174,12 @@ async function expectCreateDraftErrorWithoutWrite(
   message?: RegExp,
 ) {
   const before = await writeCounts();
-  const response = await mcpPOST(mcpRequest(secret, toolCall("create_news_draft", args)));
+  const response = await mcpPOST(
+    mcpRequest(secret, toolCall("create_news_draft", {
+      idempotencyKey: nextIdempotencyKey("draft-error"),
+      ...args,
+    })),
+  );
   expect(response.status).toBe(200);
   const body = await parseMcpResponse(response);
   expect(body.result?.isError === true || Boolean(body.error)).toBe(true);
@@ -431,6 +464,7 @@ describe("/api/mcp tools", () => {
       mcpRequest(
         key.secret,
         toolCall("create_news_draft", {
+          idempotencyKey: nextIdempotencyKey("draft-create"),
           title: "MCP draft title",
           summary: "Draft summary",
           body: "Draft body",
@@ -453,6 +487,145 @@ describe("/api/mcp tools", () => {
     expect(entry?.details).toMatchObject({ keyPrefix: key.key.keyPrefix, gameSlug: GAME_ALLOWED });
   });
 
+  test("retries a lost create_news_draft response without duplicating the post or audit", async () => {
+    const key = await createKey({ tools: ["create_news_draft"], games: [GAME_ALLOWED] });
+    const idempotencyKey = nextIdempotencyKey("draft-replay");
+    const args = {
+      idempotencyKey,
+      title: "Replay-safe MCP draft",
+      summary: "Replay summary",
+      body: "Replay body",
+      gameSlug: GAME_ALLOWED,
+    };
+    const before = await writeCounts();
+
+    const first = await callMcpTool(key.secret, "create_news_draft", args);
+    const second = await callMcpTool(key.secret, "create_news_draft", args);
+
+    expect(first.result.isError).not.toBe(true);
+    expect(second.result.isError).not.toBe(true);
+    const firstPost = first.result.structuredContent.post;
+    const secondPost = second.result.structuredContent.post;
+    expect(first.result.structuredContent.replayed).toBe(false);
+    expect(second.result.structuredContent.replayed).toBe(true);
+    expect(secondPost.id).toBe(firstPost.id);
+
+    const after = await writeCounts();
+    expect(after).toEqual({
+      posts: before.posts + 1,
+      audit: before.audit + 1,
+      receipts: before.receipts + 1,
+    });
+
+    const { all } = await import("@bot/db/client.js");
+    const receipt = await all(
+      `SELECT result_json
+         FROM ewc_mcp_write_receipts
+        WHERE key_id = $1 AND tool_name = $2 AND idempotency_key = $3`,
+      [key.key.id, "create_news_draft", idempotencyKey],
+    );
+    expect(receipt).toHaveLength(1);
+    expect(JSON.parse(String(receipt[0].result_json))).toEqual({ postId: firstPost.id });
+    expect(String(receipt[0].result_json)).not.toContain("Replay-safe MCP draft");
+  });
+
+  test("same create_news_draft payload with different idempotency keys creates distinct drafts", async () => {
+    const key = await createKey({ tools: ["create_news_draft"], games: [GAME_ALLOWED] });
+    const before = await writeCounts();
+    const base = {
+      title: "Different idempotency draft",
+      summary: "Same payload",
+      body: "Same body",
+      gameSlug: GAME_ALLOWED,
+    };
+
+    const first = await callMcpTool(key.secret, "create_news_draft", {
+      idempotencyKey: nextIdempotencyKey("draft-distinct-a"),
+      ...base,
+    });
+    const second = await callMcpTool(key.secret, "create_news_draft", {
+      idempotencyKey: nextIdempotencyKey("draft-distinct-b"),
+      ...base,
+    });
+
+    expect(first.result.structuredContent.replayed).toBe(false);
+    expect(second.result.structuredContent.replayed).toBe(false);
+    expect(second.result.structuredContent.post.id).not.toBe(first.result.structuredContent.post.id);
+    await expect(writeCounts()).resolves.toEqual({
+      posts: before.posts + 2,
+      audit: before.audit + 2,
+      receipts: before.receipts + 2,
+    });
+  });
+
+  test("one MCP key cannot replay another key's idempotency receipt", async () => {
+    const firstKey = await createKey({ tools: ["create_news_draft"], games: [GAME_ALLOWED] });
+    const secondKey = await createKey({ tools: ["create_news_draft"], games: [GAME_ALLOWED] });
+    const idempotencyKey = nextIdempotencyKey("draft-key-isolated");
+    const args = {
+      idempotencyKey,
+      title: "Key-isolated MCP draft",
+      gameSlug: GAME_ALLOWED,
+    };
+    const before = await writeCounts();
+
+    const first = await callMcpTool(firstKey.secret, "create_news_draft", args);
+    const second = await callMcpTool(secondKey.secret, "create_news_draft", args);
+
+    expect(first.result.structuredContent.replayed).toBe(false);
+    expect(second.result.structuredContent.replayed).toBe(false);
+    expect(second.result.structuredContent.post.id).not.toBe(first.result.structuredContent.post.id);
+    await expect(writeCounts()).resolves.toEqual({
+      posts: before.posts + 2,
+      audit: before.audit + 2,
+      receipts: before.receipts + 2,
+    });
+  });
+
+  test("injected audit failures roll back draft and stream writes without receipts", async () => {
+    const draftKey = await createKey({ tools: ["create_news_draft"], games: [GAME_ALLOWED] });
+    const streamKey = await createKey({ tools: ["update_stream_channel"], games: [GAME_ALLOWED] });
+    const { createStreamChannel, getStreamChannel } = await import("@bot/db/streamChannels.js");
+    const channel = await createStreamChannel({
+      platform: "twitch",
+      handle: "audit_fail_tw",
+      label: "Audit Old",
+      creatorKey: "audit-fail",
+      scope: "game",
+      gameSlug: GAME_ALLOWED,
+    });
+    const beforeStream = await getStreamChannel(channel.id);
+
+    await withMcpWriteHooks({
+      beforeAudit() {
+        throw new Error("injected audit failure");
+      },
+    }, async () => {
+      const beforeDraft = await writeCounts();
+      const draftBody = await callMcpTool(draftKey.secret, "create_news_draft", {
+        idempotencyKey: nextIdempotencyKey("draft-audit-fail"),
+        title: "Audit failure draft",
+        gameSlug: GAME_ALLOWED,
+      });
+      expect(draftBody.error || draftBody.result?.isError).toBeTruthy();
+      await expect(writeCounts()).resolves.toEqual(beforeDraft);
+
+      const beforeUpdate = await writeCounts();
+      const streamBody = await callMcpTool(streamKey.secret, "update_stream_channel", {
+        idempotencyKey: nextIdempotencyKey("stream-audit-fail"),
+        id: channel.id,
+        label: "Audit New",
+      });
+      expect(streamBody.error || streamBody.result?.isError).toBeTruthy();
+      await expect(writeCounts()).resolves.toEqual(beforeUpdate);
+      await expect(getStreamChannel(channel.id)).resolves.toMatchObject({
+        label: beforeStream?.label,
+        gameSlugs: beforeStream?.gameSlugs,
+        isDefault: beforeStream?.isDefault,
+      });
+    });
+  });
+
   test("accepts canonical maximum news draft lengths", async () => {
     const key = await createKey({ tools: ["create_news_draft"], games: [GAME_ALLOWED] });
     const title = "T".repeat(NEWS_TITLE_MAX_LENGTH);
@@ -462,6 +635,7 @@ describe("/api/mcp tools", () => {
       mcpRequest(
         key.secret,
         toolCall("create_news_draft", {
+          idempotencyKey: nextIdempotencyKey("draft-max"),
           title,
           summary,
           body: bodyText,
@@ -531,6 +705,7 @@ describe("/api/mcp tools", () => {
       mcpRequest(
         key.secret,
         toolCall("create_news_draft", {
+          idempotencyKey: nextIdempotencyKey("draft-incomplete"),
           title: "Incomplete MCP draft",
           gameSlug: GAME_ALLOWED,
         }),
@@ -560,6 +735,7 @@ describe("/api/mcp tools", () => {
       mcpRequest(
         key.secret,
         toolCall("create_news_draft", {
+          idempotencyKey: nextIdempotencyKey("draft-media"),
           title: "Media related game draft",
           mediaSlug: MEDIA_ALLOWED,
           gameSlug: GAME_OUTSIDE_SCOPE,
@@ -593,6 +769,73 @@ describe("/api/mcp tools", () => {
     }, /cannot draft/i);
   });
 
+  test("injected stream sibling update failure rolls back stream rows, audit, and receipt", async () => {
+    const { createStreamChannel, getStreamChannel } = await import("@bot/db/streamChannels.js");
+    const primary = await createStreamChannel({
+      platform: "twitch",
+      handle: "mcp_tx_fault_tw",
+      label: "MCP Tx Old",
+      creatorKey: "mcp-tx-fault",
+      scope: "game",
+      gameSlug: GAME_ALLOWED,
+    });
+    const sibling = await createStreamChannel({
+      platform: "kick",
+      handle: "mcp_tx_fault_kk",
+      label: "MCP Tx Old",
+      creatorKey: "mcp-tx-fault",
+      scope: "game",
+      gameSlug: GAME_ALLOWED,
+      isDefault: true,
+    });
+    const key = await createKey({
+      tools: ["update_stream_channel"],
+      games: [GAME_ALLOWED],
+    });
+    const ids = [primary.id, sibling.id];
+    const snapshot = async () => Promise.all(ids.map(async (id) => {
+      const channel = await getStreamChannel(id);
+      return {
+        id: channel?.id,
+        label: channel?.label,
+        gameSlugs: channel?.gameSlugs,
+        isDefault: channel?.isDefault,
+        active: channel?.active,
+      };
+    }));
+    const beforeRows = await snapshot();
+    const beforeCounts = await writeCounts();
+
+    await withMcpWriteHooks({
+      wrapTx(tx: DbTxClient, context) {
+        if (context.toolName !== "update_stream_channel") return tx;
+        let streamUpdateCount = 0;
+        return {
+          ...tx,
+          run(sql, params) {
+            if (/^\s*UPDATE stream_channels SET/i.test(sql)) {
+              streamUpdateCount += 1;
+              if (streamUpdateCount === 2) throw new Error("injected sibling failure");
+            }
+            return tx.run(sql, params);
+          },
+        };
+      },
+    }, async () => {
+      const body = await callMcpTool(key.secret, "update_stream_channel", {
+        idempotencyKey: nextIdempotencyKey("stream-sibling-fail"),
+        id: primary.id,
+        label: "MCP Tx New",
+        gameSlugs: [GAME_ALLOWED],
+        isDefault: true,
+      });
+      expect(body.error || body.result?.isError).toBeTruthy();
+    });
+
+    await expect(snapshot()).resolves.toEqual(beforeRows);
+    await expect(writeCounts()).resolves.toEqual(beforeCounts);
+  });
+
   test("scoped stream updates do not propagate to sibling channels outside the key scope", async () => {
     const { createStreamChannel, getStreamChannel } = await import("@bot/db/streamChannels.js");
     const allowed = await createStreamChannel({
@@ -620,7 +863,11 @@ describe("/api/mcp tools", () => {
     const response = await mcpPOST(
       mcpRequest(
         key.secret,
-        toolCall("update_stream_channel", { id: allowed.id, label: "Scoped New" }),
+        toolCall("update_stream_channel", {
+          idempotencyKey: nextIdempotencyKey("stream-scoped"),
+          id: allowed.id,
+          label: "Scoped New",
+        }),
       ),
     );
     expect(response.status).toBe(200);

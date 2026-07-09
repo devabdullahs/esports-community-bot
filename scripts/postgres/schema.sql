@@ -572,6 +572,16 @@ CREATE TABLE IF NOT EXISTS ewc_mcp_keys (
 CREATE INDEX IF NOT EXISTS idx_ewc_mcp_keys_owner
   ON ewc_mcp_keys(owner_discord_id, revoked_at);
 
+CREATE TABLE IF NOT EXISTS ewc_mcp_write_receipts (
+  key_id          BIGINT NOT NULL,
+  tool_name       TEXT NOT NULL,
+  idempotency_key TEXT NOT NULL,
+  result_json     TEXT,
+  created_at      TEXT NOT NULL DEFAULT (to_char(now() AT TIME ZONE 'UTC', 'YYYY-MM-DD HH24:MI:SS')),
+  completed_at    TEXT,
+  PRIMARY KEY (key_id, tool_name, idempotency_key)
+);
+
 -- Admin-curated live-stream / co-stream channels (Twitch, Kick, YouTube, SOOP).
 -- A channel is attached at one SCOPE: 'game' (every match of game_slug),
 -- 'team' (every match a team plays, keyed by normalized team_key), 'match'

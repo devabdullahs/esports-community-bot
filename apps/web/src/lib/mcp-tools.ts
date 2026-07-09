@@ -1,7 +1,6 @@
 import "server-only";
 
 import { all } from "@bot/db/client.js";
-import { recordAdminAudit as recordAudit } from "@bot/db/ewcAdminAuditLog.js";
 import { listStandingsForTournament } from "@bot/db/tournamentStandings.js";
 import { getTournamentById } from "@bot/db/tournaments.js";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
@@ -14,11 +13,11 @@ import {
   canMcpManageGame,
   canMcpManageMedia,
   canUseMcpTool,
-  mcpAuditActor,
   type McpAccess,
 } from "@/lib/mcp-auth";
+import { runIdempotentMcpWrite } from "@/lib/mcp-write";
 import { ADMIN_PUBLIC_OVERLAP_TOOL_NAMES, MCP_TOOL_MANIFEST } from "@/lib/mcp-tool-manifest";
-import { listAdminNewsPosts, createNewsPost } from "@/lib/news";
+import { createNewsPostInTx, getNewsPost, listAdminNewsPosts } from "@/lib/news";
 import { getMediaChannel, listMediaChannels, type MediaChannelRecord } from "@/lib/media";
 import {
   NEWS_BODY_MAX_LENGTH,
@@ -27,7 +26,13 @@ import {
   validateNewsInput,
 } from "@/lib/news-validation";
 import { registerPublicMcpTools } from "@/lib/public-mcp-tools";
-import { getStreamChannel, listStreamChannels, updateStreamChannel, type StreamChannel } from "@/lib/stream-channels";
+import {
+  getStreamChannel,
+  getStreamChannelInTx,
+  listStreamChannels,
+  updateStreamChannelInTx,
+  type StreamChannel,
+} from "@/lib/stream-channels";
 
 type ToolResult = {
   content: Array<{ type: "text"; text: string }>;
@@ -36,6 +41,11 @@ type ToolResult = {
 };
 
 type CapabilityLocale = "en" | "ar";
+
+const IDEMPOTENCY_KEY_DESCRIPTION =
+  "Caller-generated UUID or unique opaque token reused only when retrying the same operation.";
+
+const idempotencyKeySchema = z.string().min(8).max(100).describe(IDEMPOTENCY_KEY_DESCRIPTION);
 
 function jsonResult(data: Record<string, unknown>): ToolResult {
   return {
@@ -70,21 +80,6 @@ function postVisibleToAccess(
   if (post.mediaSlug) return canMcpManageMedia(access, post.mediaSlug);
   if (post.gameSlug) return canMcpManageGame(access, post.gameSlug);
   return false;
-}
-
-async function auditMcp(access: McpAccess, action: string, target: string | null, details?: Record<string, unknown>) {
-  const actor = mcpAuditActor(access);
-  await recordAudit({
-    ...actor,
-    action,
-    target,
-    details: {
-      ...(details ?? {}),
-      keyId: access.key.id,
-      keyPrefix: access.key.keyPrefix,
-      ownerDiscordId: access.discordUserId,
-    },
-  });
 }
 
 function streamAllowed(access: McpAccess, channel: StreamChannel | null) {
@@ -411,8 +406,9 @@ export function createAdminMcpServer(access: McpAccess) {
     "create_news_draft",
     {
       title: "Create News Draft",
-      description: "Create a draft news post in an allowed game or media channel. Call get_admin_capabilities for valid slugs.",
+      description: "Create a draft news post in an allowed game or media channel. Requires idempotencyKey for safe retries. Call get_admin_capabilities for valid slugs.",
       inputSchema: {
+        idempotencyKey: idempotencyKeySchema,
         title: z.string().min(1).max(NEWS_TITLE_MAX_LENGTH),
         summary: z.string().max(NEWS_SUMMARY_MAX_LENGTH).optional(),
         body: z.string().max(NEWS_BODY_MAX_LENGTH).optional(),
@@ -422,7 +418,16 @@ export function createAdminMcpServer(access: McpAccess) {
         ewc: z.boolean().optional(),
       },
     },
-    async ({ title, summary = "", body = "", locale = "en", gameSlug = "", mediaSlug = "", ewc = false }) => {
+    async ({
+      idempotencyKey,
+      title,
+      summary = "",
+      body = "",
+      locale = "en",
+      gameSlug = "",
+      mediaSlug = "",
+      ewc = false,
+    }) => {
       assertTool(access, "create_news_draft");
       const cleanGame = gameSlug.trim();
       const cleanMedia = mediaSlug.trim();
@@ -449,17 +454,34 @@ export function createAdminMcpServer(access: McpAccess) {
         if (!canMcpManageGame(access, value.gameSlug)) return errorResult("This MCP key cannot draft for that game.");
       }
 
-      const post = await createNewsPost({
-        ...value,
-        status: "draft",
-        authorDiscordId: access.discordUserId,
-        authorName: access.displayName,
+      const write = await runIdempotentMcpWrite({
+        access,
+        toolName: "create_news_draft",
+        idempotencyKey,
+        auditAction: "mcp.news.create_draft",
+        mutate: async (tx) => {
+          const postId = await createNewsPostInTx(tx, {
+            ...value,
+            status: "draft",
+            authorDiscordId: access.discordUserId,
+            authorName: access.displayName,
+          });
+          return {
+            result: { postId },
+            auditTarget: String(postId),
+            auditDetails: {
+              gameSlug: value.gameSlug,
+              mediaSlug: value.mediaSlug,
+            },
+          };
+        },
+        hydrate: async ({ postId }) => {
+          const post = await getNewsPost(Number(postId));
+          if (!post) throw new Error("Created news post was not found after commit.");
+          return post;
+        },
       });
-      await auditMcp(access, "mcp.news.create_draft", String(post.id), {
-        gameSlug: value.gameSlug,
-        mediaSlug: value.mediaSlug,
-      });
-      return jsonResult({ post });
+      return jsonResult({ post: write.value, replayed: write.replayed });
     },
   );
 
@@ -467,8 +489,9 @@ export function createAdminMcpServer(access: McpAccess) {
     "update_stream_channel",
     {
       title: "Update Stream Channel",
-      description: "Update a stream channel. Call get_admin_capabilities for valid channel IDs. Non-super keys may only update game-scoped channels they manage.",
+      description: "Update a stream channel. Requires idempotencyKey for safe retries. Call get_admin_capabilities for valid channel IDs. Non-super keys may only update game-scoped channels they manage.",
       inputSchema: {
+        idempotencyKey: idempotencyKeySchema,
         id: z.number().int().positive(),
         label: z.string().max(100).optional(),
         language: z.string().max(20).optional(),
@@ -478,7 +501,7 @@ export function createAdminMcpServer(access: McpAccess) {
         creatorKey: z.string().max(80).optional(),
       },
     },
-    async ({ id, ...patch }) => {
+    async ({ idempotencyKey, id, ...patch }) => {
       assertTool(access, "update_stream_channel");
       const existing = await getStreamChannel(id);
       if (!existing) return errorResult("Stream channel not found.");
@@ -486,12 +509,40 @@ export function createAdminMcpServer(access: McpAccess) {
       if (patch.gameSlugs && access.games !== "ALL" && !patch.gameSlugs.every((slug) => canMcpManageGame(access, slug))) {
         return errorResult("This MCP key cannot assign one or more requested games.");
       }
-      const updated = await updateStreamChannel(id, {
-        ...patch,
-        propagateToGameSlugs: scopedPropagationGameSlugs(access),
+      const write = await runIdempotentMcpWrite({
+        access,
+        toolName: "update_stream_channel",
+        idempotencyKey,
+        auditAction: "mcp.stream.update",
+        mutate: async (tx) => {
+          const current = await getStreamChannelInTx(tx, id);
+          if (!current) throw new Error("Stream channel not found.");
+          if (!streamAllowed(access, current)) throw new Error("This MCP key cannot update that stream channel.");
+          if (
+            patch.gameSlugs &&
+            access.games !== "ALL" &&
+            !patch.gameSlugs.every((slug) => canMcpManageGame(access, slug))
+          ) {
+            throw new Error("This MCP key cannot assign one or more requested games.");
+          }
+          const updated = await updateStreamChannelInTx(tx, id, {
+            ...patch,
+            propagateToGameSlugs: scopedPropagationGameSlugs(access),
+          });
+          if (!updated) throw new Error("Stream channel not found.");
+          return {
+            result: { channelId: id },
+            auditTarget: String(id),
+            auditDetails: { active: updated.active },
+          };
+        },
+        hydrate: async ({ channelId }) => {
+          const channel = await getStreamChannel(Number(channelId));
+          if (!channel) throw new Error("Updated stream channel was not found after commit.");
+          return channel;
+        },
       });
-      await auditMcp(access, "mcp.stream.update", String(id), { active: updated?.active ?? null });
-      return jsonResult({ channel: updated });
+      return jsonResult({ channel: write.value, replayed: write.replayed });
     },
   );
 

@@ -9,6 +9,7 @@ process.env.DB_PATH = join(dir, 'bot.sqlite');
 process.env.LOG_LEVEL = 'error';
 
 const { closeDb } = await import('../src/db/index.js');
+const { transaction } = await import('../src/db/client.js');
 const {
   parseChannelHandle,
   parseGameSlugs,
@@ -20,6 +21,7 @@ const {
   channelsForMatch,
   channelsForTournament,
   updateStreamChannel,
+  updateStreamChannelInTx,
   setStreamChannelActive,
   deleteStreamChannel,
   listDistinctActiveHandles,
@@ -149,6 +151,62 @@ test('creator-level edits propagate to a creator\'s sibling platforms', async ()
   // Per-row attributes we did NOT pass stay untouched on the sibling.
   assert.equal(kkAfter.handle, 'creator_edit_kk', 'per-row handle unchanged on sibling');
   assert.equal(kkAfter.platform, 'kick', 'per-row platform unchanged on sibling');
+});
+
+test('transaction-bound stream update rolls back primary changes when sibling propagation fails', async () => {
+  const primary = await createStreamChannel({
+    platform: 'twitch',
+    handle: 'tx_fault_tw',
+    label: 'Tx Fault Old',
+    creatorKey: 'tx-fault',
+    scope: 'game',
+    gameSlug: 'valorant',
+  });
+  const sibling = await createStreamChannel({
+    platform: 'kick',
+    handle: 'tx_fault_kk',
+    label: 'Tx Fault Old',
+    creatorKey: 'tx-fault',
+    scope: 'game',
+    gameSlug: 'valorant',
+    isDefault: true,
+  });
+  const ids = [primary.id, sibling.id];
+  const snapshot = async () => Promise.all(ids.map(async (id) => {
+    const channel = await getStreamChannel(id);
+    return {
+      id: channel.id,
+      label: channel.label,
+      gameSlugs: channel.gameSlugs,
+      isDefault: channel.isDefault,
+      active: channel.active,
+    };
+  }));
+  const before = await snapshot();
+
+  await assert.rejects(
+    () => transaction(async (tx) => {
+      let streamUpdateCount = 0;
+      const faultTx = {
+        ...tx,
+        run(sql, params) {
+          if (/^\s*UPDATE stream_channels SET/i.test(sql)) {
+            streamUpdateCount += 1;
+            if (streamUpdateCount === 2) throw new Error('injected sibling failure');
+          }
+          return tx.run(sql, params);
+        },
+      };
+      await updateStreamChannelInTx(faultTx, primary.id, {
+        label: 'Tx Fault New',
+        gameSlugs: ['valorant', 'overwatch'],
+        isDefault: true,
+      });
+    }),
+    /injected sibling failure/,
+  );
+
+  assert.deepEqual(await snapshot(), before);
 });
 
 test('re-adding the same channel at the same scope upserts (no duplicate)', async () => {
