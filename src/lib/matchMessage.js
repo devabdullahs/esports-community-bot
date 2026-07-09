@@ -7,11 +7,13 @@ import {
   renderScheduleCard,
   renderStatusCard,
 } from './matchCard.js';
-import { gameName, gameTag, matchTagEwc } from './games.js';
+import { gameName, gameTag, matchTag, matchTagEwc, normalizeGameSlug } from './games.js';
 import { isLobbyMatch, matchLabel, matchUrl, tournamentUrl } from './render.js';
 
 const LIQUIPEDIA_FOOTER = 'Data from Liquipedia — CC-BY-SA 3.0';
 const NEXT_UP_LOOKAHEAD_SECONDS = 3 * 60 * 60;
+const ALL_GAMES_LIVE_LIMIT = 12;
+const ALL_GAMES_UPCOMING_LIMIT = 12;
 
 export const MATCH_STATUS = {
   running: { label: 'Live now', color: 0xed4245, order: 0 },
@@ -156,31 +158,64 @@ function upcomingMatches(matches, limit = 5, { diversify = false } = {}) {
   return selected.sort(byUpcomingTime);
 }
 
-function allGamesUpcoming(matches, limit = 10) {
+function matchIdentity(m) {
+  return m.id ?? m.external_id ?? `${m.game || 'unknown'}:${m.team_a || ''}:${m.team_b || ''}:${m.scheduled_at || ''}`;
+}
+
+function isFightingGameMatch(m) {
+  return normalizeGameSlug(m.game) === 'fighters';
+}
+
+function ensureFightingGameMatches(selected, rows, sortFn) {
+  const selectedIds = new Set(selected.map(matchIdentity));
+  for (const match of rows) {
+    if (!isFightingGameMatch(match) || selectedIds.has(matchIdentity(match))) continue;
+    selected.push(match);
+    selectedIds.add(matchIdentity(match));
+  }
+  return selected.sort(sortFn);
+}
+
+function allGamesUpcoming(matches, limit = ALL_GAMES_UPCOMING_LIMIT) {
   const scheduled = matches.filter((m) => m.status === 'scheduled').sort(byUpcomingTime);
   const selected = [];
-  const seenGames = new Set();
+  const selectedIds = new Set();
+  const seenBuckets = new Set();
 
   for (const match of scheduled) {
-    const game = gameTag(match.game) || match.game || 'unknown';
-    if (seenGames.has(game)) continue;
+    const bucket = isFightingGameMatch(match)
+      ? `fighters:${matchIdentity(match)}`
+      : matchTag(match) || match.game || 'unknown';
+    if (seenBuckets.has(bucket)) continue;
     selected.push(match);
-    seenGames.add(game);
-    if (selected.length >= limit) return selected.sort(byUpcomingTime);
+    selectedIds.add(matchIdentity(match));
+    seenBuckets.add(bucket);
+    if (selected.length >= limit) return ensureFightingGameMatches(selected, scheduled, byUpcomingTime);
   }
 
   for (const match of scheduled) {
-    if (selected.some((m) => m.id === match.id)) continue;
+    if (selectedIds.has(matchIdentity(match))) continue;
     selected.push(match);
+    selectedIds.add(matchIdentity(match));
     if (selected.length >= limit) break;
   }
 
-  return selected.sort(byUpcomingTime);
+  return ensureFightingGameMatches(selected, scheduled, byUpcomingTime);
+}
+
+export function selectAllGamesStatusMatches(
+  matches,
+  { liveLimit = ALL_GAMES_LIVE_LIMIT, upcomingLimit = ALL_GAMES_UPCOMING_LIMIT } = {},
+) {
+  const running = matches.filter((m) => m.status === 'running').sort(byLiveTime);
+  return {
+    live: ensureFightingGameMatches(running.slice(0, liveLimit), running, byLiveTime),
+    upcoming: allGamesUpcoming(matches, upcomingLimit),
+  };
 }
 
 export async function buildAllGamesStatusPayload(matches) {
-  const live = matches.filter((m) => m.status === 'running').sort(byLiveTime).slice(0, 5);
-  const upcoming = allGamesUpcoming(matches, 10);
+  const { live, upcoming } = selectAllGamesStatusMatches(matches);
   const imageName = `match-card-all-status-${Date.now()}.png`;
   const attachment = new AttachmentBuilder(await renderAllGamesStatusCard({ live, upcoming }), { name: imageName });
 

@@ -397,9 +397,9 @@ export function renderAllGamesStatusCard({ live = [], upcoming = [], updatedAt =
   // silently dropped later days once the compact day-grouped layout landed.
   const HEADER_H = 44;
   const ROW_H = 46;
-  const liveRows = live.slice(0, 4);
+  const liveRows = live;
   const groups = new Map();
-  for (const m of upcoming.slice(0, 12)) {
+  for (const m of upcoming) {
     const key = riyadhDayKey(m.scheduled_at) ?? 'tbd';
     if (!groups.has(key)) groups.set(key, []);
     groups.get(key).push(m);
