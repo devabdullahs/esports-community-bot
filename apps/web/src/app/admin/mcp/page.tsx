@@ -17,26 +17,41 @@ export const dynamic = "force-dynamic";
 export default async function AdminMcpPage() {
   const access = await getAdminAccess();
   if (!access.session) redirect("/login?callbackURL=/admin/mcp");
-  if (!access.isSuper) redirect("/admin");
+  if (!access.allowed) redirect("/admin");
 
   const locale = await getRequestLocale();
   const t = getAdminCopy(locale);
-  const [keys, games, media] = await Promise.all([
+  const [allKeys, games, media] = await Promise.all([
     listMcpKeys(),
     listGames(),
     listMediaChannels(),
   ]);
+  const keys = access.isSuper
+    ? allKeys
+    : allKeys.filter((key) => key.ownerDiscordId === access.discordUserId);
+  const allowedGameSlugs = access.games === "ALL" ? null : new Set(access.games);
+  const allowedMediaSlugs = access.media === "ALL" ? null : new Set(access.media);
+  const visibleGames = allowedGameSlugs
+    ? games.filter((game) => allowedGameSlugs.has(game.slug))
+    : games;
+  const visibleMedia = allowedMediaSlugs
+    ? media.filter((channel) => allowedMediaSlugs.has(channel.slug))
+    : media;
 
   return (
     <AdminPageShell
       backHref="/admin"
       backLabel={t.common.backToAdmin}
-      eyebrow={t.common.superAdmin}
+      eyebrow={access.isSuper ? t.common.superAdmin : t.dashboard.roleScoped}
       title={locale === "ar" ? "مفاتيح MCP" : "MCP keys"}
       description={
-        locale === "ar"
-          ? "أنشئ مفاتيح Bearer آمنة لأدوات الذكاء الاصطناعي الإدارية، وتابعها أو ألغها من مكان واحد."
-          : "Create, monitor, and revoke secure bearer keys for admin AI tools."
+        access.isSuper
+          ? locale === "ar"
+            ? "أنشئ مفاتيح Bearer آمنة لأدوات الذكاء الاصطناعي الإدارية، وتابعها أو ألغها من مكان واحد."
+            : "Create, monitor, and revoke secure bearer keys for admin AI tools."
+          : locale === "ar"
+            ? "أنشئ مفاتيح MCP خاصة بحسابك فقط. ترث المفاتيح نفس صلاحيات الألعاب والمنصات الإعلامية المسموحة لك."
+            : "Create MCP keys for your own account only. Keys inherit your existing game and media permissions."
       }
       maxWidth="5xl"
       actions={
@@ -50,9 +65,10 @@ export default async function AdminMcpPage() {
       <McpKeyManager
         keys={keys}
         tools={MCP_TOOL_NAMES}
-        games={games.map((game) => ({ slug: game.slug, label: localizeText(game.title, locale) }))}
-        media={media.map((channel) => ({ slug: channel.slug, label: localizeText(channel.name, locale) }))}
+        games={visibleGames.map((game) => ({ slug: game.slug, label: localizeText(game.title, locale) }))}
+        media={visibleMedia.map((channel) => ({ slug: channel.slug, label: localizeText(channel.name, locale) }))}
         locale={locale}
+        isSuper={access.isSuper}
         defaultOwnerDiscordId={access.discordUserId ?? ""}
         defaultOwnerName={access.displayName ?? ""}
       />

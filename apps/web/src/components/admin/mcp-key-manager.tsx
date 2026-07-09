@@ -44,6 +44,14 @@ function text(locale: Locale) {
         revokeConfirm: "إلغاء هذا المفتاح؟",
         copied: "تم النسخ",
         failed: "فشل الإجراء",
+        selectAll: "تحديد الكل",
+        clear: "مسح",
+        noOptions: "لا توجد خيارات متاحة.",
+        ownKeys: "مفاتيحك",
+        scopeNoticeSuper:
+          "يمكنك إنشاء مفاتيح لحسابك الإداري وإدارتها لكل النطاقات. ألغ تحديد أي نطاق لا يحتاجه المفتاح.",
+        scopeNoticeScoped:
+          "يمكنك إنشاء مفاتيح لحسابك فقط. الخيارات المعروضة هنا هي نفس الألعاب والمنصات الإعلامية المسموحة لك في لوحة التحكم.",
       }
     : {
         create: "Create MCP key",
@@ -69,6 +77,14 @@ function text(locale: Locale) {
         revokeConfirm: "Revoke this MCP key?",
         copied: "Copied",
         failed: "Action failed",
+        selectAll: "Select all",
+        clear: "Clear",
+        noOptions: "No options available.",
+        ownKeys: "Your keys",
+        scopeNoticeSuper:
+          "You can create keys for your admin account across all scopes. Clear any scope the key does not need.",
+        scopeNoticeScoped:
+          "You can create keys only for your own account. The available choices match your existing dashboard game and media permissions.",
       };
 }
 
@@ -77,35 +93,61 @@ function Chips({
   options,
   selected,
   onToggle,
+  onSelectAll,
+  onClear,
+  selectAllLabel,
+  clearLabel,
+  emptyLabel,
 }: {
   title: string;
   options: Opt[];
   selected: Set<string>;
   onToggle: (slug: string) => void;
+  onSelectAll: () => void;
+  onClear: () => void;
+  selectAllLabel: string;
+  clearLabel: string;
+  emptyLabel: string;
 }) {
   return (
     <div className="flex flex-col gap-1.5">
-      <p className="text-xs font-medium text-muted-foreground">{title}</p>
-      <div className="flex flex-wrap gap-1.5">
-        {options.map((option) => {
-          const on = selected.has(option.slug);
-          return (
-            <button
-              key={option.slug}
-              type="button"
-              onClick={() => onToggle(option.slug)}
-              className={cn(
-                "rounded-full border px-2.5 py-1 text-xs transition-colors",
-                on
-                  ? "border-primary bg-primary/10 text-foreground"
-                  : "border-border text-muted-foreground hover:bg-muted",
-              )}
-            >
-              {option.label}
+      <div className="flex items-center justify-between gap-3">
+        <p className="text-xs font-medium text-muted-foreground">{title}</p>
+        {options.length ? (
+          <div className="flex items-center gap-2 text-xs">
+            <button type="button" className="text-primary hover:underline" onClick={onSelectAll}>
+              {selectAllLabel}
             </button>
-          );
-        })}
+            <button type="button" className="text-muted-foreground hover:text-foreground" onClick={onClear}>
+              {clearLabel}
+            </button>
+          </div>
+        ) : null}
       </div>
+      {options.length ? (
+        <div className="flex flex-wrap gap-1.5">
+          {options.map((option) => {
+            const on = selected.has(option.slug);
+            return (
+              <button
+                key={option.slug}
+                type="button"
+                onClick={() => onToggle(option.slug)}
+                className={cn(
+                  "rounded-full border px-2.5 py-1 text-xs transition-colors",
+                  on
+                    ? "border-primary bg-primary/10 text-foreground"
+                    : "border-border text-muted-foreground hover:bg-muted",
+                )}
+              >
+                {option.label}
+              </button>
+            );
+          })}
+        </div>
+      ) : (
+        <p className="text-sm text-muted-foreground">{emptyLabel}</p>
+      )}
     </div>
   );
 }
@@ -129,6 +171,7 @@ export function McpKeyManager({
   games,
   media,
   locale,
+  isSuper,
   defaultOwnerDiscordId,
   defaultOwnerName,
 }: {
@@ -137,6 +180,7 @@ export function McpKeyManager({
   games: Opt[];
   media: Opt[];
   locale: Locale;
+  isSuper: boolean;
   defaultOwnerDiscordId: string;
   defaultOwnerName: string;
 }) {
@@ -152,9 +196,11 @@ export function McpKeyManager({
   const ownerName = defaultOwnerName;
   const [expiresOn, setExpiresOn] = useState<Date | undefined>();
   const [expiresTime, setExpiresTime] = useState("23:59");
+  const allGameSlugs = games.map((game) => game.slug);
+  const allMediaSlugs = media.map((channel) => channel.slug);
   const [selectedTools, setSelectedTools] = useState<Set<string>>(new Set(tools));
-  const [selectedGames, setSelectedGames] = useState<Set<string>>(new Set());
-  const [selectedMedia, setSelectedMedia] = useState<Set<string>>(new Set());
+  const [selectedGames, setSelectedGames] = useState<Set<string>>(() => new Set(allGameSlugs));
+  const [selectedMedia, setSelectedMedia] = useState<Set<string>>(() => new Set(allMediaSlugs));
   const dateFormatter = new Intl.DateTimeFormat(locale === "ar" ? "ar-SA" : "en-US", {
     dateStyle: "medium",
   });
@@ -196,6 +242,9 @@ export function McpKeyManager({
       setLabel("");
       setExpiresOn(undefined);
       setExpiresTime("23:59");
+      setSelectedTools(new Set(tools));
+      setSelectedGames(new Set(allGameSlugs));
+      setSelectedMedia(new Set(allMediaSlugs));
       router.refresh();
     } catch (err) {
       setError((err as Error).message);
@@ -259,6 +308,10 @@ export function McpKeyManager({
           <CardTitle>{t.create}</CardTitle>
         </CardHeader>
         <CardContent className="flex flex-col gap-4">
+          <Alert>
+            <KeyRoundIcon className="size-4" />
+            <AlertDescription>{isSuper ? t.scopeNoticeSuper : t.scopeNoticeScoped}</AlertDescription>
+          </Alert>
           <div className="grid gap-4 md:grid-cols-2">
             <Field>
               <FieldLabel>{t.label}</FieldLabel>
@@ -329,18 +382,33 @@ export function McpKeyManager({
             options={tools.map((tool) => ({ slug: tool, label: tool }))}
             selected={selectedTools}
             onToggle={(tool) => toggle(selectedTools, setSelectedTools, tool)}
+            onSelectAll={() => setSelectedTools(new Set(tools))}
+            onClear={() => setSelectedTools(new Set())}
+            selectAllLabel={t.selectAll}
+            clearLabel={t.clear}
+            emptyLabel={t.noOptions}
           />
           <Chips
             title={t.games}
             options={games}
             selected={selectedGames}
             onToggle={(game) => toggle(selectedGames, setSelectedGames, game)}
+            onSelectAll={() => setSelectedGames(new Set(allGameSlugs))}
+            onClear={() => setSelectedGames(new Set())}
+            selectAllLabel={t.selectAll}
+            clearLabel={t.clear}
+            emptyLabel={t.noOptions}
           />
           <Chips
             title={t.media}
             options={media}
             selected={selectedMedia}
             onToggle={(channel) => toggle(selectedMedia, setSelectedMedia, channel)}
+            onSelectAll={() => setSelectedMedia(new Set(allMediaSlugs))}
+            onClear={() => setSelectedMedia(new Set())}
+            selectAllLabel={t.selectAll}
+            clearLabel={t.clear}
+            emptyLabel={t.noOptions}
           />
           <Button onClick={createKey} disabled={busy || !ownerDiscordId.trim() || selectedTools.size === 0} className="w-fit">
             <KeyRoundIcon data-icon="inline-start" />
@@ -350,7 +418,7 @@ export function McpKeyManager({
       </Card>
 
       <div className="flex flex-col gap-3">
-        <h2 className="text-lg font-semibold">{t.activeKeys}</h2>
+        <h2 className="text-lg font-semibold">{isSuper ? t.activeKeys : t.ownKeys}</h2>
         {keys.map((key) => (
           <Card key={key.id} size="sm">
             <CardContent className="flex flex-col gap-3 py-4">
@@ -384,10 +452,10 @@ export function McpKeyManager({
                 {key.tools.map((tool) => (
                   <Badge key={tool} variant="outline">{tool}</Badge>
                 ))}
-                {key.games.map((game) => (
+                {key.games.filter((game) => !game.startsWith("__ec_")).map((game) => (
                   <Badge key={`g-${game}`} variant="secondary">{game}</Badge>
                 ))}
-                {key.media.map((channel) => (
+                {key.media.filter((channel) => !channel.startsWith("__ec_")).map((channel) => (
                   <Badge key={`m-${channel}`} variant="secondary">{channel}</Badge>
                 ))}
               </div>

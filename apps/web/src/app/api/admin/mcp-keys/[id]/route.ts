@@ -1,8 +1,9 @@
 import { NextResponse } from "next/server";
-import { getAdminAccess, isSuper } from "@/lib/admin";
+import { getAdminAccess } from "@/lib/admin";
 import { recordAdminAudit } from "@/lib/audit";
 import { sameOriginOr403 } from "@/lib/community";
 import { getMcpKey, revokeMcpKey } from "@/lib/mcp-keys";
+import { rateLimitOr429 } from "@/lib/rate-limit";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -21,13 +22,23 @@ export async function DELETE(
 
   const access = await getAdminAccess();
   if (!access.session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  if (!isSuper(access)) return NextResponse.json({ error: "Super admin only" }, { status: 403 });
+  if (!access.allowed || !access.discordUserId) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   const { id: rawId } = await context.params;
   const id = parseId(rawId);
   if (!id) return NextResponse.json({ error: "Invalid key id" }, { status: 400 });
   const existing = await getMcpKey(id);
   if (!existing) return NextResponse.json({ error: "Not found" }, { status: 404 });
+  if (!access.isSuper && existing.ownerDiscordId !== access.discordUserId) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+
+  const limited = await rateLimitOr429({
+    key: `admin:mcp-key:revoke:${access.discordUserId}`,
+    limit: 30,
+    windowSec: 600,
+  });
+  if (limited) return limited;
 
   await revokeMcpKey(id);
   await recordAdminAudit(access, "mcp_key.revoke", String(id), {

@@ -237,7 +237,7 @@ Authorization header without the bridge.
 
 ## Security Notes
 
-- Only super admins can create or revoke MCP keys.
+- Admins can create and revoke MCP keys for their own signed-in account. Super admins can view and revoke all keys.
 - Keys should be scoped to the smallest useful tool/game/media set.
 - Treat MCP keys like admin credentials. Do not paste them into screenshots,
   commits, issue comments, or shared prompts.

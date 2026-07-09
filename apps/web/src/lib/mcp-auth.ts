@@ -11,6 +11,8 @@ import { getAdmin } from "@/lib/admins";
 
 type McpKeyRow = Awaited<ReturnType<typeof verifyMcpKeySecret>>;
 
+export const MCP_NO_SCOPE_SENTINEL = "__ec_no_scope__";
+
 export type McpAccess = {
   key: NonNullable<McpKeyRow>;
   discordUserId: string;
@@ -38,10 +40,12 @@ function superAdminDiscordIds(): Set<string> {
 }
 
 function intersectScopes(owner: string[] | "ALL", keyScopes: string[]): string[] | "ALL" {
-  if (!keyScopes.length) return owner;
-  if (owner === "ALL") return keyScopes;
+  if (keyScopes.includes(MCP_NO_SCOPE_SENTINEL)) return [];
+  const cleanScopes = keyScopes.filter((scope) => scope !== MCP_NO_SCOPE_SENTINEL);
+  if (!cleanScopes.length) return owner;
+  if (owner === "ALL") return cleanScopes;
   const allowed = new Set(owner);
-  return keyScopes.filter((slug) => allowed.has(slug));
+  return cleanScopes.filter((slug) => allowed.has(slug));
 }
 
 export function isMcpEnabled() {

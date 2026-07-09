@@ -17,6 +17,7 @@ const { activityForDiscordIds, activityQueries, listCommentsByAuthor } = await i
 
 const userA = '400000000000000001';
 const userB = '400000000000000002';
+const userC = '400000000000000003';
 
 let postId;
 let firstCommentId;
@@ -46,6 +47,7 @@ test.before(async () => {
   await setCommentLike(firstCommentId, userA);
   await setPostLike(postId, userA);
   await setCommentLike(firstCommentId, userB);
+  await setPostLike(postId, userC);
 });
 
 test.after(() => {
@@ -65,15 +67,35 @@ test('activityForDiscordIds rolls up comment counts (excluding deleted), last co
   assert.equal(a.commentCount, 2, 'deleted comment is excluded from the count');
   assert.equal(a.likeCount, 2, 'comment like + post like');
   assert.ok(a.lastCommentAt, 'last comment timestamp is present');
+  assert.ok(a.lastLikeAt, 'last like timestamp is present');
+  assert.ok(a.lastActivityAt, 'last activity timestamp is present');
+  assert.ok(Date.parse(a.lastActivityAt.replace(' ', 'T') + 'Z') >= Date.parse(a.lastCommentAt.replace(' ', 'T') + 'Z'));
 
   const b = map.get(userB);
   assert.equal(b.commentCount, 1);
   assert.equal(b.likeCount, 1);
 });
 
+test('activityForDiscordIds treats likes as activity even without comments', async () => {
+  const map = await activityForDiscordIds([userC]);
+  const c = map.get(userC);
+
+  assert.equal(c.commentCount, 0);
+  assert.equal(c.likeCount, 1);
+  assert.equal(c.lastCommentAt, null);
+  assert.ok(c.lastLikeAt, 'last like timestamp is present');
+  assert.equal(c.lastActivityAt, c.lastLikeAt);
+});
+
 test('activityForDiscordIds seeds zero entries for ids with no activity', async () => {
   const map = await activityForDiscordIds(['400000000000000009']);
-  assert.deepEqual(map.get('400000000000000009'), { commentCount: 0, lastCommentAt: null, likeCount: 0 });
+  assert.deepEqual(map.get('400000000000000009'), {
+    commentCount: 0,
+    lastCommentAt: null,
+    likeCount: 0,
+    lastLikeAt: null,
+    lastActivityAt: null,
+  });
 });
 
 test('listCommentsByAuthor returns all statuses newest-first', async () => {

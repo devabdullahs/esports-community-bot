@@ -1,4 +1,5 @@
 import Link from "next/link";
+import type { ReactNode } from "react";
 import { notFound, redirect } from "next/navigation";
 import {
   ArrowLeftIcon,
@@ -89,7 +90,7 @@ export default async function AdminUserDetailPage({
           <StatCard label={t.users.detail.likes} value={String(detail.likeCount)} icon={HeartIcon} />
           <StatCard
             label={t.users.detail.lastActive}
-            value={detail.lastActivityAt ?? t.users.detail.never}
+            value={detail.lastActivityAt ? <DateTime value={detail.lastActivityAt} locale={locale} /> : t.users.detail.never}
             icon={CalendarDaysIcon}
           />
         </div>
@@ -111,7 +112,7 @@ function StatCard({
   icon: Icon,
 }: {
   label: string;
-  value: string;
+  value: ReactNode;
   icon?: LucideIcon;
 }) {
   return (

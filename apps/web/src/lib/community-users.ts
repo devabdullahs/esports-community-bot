@@ -12,7 +12,13 @@ import { clampInt } from "@/lib/validate";
 // across the two backends).
 
 // Shapes returned by the untyped bot JS modules (annotated here at the boundary).
-type Activity = { commentCount: number; lastCommentAt: string | null; likeCount: number };
+type Activity = {
+  commentCount: number;
+  lastCommentAt: string | null;
+  likeCount: number;
+  lastLikeAt?: string | null;
+  lastActivityAt?: string | null;
+};
 type BlockRow = {
   discordUserId: string;
   blockedBy: string;
@@ -66,6 +72,9 @@ type AuthUserRow = {
   name: string | null;
   image: string | null;
   createdAt: string;
+  updatedAt: string | null;
+  accountUpdatedAt: string | null;
+  sessionUpdatedAt: string | null;
   discordUserId: string | null;
 };
 
@@ -76,12 +85,43 @@ type SqliteAuthDatabase = {
   prepare: (sql: string) => { all: (...params: unknown[]) => Array<Record<string, unknown>>; get: (...params: unknown[]) => Record<string, unknown> | undefined };
 };
 
+const DATE_WITHOUT_ZONE_RE = /^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}(?::\d{2}(?:\.\d{1,6})?)?$/;
+
+function dateText(value: unknown): string | null {
+  if (value == null) return null;
+  if (value instanceof Date) return value.toISOString();
+  return String(value);
+}
+
+function timestampMs(value: string | null | undefined) {
+  if (!value) return null;
+  const text = value.trim();
+  const normalized = DATE_WITHOUT_ZONE_RE.test(text) ? `${text.replace(" ", "T")}Z` : text;
+  const ms = Date.parse(normalized);
+  return Number.isNaN(ms) ? null : ms;
+}
+
+function mostRecentTimestamp(...values: Array<string | null | undefined>) {
+  let best: string | null = null;
+  let bestMs = -Infinity;
+  for (const value of values) {
+    const ms = timestampMs(value);
+    if (ms == null || ms <= bestMs) continue;
+    best = value ?? null;
+    bestMs = ms;
+  }
+  return best;
+}
+
 function normalizeRow(row: Record<string, unknown>): AuthUserRow {
   return {
     id: String(row.id),
     name: (row.name as string | null) ?? null,
     image: (row.image as string | null) ?? null,
-    createdAt: String(row.createdAt),
+    createdAt: dateText(row.createdAt) ?? "",
+    updatedAt: dateText(row.updatedAt),
+    accountUpdatedAt: dateText(row.accountUpdatedAt),
+    sessionUpdatedAt: dateText(row.sessionUpdatedAt),
     discordUserId: (row.discordUserId as string | null) ?? null,
   };
 }
@@ -111,10 +151,15 @@ export async function listCommunityUsers({
         : "";
       const searchParams = hasSearch ? [`%${term}%`, term] : [];
       const listSql =
-        `SELECT u.id, u.name, u.image, u."createdAt", a."accountId" AS "discordUserId"
+        `SELECT u.id, u.name, u.image, u."createdAt", u."updatedAt",
+                a."accountId" AS "discordUserId",
+                a."updatedAt" AS "accountUpdatedAt",
+                MAX(s."updatedAt") AS "sessionUpdatedAt"
          FROM "user" u
          LEFT JOIN "account" a ON a."userId" = u.id AND a."providerId" = 'discord'
+         LEFT JOIN "session" s ON s."userId" = u.id
          ${where}
+         GROUP BY u.id, u.name, u.image, u."createdAt", u."updatedAt", a."accountId", a."updatedAt"
          ORDER BY u."createdAt" DESC
          LIMIT $${searchParams.length + 1} OFFSET $${searchParams.length + 2}`;
       const listResult = await pg.query(listSql, [...searchParams, take, skip]);
@@ -134,10 +179,15 @@ export async function listCommunityUsers({
         : "";
       const searchParams = hasSearch ? [`%${term}%`, term] : [];
       const listSql =
-        `SELECT u.id, u.name, u.image, u.createdAt, a.accountId AS discordUserId
+        `SELECT u.id, u.name, u.image, u.createdAt, u.updatedAt,
+                a.accountId AS discordUserId,
+                a.updatedAt AS accountUpdatedAt,
+                MAX(s.updatedAt) AS sessionUpdatedAt
          FROM "user" u
          LEFT JOIN account a ON a.userId = u.id AND a.providerId = 'discord'
+         LEFT JOIN "session" s ON s.userId = u.id
          ${where}
+         GROUP BY u.id, u.name, u.image, u.createdAt, u.updatedAt, a.accountId, a.updatedAt
          ORDER BY u.createdAt DESC
          LIMIT ? OFFSET ?`;
       rows = sqlite.prepare(listSql).all(...searchParams, take, skip).map(normalizeRow);
@@ -183,7 +233,15 @@ export async function listCommunityUsers({
       discordUserId: r.discordUserId,
       commentCount: a?.commentCount ?? 0,
       likeCount: a?.likeCount ?? 0,
-      lastActivityAt: a?.lastCommentAt ?? null,
+      lastActivityAt: mostRecentTimestamp(
+        a?.lastActivityAt,
+        a?.lastCommentAt,
+        a?.lastLikeAt,
+        r.sessionUpdatedAt,
+        r.accountUpdatedAt,
+        r.updatedAt,
+        r.createdAt,
+      ),
       ewcLinked: r.discordUserId ? linked.has(r.discordUserId) : false,
       blocked: r.discordUserId ? blocked.has(r.discordUserId) : false,
     };
@@ -199,10 +257,15 @@ export async function getCommunityUserDetail(discordUserId: string): Promise<Com
     if (isPostgresAuthDatabase()) {
       const pg = authDatabase as PgAuthDatabase;
       const result = await pg.query(
-        `SELECT u.id, u.name, u.image, u."createdAt", a."accountId" AS "discordUserId"
+        `SELECT u.id, u.name, u.image, u."createdAt", u."updatedAt",
+                a."accountId" AS "discordUserId",
+                a."updatedAt" AS "accountUpdatedAt",
+                MAX(s."updatedAt") AS "sessionUpdatedAt"
          FROM "account" a
          JOIN "user" u ON u.id = a."userId"
+         LEFT JOIN "session" s ON s."userId" = u.id
          WHERE a."accountId" = $1 AND a."providerId" = 'discord'
+         GROUP BY u.id, u.name, u.image, u."createdAt", u."updatedAt", a."accountId", a."updatedAt"
          ORDER BY a."updatedAt" DESC
          LIMIT 1`,
         [discordUserId],
@@ -212,10 +275,15 @@ export async function getCommunityUserDetail(discordUserId: string): Promise<Com
       const sqlite = authDatabase as SqliteAuthDatabase;
       const found = sqlite
         .prepare(
-          `SELECT u.id, u.name, u.image, u.createdAt, a.accountId AS discordUserId
+          `SELECT u.id, u.name, u.image, u.createdAt, u.updatedAt,
+                  a.accountId AS discordUserId,
+                  a.updatedAt AS accountUpdatedAt,
+                  MAX(s.updatedAt) AS sessionUpdatedAt
            FROM account a
            JOIN "user" u ON u.id = a.userId
+           LEFT JOIN "session" s ON s.userId = u.id
            WHERE a.accountId = ? AND a.providerId = 'discord'
+           GROUP BY u.id, u.name, u.image, u.createdAt, u.updatedAt, a.accountId, a.updatedAt
            ORDER BY a.updatedAt DESC
            LIMIT 1`,
         )
@@ -243,7 +311,15 @@ export async function getCommunityUserDetail(discordUserId: string): Promise<Com
     discordUserId,
     commentCount: a?.commentCount ?? 0,
     likeCount: a?.likeCount ?? 0,
-    lastActivityAt: a?.lastCommentAt ?? null,
+    lastActivityAt: mostRecentTimestamp(
+      a?.lastActivityAt,
+      a?.lastCommentAt,
+      a?.lastLikeAt,
+      row.sessionUpdatedAt,
+      row.accountUpdatedAt,
+      row.updatedAt,
+      row.createdAt,
+    ),
     ewcLinked,
     block,
     comments,
