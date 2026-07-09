@@ -120,10 +120,20 @@ function navSections(
     },
   ];
 
+  const systemItems: AdminNavItem[] = [
+    {
+      href: "/admin/mcp",
+      label: locale === "ar" ? "مفاتيح MCP" : "MCP keys",
+      description:
+        locale === "ar"
+          ? "مفاتيح آمنة لأدوات الذكاء الاصطناعي الإدارية."
+          : "Secure keys for admin AI tooling.",
+      icon: KeyRoundIcon,
+    },
+  ];
+
   if (isSuper) {
-    sections.push({
-      title: locale === "ar" ? "\u0627\u0644\u0646\u0638\u0627\u0645" : "System",
-      items: [
+    systemItems.unshift(
         {
           href: "/admin/analytics",
           label: t.links.analyticsTitle,
@@ -148,6 +158,8 @@ function navSections(
           description: t.links.streamsDescription,
           icon: RadioIcon,
         },
+    );
+    systemItems.push(
         {
           href: "/admin/team",
           label: t.links.teamTitle,
@@ -155,23 +167,18 @@ function navSections(
           icon: ShieldIcon,
         },
         {
-          href: "/admin/mcp",
-          label: locale === "ar" ? "مفاتيح MCP" : "MCP keys",
-          description:
-            locale === "ar"
-              ? "مفاتيح آمنة لأدوات الذكاء الاصطناعي الإدارية."
-              : "Secure keys for admin AI tooling.",
-          icon: KeyRoundIcon,
-        },
-        {
           href: "/admin/audit",
           label: t.links.auditTitle,
           description: t.links.auditDescription,
           icon: ClipboardListIcon,
         },
-      ],
-    });
+    );
   }
+
+  sections.push({
+    title: locale === "ar" ? "\u0627\u0644\u0646\u0638\u0627\u0645" : "System",
+    items: systemItems,
+  });
 
   return sections;
 }
