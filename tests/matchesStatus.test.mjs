@@ -32,6 +32,8 @@ test('normalizeTeamName resolves known Liquipedia short-name redirects', () => {
   assert.equal(normalizeTeamName('Power Rangers'), 'powerrangers');
   assert.equal(normalizeTeamName('BB Team'), 'betboomteam');
   assert.equal(normalizeTeamName('BetBoom Team'), 'betboomteam');
+  assert.equal(normalizeTeamName('Rune Eaters'), 'runeeaters');
+  assert.equal(normalizeTeamName('Rune Eaters Esports'), 'runeeaters');
 });
 
 test('dedupeMatches collapses live-widget alias rows by timestamp and shared team', () => {
@@ -171,6 +173,37 @@ test('dedupeMatches prefers scored Power Rangers result over stale Poor Rangers 
       score_b: 1,
       status: 'running',
       scheduled_at: 1_783_505_700,
+    },
+  ];
+
+  assert.deepEqual(dedupeMatches(rows), [rows[1]]);
+});
+
+test('dedupeMatches prefers full Rune Eaters result over short-name live row', () => {
+  const rows = [
+    {
+      id: 1,
+      tournament_id: 10,
+      game: 'dota2',
+      external_id: 'dota2:1783587600:BB Team:Rune Eaters',
+      team_a: 'BB Team',
+      team_b: 'Rune Eaters',
+      score_a: 0,
+      score_b: 0,
+      status: 'running',
+      scheduled_at: 1_783_587_600,
+    },
+    {
+      id: 2,
+      tournament_id: 10,
+      game: 'dota2',
+      external_id: 'dota2:Esports_World_Cup/2026/Group_Stage:matchlist:24:betboom team vs rune eaters esports',
+      team_a: 'BetBoom Team',
+      team_b: 'Rune Eaters Esports',
+      score_a: 0,
+      score_b: 0,
+      status: 'running',
+      scheduled_at: 1_783_587_600,
     },
   ];
 
