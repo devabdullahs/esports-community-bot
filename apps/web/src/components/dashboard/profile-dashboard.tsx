@@ -58,6 +58,7 @@ type MePayload = {
     season: string;
     rank: number | null;
     overallPoints: number;
+    weeksPredicted: number;
     weeksScored: number;
     weeklyWins: number;
     top3Sweeps: number;
@@ -265,7 +266,11 @@ export function ProfileDashboard({
               icon={TrophyIcon}
             />
             <StatCard label={text.points} value={formatNumber(stats.overallPoints, locale)} icon={SparklesIcon} />
-            <StatCard label={text.weeksScored} value={formatNumber(stats.weeksScored, locale)} icon={CalendarDaysIcon} />
+            <StatCard
+              label={text.weeksPredicted}
+              value={formatNumber(stats.weeksPredicted, locale)}
+              icon={CalendarDaysIcon}
+            />
             <StatCard label={text.weeklyWins} value={formatNumber(stats.weeklyWins, locale)} icon={MedalIcon} />
           </section> : null}
 

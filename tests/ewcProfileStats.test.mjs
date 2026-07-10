@@ -20,6 +20,7 @@ const {
   upsertWeeklyPrediction,
 } = await import('../src/db/ewcPredictions.js');
 const {
+  EWC_ROLE_CONNECTION_METADATA,
   buildDiscordRoleConnectionPayload,
   formatShowcaseUsername,
   getEwcRoleConnectionPayload,
@@ -86,6 +87,15 @@ async function seed() {
   await saveWeeklyPredictionScore(guildId, week2.id, userA, 100, { bonus: 0 });
   await saveWeeklyPredictionScore(guildId, week2.id, userB, 600, { bonus: 0 });
   await markEwcWeekScored(week2.id, []);
+
+  const week3 = await upsertEwcWeek({
+    guildId,
+    season,
+    weekKey: 'week-3',
+    label: 'Week 3',
+    createdBy: 'admin',
+  });
+  await upsertWeeklyPrediction({ guildId, weekId: week3.id, userId: userA, picks: ['Team Falcons'] });
 }
 
 await seed();
@@ -94,6 +104,7 @@ test('builds ranked profile stats and Discord role connection payload', async ()
   const stats = await getEwcUserProfileStats(guildId, season, userA);
   assert.equal(stats.rank, 1);
   assert.equal(stats.overallPoints, 1600);
+  assert.equal(stats.weeksPredicted, 3);
   assert.equal(stats.weeksScored, 2);
   assert.equal(stats.weeklyWins, 1);
   assert.equal(stats.top3Sweeps, 1);
@@ -103,9 +114,12 @@ test('builds ranked profile stats and Discord role connection payload', async ()
   assert.equal(payload.platform_name, 'EWC Predictions');
   assert.equal(payload.metadata.overall_rank, '1');
   assert.equal(payload.metadata.overall_points, '1600');
-  assert.equal(payload.metadata.weeks_scored, '2');
+  assert.equal(payload.metadata.weeks_scored, '3');
   assert.equal(payload.metadata.weekly_wins, '1');
   assert.equal(payload.metadata.top3_sweeps, '1');
+
+  const activityMetadata = EWC_ROLE_CONNECTION_METADATA.find((entry) => entry.key === 'weeks_scored');
+  assert.equal(activityMetadata?.name, 'Weeks Predicted');
 });
 
 test('shapes public leaderboard rows', async () => {

@@ -29,9 +29,10 @@ export const EWC_ROLE_CONNECTION_METADATA = [
   },
   {
     type: 2,
+    // Keep the existing key so guild role requirements survive this semantic fix.
     key: 'weeks_scored',
-    name: 'Weeks Scored',
-    description: 'Number of scored EWC weekly prediction rounds.',
+    name: 'Weeks Predicted',
+    description: 'Number of EWC weekly prediction rounds this member submitted.',
   },
   {
     type: 2,
@@ -86,10 +87,10 @@ async function weeklyAggregateStats(guildId, season, userId) {
      JOIN ewc_prediction_weeks w ON w.id = wp.week_id
      WHERE wp.guild_id = $1
        AND w.season = $2
-       AND wp.user_id = $3
-       AND wp.score IS NOT NULL`,
+       AND wp.user_id = $3`,
     [guildId, season, userId],
   );
+  const scoredRows = weeklyRows.filter((row) => row.score != null);
 
   const weeklyWins = (
     await get(
@@ -113,15 +114,16 @@ async function weeklyAggregateStats(guildId, season, userId) {
   )?.c;
 
   return {
-    weeksScored: weeklyRows.length,
+    weeksPredicted: weeklyRows.length,
+    weeksScored: scoredRows.length,
     weeklyWins: Number(weeklyWins || 0),
-    top3Sweeps: weeklyRows.filter((row) => Number(parseJson(row.details_json, {})?.bonus || 0) >= WEEKLY_TOP_THREE_SWEEP_BONUS)
+    top3Sweeps: scoredRows.filter((row) => Number(parseJson(row.details_json, {})?.bonus || 0) >= WEEKLY_TOP_THREE_SWEEP_BONUS)
       .length,
   };
 }
 
 function emptyWeeklyAggregate() {
-  return { weeksScored: 0, weeklyWins: 0, top3Sweeps: 0 };
+  return { weeksPredicted: 0, weeksScored: 0, weeklyWins: 0, top3Sweeps: 0 };
 }
 
 async function weeklyAggregateStatsForUsers(guildId, season, userIds) {
@@ -135,7 +137,6 @@ async function weeklyAggregateStatsForUsers(guildId, season, userIds) {
      JOIN ewc_prediction_weeks w ON w.id = wp.week_id
      WHERE wp.guild_id = $1
        AND w.season = $2
-       AND wp.score IS NOT NULL
        AND wp.user_id IN (${placeholders(3, uniqueIds.length)})`,
     [guildId, season, ...uniqueIds],
   );
@@ -154,6 +155,11 @@ async function weeklyAggregateStatsForUsers(guildId, season, userIds) {
 
   for (const row of weeklyRows) {
     const current = stats.get(row.user_id) || emptyWeeklyAggregate();
+    current.weeksPredicted += 1;
+    if (row.score == null) {
+      stats.set(row.user_id, current);
+      continue;
+    }
     const score = Number(row.score || 0);
     current.weeksScored += 1;
     if (score === winningScoreByWeek.get(row.week_id)) current.weeklyWins += 1;
@@ -238,7 +244,7 @@ export function formatShowcaseUsername(stats) {
     ? 'picks hidden'
     : stats.topTeams?.length
       ? stats.topTeams.join(', ')
-      : `${stats.weeksScored || 0} weeks`;
+      : `${stats.weeksPredicted ?? stats.weeksScored ?? 0} weeks`;
   const value = `${rank} | ${points} | ${teams}`;
   return value.length <= MAX_SHOWCASE_USERNAME ? value : `${value.slice(0, MAX_SHOWCASE_USERNAME - 3)}...`;
 }
@@ -258,6 +264,7 @@ export async function getEwcUserProfileStats(guildId, season = DEFAULT_EWC_PROFI
     displayName: memberLabel(userId),
     rank: rank.rank,
     overallPoints: rank.score,
+    weeksPredicted: weekly.weeksPredicted,
     weeksScored: weekly.weeksScored,
     weeklyWins: weekly.weeklyWins,
     top3Sweeps: weekly.top3Sweeps,
@@ -292,6 +299,7 @@ export async function getPublicEwcLeaderboard({ guildId, season = DEFAULT_EWC_PR
         rank: start + index + 1,
         displayName: memberLabel(userId),
         overallPoints: Number(row.score || 0),
+        weeksPredicted: weekly.weeksPredicted,
         weeksScored: weekly.weeksScored,
         weeklyWins: weekly.weeklyWins,
         top3Sweeps: weekly.top3Sweeps,
@@ -302,13 +310,14 @@ export async function getPublicEwcLeaderboard({ guildId, season = DEFAULT_EWC_PR
 }
 
 export function buildDiscordRoleConnectionPayload(stats) {
+  const weeksPredicted = stats.weeksPredicted ?? stats.weeksScored ?? 0;
   return {
     platform_name: 'EWC Predictions',
     platform_username: stats.showcaseUsername || formatShowcaseUsername(stats),
     metadata: {
       overall_rank: String(stats.rank || UNRANKED_VALUE),
       overall_points: String(Math.max(0, Math.floor(Number(stats.overallPoints || 0)))),
-      weeks_scored: String(Math.max(0, Math.floor(Number(stats.weeksScored || 0)))),
+      weeks_scored: String(Math.max(0, Math.floor(Number(weeksPredicted)))),
       weekly_wins: String(Math.max(0, Math.floor(Number(stats.weeklyWins || 0)))),
       top3_sweeps: String(Math.max(0, Math.floor(Number(stats.top3Sweeps || 0)))),
     },

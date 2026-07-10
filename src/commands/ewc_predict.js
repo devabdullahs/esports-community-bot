@@ -35,6 +35,7 @@ import {
   userPredictionProfile,
   weeklyLeaderboard,
 } from '../db/ewcPredictions.js';
+import { getEwcProfileLinkByDiscordUser } from '../db/ewcProfileLinks.js';
 import { effectiveEwcWeekStatus, formatShortDate, formatTimestamp, normalizeClubName } from '../lib/ewcPredictions.js';
 import { selectCurrentOpenEwcWeek } from '../lib/ewcPredictionRounds.js';
 import { resolveEwcClubPick, searchEwcClubChoices } from '../lib/ewcClubCache.js';
@@ -42,6 +43,7 @@ import { ewcGameParticipantTeams, matchParticipant } from '../lib/ewcGameTeams.j
 import { announceEwcParticipation } from '../lib/ewcParticipation.js';
 import { updateEwcPredictionLeaderboard } from '../jobs/ewcPredictions.js';
 import { renderEwcShareCard } from '../lib/ewcShareCard.js';
+import { logger } from '../lib/logger.js';
 import QRCode from 'qrcode';
 
 const DEFAULT_SEASON = '2026';
@@ -172,6 +174,20 @@ async function dashboardInternalRequest(path, body) {
   const data = await response.json().catch(() => ({}));
   if (!response.ok) throw new Error(data.error || `Dashboard request failed (${response.status})`);
   return data;
+}
+
+export async function refreshLinkedProfileAfterFirstWeeklyPick({ firstPick, discordUserId, guildId, season }) {
+  if (!firstPick) return;
+  try {
+    if (!(await getEwcProfileLinkByDiscordUser(discordUserId))) return;
+    await dashboardInternalRequest('/api/internal/ewc-profile/sync', {
+      discordUserId,
+      guildId,
+      season,
+    });
+  } catch (error) {
+    logger.warn(`[ewc-predict] linked profile refresh failed for ${discordUserId}: ${error.message}`);
+  }
 }
 
 function season() {
@@ -764,7 +780,15 @@ async function handleWeeklyPickModal(interaction, { seasonYear, weekKey, gameKey
     return;
   }
   await interaction.editReply({ components: payload.components });
-  if (saved.firstPick) await announceWeeklyParticipation(interaction, round);
+  if (saved.firstPick) {
+    await announceWeeklyParticipation(interaction, round);
+    void refreshLinkedProfileAfterFirstWeeklyPick({
+      firstPick: true,
+      discordUserId: interaction.user.id,
+      guildId: interaction.guildId,
+      season: seasonYear,
+    });
+  }
 }
 
 async function showSeasonSlotModal(interaction, { seasonYear, index, ownerId }) {

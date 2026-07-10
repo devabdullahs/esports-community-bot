@@ -144,6 +144,7 @@ describe("EWC profile routes", () => {
       season: SEASON,
       userId: user.discordUserId,
       overallPoints: 420,
+      weeksPredicted: 1,
       weeksScored: 1,
     });
   });
