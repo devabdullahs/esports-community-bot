@@ -79,6 +79,7 @@ export const config = {
       'LIQUIPEDIA_USER_AGENT',
       'EsportsCommunityBot/0.1 (set LIQUIPEDIA_USER_AGENT with a contact email)',
     ),
+    matchDetailsEnabled: get('LIQUIPEDIA_MATCH_DETAILS_ENABLED', 'true') === 'true',
     // Team/player entity enrichment (quiet-hours, capped, tracked-scene scope).
     // The budget counts EVERY Liquipedia request the run makes (searches AND
     // parses), so it truly bounds queue occupancy: 60 requests ~= <=45 min

@@ -24,7 +24,10 @@ import {
   parseValveRankingTable,
   mergeLiveWidgetMatch,
 } from './parsers.js';
+import { alignMatchDetailsSides, parseMatchDetails } from './matchDetailsParsers.js';
 import { hasStandingsRows, parseBattleRoyaleSchedules, parseEventStandings } from './standingsParsers.js';
+
+const MATCH_DETAIL_GAMES = new Set(['valorant', 'dota2']);
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -123,6 +126,16 @@ export async function fetchGameMatches(game) {
     .toArray()
     .map((el) => parseMatchInfo($, el, game))
     .filter((m) => m.teamA !== 'TBD' || m.teamB !== 'TBD');
+}
+
+// Per-match pages contain the map/game detail that tournament pages intentionally omit.
+// This still consumes the shared parsePage queue and cache; do not add another HTTP path.
+export async function fetchMatchDetails(game, matchPage, { teamA, teamB } = {}) {
+  if (!MATCH_DETAIL_GAMES.has(game) || !matchPage) return null;
+  const data = await parsePage(game, matchPage);
+  const html = data?.parse?.text?.['*'];
+  if (!html) return null;
+  return alignMatchDetailsSides(parseMatchDetails(game, html), { teamA, teamB });
 }
 
 // Matches for a tracked tournament, parsed from its OWN page's bracket/matchlist

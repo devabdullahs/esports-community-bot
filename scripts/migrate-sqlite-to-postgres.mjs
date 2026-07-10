@@ -22,6 +22,7 @@ const schemaPath = resolve(rootDir, 'scripts/postgres/schema.sql');
 const appTables = [
   'tournaments',
   'matches',
+  'match_details',
   'teams',
   'players',
   'guild_settings',

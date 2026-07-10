@@ -19,7 +19,7 @@ import {
 } from "@/components/ui/table";
 import { LocalDateTime } from "@/components/local-date-time";
 import { PlatformIcon } from "@/components/platform-icon";
-import { copy, directionForLocale, type Locale } from "@/lib/i18n";
+import { copy, directionForLocale, localizedPath, type Locale } from "@/lib/i18n";
 import { logoProxyUrl } from "@/lib/logo-url";
 import { withProfileReturn, type ProfileReturnContext } from "@/lib/profile-navigation";
 import { safeUrlOrUndefined } from "@/lib/safe-url";
@@ -42,6 +42,7 @@ type MatchRow = {
   status: MatchStatus;
   scheduled_at: number | null;
   updated_at: string | null;
+  has_details?: boolean;
   stream?: { platform: string; url: string } | null;
   coStreams?: { platform: string; handle: string; label: string; url: string | null }[];
 };
@@ -157,6 +158,18 @@ function ResultScoreText({
 function MatchTime({ value, locale, fallback }: { value: number | null; locale: Locale; fallback: string }) {
   if (value == null || !Number.isFinite(value)) return <span>{fallback}</span>;
   return <LocalDateTime value={new Date(value * 1000).toISOString()} locale={locale} />;
+}
+
+function MatchDetailsLink({ match, locale, text }: { match: MatchRow; locale: Locale; text: TournamentCopy }) {
+  if (!match.has_details) return null;
+  return (
+    <Link
+      href={localizedPath(`/matches/${match.id}`, locale)}
+      className="text-xs font-medium text-primary underline-offset-4 hover:underline"
+    >
+      {text.matchDetails}
+    </Link>
+  );
 }
 
 // Team label that links to the team's profile page when the server resolved an
@@ -410,6 +423,7 @@ export function TournamentMatchList({
                     </div>
                   </CardContent>
                 )}
+                <MatchDetailsLink match={m} locale={locale} text={text} />
                 {m.stream ? (
                   <a
                     href={m.stream.url}
@@ -487,6 +501,7 @@ export function TournamentMatchList({
                             returnContext={returnContext}
                           />
                         )}
+                        <MatchDetailsLink match={m} locale={locale} text={text} />
                       </TableCell>
                     </TableRow>
                   ))}
@@ -541,6 +556,7 @@ export function TournamentMatchList({
                               returnContext={returnContext}
                             />
                           )}
+                          <MatchDetailsLink match={m} locale={locale} text={text} />
                         </TableCell>
                         <TableCell className="text-end">
                           <ResultScoreText
