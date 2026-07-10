@@ -76,6 +76,7 @@ export function adminNavSections(
   if (isSuper) {
     systemItems.unshift(
       { href: "/admin/analytics", label: t.links.analyticsTitle, icon: "chart" },
+      { href: "/admin/predictions", label: locale === "ar" ? "عمليات التوقعات" : "Prediction operations", icon: "clipboard" },
       { href: "/admin/users", label: t.links.usersTitle, icon: "users" },
       { href: "/admin/partners", label: t.links.partnersTitle, icon: "handshake" },
       { href: "/admin/streams", label: t.links.streamsTitle, icon: "radio" },

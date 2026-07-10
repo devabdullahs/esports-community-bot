@@ -493,6 +493,26 @@ test('scorePerGameWeeklyPrediction: missing pick blocks the all-winners bonus ev
   assert.equal(out.score, 1000);
 });
 
+test('scorePerGameWeeklyPrediction: explicit pick timestamps enforce the game lock while legacy picks remain scoreable', () => {
+  const game = [{ ...GAMES[0], lockAt: 500 }];
+  const result = [resultsFor()[0]];
+  const before = scorePerGameWeeklyPrediction([{ gameKey: 'valorant-1', pick: 'Team Falcons', pickedAt: 499 }], game, result);
+  assert.equal(before.score, 1000);
+  assert.equal(before.details.picks[0].late, false);
+
+  const atLock = scorePerGameWeeklyPrediction([{ gameKey: 'valorant-1', pick: 'Team Falcons', pickedAt: 500 }], game, result);
+  assert.equal(atLock.score, 0);
+  assert.equal(atLock.details.picks[0].late, true);
+
+  const afterLock = scorePerGameWeeklyPrediction([{ gameKey: 'valorant-1', pick: 'Team Falcons', pickedAt: 501 }], game, result);
+  assert.equal(afterLock.score, 0);
+  assert.equal(afterLock.details.picks[0].late, true);
+
+  const legacy = scorePerGameWeeklyPrediction([{ gameKey: 'valorant-1', pick: 'Team Falcons' }], game, result);
+  assert.equal(legacy.score, 1000);
+  assert.equal(legacy.details.picks[0].late, false);
+});
+
 test('scorePerGameWeeklyPrediction: throws when the round has no per-game events configured', () => {
   assert.throws(() => scorePerGameWeeklyPrediction([], [], []), /no per-game events/);
 });

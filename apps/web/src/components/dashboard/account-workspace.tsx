@@ -9,6 +9,7 @@ import {
 } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { ProfileDashboard } from "@/components/dashboard/profile-dashboard";
+import { PublicPredictionIdentitySettings } from "@/components/dashboard/public-prediction-identity-settings";
 import { FollowCenter } from "@/components/follows/follow-center";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { copy, type Locale } from "@/lib/i18n";
@@ -73,7 +74,10 @@ export function AccountWorkspace({
         <FollowCenter locale={locale} section="notifications" />
       </TabsContent>
       <TabsContent value="settings">
-        <FollowCenter locale={locale} section="settings" />
+        <div className="flex flex-col gap-6">
+          <PublicPredictionIdentitySettings locale={locale} />
+          <FollowCenter locale={locale} section="settings" />
+        </div>
       </TabsContent>
     </Tabs>
   );

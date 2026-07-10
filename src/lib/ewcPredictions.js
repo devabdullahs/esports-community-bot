@@ -209,6 +209,7 @@ function normalizeGamePicks(picks) {
       game: pick.game || null,
       event: pick.event || null,
       pick: String(pick.pick).replace(/\s+/g, ' ').trim(),
+      pickedAt: Number.isSafeInteger(Number(pick.pickedAt)) ? Number(pick.pickedAt) : null,
     }))
     .filter((pick) => pick.pick);
 }
@@ -242,7 +243,8 @@ export function scorePerGameWeeklyPrediction(picks, games, results) {
   const details = activeGames.map((game) => {
     const pick = byGame.get(game.key);
     const { gameResult, map } = resultMapForGame(results, game.key);
-    const actual = pick ? clubNameKeys(pick.pick).map((key) => map.get(key)).find(Boolean) : null;
+    const late = Boolean(pick?.pickedAt && game.lockAt && pick.pickedAt >= game.lockAt);
+    const actual = pick && !late ? clubNameKeys(pick.pick).map((key) => map.get(key)).find(Boolean) : null;
     return {
       gameKey: game.key,
       game: game.game,
@@ -254,6 +256,7 @@ export function scorePerGameWeeklyPrediction(picks, games, results) {
       points: actual?.points || 0,
       winner: (gameResult?.placements || []).find((row) => Number(row.points) === 1000)?.club || null,
       resultAvailable: Boolean(gameResult?.placements?.length),
+      late,
     };
   });
 

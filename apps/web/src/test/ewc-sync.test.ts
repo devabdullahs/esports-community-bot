@@ -93,10 +93,12 @@ async function seedScoredWeek({
   guildId,
   userId,
   score,
+  details = { total: score },
 }: {
   guildId: string;
   userId: string;
   score: number;
+  details?: Record<string, unknown>;
 }): Promise<void> {
   const {
     saveWeeklyPredictionScore,
@@ -117,7 +119,7 @@ async function seedScoredWeek({
     userId,
     picks: ["Team Falcons", "T1", "Gen.G"],
   });
-  await saveWeeklyPredictionScore(guildId, week.id, userId, score, { total: score });
+  await saveWeeklyPredictionScore(guildId, week.id, userId, score, details);
 }
 
 beforeEach(() => {
@@ -200,10 +202,119 @@ describe("EWC profile routes", () => {
       lockedGames: 1,
       totalGames: 3,
       pickedGames: 1,
+      isComplete: false,
       remainingGameKeys: ["open-remaining"],
       discordUrl: `https://discord.com/channels/${user.guildId}`,
     });
     expect(JSON.stringify(body.currentRound)).not.toContain("Team Falcons");
+  });
+
+  test("GET /api/me/ewc returns bounded score breakdowns only for stored scores", async () => {
+    const user = {
+      authUserId: "dev-ewc-breakdown-user",
+      discordUserId: "200000000000048109",
+      guildId: "920000000000000109",
+    };
+    useDevSession(user.authUserId, user.discordUserId);
+    await seedProfileLink(user);
+    await seedScoredWeek({
+      guildId: user.guildId,
+      userId: user.discordUserId,
+      score: 1000,
+      details: {
+        mode: "per-game",
+        bonus: 0,
+        picks: [{ gameKey: "valorant", game: "Valorant", pick: "Team Falcons", matchedClub: "Team Falcons", place: "1st", points: 1000, winner: "Team Falcons" }],
+      },
+    });
+
+    const body = await (await meGET(new Request("http://localhost/api/me/ewc"))).json();
+    expect(body.stats.recentWeekly[0].breakdown).toMatchObject({
+      available: true,
+      kind: "weekly-per-game",
+      total: 1000,
+      integrity: "ok",
+      rows: [{ game: "Valorant", pick: "Team Falcons", points: 1000, status: "scored" }],
+    });
+  });
+
+  test("GET /api/me/ewc projects progress for every overlapping actionable round without pick values", async () => {
+    const user = {
+      authUserId: "dev-ewc-overlap-user",
+      discordUserId: "200000000000048107",
+      guildId: "920000000000000107",
+    };
+    useDevSession(user.authUserId, user.discordUserId);
+    await seedProfileLink(user);
+    const now = Math.floor(Date.now() / 1000);
+    const { upsertEwcWeek, upsertWeeklyGamePick } = await import("@bot/db/ewcPredictions.js");
+    const first = await upsertEwcWeek({
+      guildId: user.guildId,
+      season: SEASON,
+      weekKey: "overlap-first",
+      label: "Overlap first",
+      openAt: now - 60,
+      closeAt: now + 1_800,
+      games: [{ key: "first-picked", game: "Valorant", event: "EWC Valorant", lockAt: now + 900 }],
+      createdBy: "web-test",
+    });
+    await upsertEwcWeek({
+      guildId: user.guildId,
+      season: SEASON,
+      weekKey: "overlap-second",
+      label: "Overlap second",
+      openAt: now - 60,
+      closeAt: now + 3_600,
+      games: [{ key: "second-open", game: "Dota 2", event: "EWC Dota", lockAt: now + 1_200 }],
+      createdBy: "web-test",
+    });
+    await upsertWeeklyGamePick({
+      guildId: user.guildId,
+      weekId: first.id,
+      userId: user.discordUserId,
+      gameKey: "first-picked",
+      pick: "Team Falcons",
+    });
+
+    const body = await (await meGET(new Request("http://localhost/api/me/ewc"))).json();
+    expect(body.actionableRounds).toHaveLength(2);
+    expect(body.actionableRounds.map((round: { weekKey: string }) => round.weekKey)).toEqual(["overlap-first", "overlap-second"]);
+    expect(body.actionableRounds[0]).toMatchObject({ pickedGames: 1, isComplete: true, openUnpickedGameKeys: [] });
+    expect(body.actionableRounds[1]).toMatchObject({ pickedGames: 0, openUnpickedGameKeys: ["second-open"] });
+    expect(JSON.stringify(body.actionableRounds)).not.toContain("Team Falcons");
+  });
+
+  test("GET /api/me/ewc deep-links the private progress action to the persistent picker when configured", async () => {
+    const user = {
+      authUserId: "dev-ewc-picker-link-user",
+      discordUserId: "200000000000048108",
+      guildId: "920000000000000108",
+    };
+    useDevSession(user.authUserId, user.discordUserId);
+    await seedProfileLink(user);
+    const now = Math.floor(Date.now() / 1000);
+    const { upsertEwcWeek } = await import("@bot/db/ewcPredictions.js");
+    const { setEwcPredictionsLeaderboard, setEwcPredictionsLeaderboardMessage } = await import("@bot/db/settings.js");
+    await upsertEwcWeek({
+      guildId: user.guildId,
+      season: SEASON,
+      weekKey: "picker-link",
+      label: "Picker link",
+      openAt: now - 60,
+      closeAt: now + 3_600,
+      games: [{ key: "open", game: "Valorant", lockAt: now + 1_800 }],
+      createdBy: "web-test",
+    });
+    await setEwcPredictionsLeaderboard(user.guildId, { channelId: "930000000000000108", season: SEASON });
+    await setEwcPredictionsLeaderboardMessage(user.guildId, "940000000000000108");
+
+    const body = await (await meGET(new Request("http://localhost/api/me/ewc"))).json();
+    expect(body.currentRound).toMatchObject({
+      weekKey: "picker-link",
+      isComplete: false,
+      discordUrl: "https://discord.com/channels/920000000000000108/930000000000000108/940000000000000108",
+    });
+    expect(JSON.stringify(body.currentRound)).not.toContain("pick:");
   });
 
   test("POST /api/me/ewc creates the profile link with a same-origin request", async () => {

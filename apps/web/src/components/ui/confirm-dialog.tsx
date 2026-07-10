@@ -1,5 +1,6 @@
 "use client";
 
+import type { ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -18,6 +19,7 @@ export type ConfirmDialogAction = {
   // Visual variant for the button; "destructive" for irreversible actions.
   variant?: "default" | "destructive" | "outline" | "secondary";
   onClick: () => void;
+  disabled?: boolean;
 };
 
 export function ConfirmDialog({
@@ -27,6 +29,7 @@ export function ConfirmDialog({
   description,
   cancelLabel,
   actions,
+  children,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -35,6 +38,7 @@ export function ConfirmDialog({
   cancelLabel: string;
   // One or more action buttons rendered after Cancel (last is the primary/right-most).
   actions: ConfirmDialogAction[];
+  children?: ReactNode;
 }) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -43,6 +47,7 @@ export function ConfirmDialog({
           <DialogTitle>{title}</DialogTitle>
           {description ? <DialogDescription>{description}</DialogDescription> : null}
         </DialogHeader>
+        {children}
         <DialogFooter>
           <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
             {cancelLabel}
@@ -53,6 +58,7 @@ export function ConfirmDialog({
               type="button"
               variant={action.variant ?? "default"}
               onClick={action.onClick}
+              disabled={action.disabled}
             >
               {action.label}
             </Button>
