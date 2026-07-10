@@ -15,7 +15,7 @@ import { copy, formatNumber, type Locale } from "@/lib/i18n";
 
 type Picker = {
   weekly: PickerRound[];
-  season: { topSize: number; status: string; closeAt: number | null; picks: string[] } | null;
+  season: { topSize: number; status: string; openAt: number | null; closeAt: number | null; picks: string[]; choices: string[] } | null;
 };
 
 type MutationResult = { error?: string; actionableRounds?: unknown[] };
@@ -40,7 +40,10 @@ export function WebPredictionPicker({
   const [drafts, setDrafts] = useState<Record<string, string>>({});
   const [seasonDrafts, setSeasonDrafts] = useState<Record<number, string>>({});
   const games = actionablePickerGames(picker?.weekly || []);
-  const clubs = useMemo(() => knownPickerClubs(picker?.weekly || [], picker?.season?.picks || []), [picker]);
+  const clubs = useMemo(
+    () => knownPickerClubs(picker?.weekly || [], picker?.season?.picks || [], picker?.season?.choices || []),
+    [picker],
+  );
 
   const weekly = useMutation({
     mutationFn: async ({ weekKey, gameKey, pick }: { weekKey: string; gameKey: string; pick: string }) =>
@@ -76,19 +79,21 @@ export function WebPredictionPicker({
             <h2 className="text-lg font-semibold">{text.webWeeklyTitle}</h2>
             <p className="text-sm text-muted-foreground">{text.webWeeklyDescription}</p>
           </div>
-          {games.map((game) => {
+          {games.map((game, gameIndex) => {
             const key = `${game.weekKey}:${game.key}`;
+            const gameListId = `ewc-game-clubs-${gameIndex}`;
             const value = drafts[key] ?? game.pick ?? "";
             const saving = weekly.isPending && weekly.variables?.weekKey === game.weekKey && weekly.variables?.gameKey === game.key;
             return (
               <FieldGroup key={key} className="rounded-lg border p-4">
+                <datalist id={gameListId}>{(game.choices || []).map((club) => <option key={club} value={club} />)}</datalist>
                 <div className="flex flex-wrap items-start justify-between gap-2">
                   <div className="min-w-0"><p className="font-medium">{game.game}</p><p className="text-sm text-muted-foreground">{game.event || game.label}</p></div>
                   {game.lockAt ? <Badge variant="outline"><LockIcon data-icon="inline-start" />{text.nextLock} <LocalDateTime value={new Date(game.lockAt * 1000).toISOString()} locale={locale} /></Badge> : null}
                 </div>
                 <Field>
                   <FieldLabel htmlFor={`pick-${key}`}>{text.clubPick}</FieldLabel>
-                  <Input id={`pick-${key}`} list={datalistId} value={value} onChange={(event) => setDrafts((current) => ({ ...current, [key]: event.target.value }))} placeholder={text.clubPickPlaceholder} disabled={saving} />
+                  <Input id={`pick-${key}`} list={gameListId} value={value} onChange={(event) => setDrafts((current) => ({ ...current, [key]: event.target.value }))} placeholder={text.clubPickPlaceholder} disabled={saving} />
                   <FieldDescription>{text.clubPickHelp}</FieldDescription>
                 </Field>
                 <div className="flex flex-wrap gap-2">

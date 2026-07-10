@@ -7,7 +7,7 @@ vi.mock("@/lib/community", () => ({
 }));
 vi.mock("@/lib/rate-limit", () => ({ rateLimitOr429: vi.fn(async () => null) }));
 vi.mock("@/lib/ewc-prediction-writes", () => ({
-  mapPredictionWriteStatus: vi.fn((result: { code: string }) => result.code === "locked" ? 409 : 400),
+  mapPredictionWriteStatus: vi.fn((result: { code: string }) => result.code === "locked" ? 409 : result.code === "resolution_unavailable" ? 503 : 400),
   submitWebSeasonPick: vi.fn(),
   submitWebWeeklyPick: vi.fn(),
 }));
@@ -89,6 +89,21 @@ describe("web EWC prediction write routes", () => {
     await expect(response.json()).resolves.toMatchObject({ code: "saved", firstPick: true, actionableRounds: [] });
   });
 
+  test("timestamps a web pick only after its complete request body is received", async () => {
+    let now = 1_000;
+    const clock = vi.spyOn(Date, "now").mockImplementation(() => now);
+    const delayed = {
+      json: vi.fn(async () => {
+        now = 9_000;
+        return { weekKey: "week-one", gameKey: "valorant", pick: "Team Falcons" };
+      }),
+    } as unknown as Request;
+
+    await weeklyPOST(delayed);
+    expect(mockWeekly).toHaveBeenCalledWith(expect.objectContaining({ submittedAt: 9 }));
+    clock.mockRestore();
+  });
+
   test("maps a trusted locked response to conflict and supports only closed season actions", async () => {
     mockWeekly.mockResolvedValueOnce({ ok: false, code: "locked", message: "locked" } as never);
     expect((await weeklyPOST(request("/api/me/ewc/picks/weekly", { weekKey: "week", gameKey: "game", pick: "Falcons" }))).status).toBe(409);
@@ -98,5 +113,11 @@ describe("web EWC prediction write routes", () => {
     const saved = await seasonPOST(request("/api/me/ewc/picks/season", { action: "swap", a: 0, b: 1 }));
     expect(saved.status).toBe(200);
     expect(mockSeason).toHaveBeenLastCalledWith(expect.objectContaining({ body: { action: "swap", a: 0, b: 1 } }));
+  });
+
+  test("maps transient prediction resolution failures to service unavailable", async () => {
+    mockWeekly.mockResolvedValueOnce({ ok: false, code: "resolution_unavailable", message: "retry" } as never);
+    const response = await weeklyPOST(request("/api/me/ewc/picks/weekly", { weekKey: "week", gameKey: "game", pick: "Falcons" }));
+    expect(response.status).toBe(503);
   });
 });

@@ -31,6 +31,7 @@ beforeEach(async () => {
 describe("web prediction write adapter", () => {
   test("derives the linked single-guild identity and trusted timestamp for weekly writes", async () => {
     const calls: unknown[] = [];
+    const roleSyncCalls: unknown[] = [];
     const result = await submitWebWeeklyPick({
       member,
       body: { weekKey: "adapter-week", gameKey: "valorant", pick: "Team Falcons" },
@@ -40,9 +41,27 @@ describe("web prediction write adapter", () => {
         seasonSlot: async () => ({ ok: false, code: "unexpected", message: "unexpected" }),
         seasonSwap: async () => ({ ok: false, code: "unexpected", message: "unexpected" }),
       },
+      roleSync: async (input) => { roleSyncCalls.push(input); return {} as never; },
     });
     expect(result).toMatchObject({ ok: true, firstPick: true });
     expect(calls).toEqual([expect.objectContaining({ guildId, season: "2026", userId: member.discordUserId, submittedAt: 123 })]);
+    expect(roleSyncCalls).toEqual([{ authUserId: member.authUserId, guildId, season: "2026" }]);
+  });
+
+  test("keeps a committed write successful when completion or role refresh fails", async () => {
+    const result = await submitWebWeeklyPick({
+      member,
+      body: { weekKey: "adapter-week", gameKey: "valorant", pick: "Team Falcons" },
+      submittedAt: 123,
+      writer: {
+        weekly: async () => ({ ok: true, code: "saved", message: "saved", firstPick: true }),
+        seasonSlot: async () => ({ ok: false, code: "unexpected", message: "unexpected" }),
+        seasonSwap: async () => ({ ok: false, code: "unexpected", message: "unexpected" }),
+      },
+      completionLoader: async () => { throw new Error("temporary read failure"); },
+      roleSync: async () => { throw new Error("temporary Discord failure"); },
+    });
+    expect(result).toMatchObject({ ok: true, code: "saved", firstPick: true, completion: [] });
   });
 
   test("refuses missing profile state and malformed opaque keys without calling a writer", async () => {

@@ -5,6 +5,7 @@ export type PickerGame = {
   lockAt: number | null;
   state: "open" | "locked";
   pick: string | null;
+  choices?: string[];
 };
 
 export type PickerRound = { weekKey: string; label: string; games: PickerGame[] };
@@ -18,9 +19,22 @@ export function seasonPickerSlots(picks: string[], topSize: number) {
   return Array.from({ length: size }, (_, index) => ({ index, pick: picks[index] || null, locked: index > picks.length }));
 }
 
-export function knownPickerClubs(rounds: PickerRound[], seasonPicks: string[]) {
+export function effectiveSeasonPickerStatus(
+  round: { status: string; openAt: number | null; closeAt: number | null } | null,
+  now: number,
+) {
+  if (!round) return null;
+  if (round.status !== "open") return round.status;
+  if (round.openAt !== null && now < round.openAt) return "upcoming";
+  if (round.closeAt !== null && now >= round.closeAt) return "locked";
+  return "open";
+}
+
+export function knownPickerClubs(rounds: PickerRound[], seasonPicks: string[], seasonChoices: string[] = []) {
   return [...new Set([
+    ...seasonChoices,
     ...seasonPicks,
+    ...rounds.flatMap((round) => round.games.flatMap((game) => game.choices || [])),
     ...rounds.flatMap((round) => round.games.map((game) => game.pick).filter((pick): pick is string => Boolean(pick))),
   ])].sort((a, b) => a.localeCompare(b));
 }

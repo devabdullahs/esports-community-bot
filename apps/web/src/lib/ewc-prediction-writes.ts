@@ -9,7 +9,7 @@ import {
 } from "@bot/lib/ewcPredictionWrites.js";
 import type { CommunityMember } from "@/lib/community";
 import { DEFAULT_SEASON } from "@/lib/env";
-import { actionableRoundsForViewer } from "@/lib/ewc-profile-sync";
+import { actionableRoundsForViewer, syncEwcProfileForAuthUser } from "@/lib/ewc-profile-sync";
 import { resolveDefaultGuildId } from "@/lib/guild";
 
 type WriteResult = {
@@ -25,6 +25,9 @@ type Writer = {
   seasonSlot: typeof submitSeasonSlot;
   seasonSwap: typeof swapSeasonPicks;
 };
+
+type CompletionLoader = typeof actionableRoundsForViewer;
+type RoleSync = typeof syncEwcProfileForAuthUser;
 
 const defaultWriter: Writer = {
   weekly: submitWeeklyGamePick,
@@ -63,19 +66,47 @@ async function linkedPredictionContext(member: CommunityMember) {
 }
 
 function invalidatePredictionCaches() {
-  revalidateTag("ewc-predictions", "default");
-  revalidateTag("ewc-public-leaderboard", "default");
-}
-
-async function completionFor(context: { guildId: string; season: string; discordUserId: string }) {
-  return actionableRoundsForViewer(context.guildId, context.season, context.discordUserId);
+  try {
+    revalidateTag("ewc-predictions", "default");
+    revalidateTag("ewc-public-leaderboard", "default");
+  } catch {
+    // Cache refresh is advisory after the database commit. A later request or
+    // scheduled refresh will recover without misreporting the saved pick.
+  }
 }
 
 export function mapPredictionWriteStatus(result: WriteResult): number {
   if (result.ok) return 200;
   if (result.code === "round_not_found" || result.code === "game_not_found") return 404;
   if (["locked", "round_closed", "not_open", "slot_locked", "duplicate_pick"].includes(result.code)) return 409;
+  if (result.code === "resolution_unavailable") return 503;
   return 400;
+}
+
+async function completionAfterWrite(
+  context: { guildId: string; season: string; discordUserId: string },
+  loader: CompletionLoader,
+) {
+  try {
+    return await loader(context.guildId, context.season, context.discordUserId);
+  } catch {
+    return [];
+  }
+}
+
+async function syncFirstWeeklyPick(
+  member: CommunityMember,
+  context: { guildId: string; season: string },
+  firstPick: boolean | undefined,
+  roleSync: RoleSync,
+) {
+  if (!firstPick) return;
+  try {
+    await roleSync({ authUserId: member.authUserId, guildId: context.guildId, season: context.season });
+  } catch {
+    // The prediction is already committed. Linked-role refresh is best-effort
+    // and must not turn a successful save into a client-visible failure.
+  }
 }
 
 export async function submitWebWeeklyPick({
@@ -83,11 +114,15 @@ export async function submitWebWeeklyPick({
   body,
   submittedAt,
   writer = defaultWriter,
+  completionLoader = actionableRoundsForViewer,
+  roleSync = syncEwcProfileForAuthUser,
 }: {
   member: CommunityMember;
   body: { weekKey?: unknown; gameKey?: unknown; pick?: unknown };
   submittedAt: number;
   writer?: Writer;
+  completionLoader?: CompletionLoader;
+  roleSync?: RoleSync;
 }) {
   const weekKey = opaqueKey(body.weekKey);
   const gameKey = opaqueKey(body.gameKey);
@@ -97,8 +132,9 @@ export async function submitWebWeeklyPick({
   const context = await linkedPredictionContext(member);
   if (!context) return adapterError("profile_required", "Link your verified Discord account to an active prediction profile first.");
 
+  let result: WriteResult;
   try {
-    const result = await writer.weekly({
+    result = await writer.weekly({
       guildId: context.guildId,
       season: context.season,
       userId: context.discordUserId,
@@ -107,12 +143,14 @@ export async function submitWebWeeklyPick({
       rawPick,
       submittedAt,
     });
-    if (!result.ok) return result;
-    invalidatePredictionCaches();
-    return { ...result, completion: await completionFor(context) };
   } catch {
     return adapterError("resolution_unavailable", "Prediction validation is temporarily unavailable. Please try again shortly.");
   }
+  if (!result.ok) return result;
+  invalidatePredictionCaches();
+  const completion = await completionAfterWrite(context, completionLoader);
+  await syncFirstWeeklyPick(member, context, result.firstPick, roleSync);
+  return { ...result, completion };
 }
 
 export async function submitWebSeasonPick({
@@ -120,11 +158,13 @@ export async function submitWebSeasonPick({
   body,
   submittedAt,
   writer = defaultWriter,
+  completionLoader = actionableRoundsForViewer,
 }: {
   member: CommunityMember;
   body: { action?: unknown; index?: unknown; a?: unknown; b?: unknown; pick?: unknown };
   submittedAt: number;
   writer?: Writer;
+  completionLoader?: CompletionLoader;
 }) {
   const context = await linkedPredictionContext(member);
   if (!context) return adapterError("profile_required", "Link your verified Discord account to an active prediction profile first.");
@@ -146,7 +186,7 @@ export async function submitWebSeasonPick({
       });
       if (!result.ok) return result;
       invalidatePredictionCaches();
-      return { ...result, completion: await completionFor(context) };
+      return { ...result, completion: await completionAfterWrite(context, completionLoader) };
     }
     if (action === "swap") {
       const a = integer(body.a);
@@ -162,7 +202,7 @@ export async function submitWebSeasonPick({
       });
       if (!result.ok) return result;
       invalidatePredictionCaches();
-      return { ...result, completion: await completionFor(context) };
+      return { ...result, completion: await completionAfterWrite(context, completionLoader) };
     }
   } catch {
     return adapterError("resolution_unavailable", "Prediction validation is temporarily unavailable. Please try again shortly.");

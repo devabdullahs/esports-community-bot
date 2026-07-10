@@ -14,9 +14,6 @@ function exactWeeklyBody(value: unknown): { weekKey?: unknown; gameKey?: unknown
 }
 
 export async function POST(request: Request) {
-  // Capture before body parsing and all validation/resolution work. The shared
-  // service rechecks this trusted timestamp inside its short transaction.
-  const submittedAt = Math.floor(Date.now() / 1000);
   const origin = sameOriginOr403(request);
   if (origin) return origin;
 
@@ -32,6 +29,10 @@ export async function POST(request: Request) {
   const body = exactWeeklyBody(await request.json().catch(() => null));
   if (!body) return NextResponse.json({ error: "Invalid prediction request.", code: "invalid_input" }, { status: 400 });
 
+  // The payload must be fully received before its trusted timestamp is taken.
+  // Otherwise a client could start a request before lock and delay its body
+  // until after lock while retaining the earlier timestamp.
+  const submittedAt = Math.floor(Date.now() / 1000);
   const result = await submitWebWeeklyPick({ member, body, submittedAt });
   if (!result.ok) return NextResponse.json({ error: result.message, code: result.code }, { status: mapPredictionWriteStatus(result) });
   return NextResponse.json({ code: result.code, firstPick: Boolean(result.firstPick), actionableRounds: result.completion });

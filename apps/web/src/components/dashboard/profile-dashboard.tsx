@@ -136,9 +136,17 @@ type MePayload = {
         lockAt: number | null;
         state: "open" | "locked";
         pick: string | null;
+        choices?: string[];
       }>;
     }>;
-    season: { topSize: number; status: string; closeAt: number | null; picks: string[] } | null;
+    season: {
+      topSize: number;
+      status: string;
+      openAt: number | null;
+      closeAt: number | null;
+      picks: string[];
+      choices: string[];
+    } | null;
   } | null;
 };
 

@@ -65,5 +65,14 @@ describe("admin prediction operations API", () => {
       args: { weekKey: "week-8", confirmationWeekKey: "week-7" },
     });
     expect(() => predictionOperationRequest("reopen_week", null)).toThrow("round");
+    expect(predictionOperationRequest("snapshot_week", "week-8", "", "final")).toEqual({
+      operation: "snapshot_week",
+      args: { weekKey: "week-8", type: "final" },
+    });
+    expect(predictionOperationRequest("reopen_season", null)).toEqual({ operation: "reopen_season", args: {} });
+    expect(predictionOperationRequest("generate_weeks", null)).toEqual({
+      operation: "generate_weeks",
+      args: { openBeforeHours: 48, lockBeforeHours: 24, scoreDelayHours: 24 },
+    });
   });
 });

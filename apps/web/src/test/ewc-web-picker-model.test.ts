@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { actionablePickerGames, knownPickerClubs, seasonPickerSlots } from "@/lib/ewc-web-picker-model";
+import { actionablePickerGames, effectiveSeasonPickerStatus, knownPickerClubs, seasonPickerSlots } from "@/lib/ewc-web-picker-model";
 
 describe("web prediction picker model", () => {
   const rounds = [
@@ -18,6 +18,14 @@ describe("web prediction picker model", () => {
     },
   ];
 
+  test("derives season availability from both configured state and deadlines", () => {
+    expect(effectiveSeasonPickerStatus(null, 100)).toBeNull();
+    expect(effectiveSeasonPickerStatus({ status: "open", openAt: 200, closeAt: 300 }, 100)).toBe("upcoming");
+    expect(effectiveSeasonPickerStatus({ status: "open", openAt: 100, closeAt: 300 }, 200)).toBe("open");
+    expect(effectiveSeasonPickerStatus({ status: "open", openAt: 100, closeAt: 200 }, 200)).toBe("locked");
+    expect(effectiveSeasonPickerStatus({ status: "scored", openAt: null, closeAt: null }, 100)).toBe("scored");
+  });
+
   test("keeps every open game from overlapping rounds and omits locked games", () => {
     expect(actionablePickerGames(rounds)).toMatchObject([
       { weekKey: "week-one", key: "open", pick: "Team Falcons" },
@@ -34,7 +42,16 @@ describe("web prediction picker model", () => {
     ]);
   });
 
-  test("reuses private known club names without adding a public lookup key", () => {
-    expect(knownPickerClubs(rounds, ["T1", "Team Falcons"])).toEqual(["T1", "Team Falcons"]);
+  test("combines eligible choices with private saved club names", () => {
+    const withChoices = [{
+      ...rounds[0],
+      games: rounds[0].games.map((game) => ({ ...game, choices: game.key === "open" ? ["G2 Esports"] : [] })),
+    }];
+    expect(knownPickerClubs(withChoices, ["T1", "Team Falcons"], ["Team Liquid"])).toEqual([
+      "G2 Esports",
+      "T1",
+      "Team Falcons",
+      "Team Liquid",
+    ]);
   });
 });

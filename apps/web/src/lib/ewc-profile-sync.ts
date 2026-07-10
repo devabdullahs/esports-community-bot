@@ -4,6 +4,8 @@ import { auth } from "@/lib/auth";
 import { getDiscordAccountForAuthUser } from "@/lib/auth-database";
 import { isDevAuthUser } from "@/lib/dev-auth";
 import { DEFAULT_SEASON } from "@/lib/env";
+import { getEwcClubTrackerFromDatabase } from "@/lib/ewc-clubs";
+import { effectiveSeasonPickerStatus } from "@/lib/ewc-web-picker-model";
 import {
   deleteEwcProfileLink,
   getEwcProfileLinkByAuthUser,
@@ -20,6 +22,7 @@ import { getSettings } from "@bot/db/settings.js";
 import { getEwcSeason, getSeasonPrediction, getWeeklyPrediction, listEwcWeeks } from "@bot/db/ewcPredictions.js";
 import { effectiveEwcWeekStatus } from "@bot/lib/ewcPredictions.js";
 import { categorizeEwcPredictionRounds, predictionRoundCompletion } from "@bot/lib/ewcPredictionRounds.js";
+import { ewcGameParticipantTeams } from "@bot/lib/ewcGameTeams.js";
 import {
   deleteDiscordRoleConnection,
   updateDiscordRoleConnection,
@@ -99,7 +102,7 @@ type HydratedWeek = {
   open_at?: number | null;
   close_at?: number | null;
   score_after?: number | null;
-  games?: Array<{ key?: string; game?: string; event?: string; lockAt?: number | null }>;
+  games?: Array<{ key?: string; game?: string; event?: string; eventUrl?: string | null; lockAt?: number | null }>;
 };
 
 type WeeklyPrediction = { picks?: Array<string | { gameKey?: string; pick?: string }> } | null;
@@ -179,10 +182,11 @@ export async function actionableRoundsForViewer(guildId: string, season: string,
 // callers cannot accidentally inherit a member's selected club.
 export async function privatePickerForViewer(guildId: string, season: string, discordUserId: string) {
   const now = Math.floor(Date.now() / 1000);
-  const [weeks, seasonRound, seasonPrediction] = await Promise.all([
+  const [weeks, seasonRound, seasonPrediction, clubTracker] = await Promise.all([
     listEwcWeeks(guildId, season) as Promise<HydratedWeek[]>,
     getEwcSeason(guildId, season),
     getSeasonPrediction(guildId, season, discordUserId),
+    getEwcClubTrackerFromDatabase(season),
   ]);
   const { actionable } = categorizeEwcPredictionRounds(weeks, now) as { actionable: HydratedWeek[] };
   const weekly = await Promise.all(
@@ -196,27 +200,46 @@ export async function privatePickerForViewer(guildId: string, season: string, di
       return {
         weekKey: round.week_key,
         label: round.label || round.week_key,
-        games: (round.games || [])
-          .filter((game) => game.key)
-          .map((game) => ({
-            key: String(game.key),
-            game: game.game || String(game.key),
-            event: game.event || null,
-            lockAt: game.lockAt ?? null,
-            state: !game.lockAt || now < game.lockAt ? "open" : "locked",
-            pick: picks.get(String(game.key)) || null,
-          })),
+        games: await Promise.all(
+          (round.games || [])
+            .filter((game) => game.key)
+            .map(async (game) => {
+              const existingPick = picks.get(String(game.key)) || null;
+              const participants = await ewcGameParticipantTeams(game.game || String(game.key), {
+                eventUrl: game.eventUrl || null,
+              }).catch(() => []);
+              const choices = [...new Set([...participants, ...(existingPick ? [existingPick] : [])])]
+                .filter(Boolean)
+                .slice(0, 100);
+              return {
+                key: String(game.key),
+                game: game.game || String(game.key),
+                event: game.event || null,
+                lockAt: game.lockAt ?? null,
+                state: !game.lockAt || now < game.lockAt ? "open" : "locked",
+                pick: existingPick,
+                choices,
+              };
+            }),
+        ),
       };
     }),
   );
+  const seasonStatus = effectiveSeasonPickerStatus(seasonRound ? {
+    status: String(seasonRound.status),
+    openAt: seasonRound.open_at ?? null,
+    closeAt: seasonRound.close_at ?? null,
+  } : null, now);
   return {
     weekly,
     season: seasonRound
       ? {
           topSize: Number(seasonRound.top_size || 0),
-          status: String(seasonRound.status || "open"),
+          status: seasonStatus,
+          openAt: seasonRound.open_at ?? null,
           closeAt: seasonRound.close_at ?? null,
           picks: Array.isArray(seasonPrediction?.picks) ? seasonPrediction.picks.filter((pick: unknown): pick is string => typeof pick === "string") : [],
+          choices: [...new Set(clubTracker.clubs.map((club) => club.name).filter(Boolean))].slice(0, 250),
         }
       : null,
   };

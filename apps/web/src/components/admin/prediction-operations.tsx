@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { RefreshCwIcon, RotateCcwIcon, Trash2Icon, TrophyIcon } from "lucide-react";
+import { CalendarPlusIcon, CameraIcon, RefreshCwIcon, RotateCcwIcon, Trash2Icon, TrophyIcon } from "lucide-react";
 import type { AdminPredictionOperationsModel, AdminPredictionRound } from "@/lib/admin-predictions";
 import { predictionOperationRequest, type PredictionOperationName } from "@/lib/prediction-operation-model";
 import { Badge } from "@/components/ui/badge";
@@ -14,12 +14,17 @@ import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
-type PendingAction = { operation: PredictionOperationName; round: AdminPredictionRound | null } | null;
+type PendingAction = {
+  operation: PredictionOperationName;
+  round: AdminPredictionRound | null;
+  snapshotType?: "baseline" | "final";
+} | null;
 
 const COPY = {
   en: {
     active: "Active", awaiting: "Awaiting results", scored: "Scored", history: "Operation history",
-    refresh: "Refresh leaderboard", score: "Score", reopen: "Reopen", delete: "Delete",
+    refresh: "Refresh leaderboard", generate: "Generate weeks", score: "Score", scoreSeason: "Score season", reopen: "Reopen", reopenSeason: "Reopen season", delete: "Delete",
+    snapshotBaseline: "Baseline snapshot", snapshotFinal: "Final snapshot",
     title: "Prediction operations", description: "Durable actions run in the bot process and are recorded here.",
     noRounds: "No prediction rounds are configured for this season.", health: "Automation health",
     noHealth: "No operation or automation attempt has been recorded yet.", confirm: "Confirm operation", cancel: "Cancel", execute: "Queue operation",
@@ -30,7 +35,8 @@ const COPY = {
   },
   ar: {
     active: "النشطة", awaiting: "بانتظار النتائج", scored: "المحتسبة", history: "سجل العمليات",
-    refresh: "حدّث لوحة الصدارة", score: "احتسب", reopen: "أعد الفتح", delete: "احذف",
+    refresh: "حدّث لوحة الصدارة", generate: "أنشئ الأسابيع", score: "احتسب", scoreSeason: "احتسب الموسم", reopen: "أعد الفتح", reopenSeason: "أعد فتح الموسم", delete: "احذف",
+    snapshotBaseline: "لقطة البداية", snapshotFinal: "اللقطة النهائية",
     title: "عمليات التوقعات", description: "تعمل الإجراءات الدائمة في عملية البوت وتُسجل هنا.",
     noRounds: "لا توجد جولات توقعات مهيأة لهذا الموسم.", health: "حالة الأتمتة",
     noHealth: "لم تُسجل أي عملية أو محاولة أتمتة بعد.", confirm: "تأكيد العملية", cancel: "إلغاء", execute: "ضع العملية في الطابور",
@@ -67,6 +73,7 @@ export function PredictionOperations({ model, locale }: { model: AdminPrediction
   const [submitting, setSubmitting] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const busyWeeks = useMemo(() => new Set(model.operations.filter((operation) => ["queued", "running"].includes(operation.status)).map((operation) => operation.targetWeekKey).filter((weekKey): weekKey is string => Boolean(weekKey))), [model.operations]);
+  const busyGlobal = useMemo(() => new Set(model.operations.filter((operation) => ["queued", "running"].includes(operation.status) && !operation.targetWeekKey).map((operation) => operation.operation)), [model.operations]);
 
   useEffect(() => {
     if (!model.operations.some((operation) => ["queued", "running"].includes(operation.status))) return;
@@ -74,15 +81,15 @@ export function PredictionOperations({ model, locale }: { model: AdminPrediction
     return () => window.clearTimeout(timer);
   }, [model.operations]);
 
-  const open = (operation: PredictionOperationName, round: AdminPredictionRound | null = null) => {
+  const open = (operation: PredictionOperationName, round: AdminPredictionRound | null = null, snapshotType?: "baseline" | "final") => {
     setConfirmation("");
-    setPending({ operation, round });
+    setPending({ operation, round, snapshotType });
   };
   const submit = async () => {
     if (!pending) return;
     setSubmitting(true);
     try {
-      const request = predictionOperationRequest(pending.operation, pending.round?.weekKey ?? null, confirmation);
+      const request = predictionOperationRequest(pending.operation, pending.round?.weekKey ?? null, confirmation, pending.snapshotType);
       const response = await fetch("/api/admin/predictions", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -118,6 +125,8 @@ export function PredictionOperations({ model, locale }: { model: AdminPrediction
         <TableCell className="tabular-nums">{round.participantCount} / {round.scoredCount} {text.scoredCount}</TableCell>
         <TableCell className="tabular-nums">{round.reminders.sent} / {round.reminders.attempts}</TableCell>
         <TableCell><div className="flex flex-wrap justify-end gap-2">
+          <Button size="sm" variant="outline" disabled={busyWeeks.has(round.weekKey)} onClick={() => open("snapshot_week", round, "baseline")}><CameraIcon data-icon="inline-start" />{text.snapshotBaseline}</Button>
+          <Button size="sm" variant="outline" disabled={busyWeeks.has(round.weekKey)} onClick={() => open("snapshot_week", round, "final")}><CameraIcon data-icon="inline-start" />{text.snapshotFinal}</Button>
           {round.effectiveStatus !== "scored" ? <Button size="sm" variant="outline" disabled={busyWeeks.has(round.weekKey)} onClick={() => open("score_week", round)}><TrophyIcon data-icon="inline-start" />{text.score}</Button> : null}
           {round.effectiveStatus === "scored" ? <Button size="sm" variant="outline" disabled={busyWeeks.has(round.weekKey)} onClick={() => open("reopen_week", round)}><RotateCcwIcon data-icon="inline-start" />{text.reopen}</Button> : null}
           <Button size="sm" variant="destructive" disabled={round.effectiveStatus === "scored" || busyWeeks.has(round.weekKey)} onClick={() => open("delete_week", round)}><Trash2Icon data-icon="inline-start" />{text.delete}</Button>
@@ -133,7 +142,12 @@ export function PredictionOperations({ model, locale }: { model: AdminPrediction
     <Card><CardHeader><CardTitle>{text.health}</CardTitle><CardDescription>{model.health?.lastAttemptAt || text.noHealth}</CardDescription></CardHeader><CardContent className="flex flex-col gap-2">
       {model.health?.lastError ? <p className="break-words text-sm text-destructive">{text.error}: {model.health.lastError}</p> : null}
       {notice ? <p className="text-sm text-muted-foreground">{notice}</p> : null}
-      <div className="flex flex-wrap gap-2"><Button onClick={() => open("refresh_leaderboard")}><RefreshCwIcon data-icon="inline-start" />{text.refresh}</Button>{model.seasonRound && model.seasonRound.status !== "scored" ? <Button variant="outline" onClick={() => open("score_season")}><TrophyIcon data-icon="inline-start" />{text.score}</Button> : null}</div>
+      <div className="flex flex-wrap gap-2">
+        <Button disabled={busyGlobal.has("refresh_leaderboard")} onClick={() => open("refresh_leaderboard")}><RefreshCwIcon data-icon="inline-start" />{text.refresh}</Button>
+        <Button variant="outline" disabled={busyGlobal.has("generate_weeks")} onClick={() => open("generate_weeks")}><CalendarPlusIcon data-icon="inline-start" />{text.generate}</Button>
+        {model.seasonRound && model.seasonRound.status !== "scored" ? <Button variant="outline" disabled={busyGlobal.has("score_season")} onClick={() => open("score_season")}><TrophyIcon data-icon="inline-start" />{text.scoreSeason}</Button> : null}
+        {model.seasonRound?.status === "scored" ? <Button variant="outline" disabled={busyGlobal.has("reopen_season")} onClick={() => open("reopen_season")}><RotateCcwIcon data-icon="inline-start" />{text.reopenSeason}</Button> : null}
+      </div>
     </CardContent></Card>
     <Tabs defaultValue="active"><TabsList><TabsTrigger value="active">{text.active}</TabsTrigger><TabsTrigger value="awaiting">{text.awaiting}</TabsTrigger><TabsTrigger value="scored">{text.scored}</TabsTrigger><TabsTrigger value="history">{text.history}</TabsTrigger></TabsList>
       <TabsContent value="active">{table(groups.active)}</TabsContent><TabsContent value="awaiting">{table(groups.awaiting)}</TabsContent><TabsContent value="scored">{table(groups.scored)}</TabsContent>

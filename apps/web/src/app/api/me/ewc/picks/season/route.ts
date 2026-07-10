@@ -16,7 +16,6 @@ function exactSeasonBody(value: unknown): { action?: unknown; index?: unknown; a
 }
 
 export async function POST(request: Request) {
-  const submittedAt = Math.floor(Date.now() / 1000);
   const origin = sameOriginOr403(request);
   if (origin) return origin;
 
@@ -32,6 +31,7 @@ export async function POST(request: Request) {
   const body = exactSeasonBody(await request.json().catch(() => null));
   if (!body) return NextResponse.json({ error: "Invalid prediction request.", code: "invalid_input" }, { status: 400 });
 
+  const submittedAt = Math.floor(Date.now() / 1000);
   const result = await submitWebSeasonPick({ member, body, submittedAt });
   if (!result.ok) return NextResponse.json({ error: result.message, code: result.code }, { status: mapPredictionWriteStatus(result) });
   return NextResponse.json({ code: result.code, firstPick: Boolean(result.firstPick), actionableRounds: result.completion });
