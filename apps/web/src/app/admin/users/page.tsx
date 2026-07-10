@@ -4,6 +4,7 @@ import { SearchIcon } from "lucide-react";
 import { getAdminAccess } from "@/lib/admin";
 import { getAdminCopy } from "@/lib/admin-copy";
 import { listCommunityUsers } from "@/lib/community-users";
+import { localizedPath } from "@/lib/i18n";
 import { getRequestLocale } from "@/lib/request-locale";
 import { AdminPageShell } from "@/components/admin/admin-page-shell";
 import { AuthorAvatar } from "@/components/news/author-avatar";
@@ -49,8 +50,10 @@ export default async function AdminUsersPage({
 
   const { users, total } = await listCommunityUsers({ search: q, limit: PAGE_SIZE, offset });
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
-  const pageHref = (p: number) =>
-    `/admin/users?${new URLSearchParams({ ...(q ? { q } : {}), page: String(p) }).toString()}`;
+  const pageHref = (p: number) => localizedPath(
+    `/admin/users?${new URLSearchParams({ ...(q ? { q } : {}), page: String(p) }).toString()}`,
+    locale,
+  );
 
   return (
     <AdminPageShell
@@ -103,7 +106,10 @@ export default async function AdminUsersPage({
                     <TableRow key={u.authUserId}>
                       <TableCell>
                         {u.discordUserId ? (
-                          <Link href={`/admin/users/${u.discordUserId}`} className="hover:underline">
+                          <Link
+                            href={localizedPath(`/admin/users/${u.discordUserId}`, locale)}
+                            className="hover:underline"
+                          >
                             {rowInner}
                           </Link>
                         ) : (

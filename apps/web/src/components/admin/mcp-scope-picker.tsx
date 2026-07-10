@@ -94,7 +94,7 @@ export function McpScopePicker({
           className="w-[min(90vw,20rem)] p-0"
           initialFocus={(openType) => openType === "keyboard"}
         >
-          <Command shouldFilter={false}>
+          <Command shouldFilter={false} defaultValue="__scope_picker_unselected__">
             <CommandInput
               value={query}
               onValueChange={setQuery}

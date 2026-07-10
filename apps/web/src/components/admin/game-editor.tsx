@@ -6,7 +6,7 @@ import { PlusIcon, SaveIcon, Trash2Icon } from "lucide-react";
 import { normalizeSlug, validateGameContent } from "@/lib/game-validation";
 import { getAdminCopy } from "@/lib/admin-copy";
 import type { GameRecord, LocalizedText } from "@/lib/games";
-import { copy, type Locale } from "@/lib/i18n";
+import { copy, localizedPath, type Locale } from "@/lib/i18n";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -108,7 +108,7 @@ export function GameEditor({
       );
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error || t.common.couldNotSave);
-      router.push("/admin/games");
+      router.push(localizedPath("/admin/games", locale));
       router.refresh();
     } catch (e) {
       setError((e as Error).message);

@@ -13,7 +13,7 @@ import {
 import { localizeText } from "@/lib/community-content";
 import { getAdminCopy } from "@/lib/admin-copy";
 import type { GameRecord } from "@/lib/games";
-import type { Locale } from "@/lib/i18n";
+import { localizedPath, type Locale } from "@/lib/i18n";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -91,7 +91,11 @@ export function GamesList({
           {t.games.count(items.length)}
         </p>
         {canManageGames ? (
-          <Button render={<Link href="/admin/games/new" />} nativeButton={false} className="w-full sm:w-auto">
+          <Button
+            render={<Link href={localizedPath("/admin/games/new", locale)} />}
+            nativeButton={false}
+            className="w-full sm:w-auto"
+          >
             <PlusIcon data-icon="inline-start" />
             {t.games.newAction}
           </Button>
@@ -137,7 +141,7 @@ export function GamesList({
               </div>
               <div className="flex shrink-0 gap-1">
                 <Button
-                  render={<Link href={`/admin/games/${game.slug}`} />}
+                  render={<Link href={localizedPath(`/admin/games/${game.slug}`, locale)} />}
                   nativeButton={false}
                   variant="ghost"
                   size="icon-sm"

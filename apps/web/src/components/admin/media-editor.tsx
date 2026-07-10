@@ -6,7 +6,7 @@ import { Loader2Icon, PlusIcon, SaveIcon, Trash2Icon, UploadIcon } from "lucide-
 import { normalizeSlug, MEDIA_URL_MAX_LENGTH } from "@/lib/media-validation";
 import { getAdminCopy } from "@/lib/admin-copy";
 import type { LocalizedText, MediaChannelRecord, MediaLink, MediaPlatform } from "@/lib/media";
-import { copy, type Locale } from "@/lib/i18n";
+import { copy, localizedPath, type Locale } from "@/lib/i18n";
 import { isSafeUrl } from "@/lib/safe-url";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -140,7 +140,7 @@ export function MediaEditor({
       );
       const result = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(result.error || t.common.couldNotSave);
-      router.push("/admin/media");
+      router.push(localizedPath("/admin/media", locale));
       router.refresh();
     } catch (e) {
       setError((e as Error).message);

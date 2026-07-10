@@ -3,14 +3,11 @@
 import { useEffect, useState } from "react";
 import { RefreshCwIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { copy, LOCALE_COOKIE_NAME, type Locale } from "@/lib/i18n";
+import { copy, localeFromPathname, type Locale } from "@/lib/i18n";
 
-// error.tsx must be a client component, so it reads the locale from the cookie
-// (the layout still provides header/footer + html dir around it).
 function readLocale(): Locale {
-  if (typeof document === "undefined") return "en";
-  const match = document.cookie.match(new RegExp(`(?:^|; )${LOCALE_COOKIE_NAME}=(ar|en)`));
-  return (match?.[1] as Locale) || "en";
+  if (typeof window === "undefined") return "en";
+  return localeFromPathname(window.location.pathname) ?? "en";
 }
 
 export default function RouteError({
@@ -20,7 +17,7 @@ export default function RouteError({
   error: Error & { digest?: string };
   reset: () => void;
 }) {
-  // Lazy initializer reads the cookie once on the client (avoids setState-in-effect).
+  // The route prefix is authoritative, including inside the client error boundary.
   const [locale] = useState<Locale>(readLocale);
   useEffect(() => {
     // Log for debugging; no external error reporting per scope.

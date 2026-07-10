@@ -5,7 +5,7 @@ import { CheckIcon, EyeOffIcon, FlagIcon, Loader2Icon, RotateCcwIcon, Trash2Icon
 import { LocalDateTime } from "@/components/local-date-time";
 import { AuthorAvatar } from "@/components/news/author-avatar";
 import { getAdminCopy } from "@/lib/admin-copy";
-import type { Locale } from "@/lib/i18n";
+import { localizedPath, type Locale } from "@/lib/i18n";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -159,7 +159,10 @@ export function CommentModeration({ locale }: { locale: Locale }) {
 
               <div className="text-xs text-muted-foreground">
                 {t.comments.onPost}{" "}
-                <a href={`/admin/news/${c.postId}`} className="underline-offset-2 hover:underline">
+                <a
+                  href={localizedPath(`/admin/news/${c.postId}`, locale)}
+                  className="underline-offset-2 hover:underline"
+                >
                   {c.postTitle || t.comments.postFallback(c.postId)}
                 </a>
               </div>

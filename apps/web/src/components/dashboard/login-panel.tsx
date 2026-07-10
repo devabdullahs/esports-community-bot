@@ -22,6 +22,7 @@ import {
 } from "@/components/ui/field";
 import {
   copy,
+  localizedPath,
   type Locale,
 } from "@/lib/i18n";
 
@@ -31,7 +32,7 @@ export function LoginPanel({ locale }: { locale: Locale }) {
   const [pending, setPending] = useState(false);
   const text = copy[locale].login;
   const common = copy[locale].common;
-  const callbackURL = searchParams.get("callbackURL") || "/me";
+  const callbackURL = searchParams.get("callbackURL") || localizedPath("/me", locale);
 
   async function onSignIn() {
     setError(null);
@@ -78,10 +79,10 @@ export function LoginPanel({ locale }: { locale: Locale }) {
             <Field>
               <FieldDescription className="text-center">
                 {text.legalPrefix}{" "}
-                <Link href="/terms">{common.termsOfService}</Link>
+                <Link href={localizedPath("/terms", locale)}>{common.termsOfService}</Link>
                 {" "}
                 {text.legalAnd}{" "}
-                <Link href="/privacy">{common.privacyPolicy}</Link>.
+                <Link href={localizedPath("/privacy", locale)}>{common.privacyPolicy}</Link>.
               </FieldDescription>
             </Field>
           </FieldGroup>

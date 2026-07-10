@@ -5,6 +5,7 @@ import { AdminPageShell } from "@/components/admin/admin-page-shell";
 import { canManageMedia, getAdminAccess } from "@/lib/admin";
 import { getAdminCopy } from "@/lib/admin-copy";
 import { localizeText } from "@/lib/community-content";
+import { localizedPath } from "@/lib/i18n";
 import { listMediaChannels } from "@/lib/media";
 import { getRequestLocale } from "@/lib/request-locale";
 import { Button } from "@/components/ui/button";
@@ -32,7 +33,9 @@ export default async function NewMediaPostPage() {
   );
 
   if (channels.length === 1) {
-    redirect(`/admin/news/new?media=${encodeURIComponent(channels[0].slug)}`);
+    redirect(
+      localizedPath(`/admin/news/new?media=${encodeURIComponent(channels[0].slug)}`, locale),
+    );
   }
 
   return (
@@ -77,7 +80,10 @@ export default async function NewMediaPostPage() {
                   <Button
                     render={
                       <Link
-                        href={`/admin/news/new?media=${encodeURIComponent(channel.slug)}`}
+                        href={localizedPath(
+                          `/admin/news/new?media=${encodeURIComponent(channel.slug)}`,
+                          locale,
+                        )}
                       />
                     }
                     nativeButton={false}

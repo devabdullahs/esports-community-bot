@@ -12,7 +12,7 @@ import {
 } from "lucide-react";
 import { localizeText } from "@/lib/community-content";
 import { getAdminCopy } from "@/lib/admin-copy";
-import type { Locale } from "@/lib/i18n";
+import { localizedPath, type Locale } from "@/lib/i18n";
 import type { MediaChannelRecord } from "@/lib/media";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -94,7 +94,11 @@ export function MediaList({
           {t.media.count(items.length)}
         </p>
         {isSuper ? (
-          <Button render={<Link href="/admin/media/new" />} nativeButton={false} className="w-full sm:w-auto">
+          <Button
+            render={<Link href={localizedPath("/admin/media/new", locale)} />}
+            nativeButton={false}
+            className="w-full sm:w-auto"
+          >
             <PlusIcon data-icon="inline-start" />
             {t.media.newAction}
           </Button>
@@ -141,7 +145,7 @@ export function MediaList({
               <div className="flex shrink-0 gap-1">
                 {canEdit(channel.slug) ? (
                   <Button
-                    render={<Link href={`/admin/media/${channel.slug}`} />}
+                    render={<Link href={localizedPath(`/admin/media/${channel.slug}`, locale)} />}
                     nativeButton={false}
                     variant="ghost"
                     size="icon-sm"

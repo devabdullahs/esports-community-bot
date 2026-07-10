@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { AccountWorkspace } from "@/components/dashboard/account-workspace";
 import { DEFAULT_SEASON } from "@/lib/env";
-import { copy } from "@/lib/i18n";
+import { copy, localizedPath } from "@/lib/i18n";
 import { normalizeProfileTab } from "@/lib/profile-workspace";
 import { getRequestLocale } from "@/lib/request-locale";
 import { getOptionalSession } from "@/lib/session";
@@ -22,11 +22,11 @@ export default async function MePage({
   if (params.guildId) callbackParams.set("guildId", params.guildId);
   callbackParams.set("season", params.season || DEFAULT_SEASON);
   if (params.tab) callbackParams.set("tab", normalizeProfileTab(params.tab));
-  const callbackURL = `/me?${callbackParams.toString()}`;
+  const callbackURL = localizedPath(`/me?${callbackParams.toString()}`, locale);
 
   if (!session) {
     const loginParams = new URLSearchParams({ callbackURL });
-    redirect(`/login?${loginParams.toString()}`);
+    redirect(localizedPath(`/login?${loginParams.toString()}`, locale));
   }
 
   return (
