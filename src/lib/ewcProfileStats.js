@@ -108,7 +108,8 @@ async function weeklyAggregateStats(guildId, season, userId) {
        WHERE wp.guild_id = $3
           AND w.season = $4
           AND wp.user_id = $5
-          AND wp.score IS NOT NULL`,
+          AND wp.score IS NOT NULL
+          AND win.max_score > 0`,
       [guildId, season, guildId, season, userId],
     )
   )?.c;
@@ -162,7 +163,7 @@ async function weeklyAggregateStatsForUsers(guildId, season, userIds) {
     }
     const score = Number(row.score || 0);
     current.weeksScored += 1;
-    if (score === winningScoreByWeek.get(row.week_id)) current.weeklyWins += 1;
+    if (score > 0 && score === winningScoreByWeek.get(row.week_id)) current.weeklyWins += 1;
     if (Number(parseJson(row.details_json, {})?.bonus || 0) >= WEEKLY_TOP_THREE_SWEEP_BONUS) {
       current.top3Sweeps += 1;
     }
@@ -282,8 +283,8 @@ export async function getEwcUserProfileStats(guildId, season = DEFAULT_EWC_PROFI
 
 export async function getPublicEwcLeaderboard({ guildId, season = DEFAULT_EWC_PROFILE_SEASON, limit = 50, offset = 0 }) {
   const rows = await leaderboardRows(guildId, season, limit, offset);
-  const start = Math.max(0, Math.floor(Number(offset)) || 0);
-  const topRows = start === 0 && rows.length ? rows : await leaderboardRows(guildId, season, 1, 0);
+  const normalizedOffset = Math.max(0, Math.floor(Number(offset)) || 0);
+  const topRows = normalizedOffset === 0 && rows.length ? rows : await leaderboardRows(guildId, season, 1, 0);
   const userIds = rows.map((row) => row.user_id);
   const weeklyByUser = await weeklyAggregateStatsForUsers(guildId, season, userIds);
   const topTeamsByUser = await seasonPickTeamsForUsers(guildId, season, userIds);
@@ -292,11 +293,11 @@ export async function getPublicEwcLeaderboard({ guildId, season = DEFAULT_EWC_PR
     season,
     total: await countOverallScored(guildId, season),
     topScore: Number(topRows[0]?.score || 0),
-    rows: rows.map((row, index) => {
+    rows: rows.map((row) => {
       const userId = row.user_id;
       const weekly = weeklyByUser.get(userId) || emptyWeeklyAggregate();
       return {
-        rank: start + index + 1,
+        rank: Number(row.rank),
         displayName: memberLabel(userId),
         overallPoints: Number(row.score || 0),
         weeksPredicted: weekly.weeksPredicted,

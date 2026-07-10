@@ -108,7 +108,7 @@ or optimize for guild counts.
 | 083  | Surface every actionable prediction round | P1 | M | - | DONE (this commit) |
 | 084  | Make prediction deadlines and completion truthful | P1 | M | 083 | DONE (this commit) |
 | 085  | Remove Discord prediction picker component ceilings | P2 | M | 082 | DONE (this commit) |
-| 086  | Make prediction ranks tie-aware on every surface | P2 | M | - | TODO |
+| 086  | Make prediction ranks tie-aware on every surface | P2 | M | - | DONE (this commit) |
 | 087  | Add explainable prediction score breakdowns | P2 | M | 082 | TODO |
 | 088  | Add secure website prediction submission | P2 | L | 082, 083, 084 | TODO |
 | 089  | Localize the complete Discord prediction experience | P2 | M | 084, 085, 087 | TODO |

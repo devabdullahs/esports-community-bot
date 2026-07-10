@@ -17,11 +17,13 @@ import {
   markEwcWeekScored,
   markEwcWeekScoredWithResults,
   overallLeaderboard,
+  seasonLeaderboard,
   saveSeasonPredictionScore,
   saveWeeklyPredictionScore,
   setEwcSeasonStatus,
   setEwcWeekSnapshot,
   setEwcWeekStatus,
+  weeklyLeaderboard,
 } from '../db/ewcPredictions.js';
 import { listEwcProfileLinks } from '../db/ewcProfileLinks.js';
 import {
@@ -56,22 +58,19 @@ async function standingsFor(season) {
   return data.standings;
 }
 
-function topPredictionLines(predictions) {
-  const rows = predictions
-    .filter((prediction) => prediction.score != null)
-    .sort((a, b) => b.score - a.score || String(a.updated_at || '').localeCompare(String(b.updated_at || '')))
-    .slice(0, 10);
-  if (!rows.length) return 'No scored predictions.';
-  return rows.map((row, index) => `**${index + 1}.** <@${row.user_id}> - \`${Number(row.score).toLocaleString()}\``).join('\n');
+function topPredictionLines(rows) {
+  const rankedRows = rows.filter((prediction) => prediction.score != null).slice(0, 10);
+  if (!rankedRows.length) return 'No scored predictions.';
+  return rankedRows.map((row) => `**${row.rank}.** <@${row.user_id}> - \`${Number(row.score).toLocaleString()}\``).join('\n');
 }
 
 function leaderboardLines(rows, { championPickVisible = false } = {}) {
   if (!rows.length) return 'No scored predictions yet.';
   return rows
     .slice(0, 20)
-    .map((row, index) => {
+    .map((row) => {
       const pick = championPickVisible ? ` - Champion pick: **${row.championPick || '-'}**` : '';
-      return `**${index + 1}.** <@${row.user_id}> - \`${Number(row.score || 0).toLocaleString()}\`${pick}`;
+      return `**${row.rank}.** <@${row.user_id}> - \`${Number(row.score || 0).toLocaleString()}\`${pick}`;
     })
     .join('\n');
 }
@@ -564,7 +563,7 @@ async function processWeek(client, round) {
   logger.info(
     `[ewc-predictions] scored ${predictions.length} weekly prediction(s) for ${round.guild_id}/${round.season}/${round.week_key} (${perGame ? 'per-game' : 'aggregate'})`,
   );
-  const scored = await listWeeklyPredictions(round.id);
+  const scored = await weeklyLeaderboard(round.id, 10, 0);
   await announce(
     client,
     round.guild_id,
@@ -610,7 +609,7 @@ async function processSeason(client, round) {
     await markEwcSeasonScored(round.guild_id, round.season, final, tx);
   });
   logger.info(`[ewc-predictions] scored ${predictions.length} season prediction(s) for ${round.guild_id}/${round.season}`);
-  const scored = await listSeasonPredictions(round.guild_id, round.season);
+  const scored = await seasonLeaderboard(round.guild_id, round.season, 10, 0);
   await announce(
     client,
     round.guild_id,

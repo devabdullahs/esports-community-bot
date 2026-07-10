@@ -60,7 +60,7 @@ beforeAll(async () => {
 });
 
 describe("GET /api/ewc/[guildId]/[season]/leaderboard", () => {
-  test("orders rows by score desc, then user_id asc for tied scores", async () => {
+  test("orders ties consistently while returning competition ranks", async () => {
     const res = await GET(req(), ctx());
     expect(res.status).toBe(200);
 
@@ -78,7 +78,7 @@ describe("GET /api/ewc/[guildId]/[season]/leaderboard", () => {
     expect(body.rows.map((row: { rank: number; overallPoints: number }) => [row.rank, row.overallPoints])).toEqual([
       [1, 900],
       [2, 700],
-      [3, 700],
+      [2, 700],
       [4, 100],
     ]);
   });
@@ -96,7 +96,7 @@ describe("GET /api/ewc/[guildId]/[season]/leaderboard", () => {
     expect(secondPage.total).toBe(4);
     expect(secondPage.topScore).toBe(900);
     expect(secondPage.rows.map((row: { rank: number; displayName: string }) => [row.rank, row.displayName])).toEqual([
-      [3, "Member 0202"],
+      [2, "Member 0202"],
       [4, "Member 0401"],
     ]);
 
@@ -113,7 +113,7 @@ describe("GET /api/ewc/[guildId]/[season]/leaderboard", () => {
 
     const fallbackPage = await (await GET(req("?limit=invalid&offset=invalid"), ctx())).json();
     expect(fallbackPage.topScore).toBe(900);
-    expect(fallbackPage.rows.map((row: { rank: number }) => row.rank)).toEqual([1, 2, 3, 4]);
+    expect(fallbackPage.rows.map((row: { rank: number }) => row.rank)).toEqual([1, 2, 2, 4]);
   });
 
   test("returns an empty leaderboard for a fresh guild and season", async () => {

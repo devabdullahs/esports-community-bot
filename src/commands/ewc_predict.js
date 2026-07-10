@@ -482,10 +482,10 @@ function summarizeWeeklyPicks(row, { isOwner = false } = {}) {
     .join(' | ') || 'No picks';
 }
 
-function leaderboardLines(rows, offset = 0) {
+function leaderboardLines(rows) {
   if (!rows.length) return 'No scored predictions yet.';
   return rows
-    .map((row, index) => `**${offset + index + 1}.** <@${row.user_id}> — \`${Number(row.score || 0).toLocaleString()}\``)
+    .map((row) => `**${row.rank}.** <@${row.user_id}> — \`${Number(row.score || 0).toLocaleString()}\``)
     .join('\n');
 }
 
@@ -531,7 +531,7 @@ async function buildLeaderboardPage(guildId, type, season, week, page = 1, owner
   const embed = new EmbedBuilder()
     .setColor(0xf1c40f)
     .setTitle(data.title)
-    .setDescription(leaderboardLines(await data.fetch(PAGE_SIZE, offset), offset))
+    .setDescription(leaderboardLines(await data.fetch(PAGE_SIZE, offset)))
     .setFooter({ text: `Page ${p} / ${totalPages} · ${data.count} ranked` });
 
   const components = [];

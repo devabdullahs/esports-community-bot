@@ -312,8 +312,8 @@ export function renderEwcPredictionLeaderboardCard({
     const rowHeight = championPickVisible ? 58 : 44;
     const rowTop = championPickVisible ? 32 : 28;
     let y = championPickVisible ? 278 : 264;
-    rows.slice(0, 20).forEach((row, index) => {
-      const rank = index + 1;
+    rows.slice(0, 20).forEach((row) => {
+      const rank = Number(row.rank);
       ctx.fillStyle = rank % 2 ? 'rgba(255,255,255,0.04)' : 'rgba(255,255,255,0.022)';
       roundRect(ctx, 54, y - rowTop, W - 108, rowHeight, 8);
       ctx.fill();

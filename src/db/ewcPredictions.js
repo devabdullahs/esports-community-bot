@@ -388,9 +388,13 @@ export async function deleteEwcWeek(weekId, client = null) {
 export async function weeklyLeaderboard(weekId, limit = 20, offset = 0) {
   return (
     await all(
-      `SELECT * FROM ewc_weekly_predictions
-       WHERE week_id = $1 AND score IS NOT NULL
-       ORDER BY score DESC, updated_at ASC
+      `WITH ranked AS (
+         SELECT *, RANK() OVER (ORDER BY score DESC) AS rank
+         FROM ewc_weekly_predictions
+         WHERE week_id = $1 AND score IS NOT NULL
+       )
+       SELECT * FROM ranked
+       ORDER BY score DESC, updated_at ASC, user_id ASC
        LIMIT $2 OFFSET $3`,
       [weekId, limit, offset],
     )
@@ -581,9 +585,13 @@ export async function clearSeasonPredictionScores(guildId, season = '2026') {
 export async function seasonLeaderboard(guildId, season = '2026', limit = 20, offset = 0) {
   return (
     await all(
-      `SELECT * FROM ewc_season_predictions
-       WHERE guild_id = $1 AND season = $2 AND score IS NOT NULL
-       ORDER BY score DESC, updated_at ASC
+      `WITH ranked AS (
+         SELECT *, RANK() OVER (ORDER BY score DESC) AS rank
+         FROM ewc_season_predictions
+         WHERE guild_id = $1 AND season = $2 AND score IS NOT NULL
+       )
+       SELECT * FROM ranked
+       ORDER BY score DESC, updated_at ASC, user_id ASC
        LIMIT $3 OFFSET $4`,
       [guildId, season, limit, offset],
     )
@@ -628,10 +636,9 @@ async function overallBestWeekCount(guildId, season) {
 
 // Overall = each user's weekly scores + their season score. When the season has best_weeks set,
 // only each user's top-N weekly scores count (fairer: neutralizes participation + week unevenness).
-export async function overallLeaderboard(guildId, season = '2026', limit = 20, offset = 0) {
-  const k = await overallBestWeekCount(guildId, season);
-  return all(
-    `WITH ranked AS (
+// Keep this CTE shared by the list and profile-rank queries so both use the same
+// best-N and competition-ranking semantics.
+const overallRankedCte = `WITH ranked_weekly AS (
        SELECT wp.user_id, wp.score,
               ROW_NUMBER() OVER (PARTITION BY wp.user_id ORDER BY wp.score DESC, wp.week_id) AS rn
        FROM ewc_weekly_predictions wp
@@ -639,33 +646,7 @@ export async function overallLeaderboard(guildId, season = '2026', limit = 20, o
        WHERE wp.guild_id = $1 AND w.season = $2 AND wp.score IS NOT NULL
      ),
      scores AS (
-       SELECT user_id, score FROM ranked WHERE rn <= $3
-       UNION ALL
-       SELECT user_id, score
-       FROM ewc_season_predictions
-       WHERE guild_id = $4 AND season = $5 AND score IS NOT NULL
-     )
-     SELECT user_id, SUM(score) AS score
-     FROM scores
-     GROUP BY user_id
-     ORDER BY score DESC, user_id ASC
-     LIMIT $6 OFFSET $7`,
-    [guildId, season, k, guildId, season, limit, offset],
-  );
-}
-
-export async function overallRankForUser(guildId, season = '2026', userId) {
-  const k = await overallBestWeekCount(guildId, season);
-  return get(
-    `WITH ranked AS (
-       SELECT wp.user_id, wp.score,
-              ROW_NUMBER() OVER (PARTITION BY wp.user_id ORDER BY wp.score DESC, wp.week_id) AS rn
-       FROM ewc_weekly_predictions wp
-       JOIN ewc_prediction_weeks w ON w.id = wp.week_id
-       WHERE wp.guild_id = $1 AND w.season = $2 AND wp.score IS NOT NULL
-     ),
-     scores AS (
-       SELECT user_id, score FROM ranked WHERE rn <= $3
+       SELECT user_id, score FROM ranked_weekly WHERE rn <= $3
        UNION ALL
        SELECT user_id, score
        FROM ewc_season_predictions
@@ -676,12 +657,29 @@ export async function overallRankForUser(guildId, season = '2026', userId) {
        FROM scores
        GROUP BY user_id
      ),
-     ordered AS (
-       SELECT user_id, score, ROW_NUMBER() OVER (ORDER BY score DESC, user_id ASC) AS rank
+     ranked_totals AS (
+       SELECT user_id, score, RANK() OVER (ORDER BY score DESC) AS rank
        FROM totals
-     )
+     )`;
+
+export async function overallLeaderboard(guildId, season = '2026', limit = 20, offset = 0) {
+  const k = await overallBestWeekCount(guildId, season);
+  return all(
+    `${overallRankedCte}
+     SELECT user_id, score, rank
+     FROM ranked_totals
+     ORDER BY score DESC, user_id ASC
+     LIMIT $6 OFFSET $7`,
+    [guildId, season, k, guildId, season, limit, offset],
+  );
+}
+
+export async function overallRankForUser(guildId, season = '2026', userId) {
+  const k = await overallBestWeekCount(guildId, season);
+  return get(
+    `${overallRankedCte}
      SELECT rank, score
-     FROM ordered
+     FROM ranked_totals
      WHERE user_id = $6`,
     [guildId, season, k, guildId, season, userId],
   );
