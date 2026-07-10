@@ -114,6 +114,7 @@ or optimize for guild counts.
 | 089  | Localize the complete Discord prediction experience | P2 | M | 084, 085, 087 | TODO — STOP: installed discord.js application-command locale enum lacks Arabic |
 | 090  | Add a secure admin prediction operations center | P3 | L | 082, 084 | DONE (`69d9eb2`) |
 | 091  | Add opt-in public predictor identities | P3 | M | 086 | DONE (`97f91c7`) |
+| 092  | Add Liquipedia match details pages | P2 | L | - | DONE (PR #207) |
 Status values: TODO | IN PROGRESS | DONE | BLOCKED (reason) | REJECTED (rationale) | SUPERSEDED.
 
 ## Prediction-system audit (2026-07-10 @ `2301227`)
