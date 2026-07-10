@@ -19,6 +19,7 @@ import { POST as unlinkPOST } from "@/app/api/me/ewc/unlink/route";
 const SEASON = "2026";
 const USERS = {
   get: { authUserId: "dev-ewc-get-user", discordUserId: "200000000000048101", guildId: "920000000000000101" },
+  currentRound: { authUserId: "dev-ewc-round-user", discordUserId: "200000000000048106", guildId: "920000000000000106" },
   readOnlyGet: { authUserId: "dev-ewc-readonly-user", discordUserId: "200000000000048104", guildId: "920000000000000104" },
   link: { authUserId: "dev-ewc-link-user", discordUserId: "200000000000048105", guildId: "920000000000000105" },
   sync: { authUserId: "dev-ewc-sync-user", discordUserId: "200000000000048102", guildId: "920000000000000102" },
@@ -159,6 +160,49 @@ describe("EWC profile routes", () => {
 
     const { getEwcProfileLinkByDiscordUser } = await import("@bot/db/ewcProfileLinks.js");
     await expect(getEwcProfileLinkByDiscordUser(user.discordUserId)).resolves.toBeNull();
+  });
+
+  test("GET /api/me/ewc returns only the viewer's current-round pick progress", async () => {
+    const user = USERS.currentRound;
+    useDevSession(user.authUserId, user.discordUserId);
+    await seedProfileLink(user);
+    const now = Math.floor(Date.now() / 1000);
+    const { upsertEwcWeek, upsertWeeklyGamePick } = await import("@bot/db/ewcPredictions.js");
+    const week = await upsertEwcWeek({
+      guildId: user.guildId,
+      season: SEASON,
+      weekKey: "current-round",
+      label: "Current round",
+      openAt: now - 60,
+      closeAt: now + 3_600,
+      games: [
+        { key: "open-picked", game: "Valorant", lockAt: now + 1_800 },
+        { key: "open-remaining", game: "Dota 2", lockAt: now + 2_400 },
+        { key: "locked", game: "Chess", lockAt: now - 60 },
+      ],
+      createdBy: "web-test",
+    });
+    await upsertWeeklyGamePick({
+      guildId: user.guildId,
+      weekId: week.id,
+      userId: user.discordUserId,
+      gameKey: "open-picked",
+      pick: "Team Falcons",
+    });
+
+    const res = await meGET(new Request("http://localhost/api/me/ewc"));
+    const body = await res.json();
+    expect(body.currentRound).toMatchObject({
+      weekKey: "current-round",
+      status: "partly open",
+      openGames: 2,
+      lockedGames: 1,
+      totalGames: 3,
+      pickedGames: 1,
+      remainingGameKeys: ["open-remaining"],
+      discordUrl: `https://discord.com/channels/${user.guildId}`,
+    });
+    expect(JSON.stringify(body.currentRound)).not.toContain("Team Falcons");
   });
 
   test("POST /api/me/ewc creates the profile link with a same-origin request", async () => {

@@ -84,7 +84,7 @@ describe("GET /api/ewc/[guildId]/[season]/leaderboard", () => {
   });
 
   test("paginates rows while keeping the total count", async () => {
-    const firstPage = await (await GET(req("?limit=2"), ctx())).json();
+    const firstPage = await (await GET(req("?limit=2&offset=0"), ctx())).json();
     expect(firstPage.total).toBe(4);
     expect(firstPage.topScore).toBe(900);
     expect(firstPage.rows.map((row: { displayName: string }) => row.displayName)).toEqual([
@@ -104,6 +104,16 @@ describe("GET /api/ewc/[guildId]/[season]/leaderboard", () => {
     expect(pastEnd.total).toBe(4);
     expect(pastEnd.topScore).toBe(900);
     expect(pastEnd.rows).toEqual([]);
+  });
+
+  test("clamps invalid limit and offset values to stable bounds", async () => {
+    const minimumPage = await (await GET(req("?limit=0&offset=-20"), ctx())).json();
+    expect(minimumPage.topScore).toBe(900);
+    expect(minimumPage.rows.map((row: { rank: number }) => row.rank)).toEqual([1]);
+
+    const fallbackPage = await (await GET(req("?limit=invalid&offset=invalid"), ctx())).json();
+    expect(fallbackPage.topScore).toBe(900);
+    expect(fallbackPage.rows.map((row: { rank: number }) => row.rank)).toEqual([1, 2, 3, 4]);
   });
 
   test("returns an empty leaderboard for a fresh guild and season", async () => {

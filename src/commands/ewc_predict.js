@@ -36,6 +36,7 @@ import {
   weeklyLeaderboard,
 } from '../db/ewcPredictions.js';
 import { effectiveEwcWeekStatus, formatShortDate, formatTimestamp, normalizeClubName } from '../lib/ewcPredictions.js';
+import { selectCurrentOpenEwcWeek } from '../lib/ewcPredictionRounds.js';
 import { resolveEwcClubPick, searchEwcClubChoices } from '../lib/ewcClubCache.js';
 import { ewcGameParticipantTeams, matchParticipant } from '../lib/ewcGameTeams.js';
 import { announceEwcParticipation } from '../lib/ewcParticipation.js';
@@ -341,13 +342,7 @@ export async function weeklyPickPayload(guildId, seasonYear, weekKey, userId) {
 // The week members should predict right now: the soonest-to-lock still-open round.
 export async function currentOpenWeek(guildId, seasonYear) {
   const weeks = await listEwcWeeks(guildId, seasonYear);
-  const open = weeks.filter((w) => {
-    const label = effectiveEwcWeekStatus(w).label;
-    return label === 'open' || label === 'partly open';
-  });
-  if (!open.length) return null;
-  open.sort((a, b) => (a.close_at || Infinity) - (b.close_at || Infinity));
-  return open[0];
+  return selectCurrentOpenEwcWeek(weeks);
 }
 
 // Season picks fill strictly top-down: you can change an already-set rank or set the

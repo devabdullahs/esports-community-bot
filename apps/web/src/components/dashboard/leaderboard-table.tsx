@@ -7,7 +7,6 @@ import {
   flexRender,
   getCoreRowModel,
   getFilteredRowModel,
-  getPaginationRowModel,
   getSortedRowModel,
   type SortingState,
   useReactTable,
@@ -161,7 +160,6 @@ export function LeaderboardTable({
     getCoreRowModel: getCoreRowModel(),
     getSortedRowModel: getSortedRowModel(),
     getFilteredRowModel: getFilteredRowModel(),
-    getPaginationRowModel: getPaginationRowModel(),
   });
 
   return (
@@ -171,7 +169,7 @@ export function LeaderboardTable({
         <Input
           value={globalFilter}
           onChange={(event) => setGlobalFilter(event.target.value)}
-          placeholder={text.leaderboard.searchPlaceholder}
+          placeholder={text.leaderboard.searchPagePlaceholder}
           className="ps-8"
         />
       </div>
@@ -209,19 +207,6 @@ export function LeaderboardTable({
             )}
           </TableBody>
         </Table>
-      </div>
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <p className="text-sm text-muted-foreground">
-          {text.leaderboard.page(table.getState().pagination.pageIndex + 1, table.getPageCount() || 1)}
-        </p>
-        <div className="grid grid-cols-2 gap-2 sm:flex">
-          <Button variant="outline" size="sm" onClick={() => table.previousPage()} disabled={!table.getCanPreviousPage()}>
-            {text.common.previous}
-          </Button>
-          <Button variant="outline" size="sm" onClick={() => table.nextPage()} disabled={!table.getCanNextPage()}>
-            {text.common.next}
-          </Button>
-        </div>
       </div>
     </div>
   );

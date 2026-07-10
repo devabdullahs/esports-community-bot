@@ -18,14 +18,16 @@ import {
   formatNumber,
   localizedPath,
 } from "@/lib/i18n";
+import {
+  getLeaderboardPageModel,
+  getLeaderboardPageRequest,
+} from "@/lib/leaderboard-page-model";
 import { getRequestLocale } from "@/lib/request-locale";
 import { getPublicEwcLeaderboardCached } from "@/lib/public-ewc-leaderboard";
 import { buildPageMetadata } from "@/lib/metadata";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-
-const PAGE_SIZE = 100;
 
 export async function generateMetadata({
   params,
@@ -50,33 +52,44 @@ export default async function LeaderboardPage({
   searchParams: Promise<{ page?: string }>;
 }) {
   const { guildId, season } = await params;
-  const requestedPage = Math.max(1, Math.floor(Number((await searchParams).page)) || 1);
+  const { page: requestedPage } = await searchParams;
   const locale = await getRequestLocale();
   const text = copy[locale];
 
-  // Server pagination so ranks past the first page are reachable. The table keeps
-  // its in-page search/sort; this nav steps between 100-rank blocks.
-  let page = requestedPage;
+  const initialRequest = getLeaderboardPageRequest(requestedPage);
   let leaderboard = await getPublicEwcLeaderboardCached({
     guildId,
     season,
-    limit: PAGE_SIZE,
-    offset: (page - 1) * PAGE_SIZE,
+    limit: initialRequest.limit,
+    offset: initialRequest.offset,
   });
-  const totalPages = Math.max(1, Math.ceil(leaderboard.total / PAGE_SIZE));
-  if (page > totalPages) {
-    page = totalPages;
+  let pageModel = getLeaderboardPageModel({
+    requestedPage,
+    total: leaderboard.total,
+    returnedRowCount: leaderboard.rows.length,
+  });
+
+  // Once the total is known, only an over-range URL needs a corrected fetch.
+  if (pageModel.offset !== initialRequest.offset) {
     leaderboard = await getPublicEwcLeaderboardCached({
       guildId,
       season,
-      limit: PAGE_SIZE,
-      offset: (page - 1) * PAGE_SIZE,
+      limit: pageModel.limit,
+      offset: pageModel.offset,
+    });
+    pageModel = getLeaderboardPageModel({
+      requestedPage,
+      total: leaderboard.total,
+      returnedRowCount: leaderboard.rows.length,
     });
   }
   // "Top score" is the global #1 — always from page 1, not the current page's first row.
   const topScore = leaderboard.topScore ?? leaderboard.rows[0]?.overallPoints ?? 0;
-  const rangeStart = leaderboard.total === 0 ? 0 : (page - 1) * PAGE_SIZE + 1;
-  const rangeEnd = (page - 1) * PAGE_SIZE + leaderboard.rows.length;
+  const leaderboardPath = `/leaderboard/${guildId}/${season}`;
+  const pageHref = (targetPage: number) => localizedPath(
+    `${leaderboardPath}?page=${targetPage}`,
+    locale,
+  );
 
   return (
     <main
@@ -136,35 +149,37 @@ export default async function LeaderboardPage({
         </CardHeader>
         <CardContent className="flex flex-col gap-4">
           <LeaderboardTable rows={leaderboard.rows} locale={locale} />
-          {totalPages > 1 ? (
+          {leaderboard.total > 0 ? (
             <div className="flex flex-wrap items-center justify-between gap-3 border-t pt-4">
               <p className="text-sm text-muted-foreground">
-                {text.leaderboard.showing(rangeStart, rangeEnd, leaderboard.total)}
+                {text.leaderboard.showing(pageModel.rangeStart, pageModel.rangeEnd, leaderboard.total)}
               </p>
-              <div className="flex gap-2">
-                {page > 1 ? (
-                  <Button
-                    render={<Link href={`?page=${page - 1}`} />}
-                    nativeButton={false}
-                    variant="outline"
-                    size="sm"
-                  >
-                    <ArrowLeftIcon data-icon="inline-start" className="rtl:rotate-180" />
-                    {text.common.previous}
-                  </Button>
-                ) : null}
-                {page < totalPages ? (
-                  <Button
-                    render={<Link href={`?page=${page + 1}`} />}
-                    nativeButton={false}
-                    variant="outline"
-                    size="sm"
-                  >
-                    {text.common.next}
-                    <ArrowRightIcon data-icon="inline-end" className="rtl:rotate-180" />
-                  </Button>
-                ) : null}
-              </div>
+              {pageModel.totalPages > 1 ? (
+                <div className="flex gap-2">
+                  {pageModel.hasPreviousPage ? (
+                    <Button
+                      render={<Link href={pageHref(pageModel.page - 1)} />}
+                      nativeButton={false}
+                      variant="outline"
+                      size="sm"
+                    >
+                      <ArrowLeftIcon data-icon="inline-start" className="rtl:rotate-180" />
+                      {text.common.previous}
+                    </Button>
+                  ) : null}
+                  {pageModel.hasNextPage ? (
+                    <Button
+                      render={<Link href={pageHref(pageModel.page + 1)} />}
+                      nativeButton={false}
+                      variant="outline"
+                      size="sm"
+                    >
+                      {text.common.next}
+                      <ArrowRightIcon data-icon="inline-end" className="rtl:rotate-180" />
+                    </Button>
+                  ) : null}
+                </div>
+              ) : null}
             </div>
           ) : null}
         </CardContent>

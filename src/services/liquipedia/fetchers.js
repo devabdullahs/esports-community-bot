@@ -302,11 +302,13 @@ export function clubChampionshipStandingsPage(page) {
 
 // Fetch the Club Championship page (wiki is usually "esports").
 export async function fetchClubChampionship(wiki, page) {
-  const data = await parsePage(wiki, clubChampionshipStandingsPage(page));
+  const standingsPage = clubChampionshipStandingsPage(page);
+  const sourceUrl = `https://liquipedia.net/${wiki}/${standingsPage}`;
+  const data = await parsePage(wiki, standingsPage);
   const html = data?.parse?.text?.['*'];
-  if (!html) return { standings: [], prizepool: [] };
+  if (!html) return { sourceUrl, standings: [], prizepool: [] };
   const $ = cheerio.load(html);
-  return { standings: parseClubStandings($), prizepool: parseClubPrizepool($) };
+  return { sourceUrl, standings: parseClubStandings($), prizepool: parseClubPrizepool($) };
 }
 
 // ---------------------------------------------------------------------------

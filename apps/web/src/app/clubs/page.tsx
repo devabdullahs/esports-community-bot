@@ -9,6 +9,7 @@ import {
   TrophyIcon,
   UsersIcon,
 } from "lucide-react";
+import { EwcClubViewSwitcher } from "@/components/clubs/ewc-club-view-switcher";
 import { PageBreadcrumb } from "@/components/page-breadcrumb";
 import { ProfileAvatar } from "@/components/profiles/profile-avatar";
 import { LiquipediaAttribution } from "@/components/tournaments/liquipedia-attribution";
@@ -256,6 +257,8 @@ export default async function EwcClubsPage({
         ]}
       />
 
+      <EwcClubViewSwitcher locale={locale} active="directory" />
+
       <section className="relative overflow-hidden rounded-2xl border bg-card/40 p-5 shadow-sm sm:p-6">
         <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-primary/60 to-transparent" />
         <div className="flex flex-col gap-5">
@@ -267,8 +270,14 @@ export default async function EwcClubsPage({
             <h1 className="text-3xl font-semibold leading-tight sm:text-4xl">{text.title}</h1>
             <p className="text-sm leading-6 text-muted-foreground sm:text-base">{text.description}</p>
             <p className="text-xs leading-5 text-muted-foreground">
-              {text.sourceNote} {text.updated(formatDateTime(data.updatedAt, locale))}
+              {text.sourceNote}{" "}
+              {data.updatedAt
+                ? text.updated(formatDateTime(data.updatedAt, locale))
+                : text.awaitingSnapshot}
             </p>
+            {data.stale ? (
+              <p className="text-xs leading-5 text-muted-foreground">{text.staleNotice}</p>
+            ) : null}
           </div>
 
           <form method="get" action={localizedPath("/clubs", locale)} className="flex max-w-md gap-2">

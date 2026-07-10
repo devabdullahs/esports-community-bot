@@ -103,6 +103,16 @@ describe("MCP tool manifest", () => {
       .toEqual([...MCP_WRITE_TOOL_NAMES].sort());
   });
 
+  test("distinguishes Club Championship standings from prediction rankings", () => {
+    const standings = MCP_TOOL_MANIFEST.find((tool) => tool.name === "get_ewc_club_standings");
+    const predictions = MCP_TOOL_MANIFEST.find((tool) => tool.name === "get_public_ewc_leaderboard");
+    expect(standings).toMatchObject({ adminGrant: "always", kind: "read" });
+    expect(standings?.description.en).toContain("Club Championship standings");
+    expect(predictions?.description.en).toContain("prediction leaderboard");
+    expect(getPublicMcpCopyPage("en")).toContain("separate datasets");
+    expect(getPublicMcpCopyPage("ar")).toContain("\u0645\u062c\u0645\u0648\u0639\u062a\u0627 \u0628\u064a\u0627\u0646\u0627\u062a \u0645\u0646\u0641\u0635\u0644\u062a\u0627\u0646");
+  });
+
   test("matches actual tools/list registrations", async () => {
     const { createMcpKey } = await import("@bot/db/mcpKeys.js");
     const key = await createMcpKey({ ownerDiscordId: SUPER_ID, tools: ["get_site_overview"] });

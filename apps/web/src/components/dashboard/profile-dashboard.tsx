@@ -3,7 +3,10 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   CalendarDaysIcon,
+  Clock3Icon,
   ExternalLinkIcon,
+  ListChecksIcon,
+  MessageCircleIcon,
   type LucideIcon,
   MedalIcon,
   RefreshCcwIcon,
@@ -28,6 +31,7 @@ import {
 } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Progress, ProgressLabel, ProgressValue } from "@/components/ui/progress";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   copy,
@@ -70,6 +74,19 @@ type MePayload = {
       bonus: number;
     }>;
   } | null;
+  currentRound: {
+    id: number;
+    weekKey: string;
+    label: string;
+    status: string;
+    closesAt: number | null;
+    openGames: number;
+    lockedGames: number;
+    totalGames: number;
+    pickedGames: number;
+    remainingGameKeys: string[];
+    discordUrl: string;
+  } | null;
 };
 
 async function jsonOrThrow(response: Response) {
@@ -82,10 +99,12 @@ export function ProfileDashboard({
   guildId,
   season,
   locale,
+  section = "all",
 }: {
   guildId?: string;
   season: string;
   locale: Locale;
+  section?: "all" | "overview" | "predictions";
 }) {
   const router = useRouter();
   const queryClient = useQueryClient();
@@ -170,10 +189,11 @@ export function ProfileDashboard({
 
   const data = query.data;
   const stats = data.stats;
+  const currentRound = data.currentRound;
 
   return (
     <div className="flex flex-col gap-6">
-      <Card>
+      {section !== "predictions" ? <Card>
         <CardHeader className="gap-4">
           <div className="flex items-center gap-3">
             <Avatar className="size-12">
@@ -234,11 +254,11 @@ export function ProfileDashboard({
             </Alert>
           ) : null}
         </CardContent>
-      </Card>
+      </Card> : null}
 
       {stats ? (
         <>
-          <section className="grid gap-4 sm:grid-cols-2 md:grid-cols-4">
+          {section !== "predictions" ? <section className="grid gap-4 sm:grid-cols-2 md:grid-cols-4">
             <StatCard
               label={copy[locale].common.rank}
               value={stats.rank ? `#${formatNumber(stats.rank, locale)}` : text.unranked}
@@ -247,7 +267,70 @@ export function ProfileDashboard({
             <StatCard label={text.points} value={formatNumber(stats.overallPoints, locale)} icon={SparklesIcon} />
             <StatCard label={text.weeksScored} value={formatNumber(stats.weeksScored, locale)} icon={CalendarDaysIcon} />
             <StatCard label={text.weeklyWins} value={formatNumber(stats.weeklyWins, locale)} icon={MedalIcon} />
-          </section>
+          </section> : null}
+
+          {section !== "overview" ? <>{currentRound ? (
+            <Card>
+              <CardHeader>
+                <CardTitle>{currentRound.label}</CardTitle>
+                <CardDescription>{text.currentRoundDescription}</CardDescription>
+                <CardAction>
+                  <Badge variant={currentRound.status === "open" ? "default" : "secondary"}>
+                    <Clock3Icon data-icon="inline-start" />
+                    {text.roundStatus[currentRound.status as keyof typeof text.roundStatus] || currentRound.status}
+                  </Badge>
+                </CardAction>
+              </CardHeader>
+              <CardContent className="flex flex-col gap-5">
+                <Progress
+                  value={currentRound.totalGames ? Math.min(100, Math.round((currentRound.pickedGames / currentRound.totalGames) * 100)) : 0}
+                >
+                  <ProgressLabel>{text.pickProgress}</ProgressLabel>
+                  <ProgressValue>
+                    {() => `${formatNumber(currentRound.pickedGames, locale)}/${formatNumber(currentRound.totalGames, locale)}`}
+                  </ProgressValue>
+                </Progress>
+                <div className="flex flex-wrap gap-2">
+                  <Badge variant="secondary">
+                    <ListChecksIcon data-icon="inline-start" />
+                    {text.remainingPicks(currentRound.remainingGameKeys.length)}
+                  </Badge>
+                  {currentRound.lockedGames ? (
+                    <Badge variant="outline">{text.lockedGames(currentRound.lockedGames)}</Badge>
+                  ) : null}
+                  {currentRound.closesAt ? (
+                    <Badge variant="outline">
+                      {text.closes}{" "}
+                      <LocalDateTime
+                        value={new Date(currentRound.closesAt * 1000).toISOString()}
+                        locale={locale}
+                      />
+                    </Badge>
+                  ) : null}
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <Button render={<a href={currentRound.discordUrl} target="_blank" rel="noreferrer" />} nativeButton={false}>
+                    <MessageCircleIcon data-icon="inline-start" />
+                    {text.openDiscord}
+                  </Button>
+                  <Button
+                    render={<Link href={localizedPath(`/leaderboard/${stats.guildId}/${stats.season}`, locale)} />}
+                    nativeButton={false}
+                    variant="outline"
+                  >
+                    <TrophyIcon data-icon="inline-start" />
+                    {text.leaderboard}
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          ) : (
+            <Alert>
+              <CalendarDaysIcon />
+              <AlertTitle>{text.noCurrentRound}</AlertTitle>
+              <AlertDescription>{text.noCurrentRoundDescription}</AlertDescription>
+            </Alert>
+          )}
 
           <Tabs defaultValue="showcase">
             <TabsList>
@@ -331,8 +414,13 @@ export function ProfileDashboard({
                 </CardContent>
               </Card>
             </TabsContent>
-          </Tabs>
+          </Tabs></> : null}
         </>
+      ) : section === "predictions" ? (
+        <Alert>
+          <AlertTitle>{text.noProfileTitle}</AlertTitle>
+          <AlertDescription>{text.noProfileDescription}</AlertDescription>
+        </Alert>
       ) : null}
     </div>
   );

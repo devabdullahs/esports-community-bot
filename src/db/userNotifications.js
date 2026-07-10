@@ -83,13 +83,28 @@ export async function enqueueNotifications({ userIds, type, matchId, title, body
 }
 
 export async function listNotificationsForUser(discordUserId, { limit = 30, offset = 0 } = {}) {
-  const safeLimit = Math.min(100, Math.max(1, Number(limit) || 30));
-  const safeOffset = Math.max(0, Number(offset) || 0);
+  const safeLimit = Math.min(100, Math.max(1, Math.trunc(Number(limit) || 30)));
+  const safeOffset = Math.max(0, Math.trunc(Number(offset) || 0));
   return all(
     `SELECT * FROM user_notifications WHERE discord_user_id = $1
      ORDER BY created_at DESC, id DESC LIMIT $2 OFFSET $3`,
     [discordUserId, safeLimit, safeOffset],
   );
+}
+
+export async function listNotificationPageForUser(discordUserId, { limit = 30, offset = 0 } = {}) {
+  const safeLimit = Math.min(100, Math.max(1, Math.trunc(Number(limit) || 30)));
+  const safeOffset = Math.max(0, Math.trunc(Number(offset) || 0));
+  const rows = await all(
+    `SELECT * FROM user_notifications WHERE discord_user_id = $1
+     ORDER BY created_at DESC, id DESC LIMIT $2 OFFSET $3`,
+    [discordUserId, safeLimit + 1, safeOffset],
+  );
+  const hasMore = rows.length > safeLimit;
+  return {
+    notifications: hasMore ? rows.slice(0, safeLimit) : rows,
+    nextOffset: hasMore ? safeOffset + safeLimit : null,
+  };
 }
 
 export async function countUnreadNotifications(discordUserId) {

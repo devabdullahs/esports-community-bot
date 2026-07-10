@@ -2,6 +2,10 @@ import "server-only";
 
 import { unstable_cache } from "next/cache";
 import { all } from "@bot/db/client.js";
+import {
+  getEwcClubChampionshipSnapshot,
+  getLatestEwcClubChampionshipSnapshot,
+} from "@bot/db/ewcClubChampionshipSnapshots.js";
 import { clubNameKeys as botClubNameKeys } from "@bot/lib/ewcPredictions.js";
 import {
   classifyClubRegion,
@@ -12,29 +16,17 @@ import {
 } from "@/lib/ewc-club-regions";
 import { gameTitleForSlug, listGames } from "@/lib/games";
 
-const CLUBS_SOURCE_URL = "https://liquipedia.net/esports/Esports_World_Cup/2026/Clubs";
-const STANDINGS_SOURCE_URL =
-  "https://liquipedia.net/esports/Esports_World_Cup/2026/Club_Championship_Standings";
+export const DEFAULT_EWC_CLUB_SEASON = String(new Date().getUTCFullYear());
+export const EWC_CLUB_SNAPSHOT_STALE_AFTER_MS = 6 * 60 * 60 * 1000;
+const LIVE_FALLBACK_TIMEOUT_MS = 8_000;
 
-type RawEwcClubGame = {
-  label?: string | null;
-  shortLabel?: string | null;
-  pageUrl?: string | null;
-  icon?: string | null;
-  status?: string | null;
-  entries?: Array<{ name?: string | null; wiki?: string | null; url?: string | null; status?: string | null }>;
-};
+function clubsSourceUrl(season: string) {
+  return `https://liquipedia.net/esports/Esports_World_Cup/${season}/Clubs`;
+}
 
-type RawEwcClub = {
-  name?: string | null;
-  pageUrl?: string | null;
-  logo?: string | null;
-  clubSupportProgram?: boolean | null;
-  qualifiedCount?: number | null;
-  possibleEvents?: number | null;
-  totalTeams?: number | null;
-  games?: RawEwcClubGame[];
-};
+function standingsSourceUrl(season: string) {
+  return `https://liquipedia.net/esports/Esports_World_Cup/${season}/Club_Championship_Standings`;
+}
 
 type RawStanding = {
   rank?: number | string | null;
@@ -48,6 +40,7 @@ type TeamProfileRow = {
   image_url: string | null;
   location: string | null;
   nationality: string | null;
+  liquipedia_url: string | null;
   liquipedia_facts: string | null;
 };
 
@@ -79,6 +72,7 @@ export type EwcClubTrackerClub = {
   rank: number | null;
   points: number | null;
   eligibility: string | null;
+  hasStanding: boolean;
   qualifiedCount: number;
   possibleEvents: number;
   totalTeams: number;
@@ -89,10 +83,12 @@ export type EwcClubTrackerClub = {
 };
 
 export type EwcClubTracker = {
+  season: string;
   sourceUrl: string;
   standingsSourceUrl: string;
-  updatedAt: string;
-  dataSource?: "liquipedia" | "database-fallback";
+  updatedAt: string | null;
+  dataSource: "stored-snapshot" | "liquipedia-fallback" | "database-fallback";
+  stale: boolean;
   warning?: string;
   clubs: EwcClubTrackerClub[];
   summary: {
@@ -104,11 +100,6 @@ export type EwcClubTracker = {
   };
 };
 
-type FetchEwcClubs = () => Promise<{
-  sourceUrl?: string;
-  clubs?: RawEwcClub[];
-}>;
-
 type FetchEwcClubStandings = (year?: number) => Promise<{
   sourceUrl?: string;
   standings?: RawStanding[];
@@ -116,7 +107,6 @@ type FetchEwcClubStandings = (year?: number) => Promise<{
 
 async function liquipediaFetchers() {
   const mod = (await import("@bot/services/liquipedia.js")) as {
-    fetchEwcClubs: FetchEwcClubs;
     fetchEwcClubStandings: FetchEwcClubStandings;
   };
   return mod;
@@ -154,7 +144,7 @@ function profileScore(profile: TeamProfileRow & { facts: Record<string, unknown>
 
 async function teamProfilesByClubKey() {
   const rows = (await all(
-    `SELECT name, image_url, location, nationality, liquipedia_facts
+    `SELECT name, image_url, location, nationality, liquipedia_url, liquipedia_facts
        FROM teams
       WHERE name IS NOT NULL AND name <> ''`,
     [],
@@ -190,25 +180,6 @@ function lookupByClubName<T>(map: Map<string, T>, name: unknown): T | null {
     if (value) return value;
   }
   return null;
-}
-
-async function standingsByClubKey() {
-  try {
-    const { fetchEwcClubStandings } = await liquipediaFetchers();
-    const payload = await fetchEwcClubStandings(2026);
-    const map = new Map<string, { rank: number | null; points: number | null; eligibility: string | null }>();
-    for (const row of payload.standings ?? []) {
-      if (!row.team) continue;
-      addLookup(map, row.team, {
-        rank: numberValue(row.rank),
-        points: numberValue(row.points),
-        eligibility: stringValue(row.eligibility),
-      });
-    }
-    return map;
-  } catch {
-    return new Map<string, { rank: number | null; points: number | null; eligibility: string | null }>();
-  }
 }
 
 function parseResultsJson(value: unknown): unknown[] {
@@ -251,7 +222,7 @@ function addWin(
   }
 }
 
-async function winsByClubKey() {
+async function winsByClubKey(season: string) {
   const wins = new Map<string, Map<string, EwcClubWin>>();
   const predictionRows = (await all(
     `SELECT results_json
@@ -259,7 +230,7 @@ async function winsByClubKey() {
       WHERE season = $1
         AND results_json IS NOT NULL
         AND TRIM(results_json) <> ''`,
-    ["2026"],
+    [season],
   )) as Array<{ results_json: string | null }>;
 
   for (const row of predictionRows) {
@@ -293,23 +264,6 @@ function winsForClub(wins: Map<string, Map<string, EwcClubWin>>, name: string) {
   return [...out.values()].sort((a, b) => a.game.localeCompare(b.game) || String(a.event).localeCompare(String(b.event)));
 }
 
-function normalizeGame(game: RawEwcClubGame): EwcClubGame {
-  const label = stringValue(game.label) ?? stringValue(game.shortLabel) ?? "Unknown game";
-  return {
-    label,
-    shortLabel: stringValue(game.shortLabel) ?? label,
-    pageUrl: stringValue(game.pageUrl),
-    icon: stringValue(game.icon),
-    status: stringValue(game.status) ?? "unknown",
-    entries: (game.entries ?? []).map((entry) => ({
-      name: stringValue(entry.name) ?? stringValue(entry.wiki) ?? label,
-      wiki: stringValue(entry.wiki),
-      url: stringValue(entry.url),
-      status: stringValue(entry.status),
-    })),
-  };
-}
-
 function ewcClubGameKey(game: Pick<EwcClubGame, "label" | "shortLabel" | "pageUrl">) {
   const pageUrl = stringValue(game.pageUrl);
   if (pageUrl) return `url:${pageUrl}`;
@@ -326,43 +280,6 @@ export function countUniqueQualifiedGames(clubs: Array<Pick<EwcClubTrackerClub, 
     }
   }
   return seen.size;
-}
-
-function parseStandingRowsJson(value: unknown): RawStanding[] {
-  if (typeof value !== "string" || !value.trim()) return [];
-  try {
-    const parsed = JSON.parse(value) as unknown;
-    return Array.isArray(parsed) ? (parsed as RawStanding[]) : [];
-  } catch {
-    return [];
-  }
-}
-
-async function latestStoredStandingsRows(season = "2026") {
-  const rows = (await all(
-    `SELECT payload, updated_at
-       FROM (
-         SELECT final_json AS payload, COALESCE(scored_at, created_at) AS updated_at, id AS sort_id
-           FROM ewc_prediction_weeks
-          WHERE season = $1
-            AND final_json IS NOT NULL
-            AND TRIM(final_json) <> ''
-         UNION ALL
-         SELECT final_json AS payload, COALESCE(scored_at, created_at) AS updated_at, 0 AS sort_id
-           FROM ewc_prediction_seasons
-          WHERE season = $1
-            AND final_json IS NOT NULL
-            AND TRIM(final_json) <> ''
-       ) snapshots
-      ORDER BY updated_at DESC, sort_id DESC
-      LIMIT 1`,
-    [season],
-  )) as Array<{ payload: string | null; updated_at: string | null }>;
-  const latest = rows[0] ?? null;
-  return {
-    updatedAt: latest?.updated_at ?? null,
-    standings: parseStandingRowsJson(latest?.payload),
-  };
 }
 
 type StoredClubGameRow = {
@@ -479,15 +396,34 @@ function namesFromStoredData(
   return [...names.values()];
 }
 
-export async function getEwcClubTrackerFromDatabase(): Promise<EwcClubTracker> {
-  const [snapshot, profiles, storedGames, wins] = await Promise.all([
-    latestStoredStandingsRows("2026"),
+type TrackerBuildInput = {
+  season: string;
+  standings: RawStanding[];
+  standingsSource: string;
+  updatedAt: string | null;
+  dataSource: EwcClubTracker["dataSource"];
+  stale: boolean;
+  warning?: string;
+};
+
+export function isEwcClubSnapshotStale(
+  value: string | null | undefined,
+  now = Date.now(),
+  staleAfterMs = EWC_CLUB_SNAPSHOT_STALE_AFTER_MS,
+) {
+  if (!value) return false;
+  const timestamp = new Date(value).getTime();
+  return Number.isFinite(timestamp) && now - timestamp > staleAfterMs;
+}
+
+async function buildEwcClubTracker(input: TrackerBuildInput): Promise<EwcClubTracker> {
+  const [profiles, storedGames, wins] = await Promise.all([
     teamProfilesByClubKey(),
     storedGamesByClubKey(),
-    winsByClubKey(),
+    winsByClubKey(input.season),
   ]);
   const standingsMap = new Map<string, { rank: number | null; points: number | null; eligibility: string | null }>();
-  for (const row of snapshot.standings) {
+  for (const row of input.standings) {
     if (!row.team) continue;
     addLookup(standingsMap, row.team, {
       rank: numberValue(row.rank),
@@ -497,7 +433,7 @@ export async function getEwcClubTrackerFromDatabase(): Promise<EwcClubTracker> {
   }
   const gamesByClubKey = storedGames.byKey;
 
-  const clubs = namesFromStoredData(snapshot.standings, storedGames.names, wins)
+  const clubs = namesFromStoredData(input.standings, storedGames.names, wins)
     .map((name): EwcClubTrackerClub | null => {
       const profile = lookupByClubName(profiles, name);
       const region = classifyClubRegion(name, profile);
@@ -507,7 +443,7 @@ export async function getEwcClubTrackerFromDatabase(): Promise<EwcClubTracker> {
       if (!standing && !qualifiedGames.length && !clubWins.length) return null;
       return {
         name,
-        pageUrl: null,
+        pageUrl: stringValue(profile?.liquipedia_url),
         logo: stringValue(profile?.image_url),
         supportProgram: isFeaturedClubName(name),
         featured: isFeaturedClubName(name),
@@ -517,6 +453,7 @@ export async function getEwcClubTrackerFromDatabase(): Promise<EwcClubTracker> {
         rank: standing?.rank ?? null,
         points: standing?.points ?? null,
         eligibility: standing?.eligibility ?? null,
+        hasStanding: Boolean(standing),
         qualifiedCount: qualifiedGames.length,
         possibleEvents: 0,
         totalTeams: 0,
@@ -528,12 +465,14 @@ export async function getEwcClubTrackerFromDatabase(): Promise<EwcClubTracker> {
     })
     .filter((club): club is EwcClubTrackerClub => Boolean(club))
     .sort((a, b) => {
+      const featured = Number(b.featured) - Number(a.featured);
+      if (featured) return featured;
       const points = (b.points ?? -1) - (a.points ?? -1);
       if (points) return points;
       const rank = (a.rank ?? 9999) - (b.rank ?? 9999);
       if (rank) return rank;
-      const featured = Number(b.featured) - Number(a.featured);
-      if (featured) return featured;
+      const qualified = b.qualifiedGames.length - a.qualifiedGames.length;
+      if (qualified) return qualified;
       return a.name.localeCompare(b.name);
     });
 
@@ -543,11 +482,13 @@ export async function getEwcClubTrackerFromDatabase(): Promise<EwcClubTracker> {
       .sort((a, b) => (b.points ?? 0) - (a.points ?? 0) || (a.rank ?? 9999) - (b.rank ?? 9999))[0] ?? null;
 
   return {
-    sourceUrl: CLUBS_SOURCE_URL,
-    standingsSourceUrl: STANDINGS_SOURCE_URL,
-    updatedAt: snapshot.updatedAt ?? new Date().toISOString(),
-    dataSource: "database-fallback",
-    warning: "Live Liquipedia club tracker was unavailable; returned stored local data.",
+    season: input.season,
+    sourceUrl: clubsSourceUrl(input.season),
+    standingsSourceUrl: input.standingsSource,
+    updatedAt: input.updatedAt,
+    dataSource: input.dataSource,
+    stale: input.stale,
+    ...(input.warning ? { warning: input.warning } : {}),
     clubs,
     summary: {
       total: clubs.length,
@@ -560,6 +501,42 @@ export async function getEwcClubTrackerFromDatabase(): Promise<EwcClubTracker> {
     },
   };
 }
+
+type StoredClubChampionshipSnapshot = {
+  season: string;
+  sourceUrl: string;
+  standings: RawStanding[];
+  fetchedAt: string;
+};
+
+export async function getEwcClubTrackerFromDatabase(season?: string): Promise<EwcClubTracker> {
+  const snapshot = (season
+    ? await getEwcClubChampionshipSnapshot(season)
+    : await getLatestEwcClubChampionshipSnapshot()) as StoredClubChampionshipSnapshot | null;
+  const trackerSeason = snapshot?.season ?? season ?? DEFAULT_EWC_CLUB_SEASON;
+  const stale = !snapshot || isEwcClubSnapshotStale(snapshot.fetchedAt);
+  return buildEwcClubTracker({
+    season: trackerSeason,
+    standings: snapshot?.standings ?? [],
+    standingsSource: snapshot?.sourceUrl ?? standingsSourceUrl(trackerSeason),
+    updatedAt: snapshot?.fetchedAt ?? null,
+    dataSource: snapshot ? "stored-snapshot" : "database-fallback",
+    stale,
+    warning: snapshot
+      ? stale
+        ? "Standings are a little older than usual while the next refresh is pending."
+        : undefined
+      : "No stored Club Championship snapshot is available yet.",
+  });
+}
+
+// Request handlers that promise stored-only reads (notably MCP) use this
+// projection so they never trigger or wait on an external Liquipedia request.
+export const getStoredEwcClubTrackerCached = unstable_cache(
+  async (season = "") => getEwcClubTrackerFromDatabase(season || undefined),
+  ["ewc-club-tracker-stored-only-v1"],
+  { revalidate: 60 },
+);
 
 function timeout<T>(promise: Promise<T>, timeoutMs: number, message: string) {
   let timer: ReturnType<typeof setTimeout> | undefined;
@@ -580,85 +557,40 @@ function sourceForRegion(name: string, profile: (TeamProfileRow & { facts: Recor
   return "unknown" as const;
 }
 
+async function getEwcClubTrackerFromLiveFallback(season: string) {
+  const { fetchEwcClubStandings } = await liquipediaFetchers();
+  const payload = await fetchEwcClubStandings(Number(season));
+  const standings = (payload.standings ?? []).filter((row) => stringValue(row.team));
+  if (!standings.length) throw new Error("Live Club Championship standings were empty.");
+  return buildEwcClubTracker({
+    season,
+    standings,
+    standingsSource: payload.sourceUrl ?? standingsSourceUrl(season),
+    updatedAt: new Date().toISOString(),
+    dataSource: "liquipedia-fallback",
+    stale: false,
+    warning: "No stored snapshot is available yet; showing a timeout-bounded live fallback.",
+  });
+}
+
 export const getEwcClubTrackerCached = unstable_cache(
   async (): Promise<EwcClubTracker> => {
-    const [clubPayload, standings, profiles, wins] = await Promise.all([
-      liquipediaFetchers()
-        .then(({ fetchEwcClubs }) => fetchEwcClubs())
-        .catch(() => ({ sourceUrl: CLUBS_SOURCE_URL, clubs: [] })),
-      standingsByClubKey(),
-      teamProfilesByClubKey(),
-      winsByClubKey(),
-    ]);
-
-    const clubs = (clubPayload.clubs ?? [])
-      .map((club): EwcClubTrackerClub | null => {
-        const name = stringValue(club.name);
-        if (!name) return null;
-        const profile = lookupByClubName(profiles, name);
-        const region = classifyClubRegion(name, profile);
-        const standing = lookupByClubName(standings, name);
-        const games = (club.games ?? []).map(normalizeGame);
-        const qualifiedGames = games.filter((game) => game.status === "qualified");
-        const possibleGames = games.filter((game) => game.status === "can_qualify" || game.status === "has_team");
-        return {
-          name,
-          pageUrl: stringValue(club.pageUrl),
-          logo: stringValue(club.logo),
-          supportProgram: Boolean(club.clubSupportProgram),
-          featured: isFeaturedClubName(name),
-          region,
-          regionSource: sourceForRegion(name, profile),
-          locationLabel: profile?.location ?? profile?.nationality ?? null,
-          rank: standing?.rank ?? null,
-          points: standing?.points ?? null,
-          eligibility: standing?.eligibility ?? null,
-          qualifiedCount: numberValue(club.qualifiedCount) ?? qualifiedGames.length,
-          possibleEvents: numberValue(club.possibleEvents) ?? possibleGames.length,
-          totalTeams: numberValue(club.totalTeams) ?? 0,
-          games,
-          qualifiedGames,
-          possibleGames,
-          wins: winsForClub(wins, name),
-        };
-      })
-      .filter((club): club is EwcClubTrackerClub => Boolean(club))
-      .sort((a, b) => {
-        const featured = Number(b.featured) - Number(a.featured);
-        if (featured) return featured;
-        const points = (b.points ?? -1) - (a.points ?? -1);
-        if (points) return points;
-        const rank = (a.rank ?? 9999) - (b.rank ?? 9999);
-        if (rank) return rank;
-        const qualified = b.qualifiedGames.length - a.qualifiedGames.length;
-        if (qualified) return qualified;
-        return a.name.localeCompare(b.name);
-      });
-
-    const pointsLeader =
-      clubs
-        .filter((club) => club.points != null)
-        .sort((a, b) => (b.points ?? 0) - (a.points ?? 0) || (a.rank ?? 9999) - (b.rank ?? 9999))[0] ?? null;
-
-    return {
-      sourceUrl: clubPayload.sourceUrl ?? CLUBS_SOURCE_URL,
-      standingsSourceUrl: STANDINGS_SOURCE_URL,
-      updatedAt: new Date().toISOString(),
-      dataSource: "liquipedia",
-      clubs,
-      summary: {
-        total: clubs.length,
-        featured: clubs.filter((club) => club.featured).length,
-        qualifiedGames: countUniqueQualifiedGames(clubs),
-        confirmedWins: clubs.reduce((sum, club) => sum + club.wins.length, 0),
-        pointsLeader: pointsLeader
-          ? { name: pointsLeader.name, points: pointsLeader.points ?? 0, rank: pointsLeader.rank }
-          : null,
-      },
-    };
+    const stored = await getEwcClubTrackerFromDatabase();
+    if (stored.dataSource === "stored-snapshot") return stored;
+    try {
+      return await timeout(
+        getEwcClubTrackerFromLiveFallback(stored.season),
+        LIVE_FALLBACK_TIMEOUT_MS,
+        "Timed out while waiting for the Club Championship fallback.",
+      );
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : String(error);
+      stored.warning = `${stored.warning ?? ""} ${detail}`.trim();
+      return stored;
+    }
   },
-  ["ewc-club-tracker-2026"],
-  { revalidate: 900 },
+  ["ewc-club-tracker-stored-v2"],
+  { revalidate: 60 },
 );
 
 export async function getEwcClubTrackerForMcp(timeoutMs = 12_000) {
@@ -666,7 +598,7 @@ export async function getEwcClubTrackerForMcp(timeoutMs = 12_000) {
     return await timeout(
       getEwcClubTrackerCached(),
       Math.max(1_000, timeoutMs),
-      "Timed out while waiting for the live EWC club tracker.",
+      "Timed out while waiting for the EWC club tracker.",
     );
   } catch (error) {
     const fallback = await getEwcClubTrackerFromDatabase();

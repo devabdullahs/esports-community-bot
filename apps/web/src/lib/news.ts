@@ -14,6 +14,7 @@ import {
   listLatestPublishedEwcNewsPosts as _listLatest,
   listPublishedEwcNewsPosts as _listPublished,
   listPublishedMediaPosts as _listMedia,
+  searchPublishedEwcNewsPosts as _searchPublished,
   setEwcNewsPostStatus as _setStatus,
   updateEwcNewsPost as _update,
 } from "@bot/db/ewcNewsPosts.js";
@@ -97,6 +98,15 @@ const listLatest = _listLatest as (args: {
   ewcOnly?: boolean;
   offset?: number;
 }) => Promise<NewsPost[]>;
+const searchPublished = _searchPublished as (args: {
+  query?: string;
+  locale: Locale;
+  gameSlug?: string | null;
+  mediaSlug?: string | null;
+  ewcOnly?: boolean;
+  limit?: number;
+  offset?: number;
+}) => Promise<NewsPost[]>;
 const create = _create as (input: NewsPostInput) => Promise<NewsPost>;
 const createInTx = _createInTx as (tx: unknown, input: NewsPostInput) => Promise<number>;
 const update = _update as (id: number, input: NewsPostInput) => Promise<NewsPost | null>;
@@ -134,6 +144,18 @@ export function listLatestPublishedNewsPosts(
   offset = 0,
 ): Promise<NewsPost[]> {
   return listLatest({ locale, limit, ewcOnly, offset });
+}
+
+export function searchPublishedNewsPosts(input: {
+  query?: string;
+  locale: Locale;
+  gameSlug?: string | null;
+  mediaSlug?: string | null;
+  ewcOnly?: boolean;
+  limit?: number;
+  offset?: number;
+}): Promise<NewsPost[]> {
+  return searchPublished(input);
 }
 
 export function createNewsPost(input: NewsPostInput): Promise<NewsPost> {
@@ -186,4 +208,27 @@ export const listPublishedMediaPostsCached = unstable_cache(
     listPublishedMediaPosts(mediaSlug, locale, limit),
   ["media-posts-list-published"],
   { tags: ["cms-news", "cms-media"] },
+);
+
+export const searchPublishedNewsPostsCached = unstable_cache(
+  async (
+    query: string,
+    locale: Locale,
+    gameSlug: string,
+    mediaSlug: string,
+    ewcOnly: boolean,
+    limit: number,
+    offset: number,
+  ) =>
+    searchPublishedNewsPosts({
+      query,
+      locale,
+      gameSlug: gameSlug || null,
+      mediaSlug: mediaSlug || null,
+      ewcOnly,
+      limit,
+      offset,
+    }),
+  ["news-search-published"],
+  { tags: ["cms-news", "cms-games", "cms-media"] },
 );

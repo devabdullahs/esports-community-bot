@@ -26,6 +26,7 @@ const {
   enqueueNotifications,
   getNotificationPrefs,
   upsertNotificationPrefs,
+  listNotificationPageForUser,
   listNotificationsForUser,
   listPendingDmNotifications,
   countUnreadNotifications,
@@ -40,6 +41,7 @@ const TOURN_FAN = '200000000000000002';
 const TEAM_FAN = '200000000000000003';
 const PLAYER_FAN = '200000000000000004';
 const QUIET_FAN = '200000000000000005';
+const PAGE_FAN = '200000000000000009';
 
 let tournament;
 let match;
@@ -160,6 +162,35 @@ test('dm_enabled=false keeps the inbox row but never queues a DM', async () => {
   const inbox = await listNotificationsForUser(TEAM_FAN);
   const manual = inbox.find((n) => n.dedupe_key === 'match_result:test:manual-1');
   assert.equal(manual.dm_status, 'skipped');
+});
+
+test('notification pages use a sentinel without crossing user ownership', async () => {
+  await upsertNotificationPrefs(PAGE_FAN, { dmEnabled: false });
+  for (let index = 1; index <= 5; index += 1) {
+    await enqueueNotifications({
+      userIds: [PAGE_FAN],
+      type: 'match_start',
+      matchId: match.id,
+      title: `Page notification ${index}`,
+      dedupeKey: `match_start:test:page-${index}`,
+    });
+  }
+
+  const first = await listNotificationPageForUser(PAGE_FAN, { limit: 2 });
+  const middle = await listNotificationPageForUser(PAGE_FAN, { limit: 2, offset: 2 });
+  const final = await listNotificationPageForUser(PAGE_FAN, { limit: 2, offset: 4 });
+  assert.equal(first.nextOffset, 2);
+  assert.equal(middle.nextOffset, 4);
+  assert.equal(final.nextOffset, null);
+  assert.deepEqual(
+    [...first.notifications, ...middle.notifications, ...final.notifications].map((row) => row.id),
+    [...new Set([...first.notifications, ...middle.notifications, ...final.notifications].map((row) => row.id))],
+  );
+  assert.ok(
+    [...first.notifications, ...middle.notifications, ...final.notifications].every(
+      (row) => row.discord_user_id === PAGE_FAN,
+    ),
+  );
 });
 
 test('drainDmQueue delivers pending DMs, marks closed DMs skipped and errors failed', async () => {

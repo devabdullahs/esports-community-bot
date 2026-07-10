@@ -1,31 +1,18 @@
 import { beforeAll, describe, expect, test, vi } from "vitest";
 import { PUBLIC_MCP_TOOL_NAMES } from "@/lib/mcp-tool-manifest";
 
-vi.mock("@bot/services/liquipedia.js", () => ({
-  fetchEwcClubs: async () => ({
+const liquipediaMocks = vi.hoisted(() => ({
+  fetchEwcClubs: vi.fn(async () => ({
     sourceUrl: "https://liquipedia.net/esports/Esports_World_Cup/2026/Clubs",
-    clubs: [
-      {
-        name: "Team Falcons",
-        pageUrl: "https://liquipedia.net/esports/Team_Falcons",
-        logo: "https://assets.esportscommunity.net/falcons.png",
-        clubSupportProgram: true,
-        games: [
-          {
-            label: "Dota 2",
-            shortLabel: "Dota2",
-            pageUrl: "https://liquipedia.net/dota2/Esports_World_Cup/2026",
-            status: "qualified",
-          },
-        ],
-      },
-    ],
-  }),
-  fetchEwcClubStandings: async () => ({
+    clubs: [],
+  })),
+  fetchEwcClubStandings: vi.fn(async () => ({
     sourceUrl: "https://liquipedia.net/esports/Esports_World_Cup/2026/Club_Championship_Standings",
     standings: [{ rank: 1, team: "Team Falcons", points: 100 }],
-  }),
+  })),
 }));
+
+vi.mock("@bot/services/liquipedia.js", () => liquipediaMocks);
 
 let publicMcpPOST: (request: Request) => Promise<Response>;
 let tournamentId = 0;
@@ -38,6 +25,15 @@ beforeAll(async () => {
   process.env.EWC_PUBLIC_MCP_ALLOWED_ORIGINS = "http://localhost";
   process.env.EWC_DASHBOARD_PUBLIC_URL = "http://localhost";
   process.env.EWC_DASHBOARD_DEFAULT_GUILD_ID = DEFAULT_GUILD;
+
+  const { upsertEwcClubChampionshipSnapshot } = await import("@bot/db/ewcClubChampionshipSnapshots.js");
+  await upsertEwcClubChampionshipSnapshot({
+    season: "2026",
+    sourceUrl: "https://liquipedia.net/esports/Esports_World_Cup/2026/Club_Championship_Standings",
+    standings: [{ rank: 1, team: "Team Falcons", points: 100, eligibility: "champion" }],
+    prizepool: [],
+    fetchedAt: new Date().toISOString(),
+  });
 
   const { createEwcNewsPost } = await import("@bot/db/ewcNewsPosts.js");
   await createEwcNewsPost({
@@ -59,6 +55,17 @@ beforeAll(async () => {
     },
     status: "draft",
   });
+  for (let index = 0; index < 55; index += 1) {
+    await createEwcNewsPost({
+      gameSlug: index % 2 ? "dota2" : "valorant",
+      contentMode: "shared",
+      defaultLocale: "en",
+      translations: {
+        en: { title: `MCP filler ${index}`, summary: "", body: "Newer public fixture" },
+      },
+      status: "published",
+    });
+  }
 
   const { upsertTeam, saveTeamLiquipedia } = await import("@bot/db/teams.js");
   const team = await upsertTeam({
@@ -278,6 +285,7 @@ describe("/api/public-mcp tools", () => {
     ["get_tournament_status", () => ({ tournamentId })],
     ["list_tournaments", () => ({ gameSlug: "valorant", limit: 5 })],
     ["get_ewc_club_summary", () => ({ query: "Falcons", scope: "all", limit: 5 })],
+    ["get_ewc_club_standings", () => ({ query: "Falcons", limit: 5 })],
     ["list_co_streams", () => ({ limit: 5 })],
     ["search_teams", () => ({ query: "Raw Test", limit: 5 })],
     ["search_players", () => ({ query: "Raw Test", limit: 5 })],
@@ -302,6 +310,54 @@ describe("/api/public-mcp tools", () => {
     const titles = body.result.structuredContent.posts.map((post: { title: string }) => post.title);
     expect(titles).toContain("Published MCP story");
     expect(titles).not.toContain("Draft MCP story");
+    expect(body.result.structuredContent.posts[0].url).toMatch(/^http:\/\/localhost\//);
+    expect(body.result.structuredContent.posts[0].webUrl).toBe(body.result.structuredContent.posts[0].url);
+  });
+
+  test("club tools complete from the stored snapshot without Liquipedia calls", async () => {
+    liquipediaMocks.fetchEwcClubStandings.mockClear();
+    liquipediaMocks.fetchEwcClubs.mockClear();
+    const summaryResponse = await publicMcpPOST(
+      publicMcpRequest(toolCall("get_ewc_club_summary", { scope: "all" }), {
+        ip: "203.0.113.25",
+      }),
+    );
+    const standingsResponse = await publicMcpPOST(
+      publicMcpRequest(toolCall("get_ewc_club_standings", {}), {
+        ip: "203.0.113.26",
+      }),
+    );
+    const summary = await parseMcpResponse(summaryResponse);
+    const standings = await parseMcpResponse(standingsResponse);
+    expect(summary.result.isError).not.toBe(true);
+    expect(standings.result.structuredContent.rows[0]).toMatchObject({
+      rank: 1,
+      name: "Team Falcons",
+      points: 100,
+    });
+    expect(standings.result.structuredContent.webUrl).toBe("http://localhost/clubs/standings");
+    expect(liquipediaMocks.fetchEwcClubStandings).not.toHaveBeenCalled();
+    expect(liquipediaMocks.fetchEwcClubs).not.toHaveBeenCalled();
+  });
+
+  test("search_news returns stable pagination metadata", async () => {
+    const firstResponse = await publicMcpPOST(
+      publicMcpRequest(toolCall("search_news", { limit: 2, offset: 0 }), {
+        ip: "203.0.113.23",
+      }),
+    );
+    const first = await parseMcpResponse(firstResponse);
+    expect(first.result.structuredContent.nextOffset).toBe(2);
+
+    const secondResponse = await publicMcpPOST(
+      publicMcpRequest(toolCall("search_news", { limit: 2, offset: 2 }), {
+        ip: "203.0.113.24",
+      }),
+    );
+    const second = await parseMcpResponse(secondResponse);
+    const firstIds = first.result.structuredContent.posts.map((post: { id: number }) => post.id);
+    const secondIds = second.result.structuredContent.posts.map((post: { id: number }) => post.id);
+    expect(secondIds.some((id: number) => firstIds.includes(id))).toBe(false);
   });
 
   test("team and player searches do not expose raw enrichment payloads", async () => {
@@ -323,6 +379,9 @@ describe("/api/public-mcp tools", () => {
 
     expect(teamText).toContain("Raw Test Team");
     expect(playerText).toContain("Raw Test Player");
+    expect(teams.result.structuredContent.teams[0].webUrl).toMatch(/^http:\/\/localhost\/teams\//);
+    expect(players.result.structuredContent.players[0].webUrl).toMatch(/^http:\/\/localhost\/players\//);
+    expect(players.result.structuredContent.players[0].resolvedTeam.webUrl).toMatch(/^http:\/\/localhost\/teams\//);
     expect(teamText).not.toMatch(/liquipedia_raw|liquipedia_facts|raw profile|secretFixture|privateFixture/);
     expect(playerText).not.toMatch(/liquipedia_raw|liquipedia_facts|raw player|secretFixture|privateFixture/);
   });

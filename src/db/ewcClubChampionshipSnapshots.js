@@ -1,0 +1,154 @@
+import { get, run } from './client.js';
+
+const VALID_ELIGIBILITY = new Set(['champion', 'prize']);
+
+function cleanSeason(value) {
+  const season = String(value ?? '').trim();
+  if (!/^\d{4}$/.test(season)) throw new TypeError('Club Championship season must be a four-digit year.');
+  return season;
+}
+
+function cleanSourceUrl(value) {
+  const sourceUrl = String(value ?? '').trim();
+  let parsed;
+  try {
+    parsed = new URL(sourceUrl);
+  } catch {
+    throw new TypeError('Club Championship sourceUrl must be an absolute HTTP(S) URL.');
+  }
+  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+    throw new TypeError('Club Championship sourceUrl must be an absolute HTTP(S) URL.');
+  }
+  return parsed.toString();
+}
+
+function cleanTimestamp(value, field) {
+  const date = value instanceof Date ? value : new Date(value ?? Date.now());
+  if (Number.isNaN(date.getTime())) throw new TypeError(`Club Championship ${field} must be a valid timestamp.`);
+  return date.toISOString();
+}
+
+function nullableNumber(value, field, { integer = false, positive = false } = {}) {
+  if (value == null || value === '') return null;
+  const number = typeof value === 'number' ? value : Number(String(value).replace(/,/g, ''));
+  if (!Number.isFinite(number) || (integer && !Number.isInteger(number)) || (positive && number < 1)) {
+    throw new TypeError(`Club Championship standing ${field} is invalid.`);
+  }
+  return number;
+}
+
+function cleanStandings(value) {
+  if (!Array.isArray(value) || value.length === 0) {
+    throw new TypeError('Club Championship standings must contain at least one row.');
+  }
+  return value.map((row) => {
+    if (!row || typeof row !== 'object' || Array.isArray(row)) {
+      throw new TypeError('Club Championship standings rows must be objects.');
+    }
+    const team = String(row.team ?? '').replace(/\s+/g, ' ').trim();
+    if (!team) throw new TypeError('Club Championship standings rows must include a team.');
+    const eligibility = row.eligibility == null || row.eligibility === ''
+      ? null
+      : String(row.eligibility).trim().toLowerCase();
+    if (eligibility && !VALID_ELIGIBILITY.has(eligibility)) {
+      throw new TypeError('Club Championship standing eligibility is invalid.');
+    }
+    return {
+      rank: nullableNumber(row.rank, 'rank', { integer: true, positive: true }),
+      team,
+      points: nullableNumber(row.points, 'points'),
+      eligibility,
+    };
+  });
+}
+
+function cleanPrizepool(value) {
+  if (value == null) return [];
+  if (!Array.isArray(value)) throw new TypeError('Club Championship prizepool must be an array.');
+  try {
+    return JSON.parse(JSON.stringify(value));
+  } catch {
+    throw new TypeError('Club Championship prizepool must be JSON serializable.');
+  }
+}
+
+function parseJsonArray(value) {
+  if (typeof value !== 'string' || !value.trim()) return null;
+  try {
+    const parsed = JSON.parse(value);
+    return Array.isArray(parsed) ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+function toSnapshot(row) {
+  if (!row) return null;
+  const standings = parseJsonArray(row.standings_json);
+  const prizepool = parseJsonArray(row.prizepool_json);
+  if (!standings?.length || !prizepool) return null;
+  return {
+    season: row.season,
+    sourceUrl: row.source_url,
+    standings,
+    prizepool,
+    fetchedAt: row.fetched_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+export function validateEwcClubChampionshipSnapshot(input) {
+  if (!input || typeof input !== 'object') {
+    throw new TypeError('Club Championship snapshot input is required.');
+  }
+  return {
+    season: cleanSeason(input.season),
+    sourceUrl: cleanSourceUrl(input.sourceUrl),
+    standings: cleanStandings(input.standings),
+    prizepool: cleanPrizepool(input.prizepool),
+    fetchedAt: cleanTimestamp(input.fetchedAt, 'fetchedAt'),
+  };
+}
+
+export async function upsertEwcClubChampionshipSnapshot(input) {
+  const snapshot = validateEwcClubChampionshipSnapshot(input);
+  const standingsJson = JSON.stringify(snapshot.standings);
+  const prizepoolJson = JSON.stringify(snapshot.prizepool);
+  const updatedAt = new Date().toISOString();
+  await run(
+    `INSERT INTO ewc_club_championship_snapshots
+       (season, source_url, standings_json, prizepool_json, fetched_at, updated_at)
+     VALUES ($1, $2, $3, $4, $5, $6)
+     ON CONFLICT (season) DO UPDATE SET
+       source_url = excluded.source_url,
+       standings_json = excluded.standings_json,
+       prizepool_json = excluded.prizepool_json,
+       fetched_at = excluded.fetched_at,
+       updated_at = excluded.updated_at`,
+    [snapshot.season, snapshot.sourceUrl, standingsJson, prizepoolJson, snapshot.fetchedAt, updatedAt],
+  );
+  return getEwcClubChampionshipSnapshot(snapshot.season);
+}
+
+export const saveEwcClubChampionshipSnapshot = upsertEwcClubChampionshipSnapshot;
+
+export async function getEwcClubChampionshipSnapshot(season) {
+  const row = await get(
+    `SELECT season, source_url, standings_json, prizepool_json, fetched_at, updated_at
+       FROM ewc_club_championship_snapshots
+      WHERE season = $1`,
+    [cleanSeason(season)],
+  );
+  return toSnapshot(row);
+}
+
+export async function getLatestEwcClubChampionshipSnapshot() {
+  const row = await get(
+    `SELECT season, source_url, standings_json, prizepool_json, fetched_at, updated_at
+       FROM ewc_club_championship_snapshots
+      ORDER BY fetched_at DESC, updated_at DESC, season DESC
+      LIMIT 1`,
+    [],
+  );
+  return toSnapshot(row);
+}

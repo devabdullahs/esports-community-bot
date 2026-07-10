@@ -97,6 +97,18 @@ export const MCP_TOOL_MANIFEST = Object.freeze([
     },
   }),
   freezeEntry({
+    name: 'get_ewc_club_standings',
+    surfaces: ['public', 'admin'],
+    kind: 'read',
+    adminGrant: 'always',
+    scope: 'none',
+    title: { en: 'Get EWC Club Championship standings', ar: '\u0639\u0631\u0636 \u062a\u0631\u062a\u064a\u0628 \u0628\u0637\u0648\u0644\u0629 \u0623\u0646\u062f\u064a\u0629 EWC' },
+    description: {
+      en: 'Read the official rank-ordered EWC Club Championship standings from the latest stored snapshot.',
+      ar: '\u064a\u0639\u0631\u0636 \u062a\u0631\u062a\u064a\u0628 \u0628\u0637\u0648\u0644\u0629 \u0623\u0646\u062f\u064a\u0629 EWC \u0627\u0644\u0631\u0633\u0645\u064a \u0645\u0646 \u0622\u062e\u0631 \u0646\u0633\u062e\u0629 \u0645\u062d\u0641\u0648\u0638\u0629.',
+    },
+  }),
+  freezeEntry({
     name: 'list_co_streams',
     surfaces: ['public', 'admin'],
     kind: 'read',

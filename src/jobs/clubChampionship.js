@@ -1,7 +1,8 @@
 import { ContainerBuilder, SeparatorSpacingSize, MessageFlags } from 'discord.js';
 import { config } from '../config.js';
 import { logger } from '../lib/logger.js';
-import { fetchClubChampionship } from '../services/liquipedia.js';
+import * as defaultLiquipedia from '../services/liquipedia.js';
+import * as defaultSnapshots from '../db/ewcClubChampionshipSnapshots.js';
 import { getSettings, setClubChampionshipMessage, getGuildsWithClubChampionship } from '../db/settings.js';
 import { LIQUIPEDIA_ATTRIBUTION } from '../lib/render.js';
 
@@ -13,6 +14,15 @@ function rankLabel(rank) {
 
 function eligibilityIcon(e) {
   return e === 'champion' ? '🟡 ' : e === 'prize' ? '🟢 ' : '';
+}
+
+export function clubChampionshipSeason(page) {
+  return String(page ?? '').match(/(?:^|\/)(\d{4})(?:\/|$)/)?.[1] ?? null;
+}
+
+function clubChampionshipSourceUrl(wiki, page) {
+  const standingsPage = defaultLiquipedia.clubChampionshipStandingsPage(page);
+  return `https://liquipedia.net/${wiki}/${standingsPage}`;
 }
 
 // Components V2 container for the Club Championship.
@@ -56,21 +66,42 @@ export function buildClubChampionshipContainer(label, data) {
 }
 
 // Fetch + post/edit the standings message for one guild.
-export async function updateClubChampionship(client, guildId) {
+export async function updateClubChampionship(
+  client,
+  guildId,
+  { liquipedia = defaultLiquipedia, snapshots = defaultSnapshots } = {},
+) {
   const s = await getSettings(guildId);
   if (!s.cc_channel_id || !s.cc_page) return false;
 
-  const channel = await client.channels.fetch(s.cc_channel_id).catch(() => null);
-  if (!channel?.isTextBased?.()) return false;
-
   let data;
   try {
-    data = await fetchClubChampionship(s.cc_wiki || 'esports', s.cc_page);
+    const wiki = s.cc_wiki || 'esports';
+    const fetched = await liquipedia.fetchClubChampionship(wiki, s.cc_page);
+    data = {
+      ...fetched,
+      standings: fetched?.standings ?? [],
+      prizepool: fetched?.prizepool ?? [],
+    };
+    const season = clubChampionshipSeason(s.cc_page);
+    if (!season) throw new Error(`could not determine a season from ${s.cc_page}`);
+    await snapshots.upsertEwcClubChampionshipSnapshot({
+      season,
+      sourceUrl: data.sourceUrl || clubChampionshipSourceUrl(wiki, s.cc_page),
+      standings: data.standings,
+      prizepool: data.prizepool,
+      fetchedAt: new Date(),
+    });
   } catch (e) {
     const level = /backing off after a rate limit/i.test(e.message) ? 'debug' : 'error';
-    logger[level](`[cc] fetch failed for ${s.cc_wiki}/${s.cc_page}: ${e.message}`);
+    logger[level](`[cc] refresh failed for ${s.cc_wiki}/${s.cc_page}: ${e.message}`);
     return false;
   }
+
+  // Snapshot storage happens first so a Discord permission or delivery failure
+  // never discards a successful external refresh.
+  const channel = await client.channels.fetch(s.cc_channel_id).catch(() => null);
+  if (!channel?.isTextBased?.()) return false;
 
   const payload = {
     components: [buildClubChampionshipContainer(s.cc_label || 'EWC Club Championship', data)],

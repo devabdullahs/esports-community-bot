@@ -1,10 +1,12 @@
 "use client";
 
 import {
+  BellIcon,
   ChevronDownIcon,
   CrownIcon,
   Gamepad2Icon,
   LanguagesIcon,
+  ListOrderedIcon,
   LogOutIcon,
   type LucideIcon,
   MedalIcon,
@@ -22,6 +24,10 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useState } from "react";
 import { DiscordIcon } from "@/components/discord-icon";
+import {
+  NotificationUnreadBadge,
+  useUnreadNotifications,
+} from "@/components/follows/notification-badge";
 import { ModeToggle } from "@/components/mode-toggle";
 import { SignOutButton } from "@/components/dashboard/sign-out-button";
 import { signOut } from "@/lib/auth-client";
@@ -111,6 +117,7 @@ export function SiteHeaderClient({
   const [signingOut, setSigningOut] = useState(false);
   const text = copy[locale];
   const nextLocale = locale === "ar" ? "en" : "ar";
+  const unreadNotifications = useUnreadNotifications(hasSession);
 
   async function handleSignOut() {
     setSigningOut(true);
@@ -135,6 +142,11 @@ export function SiteHeaderClient({
   // Co-streams stays top-level because it spans every tracked event and carries
   // a live indicator when any co-streamer is on air.
   const coStreamsLink: Destination = { href: "/co-streams", label: text.common.coStreams, icon: RadioIcon };
+  const notificationsLink: Destination = {
+    href: "/me?tab=notifications",
+    label: text.follows.notificationsTitle,
+    icon: BellIcon,
+  };
   const primary: Destination[] = [...contentLinks, ...competitionLinks, coStreamsLink];
   const desktopGroups = [
     { label: text.common.content, icon: NewspaperIcon, links: contentLinks },
@@ -144,6 +156,7 @@ export function SiteHeaderClient({
     { href: "/news/ewc", label: text.common.ewcNews, icon: NewspaperIcon },
     { href: "/tournaments/ewc", label: text.common.ewcTournaments, icon: TrophyIcon },
     { href: "/clubs", label: text.common.ewcClubs, icon: UsersIcon },
+    { href: "/clubs/standings", label: text.common.ewcClubStandings, icon: ListOrderedIcon },
     { href: "/predictions", label: text.common.predictions, icon: TargetIcon },
     { href: "/leaderboard", label: text.common.publicLeaderboard, icon: CrownIcon },
   ];
@@ -169,6 +182,12 @@ export function SiteHeaderClient({
         !isActivePath(pathname, localizedPath(`${href}/ewc`, locale))
       );
     }
+    if (href === "/clubs") {
+      return (
+        isActivePath(pathname, full) &&
+        !isActivePath(pathname, localizedPath("/clubs/standings", locale))
+      );
+    }
     return isActivePath(pathname, full);
   };
 
@@ -176,8 +195,10 @@ export function SiteHeaderClient({
     document.cookie = `${LOCALE_COOKIE_NAME}=${nextLocale}; Path=/; Max-Age=${LOCALE_COOKIE_MAX_AGE}; SameSite=Lax`;
     const currentPath =
       `${window.location.pathname}${window.location.search}${window.location.hash}` || "/";
-    router.push(localizedPath(currentPath, nextLocale));
-    router.refresh();
+    // Locale changes update the root document's lang/dir as well as route data.
+    // A full navigation also prevents a refresh of the old /ar route from
+    // racing and writing the previous locale cookie back after the switch.
+    window.location.assign(localizedPath(currentPath, nextLocale));
   }
 
   // In RTL the inline-end edge is the physical left, so flip the sheet side so
@@ -289,13 +310,16 @@ export function SiteHeaderClient({
                 <Button
                   variant="outline"
                   size="sm"
-                  className="hidden gap-1.5 px-2.5 lg:inline-flex"
+                  className="hidden w-36 gap-1.5 px-2.5 lg:inline-flex"
                   aria-label={text.common.account}
                 />
               }
             >
               <UserRoundIcon />
               <span>{text.common.account}</span>
+              <span className="ms-auto flex size-5 shrink-0 items-center justify-center">
+                <NotificationUnreadBadge count={unreadNotifications} locale={locale} />
+              </span>
               <ChevronDownIcon className="size-3.5 text-muted-foreground" />
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-52">
@@ -306,6 +330,19 @@ export function SiteHeaderClient({
                 <UserRoundIcon />
                 {text.common.myProfile}
               </DropdownMenuItem>
+              {hasSession ? (
+                <DropdownMenuItem
+                  render={<Link href={localizedPath(notificationsLink.href, locale)} />}
+                >
+                  <BellIcon />
+                  {notificationsLink.label}
+                  <NotificationUnreadBadge
+                    count={unreadNotifications}
+                    locale={locale}
+                    className="ms-auto"
+                  />
+                </DropdownMenuItem>
+              ) : null}
               {isAdmin ? (
                 <DropdownMenuItem
                   render={<Link href={localizedPath("/admin", locale)} />}
@@ -434,6 +471,20 @@ export function SiteHeaderClient({
                     <ShieldCheckIcon className="size-4 text-muted-foreground" />
                     <span className="min-w-0 truncate">{text.common.admin}</span>
                   </SheetClose>
+                ) : null}
+                {hasSession ? (
+                  <MobileNavLink
+                    destination={notificationsLink}
+                    locale={locale}
+                    active={false}
+                    badge={
+                      <NotificationUnreadBadge
+                        count={unreadNotifications}
+                        locale={locale}
+                        className="ms-auto"
+                      />
+                    }
+                  />
                 ) : null}
                 <SheetClose
                   render={
