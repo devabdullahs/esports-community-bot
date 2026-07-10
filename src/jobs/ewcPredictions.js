@@ -329,7 +329,7 @@ async function announceOpenWeeks(client) {
   }
 }
 
-async function syncLinkedProfileShowcases(guildId, season) {
+async function syncLinkedProfileShowcases(guildId = null, season = null) {
   if (!config.dashboard.internalUrl || !config.dashboard.internalSecret) return;
   const links = await listEwcProfileLinks({ guildId, season });
   if (!links.length) return;
@@ -344,8 +344,8 @@ async function syncLinkedProfileShowcases(guildId, season) {
         },
         body: JSON.stringify({
           discordUserId: link.discordUserId,
-          guildId,
-          season,
+          guildId: guildId || link.guildId,
+          season: season || link.season,
         }),
       });
       if (!response.ok) {
@@ -357,6 +357,8 @@ async function syncLinkedProfileShowcases(guildId, season) {
     }
   }
 }
+
+let initialProfileShowcaseSyncComplete = false;
 
 async function processWeek(client, round) {
   const now = nowSec();
@@ -494,6 +496,10 @@ async function processSeason(client, round) {
 export async function runEwcPredictionAutomation(client = null) {
   const now = nowSec();
   await announceOpenWeeks(client);
+  if (!initialProfileShowcaseSyncComplete) {
+    initialProfileShowcaseSyncComplete = true;
+    await syncLinkedProfileShowcases();
+  }
   const weeks = await listEwcWeeksForAutomation(now);
   const seasons = await listEwcSeasonsForAutomation(now);
 
