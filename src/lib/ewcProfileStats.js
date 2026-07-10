@@ -9,6 +9,7 @@ import {
 import { WEEKLY_TOP_THREE_SWEEP_BONUS } from './ewcPredictions.js';
 import { projectSeasonScoreBreakdown, projectWeeklyScoreBreakdown } from './ewcPredictionBreakdown.js';
 import { scoreBreakdownVisible, seasonPicksVisible } from './ewcPredictionVisibility.js';
+import { publicEwcProfileIdentitiesByDiscordUserIds } from '../db/ewcProfileLinks.js';
 
 export const DEFAULT_EWC_PROFILE_SEASON = '2026';
 const MAX_SHOWCASE_USERNAME = 100;
@@ -273,24 +274,47 @@ export async function getEwcUserProfileStats(guildId, season = DEFAULT_EWC_PROFI
   };
 }
 
-export async function getPublicEwcLeaderboard({ guildId, season = DEFAULT_EWC_PROFILE_SEASON, limit = 50, offset = 0 }) {
+export async function getPublicEwcLeaderboard({
+  guildId,
+  season = DEFAULT_EWC_PROFILE_SEASON,
+  limit = 50,
+  offset = 0,
+  // Test seam: production callers use the default one-query batch loader.
+  identityLoader = publicEwcProfileIdentitiesByDiscordUserIds,
+}) {
   const rows = await leaderboardRows(guildId, season, limit, offset);
   const normalizedOffset = Math.max(0, Math.floor(Number(offset)) || 0);
   const topRows = normalizedOffset === 0 && rows.length ? rows : await leaderboardRows(guildId, season, 1, 0);
   const userIds = rows.map((row) => row.user_id);
   const weeklyByUser = await weeklyAggregateStatsForUsers(guildId, season, userIds);
   const topTeamsByUser = await seasonPickTeamsForUsers(guildId, season, userIds);
+  // One bounded identity lookup for this page. The map is internal-only and is
+  // discarded while projecting rows, so a Discord ID never crosses the public
+  // response boundary.
+  const identitiesByUser = await identityLoader(userIds);
+  const projectedNames = rows.map((row) => identitiesByUser.get(row.user_id)?.displayName || memberLabel(row.user_id));
+  const nameCounts = new Map();
+  for (const name of projectedNames) nameCounts.set(name, (nameCounts.get(name) || 0) + 1);
+  const seenNames = new Map();
   return {
     guildId,
     season,
     total: await countOverallScored(guildId, season),
     topScore: Number(topRows[0]?.score || 0),
-    rows: rows.map((row) => {
+    rows: rows.map((row, index) => {
       const userId = row.user_id;
       const weekly = weeklyByUser.get(userId) || emptyWeeklyAggregate();
+      const identity = identitiesByUser.get(userId);
+      const baseName = projectedNames[index];
+      const seen = (seenNames.get(baseName) || 0) + 1;
+      seenNames.set(baseName, seen);
+      // A simple occurrence marker disambiguates coincident public names without
+      // deriving or encoding any part of a Discord/account identifier.
+      const displayName = nameCounts.get(baseName) > 1 ? `${baseName} (${seen})` : baseName;
       return {
         rank: Number(row.rank),
-        displayName: memberLabel(userId),
+        displayName,
+        avatarUrl: identity?.avatarToken ? `/api/ewc/public-avatar/${identity.avatarToken}` : null,
         overallPoints: Number(row.score || 0),
         weeksPredicted: weekly.weeksPredicted,
         weeksScored: weekly.weeksScored,

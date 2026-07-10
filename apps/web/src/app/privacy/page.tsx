@@ -67,7 +67,7 @@ const CONTENT = {
           "Your accumulated prediction scores and week-by-week history.",
         ],
         after: [
-          "On public leaderboard pages, members are identified by a masked label (e.g., \"Member 1234\") derived from a partial Discord ID. Full Discord IDs are never published on public pages.",
+          "On public leaderboard pages, members are anonymous by default under a masked label. You may explicitly opt in through My Profile → Settings to publish your current account display name and Discord avatar on the public leaderboard and public MCP clients. This consent is optional, can be revoked immediately, and clears the stored public name and avatar snapshot; your predictions and scores remain publicly listed under an anonymous label. Full Discord and account IDs are never published.",
         ],
       },
       {
@@ -187,7 +187,7 @@ const CONTENT = {
           "نقاط توقعاتك المتراكمة وسجل كل أسبوع.",
         ],
         after: [
-          'في صفحات جدول الصدارة العامة، يُعرَّف الأعضاء بتسمية مموّهة (مثل "العضو ١٢٣٤") مشتقة من جزء من معرّف ديسكورد. لا تُنشر معرّفات ديسكورد الكاملة على الصفحات العامة أبداً.',
+          'في صفحات جدول الصدارة العامة، تكون هوية الأعضاء مجهولة افتراضياً تحت تسمية مموّهة. يمكنك اختيار نشر اسم العرض الحالي وصورة ديسكورد صراحةً من ملفي الشخصي ← الإعدادات على لوحة الصدارة العامة وعملاء MCP العامة. هذه الموافقة اختيارية ويمكن سحبها فوراً، وعندها تُمسح لقطة الاسم والصورة العامة المخزنة؛ تبقى توقعاتك ونقاطك عامة تحت تسمية مجهولة. لا تُنشر معرّفات ديسكورد أو الحسابات الكاملة أبداً.',
         ],
       },
       {
