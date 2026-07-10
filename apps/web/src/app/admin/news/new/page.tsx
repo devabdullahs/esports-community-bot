@@ -1,6 +1,5 @@
-import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { ArrowLeftIcon } from "lucide-react";
+import { AdminPageShell } from "@/components/admin/admin-page-shell";
 import { NewsEditor } from "@/components/admin/news-editor";
 import { canManageMedia, getAdminAccess } from "@/lib/admin";
 import { getAdminCopy } from "@/lib/admin-copy";
@@ -8,7 +7,6 @@ import { localizeText } from "@/lib/community-content";
 import { listGames } from "@/lib/games";
 import { getMediaChannel } from "@/lib/media";
 import { getRequestLocale } from "@/lib/request-locale";
-import { Button } from "@/components/ui/button";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -33,29 +31,27 @@ export default async function NewNewsPostPage({
     if (!canManageMedia(access, mediaParam)) redirect("/admin");
     const channel = await getMediaChannel(mediaParam);
     if (!channel) notFound();
+    const channelName = localizeText(channel.name, locale);
     return (
-      <main className="mx-auto flex w-full max-w-6xl flex-1 flex-col gap-6 px-4 py-8 sm:px-8 sm:py-10">
-        <Button
-          render={<Link href={`/admin/media/${channel.slug}`} />}
-          nativeButton={false}
-          variant="ghost"
-          className="w-fit"
-        >
-          <ArrowLeftIcon data-icon="inline-start" />
-          {t.common.backToChannel}
-        </Button>
-        <div>
-          <p className="text-sm text-muted-foreground">{t.common.channelPublishing}</p>
-          <h1 className="text-3xl font-semibold leading-tight">{t.newsList.newPost}</h1>
-        </div>
+      <AdminPageShell
+        breadcrumbs={[
+          { label: t.dashboard.title, href: "/admin" },
+          { label: t.dashboard.links.mediaTitle, href: "/admin/media" },
+          { label: channelName, href: `/admin/media/${channel.slug}` },
+          { label: t.newsList.newPost },
+        ]}
+        eyebrow={t.common.channelPublishing}
+        title={t.newsList.newPost}
+        maxWidth="6xl"
+      >
         <NewsEditor
           mode="create"
           games={allGames}
-          mediaChannel={{ slug: channel.slug, name: localizeText(channel.name, locale) }}
+          mediaChannel={{ slug: channel.slug, name: channelName }}
           locale={locale}
           currentUser={currentUser}
         />
-      </main>
+      </AdminPageShell>
     );
   }
 
@@ -70,21 +66,17 @@ export default async function NewNewsPostPage({
   }
 
   return (
-    <main className="mx-auto flex w-full max-w-6xl flex-1 flex-col gap-6 px-4 py-8 sm:px-8 sm:py-10">
-      <Button
-        render={<Link href="/admin" />}
-        nativeButton={false}
-        variant="ghost"
-        className="w-fit"
-      >
-        <ArrowLeftIcon data-icon="inline-start" />
-        {t.common.backToAdmin}
-      </Button>
-      <div>
-        <p className="text-sm text-muted-foreground">{t.common.adminPublishing}</p>
-        <h1 className="text-3xl font-semibold leading-tight">{t.newsList.newPost}</h1>
-      </div>
+    <AdminPageShell
+      breadcrumbs={[
+        { label: t.dashboard.title, href: "/admin" },
+        { label: t.games.title, href: "/admin/games" },
+        { label: t.newsList.newPost },
+      ]}
+      eyebrow={t.common.adminPublishing}
+      title={t.newsList.newPost}
+      maxWidth="6xl"
+    >
       <NewsEditor mode="create" games={games} locale={locale} currentUser={currentUser} />
-    </main>
+    </AdminPageShell>
   );
 }

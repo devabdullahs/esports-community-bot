@@ -1,8 +1,6 @@
-import Link from "next/link";
 import type { ReactNode } from "react";
 import { notFound, redirect } from "next/navigation";
 import {
-  ArrowLeftIcon,
   CalendarDaysIcon,
   HeartIcon,
   type LucideIcon,
@@ -12,11 +10,11 @@ import { getAdminAccess } from "@/lib/admin";
 import { getAdminCopy } from "@/lib/admin-copy";
 import { getCommunityUserDetail } from "@/lib/community-users";
 import { getRequestLocale } from "@/lib/request-locale";
+import { AdminPageShell } from "@/components/admin/admin-page-shell";
 import { UserModeration } from "@/components/admin/user-moderation";
 import { AuthorAvatar } from "@/components/news/author-avatar";
 import { DateTime } from "@/components/date-time";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import {
   Card,
   CardDescription,
@@ -41,18 +39,22 @@ export default async function AdminUserDetailPage({
   const { discordId } = await params;
   const detail = await getCommunityUserDetail(discordId);
   if (!detail) notFound();
+  const displayName = detail.name ?? t.users.nameFallback;
 
   return (
-    <main className="mx-auto flex w-full max-w-5xl flex-1 flex-col gap-6 px-4 py-8 sm:px-8 sm:py-10">
-      <Button render={<Link href="/admin/users" />} nativeButton={false} variant="ghost" className="w-fit">
-        <ArrowLeftIcon data-icon="inline-start" />
-        {t.users.title}
-      </Button>
-
+    <AdminPageShell
+      breadcrumbs={[
+        { label: t.dashboard.title, href: "/admin" },
+        { label: t.users.title, href: "/admin/users" },
+        { label: displayName },
+      ]}
+      eyebrow={t.common.superAdmin}
+      title={displayName}
+      maxWidth="5xl"
+    >
       <div className="flex flex-wrap items-center gap-4">
         <AuthorAvatar name={detail.name ?? ""} avatarUrl={detail.image} className="size-14" />
         <div className="flex flex-col gap-1">
-          <h1 className="text-2xl font-semibold leading-tight">{detail.name ?? t.users.nameFallback}</h1>
           <p className="font-mono text-xs text-muted-foreground" dir="ltr">{detail.discordUserId}</p>
           <p className="text-xs text-muted-foreground">
             {t.users.detail.joined}: <DateTime value={detail.createdAt} locale={locale} />
@@ -102,7 +104,7 @@ export default async function AdminUserDetailPage({
         comments={detail.comments}
         locale={locale}
       />
-    </main>
+    </AdminPageShell>
   );
 }
 

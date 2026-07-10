@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { AdminPageShell } from "@/components/admin/admin-page-shell";
 import { PartnersManager } from "@/components/admin/partners-manager";
 import { getAdminAccess } from "@/lib/admin";
+import { getAdminCopy } from "@/lib/admin-copy";
 import { getRequestLocale } from "@/lib/request-locale";
 import { githubSponsorsUrl, listPartnerCampaigns, listPartnerInquiries, listPartners } from "@/lib/partners";
 
@@ -32,6 +33,7 @@ export default async function AdminPartnersPage() {
 
   const locale = await getRequestLocale();
   const t = COPY[locale];
+  const adminCopy = getAdminCopy(locale);
   const [partners, campaigns, inquiries] = await Promise.all([
     listPartners(),
     listPartnerCampaigns(),
@@ -40,8 +42,10 @@ export default async function AdminPartnersPage() {
 
   return (
     <AdminPageShell
-      backHref="/admin"
-      backLabel={t.back}
+      breadcrumbs={[
+        { label: adminCopy.dashboard.title, href: "/admin" },
+        { label: t.title },
+      ]}
       eyebrow={t.eyebrow}
       title={t.title}
       description={t.description}

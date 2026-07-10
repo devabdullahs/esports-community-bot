@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { ArrowLeftIcon, PenLineIcon, Tv2Icon } from "lucide-react";
+import { PenLineIcon, Tv2Icon } from "lucide-react";
+import { AdminPageShell } from "@/components/admin/admin-page-shell";
 import { canManageMedia, getAdminAccess } from "@/lib/admin";
 import { getAdminCopy } from "@/lib/admin-copy";
 import { localizeText } from "@/lib/community-content";
@@ -14,6 +15,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -34,40 +36,23 @@ export default async function NewMediaPostPage() {
   }
 
   return (
-    <main className="mx-auto flex w-full max-w-5xl flex-1 flex-col gap-6 px-4 py-8 sm:px-8 sm:py-10">
-      <Button
-        render={<Link href="/admin" />}
-        nativeButton={false}
-        variant="ghost"
-        className="w-fit"
-      >
-        <ArrowLeftIcon data-icon="inline-start" />
-        {t.common.backToAdmin}
-      </Button>
-
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-        <div>
-          <p className="text-sm text-muted-foreground">
-            {t.common.channelPublishing}
-          </p>
-          <h1 className="text-3xl font-semibold leading-tight">
-            {t.media.newPostTitle}
-          </h1>
-          <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">
-            {t.media.newPostDescription}
-          </p>
-        </div>
-        <Button
-          render={<Link href="/admin/media" />}
-          nativeButton={false}
-          variant="outline"
-          className="w-full sm:w-auto"
-        >
+    <AdminPageShell
+      breadcrumbs={[
+        { label: t.dashboard.title, href: "/admin" },
+        { label: t.media.title, href: "/admin/media" },
+        { label: t.media.newPostTitle },
+      ]}
+      eyebrow={t.common.channelPublishing}
+      title={t.media.newPostTitle}
+      description={t.media.newPostDescription}
+      maxWidth="5xl"
+      actions={
+        <Button render={<Link href="/admin/media" />} nativeButton={false} variant="outline">
           <Tv2Icon data-icon="inline-start" />
           {t.dashboard.links.mediaTitle}
         </Button>
-      </div>
-
+      }
+    >
       {channels.length ? (
         <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {channels.map((channel) => {
@@ -107,13 +92,16 @@ export default async function NewMediaPostPage() {
           })}
         </section>
       ) : (
-        <Card className="border-border/70 bg-card/70 shadow-sm">
-          <CardHeader>
-            <CardTitle>{t.media.empty}</CardTitle>
-            <CardDescription>{t.media.noAssignedChannels}</CardDescription>
-          </CardHeader>
-        </Card>
+        <Empty className="border border-dashed border-border">
+          <EmptyHeader>
+            <EmptyMedia variant="icon">
+              <Tv2Icon />
+            </EmptyMedia>
+            <EmptyTitle>{t.media.empty}</EmptyTitle>
+            <EmptyDescription>{t.media.noAssignedChannels}</EmptyDescription>
+          </EmptyHeader>
+        </Empty>
       )}
-    </main>
+    </AdminPageShell>
   );
 }

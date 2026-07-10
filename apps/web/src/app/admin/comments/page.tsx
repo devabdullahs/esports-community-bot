@@ -17,8 +17,10 @@ export default async function AdminCommentsPage() {
 
   return (
     <AdminPageShell
-      backHref="/admin"
-      backLabel={t.common.backToAdmin}
+      breadcrumbs={[
+        { label: t.dashboard.title, href: "/admin" },
+        { label: t.comments.title },
+      ]}
       eyebrow={t.common.moderation}
       title={t.comments.title}
       description={t.comments.description}

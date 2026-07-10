@@ -22,8 +22,10 @@ export default async function AdminGamesPage() {
 
   return (
     <AdminPageShell
-      backHref="/admin"
-      backLabel={t.common.backToAdmin}
+      breadcrumbs={[
+        { label: t.dashboard.title, href: "/admin" },
+        { label: t.games.title },
+      ]}
       eyebrow={t.common.adminPublishing}
       title={t.games.title}
       description={t.games.description}

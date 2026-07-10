@@ -9,7 +9,7 @@ import { listGames } from "@/lib/games";
 import { localizedPath } from "@/lib/i18n";
 import { getRequestLocale } from "@/lib/request-locale";
 import { listMediaChannels } from "@/lib/media";
-import { ADMIN_SELECTABLE_MCP_TOOL_NAMES } from "@/lib/mcp-tool-manifest";
+import { MCP_TOOL_MANIFEST } from "@/lib/mcp-tool-manifest";
 import { listMcpKeys } from "@/lib/mcp-keys";
 
 export const runtime = "nodejs";
@@ -38,13 +38,16 @@ export default async function AdminMcpPage() {
   const visibleMedia = allowedMediaSlugs
     ? media.filter((channel) => allowedMediaSlugs.has(channel.slug))
     : media;
+  const pageTitle = locale === "ar" ? "مفاتيح MCP" : "MCP keys";
 
   return (
     <AdminPageShell
-      backHref="/admin"
-      backLabel={t.common.backToAdmin}
+      breadcrumbs={[
+        { label: t.dashboard.title, href: "/admin" },
+        { label: pageTitle },
+      ]}
       eyebrow={access.isSuper ? t.common.superAdmin : t.dashboard.roleScoped}
-      title={locale === "ar" ? "مفاتيح MCP" : "MCP keys"}
+      title={pageTitle}
       description={
         access.isSuper
           ? locale === "ar"
@@ -65,7 +68,22 @@ export default async function AdminMcpPage() {
     >
       <McpKeyManager
         keys={keys}
-        tools={[...ADMIN_SELECTABLE_MCP_TOOL_NAMES]}
+        selectableTools={MCP_TOOL_MANIFEST.filter(
+          (tool) => tool.surfaces.includes("admin") && tool.adminGrant === "selectable",
+        ).map((tool) => ({
+          name: tool.name,
+          title: tool.title[locale],
+          description: tool.description[locale],
+          kind: tool.kind,
+        }))}
+        alwaysOnTools={MCP_TOOL_MANIFEST.filter(
+          (tool) => tool.surfaces.includes("admin") && tool.adminGrant === "always",
+        ).map((tool) => ({
+          name: tool.name,
+          title: tool.title[locale],
+          description: tool.description[locale],
+          kind: tool.kind,
+        }))}
         games={visibleGames.map((game) => ({ slug: game.slug, label: localizeText(game.title, locale) }))}
         media={visibleMedia.map((channel) => ({ slug: channel.slug, label: localizeText(channel.name, locale) }))}
         locale={locale}
