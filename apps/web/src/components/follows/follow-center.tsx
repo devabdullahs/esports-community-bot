@@ -38,6 +38,7 @@ import {
 } from "@/components/ui/card";
 import { Toggle } from "@/components/ui/toggle";
 import { copy, localizedPath, type Locale } from "@/lib/i18n";
+import { cn } from "@/lib/utils";
 
 const TYPE_ICONS: Record<EntityType, typeof Gamepad2Icon> = {
   game: Gamepad2Icon,
@@ -53,7 +54,13 @@ type PreferenceMutation = {
   patch: NotificationPrefsPatch;
 };
 
-export function FollowCenter({ locale }: { locale: Locale }) {
+export function FollowCenter({
+  locale,
+  section = "all",
+}: {
+  locale: Locale;
+  section?: "all" | "following" | "notifications" | "settings";
+}) {
   const text = copy[locale].follows;
   const queryClient = useQueryClient();
   const [followError, setFollowError] = useState<string | null>(null);
@@ -150,10 +157,12 @@ export function FollowCenter({ locale }: { locale: Locale }) {
   }
 
   return (
-    <section className="grid gap-6 lg:grid-cols-2">
-      <NotificationInbox locale={locale} />
+    <section className={cn("grid gap-6", section === "all" && "lg:grid-cols-2")}>
+      {section === "all" || section === "notifications" ? (
+        <NotificationInbox locale={locale} />
+      ) : null}
 
-      <Card>
+      {section === "all" || section === "following" ? <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <BellIcon className="size-4 text-primary" />
@@ -204,9 +213,9 @@ export function FollowCenter({ locale }: { locale: Locale }) {
             );
           })}
         </CardContent>
-      </Card>
+      </Card> : null}
 
-      <Card>
+      {section === "all" || section === "settings" ? <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <MessageCircleIcon className="size-4 text-primary" />
@@ -263,7 +272,7 @@ export function FollowCenter({ locale }: { locale: Locale }) {
             </>
           ) : null}
         </CardContent>
-      </Card>
+      </Card> : null}
     </section>
   );
 }

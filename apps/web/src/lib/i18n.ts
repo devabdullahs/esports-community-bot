@@ -462,6 +462,13 @@ const baseCopy = {
         locked: "Locked",
         closed: "Closed",
       },
+      workspaceTabs: {
+        overview: "Overview",
+        predictions: "Predictions",
+        following: "Following",
+        notifications: "Notifications",
+        settings: "Settings",
+      },
     },
     follows: {
       follow: "Follow",
@@ -963,6 +970,13 @@ const baseCopy = {
         "partly open": "\u0645\u0641\u062a\u0648\u062d\u0629 \u062c\u0632\u0626\u064a\u064b\u0627",
         locked: "\u0645\u063a\u0644\u0642\u0629",
         closed: "\u0645\u0646\u062a\u0647\u064a\u0629",
+      },
+      workspaceTabs: {
+        overview: "\u0646\u0638\u0631\u0629 \u0639\u0627\u0645\u0629",
+        predictions: "\u0627\u0644\u062a\u0648\u0642\u0639\u0627\u062a",
+        following: "\u0627\u0644\u0645\u062a\u0627\u0628\u0639\u0627\u062a",
+        notifications: "\u0627\u0644\u0625\u0634\u0639\u0627\u0631\u0627\u062a",
+        settings: "\u0627\u0644\u0625\u0639\u062f\u0627\u062f\u0627\u062a",
       },
     },
     follows: {

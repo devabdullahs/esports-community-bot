@@ -99,10 +99,12 @@ export function ProfileDashboard({
   guildId,
   season,
   locale,
+  section = "all",
 }: {
   guildId?: string;
   season: string;
   locale: Locale;
+  section?: "all" | "overview" | "predictions";
 }) {
   const router = useRouter();
   const queryClient = useQueryClient();
@@ -191,7 +193,7 @@ export function ProfileDashboard({
 
   return (
     <div className="flex flex-col gap-6">
-      <Card>
+      {section !== "predictions" ? <Card>
         <CardHeader className="gap-4">
           <div className="flex items-center gap-3">
             <Avatar className="size-12">
@@ -252,11 +254,11 @@ export function ProfileDashboard({
             </Alert>
           ) : null}
         </CardContent>
-      </Card>
+      </Card> : null}
 
       {stats ? (
         <>
-          <section className="grid gap-4 sm:grid-cols-2 md:grid-cols-4">
+          {section !== "predictions" ? <section className="grid gap-4 sm:grid-cols-2 md:grid-cols-4">
             <StatCard
               label={copy[locale].common.rank}
               value={stats.rank ? `#${formatNumber(stats.rank, locale)}` : text.unranked}
@@ -265,9 +267,9 @@ export function ProfileDashboard({
             <StatCard label={text.points} value={formatNumber(stats.overallPoints, locale)} icon={SparklesIcon} />
             <StatCard label={text.weeksScored} value={formatNumber(stats.weeksScored, locale)} icon={CalendarDaysIcon} />
             <StatCard label={text.weeklyWins} value={formatNumber(stats.weeklyWins, locale)} icon={MedalIcon} />
-          </section>
+          </section> : null}
 
-          {currentRound ? (
+          {section !== "overview" ? <>{currentRound ? (
             <Card>
               <CardHeader>
                 <CardTitle>{currentRound.label}</CardTitle>
@@ -408,8 +410,13 @@ export function ProfileDashboard({
                 </CardContent>
               </Card>
             </TabsContent>
-          </Tabs>
+          </Tabs></> : null}
         </>
+      ) : section === "predictions" ? (
+        <Alert>
+          <AlertTitle>{text.noProfileTitle}</AlertTitle>
+          <AlertDescription>{text.noProfileDescription}</AlertDescription>
+        </Alert>
       ) : null}
     </div>
   );
