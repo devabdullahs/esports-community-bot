@@ -29,17 +29,15 @@ import {
   listEwcWeeks,
   overallLeaderboard,
   seasonLeaderboard,
-  swapSeasonClubPicks,
-  upsertSeasonClubPick,
-  upsertWeeklyGamePick,
   userPredictionProfile,
   weeklyLeaderboard,
 } from '../db/ewcPredictions.js';
 import { getEwcProfileLinkByDiscordUser } from '../db/ewcProfileLinks.js';
 import { effectiveEwcWeekStatus, formatShortDate, formatTimestamp, normalizeClubName } from '../lib/ewcPredictions.js';
 import { selectCurrentOpenEwcWeek } from '../lib/ewcPredictionRounds.js';
-import { resolveEwcClubPick, searchEwcClubChoices } from '../lib/ewcClubCache.js';
-import { ewcGameParticipantTeams, matchParticipant } from '../lib/ewcGameTeams.js';
+import { searchEwcClubChoices } from '../lib/ewcClubCache.js';
+import { ewcGameParticipantTeams } from '../lib/ewcGameTeams.js';
+import { submitSeasonSlot, submitWeeklyGamePick } from '../lib/ewcPredictionWrites.js';
 import { announceEwcParticipation } from '../lib/ewcParticipation.js';
 import { updateEwcPredictionLeaderboard } from '../jobs/ewcPredictions.js';
 import { renderEwcShareCard } from '../lib/ewcShareCard.js';
@@ -222,6 +220,12 @@ function gameClosedMessage(round, game) {
   if (game.lockAt && now >= game.lockAt) return `${game.game} picks locked ${formatTimestamp(game.lockAt)}.`;
   if (round.status !== 'open') return `That round is already \`${round.status}\`.`;
   return null;
+}
+
+function interactionSubmittedAt(interaction) {
+  const createdAt = Number(interaction.createdTimestamp);
+  if (Number.isFinite(createdAt) && createdAt > 0) return Math.floor(createdAt / 1000);
+  return Math.floor(Date.now() / 1000);
 }
 
 function formatPicks(picks) {
@@ -725,6 +729,7 @@ async function handleWeeklyPickModal(interaction, { seasonYear, weekKey, gameKey
 
   // The modal was opened from a button on the (ephemeral) picker message, so defer as an update
   // and edit that message in place; errors surface as a separate ephemeral follow-up.
+  const submittedAt = interactionSubmittedAt(interaction);
   await interaction.deferUpdate();
   const round = await getEwcWeek(interaction.guildId, seasonYear, weekKey);
   const game = findRoundGame(round, gameKey);
@@ -746,32 +751,20 @@ async function handleWeeklyPickModal(interaction, { seasonYear, weekKey, gameKey
     return;
   }
 
-  // Accept a pick that is a real participant in this game's tracked event first
-  // (covers game-specific qualifiers the club list omits, e.g. EVOS Divine in Free
-  // Fire), else fall back to the EWC Club Championship resolver for fuzzy matching.
-  const participants = await ewcGameParticipantTeams(game.game, { eventUrl: game.eventUrl });
-  const participantPick = matchParticipant(rawPick, participants);
-  let pickName;
-  if (participantPick) {
-    pickName = participantPick;
-  } else {
-    const resolved = await resolveEwcClubPick(rawPick, { wait: true, game: game.game, strictGame: true });
-    if (!resolved.ok) {
-      await interaction.followUp({ content: `❌ ${resolved.message}`, flags: MessageFlags.Ephemeral });
-      return;
-    }
-    pickName = resolved.name;
-  }
-
-  const saved = await upsertWeeklyGamePick({
+  const write = await submitWeeklyGamePick({
     guildId: interaction.guildId,
-    weekId: round.id,
+    season: seasonYear,
     userId: interaction.user.id,
+    weekKey,
     gameKey,
-    game: game.game,
-    event: game.event,
-    pick: pickName,
+    rawPick,
+    submittedAt,
   });
+  if (!write.ok) {
+    await interaction.followUp({ content: `❌ ${write.message}`, flags: MessageFlags.Ephemeral });
+    return;
+  }
+  const saved = write.prediction;
 
   // Re-render the picker in place so the new pick shows in line with its game.
   const payload = await weeklyPickPayload(interaction.guildId, seasonYear, weekKey, interaction.user.id);
@@ -781,7 +774,7 @@ async function handleWeeklyPickModal(interaction, { seasonYear, weekKey, gameKey
   }
   await interaction.editReply({ components: payload.components });
   if (saved.firstPick) {
-    await announceWeeklyParticipation(interaction, round);
+    await announceWeeklyParticipation(interaction, write.round);
     void refreshLinkedProfileAfterFirstWeeklyPick({
       firstPick: true,
       discordUserId: interaction.user.id,
@@ -873,6 +866,7 @@ async function handleSeasonSlotModal(interaction, { seasonYear, index, ownerId }
 
   // The modal was opened from a button on the (ephemeral) picker message, so defer as an update
   // and edit that message in place; errors surface as a separate ephemeral follow-up.
+  const submittedAt = interactionSubmittedAt(interaction);
   await interaction.deferUpdate();
   const round = await getEwcSeason(interaction.guildId, seasonYear);
   const closed = roundClosedMessage(round);
@@ -890,58 +884,19 @@ async function handleSeasonSlotModal(interaction, { seasonYear, index, ownerId }
     return;
   }
 
-  const resolved = await resolveEwcClubPick(rawPick, { wait: true });
-  if (!resolved.ok) {
-    await interaction.followUp({ content: `❌ ${resolved.message}`, flags: MessageFlags.Ephemeral });
-    return;
-  }
-
-  const existingPicks = (await getSeasonPrediction(interaction.guildId, seasonYear, interaction.user.id))?.picks || [];
-  // Top-down only: a stale "locked" button must not skip ahead and leave a collapsing gap.
-  if (seasonSlotState(existingPicks, slot) === 'locked') {
-    const filled = existingPicks.filter((p) => typeof p === 'string' && p.trim()).length;
-    await interaction.followUp({
-      content: `❌ Set Pick #${filled + 1} first — season picks fill in order.`,
-      flags: MessageFlags.Ephemeral,
-    });
-    return;
-  }
-  // The club is already in the list at another rank: SWAP the two ranks in one step when
-  // editing a filled rank; refuse when setting the next empty rank (can't trade with empty).
-  const existingIndex = existingPicks.findIndex(
-    (pick, i) => i !== slot && typeof pick === 'string' && pick === resolved.name,
-  );
-  if (existingIndex !== -1) {
-    if (seasonSlotState(existingPicks, slot) === 'filled') {
-      await swapSeasonClubPicks({
-        guildId: interaction.guildId,
-        season: seasonYear,
-        userId: interaction.user.id,
-        a: slot,
-        b: existingIndex,
-      });
-      const swapPayload = await seasonPickPayload(interaction.guildId, seasonYear, interaction.user.id);
-      if (swapPayload.error) {
-        await interaction.followUp({ content: `❌ ${swapPayload.error}`, flags: MessageFlags.Ephemeral });
-        return;
-      }
-      await interaction.editReply({ components: swapPayload.components });
-      return;
-    }
-    await interaction.followUp({
-      content: `❌ **${resolved.name}** is already your Pick #${existingIndex + 1}. Edit that rank to move it.`,
-      flags: MessageFlags.Ephemeral,
-    });
-    return;
-  }
-
-  const saved = await upsertSeasonClubPick({
+  const write = await submitSeasonSlot({
     guildId: interaction.guildId,
     season: seasonYear,
     userId: interaction.user.id,
     index: slot,
-    pick: resolved.name,
+    rawPick,
+    submittedAt,
   });
+  if (!write.ok) {
+    await interaction.followUp({ content: `❌ ${write.message}`, flags: MessageFlags.Ephemeral });
+    return;
+  }
+  const saved = write.prediction;
 
   // Re-render the picker in place so the new pick shows in line with its slot.
   const payload = await seasonPickPayload(interaction.guildId, seasonYear, interaction.user.id);
@@ -950,7 +905,7 @@ async function handleSeasonSlotModal(interaction, { seasonYear, index, ownerId }
     return;
   }
   await interaction.editReply({ components: payload.components });
-  if (saved.firstPick) await announceSeasonParticipation(interaction, round, seasonYear);
+  if (saved.firstPick) await announceSeasonParticipation(interaction, write.round, seasonYear);
 }
 
 // Publicly note (once per member) that someone joined the season predictions,
@@ -986,6 +941,7 @@ function refreshPredictionBoard(interaction) {
 export async function execute(interaction) {
   const sub = interaction.options.getSubcommand();
   const seasonYear = season(interaction);
+  const submittedAt = interactionSubmittedAt(interaction);
 
   if (sub === 'weekly') {
     let weekKey = interaction.options.getString('week');
@@ -1035,15 +991,20 @@ export async function execute(interaction) {
       });
       return;
     }
-    const saved = await upsertWeeklyGamePick({
+    const write = await submitWeeklyGamePick({
       guildId: interaction.guildId,
-      weekId: round.id,
+      season: seasonYear,
       userId: interaction.user.id,
+      weekKey,
       gameKey,
-      game: game.game,
-      event: game.event,
-      pick,
+      rawPick: pick,
+      submittedAt,
     });
+    if (!write.ok) {
+      await interaction.reply({ content: `❌ ${write.message}`, flags: MessageFlags.Ephemeral });
+      return;
+    }
+    const saved = write.prediction;
     await interaction.reply({
       embeds: [
         new EmbedBuilder()
@@ -1054,7 +1015,7 @@ export async function execute(interaction) {
       ],
       flags: MessageFlags.Ephemeral,
     });
-    if (saved.firstPick) await announceWeeklyParticipation(interaction, round);
+    if (saved.firstPick) await announceWeeklyParticipation(interaction, write.round);
     return;
   }
 

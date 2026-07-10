@@ -1,4 +1,4 @@
-import { all, get, run, transaction } from './client.js';
+import { all, dbDriver, get, run, transaction } from './client.js';
 
 const parseJson = (value, fallback) => {
   try {
@@ -47,6 +47,14 @@ async function runWith(client, sql, params) {
   return client ? client.run(sql, params) : run(sql, params);
 }
 
+async function getWith(client, sql, params) {
+  return client ? client.get(sql, params) : get(sql, params);
+}
+
+function transactionWith(client) {
+  return client ? async (fn) => fn(client) : transaction;
+}
+
 export async function upsertEwcWeek({
   guildId,
   season = '2026',
@@ -91,9 +99,9 @@ export async function upsertEwcWeek({
   return getEwcWeek(guildId, season, weekKey);
 }
 
-export async function getEwcWeek(guildId, season, weekKey) {
+export async function getEwcWeek(guildId, season, weekKey, client = null) {
   return hydrateWeek(
-    await get('SELECT * FROM ewc_prediction_weeks WHERE guild_id = $1 AND season = $2 AND week_key = $3', [
+    await getWith(client, 'SELECT * FROM ewc_prediction_weeks WHERE guild_id = $1 AND season = $2 AND week_key = $3', [
       guildId,
       season,
       weekKey,
@@ -196,9 +204,10 @@ export async function setEwcWeekResults(weekId, results) {
   await run('UPDATE ewc_prediction_weeks SET results_json = $1 WHERE id = $2', [stringify(results), weekId]);
 }
 
-export async function upsertWeeklyPrediction({ guildId, weekId, userId, picks }) {
+export async function upsertWeeklyPrediction({ guildId, weekId, userId, picks, client = null }) {
   const now = nowText();
-  await run(
+  await runWith(
+    client,
     `INSERT INTO ewc_weekly_predictions (guild_id, week_id, user_id, picks_json, created_at, updated_at)
      VALUES ($1, $2, $3, $4, $5, $5)
      ON CONFLICT (guild_id, week_id, user_id) DO UPDATE SET
@@ -208,33 +217,69 @@ export async function upsertWeeklyPrediction({ guildId, weekId, userId, picks })
        updated_at = excluded.updated_at`,
     [guildId, weekId, userId, stringify(picks), now],
   );
-  return getWeeklyPrediction(guildId, weekId, userId);
+  return getWeeklyPrediction(guildId, weekId, userId, client);
 }
 
-export async function upsertWeeklyGamePick({ guildId, weekId, userId, gameKey, pick, game = null, event = null }) {
-  const existing = await getWeeklyPrediction(guildId, weekId, userId);
-  const current = Array.isArray(existing?.picks) ? existing.picks : [];
-  const next = current.filter((entry) => {
-    if (typeof entry === 'string') return false;
-    return entry?.gameKey !== gameKey;
-  });
-  next.push({
-    gameKey,
-    game,
-    event,
-    pick,
-    pickedAt: Math.floor(Date.now() / 1000),
-  });
-  next.sort((a, b) => String(a.game || a.gameKey).localeCompare(String(b.game || b.gameKey)));
-  const result = await upsertWeeklyPrediction({ guildId, weekId, userId, picks: next });
-  // `firstPick` = the member had NO picks for this week before now. Callers use it
-  // to publicly announce participation exactly once per member per week.
-  return { ...result, firstPick: current.length === 0 };
-}
-
-export async function getWeeklyPrediction(guildId, weekId, userId) {
+async function lockWeeklyPrediction(client, { guildId, weekId, userId }) {
+  const now = nowText();
+  await client.run(
+    `INSERT INTO ewc_weekly_predictions (guild_id, week_id, user_id, picks_json, created_at, updated_at)
+     VALUES ($1, $2, $3, $4, $5, $5)
+     ON CONFLICT (guild_id, week_id, user_id) DO NOTHING`,
+    [guildId, weekId, userId, stringify([]), now],
+  );
+  const suffix = dbDriver() === 'postgres' ? ' FOR UPDATE' : '';
   return hydratePrediction(
-    await get('SELECT * FROM ewc_weekly_predictions WHERE guild_id = $1 AND week_id = $2 AND user_id = $3', [
+    await client.get(
+      `SELECT * FROM ewc_weekly_predictions WHERE guild_id = $1 AND week_id = $2 AND user_id = $3${suffix}`,
+      [guildId, weekId, userId],
+    ),
+  );
+}
+
+export async function upsertWeeklyGamePick({
+  guildId,
+  weekId,
+  userId,
+  gameKey,
+  pick,
+  game = null,
+  event = null,
+  pickedAt = Math.floor(Date.now() / 1000),
+  client = null,
+}) {
+  return transactionWith(client)(async (runner) => {
+    const existing = await lockWeeklyPrediction(runner, { guildId, weekId, userId });
+    const current = Array.isArray(existing?.picks) ? existing.picks : [];
+    const next = current.filter((entry) => {
+      if (typeof entry === 'string') return false;
+      return entry?.gameKey !== gameKey;
+    });
+    next.push({
+      gameKey,
+      game,
+      event,
+      pick,
+      pickedAt: Math.floor(Number(pickedAt)),
+    });
+    next.sort((a, b) => String(a.game || a.gameKey).localeCompare(String(b.game || b.gameKey)));
+    const now = nowText();
+    await runner.run(
+      `UPDATE ewc_weekly_predictions
+       SET picks_json = $1, score = NULL, details_json = NULL, updated_at = $2
+       WHERE guild_id = $3 AND week_id = $4 AND user_id = $5`,
+      [stringify(next), now, guildId, weekId, userId],
+    );
+    const saved = await getWeeklyPrediction(guildId, weekId, userId, runner);
+    // `firstPick` = the member had NO picks for this week before now. Callers use it
+    // to publicly announce participation exactly once per member per week.
+    return { ...saved, firstPick: current.length === 0 };
+  });
+}
+
+export async function getWeeklyPrediction(guildId, weekId, userId, client = null) {
+  return hydratePrediction(
+    await getWith(client, 'SELECT * FROM ewc_weekly_predictions WHERE guild_id = $1 AND week_id = $2 AND user_id = $3', [
       guildId,
       weekId,
       userId,
@@ -320,8 +365,8 @@ export async function upsertEwcSeason({
   return getEwcSeason(guildId, season);
 }
 
-export async function getEwcSeason(guildId, season = '2026') {
-  return hydrateSeason(await get('SELECT * FROM ewc_prediction_seasons WHERE guild_id = $1 AND season = $2', [guildId, season]));
+export async function getEwcSeason(guildId, season = '2026', client = null) {
+  return hydrateSeason(await getWith(client, 'SELECT * FROM ewc_prediction_seasons WHERE guild_id = $1 AND season = $2', [guildId, season]));
 }
 
 export async function listEwcSeasonsForAutomation(nowSec) {
@@ -367,48 +412,71 @@ export async function markEwcSeasonScored(guildId, season, finalStandings, clien
   );
 }
 
-export async function upsertSeasonPrediction({ guildId, season = '2026', userId, picks }) {
-  // `firstPick` = the member had no season prediction before now (announce once).
-  const firstPick = !(await getSeasonPrediction(guildId, season, userId));
+async function lockSeasonPrediction(client, { guildId, season, userId }) {
   const now = nowText();
-  await run(
+  await client.run(
     `INSERT INTO ewc_season_predictions (guild_id, season, user_id, picks_json, created_at, updated_at)
      VALUES ($1, $2, $3, $4, $5, $5)
-     ON CONFLICT (guild_id, season, user_id) DO UPDATE SET
-       picks_json = excluded.picks_json,
-       score = NULL,
-       details_json = NULL,
-       updated_at = excluded.updated_at`,
-    [guildId, season, userId, stringify(picks), now],
+     ON CONFLICT (guild_id, season, user_id) DO NOTHING`,
+    [guildId, season, userId, stringify([]), now],
   );
-  const saved = await getSeasonPrediction(guildId, season, userId);
-  return { ...saved, firstPick };
+  const suffix = dbDriver() === 'postgres' ? ' FOR UPDATE' : '';
+  return hydratePrediction(
+    await client.get(
+      `SELECT * FROM ewc_season_predictions WHERE guild_id = $1 AND season = $2 AND user_id = $3${suffix}`,
+      [guildId, season, userId],
+    ),
+  );
+}
+
+async function saveLockedSeasonPrediction(client, { guildId, season, userId, picks }) {
+  await client.run(
+    `UPDATE ewc_season_predictions
+     SET picks_json = $1, score = NULL, details_json = NULL, updated_at = $2
+     WHERE guild_id = $3 AND season = $4 AND user_id = $5`,
+    [stringify(picks), nowText(), guildId, season, userId],
+  );
+  return getSeasonPrediction(guildId, season, userId, client);
+}
+
+export async function upsertSeasonPrediction({ guildId, season = '2026', userId, picks, client = null }) {
+  return transactionWith(client)(async (runner) => {
+    const existing = await lockSeasonPrediction(runner, { guildId, season, userId });
+    const saved = await saveLockedSeasonPrediction(runner, { guildId, season, userId, picks });
+    return { ...saved, firstPick: (existing?.picks || []).length === 0 };
+  });
 }
 
 // Set ONE ordered slot (0-based) of a member's season picks, preserving the others.
 // Mirrors upsertWeeklyGamePick's incremental model. Pads with nulls; callers trim.
-export async function upsertSeasonClubPick({ guildId, season = '2026', userId, index, pick }) {
-  const existing = await getSeasonPrediction(guildId, season, userId);
-  const picks = Array.isArray(existing?.picks) ? [...existing.picks] : [];
-  while (picks.length <= index) picks.push(null);
-  picks[index] = pick;
-  const cleaned = picks.filter((p) => typeof p === 'string' && p.trim());
-  return upsertSeasonPrediction({ guildId, season, userId, picks: cleaned });
+export async function upsertSeasonClubPick({ guildId, season = '2026', userId, index, pick, client = null }) {
+  return transactionWith(client)(async (runner) => {
+    const existing = await lockSeasonPrediction(runner, { guildId, season, userId });
+    const current = Array.isArray(existing?.picks) ? existing.picks : [];
+    const picks = [...current];
+    while (picks.length <= index) picks.push(null);
+    picks[index] = pick;
+    const cleaned = picks.filter((value) => typeof value === 'string' && value.trim());
+    const saved = await saveLockedSeasonPrediction(runner, { guildId, season, userId, picks: cleaned });
+    return { ...saved, firstPick: current.length === 0 };
+  });
 }
 
 // Swap two already-set ranks of a member's season picks in one step (reorder, no gaps).
 // Both indices must hold a pick — callers enforce that; a no-op if either is out of range.
-export async function swapSeasonClubPicks({ guildId, season = '2026', userId, a, b }) {
-  const existing = await getSeasonPrediction(guildId, season, userId);
-  const picks = Array.isArray(existing?.picks) ? [...existing.picks] : [];
-  if (a === b || a < 0 || b < 0 || a >= picks.length || b >= picks.length) return existing;
-  [picks[a], picks[b]] = [picks[b], picks[a]];
-  return upsertSeasonPrediction({ guildId, season, userId, picks });
+export async function swapSeasonClubPicks({ guildId, season = '2026', userId, a, b, client = null }) {
+  return transactionWith(client)(async (runner) => {
+    const existing = await lockSeasonPrediction(runner, { guildId, season, userId });
+    const picks = Array.isArray(existing?.picks) ? [...existing.picks] : [];
+    if (a === b || a < 0 || b < 0 || a >= picks.length || b >= picks.length) return existing;
+    [picks[a], picks[b]] = [picks[b], picks[a]];
+    return saveLockedSeasonPrediction(runner, { guildId, season, userId, picks });
+  });
 }
 
-export async function getSeasonPrediction(guildId, season, userId) {
+export async function getSeasonPrediction(guildId, season, userId, client = null) {
   return hydratePrediction(
-    await get('SELECT * FROM ewc_season_predictions WHERE guild_id = $1 AND season = $2 AND user_id = $3', [
+    await getWith(client, 'SELECT * FROM ewc_season_predictions WHERE guild_id = $1 AND season = $2 AND user_id = $3', [
       guildId,
       season,
       userId,
