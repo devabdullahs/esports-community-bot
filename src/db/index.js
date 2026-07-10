@@ -44,6 +44,15 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_matches_status     ON matches(status);
   CREATE INDEX IF NOT EXISTS idx_matches_tournament ON matches(tournament_id);
 
+  CREATE TABLE IF NOT EXISTS match_details (
+    match_id     INTEGER NOT NULL PRIMARY KEY REFERENCES matches(id) ON DELETE CASCADE,
+    source_page  TEXT    NOT NULL,
+    game         TEXT    NOT NULL,
+    payload_json TEXT    NOT NULL,
+    fetched_at   TEXT    NOT NULL,
+    updated_at   TEXT    NOT NULL
+  );
+
   CREATE TABLE IF NOT EXISTS teams (
     id             INTEGER PRIMARY KEY AUTOINCREMENT,
     game           TEXT,

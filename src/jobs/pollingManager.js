@@ -13,6 +13,7 @@ import {
   deleteTournamentPlaceholderMatches,
   deleteTournamentDuplicateMatches,
 } from '../db/matches.js';
+import { getMatchDetailsFetchedAt, upsertMatchDetails } from '../db/matchDetails.js';
 import { getTournamentById } from '../db/tournaments.js';
 
 // Targeted backoff polling: a match is polled (every livePollIntervalMs) only while it is
@@ -33,6 +34,8 @@ const ARM_LOOKAHEAD_SECONDS = Math.max(
 
 const watchers = new Map(); // external_id -> { armTimer?, pollTimer? }
 const tournamentPolls = new Map(); // tournament.id -> Promise<parsed matches>
+const detailRefreshes = new Map(); // match.id -> { promise, finalRequested }
+const MATCH_DETAIL_GAMES = new Set(['valorant', 'dota2']);
 
 // The refresh handler ignores the type; the notifier keys on 'started'/'finished'.
 // A row first seen already running still counts as started (mid-match discovery),
@@ -158,6 +161,56 @@ async function fetchTournamentSchedule(service, tournament) {
   return promise;
 }
 
+function fetchedMoreThanSecondsAgo(fetchedAt, seconds) {
+  if (!fetchedAt) return true;
+  const timestamp = Date.parse(`${String(fetchedAt).replace(' ', 'T').replace(/Z$/, '')}Z`);
+  return !Number.isFinite(timestamp) || Date.now() - timestamp > seconds * 1000;
+}
+
+async function refreshMatchDetails(match, tournament, { force = false } = {}) {
+  if (
+    !config.liquipedia.matchDetailsEnabled ||
+    match.source !== 'liquipedia' ||
+    !/^Match:/i.test(match.external_id) ||
+    !MATCH_DETAIL_GAMES.has(tournament.game) ||
+    (!force && match.status !== 'running')
+  )
+    return;
+  const fetchedAt = await getMatchDetailsFetchedAt(match.id);
+  if (!force && !fetchedMoreThanSecondsAgo(fetchedAt, 300)) return;
+
+  const payload = await liquipedia.fetchMatchDetails(tournament.game, match.external_id, {
+    teamA: match.team_a,
+    teamB: match.team_b,
+    maxAgeMs: force ? 0 : 300_000,
+  });
+  if (!payload) return;
+  await upsertMatchDetails({
+    matchId: match.id,
+    sourcePage: match.external_id,
+    game: tournament.game,
+    payload,
+  });
+}
+
+function queueMatchDetailsRefresh(match, tournament) {
+  const current = detailRefreshes.get(match.id);
+  if (current) {
+    if (match.status === 'finished') current.finalRequested = true;
+    return;
+  }
+  const state = { finalRequested: false };
+  const force = match.status === 'finished';
+  const promise = refreshMatchDetails(match, tournament, { force })
+    .catch((error) => logger.warn(`[poll] match details ${match.external_id}: ${error.message}`))
+    .finally(() => {
+      detailRefreshes.delete(match.id);
+      if (state.finalRequested) queueMatchDetailsRefresh({ ...match, status: 'finished' }, tournament);
+    });
+  state.promise = promise;
+  detailRefreshes.set(match.id, state);
+}
+
 async function pollOnce(match, tournament) {
   const service = services[match.source];
   if (!service?.fetchSchedule) {
@@ -218,6 +271,9 @@ async function pollOnce(match, tournament) {
   }
 
   if (polled) {
+    // Detail work is detached from the score poll. Its fetcher still uses the
+    // shared Liquipedia queue, but a slow or failed detail page never blocks scores.
+    queueMatchDetailsRefresh(polled, tournament);
     // Stop watching only on a genuine finish (the bracket marks a winner) — never on a mere
     // disappearance from the page, which previously caused false/early "finished" results.
     if (polled.status === 'finished') {

@@ -32,6 +32,7 @@ export {
   fetchEwcPlayerList,
   fetchEwcWeekGameResults,
   fetchGameMatches,
+  fetchMatchDetails,
   fetchSchedule,
   fetchValveRegionalStandings,
   fetchEventStandings,

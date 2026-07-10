@@ -64,6 +64,10 @@ export type TournamentSummary = {
 
 export type MatchStream = { platform: string; url: string };
 
+export function matchHasDetails(value: unknown): boolean {
+  return value === true || value === 1 || value === "1";
+}
+
 export type MatchRow = {
   id: number;
   external_id?: string;
@@ -81,6 +85,7 @@ export type MatchRow = {
   status: MatchStatus;
   scheduled_at: number | null;
   updated_at: string | null;
+  has_details?: boolean;
   // Raw columns (present on DB reads, omitted from the public projection).
   stream_platform?: string | null;
   stream_url?: string | null;
@@ -165,7 +170,9 @@ export function matchStream(row: MatchRow): MatchStream | null {
 
 // running first, then upcoming by start time, then finished most-recent first
 // — mirrors getMatchesForGuild's ordering in src/db/matches.js.
-const MATCHES_SQL = `SELECT ${MATCH_COLUMNS} FROM matches
+const MATCHES_SQL = `SELECT ${MATCH_COLUMNS},
+       EXISTS(SELECT 1 FROM match_details md WHERE md.match_id = matches.id) AS has_details
+   FROM matches
    WHERE tournament_id = $1
      AND NOT (source = 'startgg' AND external_id LIKE 'sgg:preview_%')
    ORDER BY CASE status WHEN 'running' THEN 0 WHEN 'scheduled' THEN 1 ELSE 2 END,
@@ -185,6 +192,7 @@ function publicMatch(row: MatchRow): MatchRow {
     status: row.status,
     scheduled_at: row.scheduled_at,
     updated_at: row.updated_at,
+    has_details: matchHasDetails(row.has_details),
     stream: matchStream(row),
   };
 }
@@ -224,8 +232,9 @@ function withTeamIds(match: MatchRow, resolve: (name: string | null) => number |
 }
 
 async function dedupedTournamentMatches(tournament: TournamentRow): Promise<MatchRow[]> {
-  const rows = ((await all(MATCHES_SQL, [tournament.id])) as MatchRow[]).map((row) => ({
+  const rows = ((await all(MATCHES_SQL, [tournament.id])) as Array<MatchRow & { has_details?: unknown }>).map((row) => ({
     ...row,
+    has_details: matchHasDetails(row.has_details),
     game: tournament.game,
   }));
   return dedupeMatches(rows);
