@@ -32,6 +32,8 @@ const appTables = [
   'ewc_prediction_weeks',
   'ewc_weekly_predictions',
   'ewc_prediction_reminders',
+  'ewc_prediction_operations',
+  'ewc_prediction_operation_health',
   'ewc_prediction_seasons',
   'ewc_season_predictions',
   'ewc_club_championship_snapshots',
