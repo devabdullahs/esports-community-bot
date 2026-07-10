@@ -227,6 +227,16 @@ export async function getEwcPredictionReminder({ guildId, weekId, gameKey, kind 
   );
 }
 
+export async function listEwcPredictionRemindersForWeek(weekId) {
+  return all(
+    `SELECT game_key, kind, sent_at, claim_expires_at, attempts
+     FROM ewc_prediction_reminders
+     WHERE week_id = $1
+     ORDER BY game_key, kind`,
+    [weekId],
+  );
+}
+
 export async function setEwcWeekStatus(weekId, status, client = null) {
   await runWith(
     client,
@@ -237,8 +247,9 @@ export async function setEwcWeekStatus(weekId, status, client = null) {
   );
 }
 
-export async function reopenEwcWeek(weekId) {
-  await run(
+export async function reopenEwcWeek(weekId, client = null) {
+  await runWith(
+    client,
     `UPDATE ewc_prediction_weeks
      SET status = 'open', final_json = NULL, results_json = NULL, scored_at = NULL
      WHERE id = $1`,
@@ -372,8 +383,8 @@ export async function saveWeeklyPredictionScore(guildId, weekId, userId, score, 
   );
 }
 
-export async function clearWeeklyPredictionScores(weekId) {
-  return run('UPDATE ewc_weekly_predictions SET score = NULL, details_json = NULL WHERE week_id = $1', [weekId]);
+export async function clearWeeklyPredictionScores(weekId, client = null) {
+  return runWith(client, 'UPDATE ewc_weekly_predictions SET score = NULL, details_json = NULL WHERE week_id = $1', [weekId]);
 }
 
 export async function deleteEwcWeek(weekId, client = null) {
@@ -468,8 +479,9 @@ export async function setEwcSeasonStatus(guildId, season, status, client = null)
   );
 }
 
-export async function reopenEwcSeason(guildId, season) {
-  await run(
+export async function reopenEwcSeason(guildId, season, client = null) {
+  await runWith(
+    client,
     `UPDATE ewc_prediction_seasons
      SET status = 'open', final_json = NULL, scored_at = NULL
      WHERE guild_id = $1 AND season = $2`,
@@ -575,8 +587,8 @@ export async function saveSeasonPredictionScore(guildId, season, userId, score, 
   );
 }
 
-export async function clearSeasonPredictionScores(guildId, season = '2026') {
-  return run('UPDATE ewc_season_predictions SET score = NULL, details_json = NULL WHERE guild_id = $1 AND season = $2', [
+export async function clearSeasonPredictionScores(guildId, season = '2026', client = null) {
+  return runWith(client, 'UPDATE ewc_season_predictions SET score = NULL, details_json = NULL WHERE guild_id = $1 AND season = $2', [
     guildId,
     season,
   ]);

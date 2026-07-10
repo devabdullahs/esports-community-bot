@@ -26,6 +26,7 @@ import {
   weeklyLeaderboard,
 } from '../db/ewcPredictions.js';
 import { listEwcProfileLinks } from '../db/ewcProfileLinks.js';
+import { recordEwcPredictionAutomationHealth } from '../db/ewcPredictionOperations.js';
 import {
   getGuildsWithEwcPredictionLeaderboard,
   getSettings,
@@ -633,16 +634,28 @@ export async function runEwcPredictionAutomation(client = null) {
   for (const round of weeks) {
     try {
       await processWeek(client, round);
+      await recordEwcPredictionAutomationHealth({ guildId: round.guild_id, season: round.season, ok: true }).catch((error) =>
+        logger.warn(`[ewc-predictions] health ${round.guild_id}/${round.season}: ${error.message}`),
+      );
     } catch (error) {
       logger.error(`[ewc-predictions] week ${round.guild_id}/${round.season}/${round.week_key}: ${error.message}`);
+      await recordEwcPredictionAutomationHealth({ guildId: round.guild_id, season: round.season, ok: false, error: error.message }).catch((healthError) =>
+        logger.warn(`[ewc-predictions] health ${round.guild_id}/${round.season}: ${healthError.message}`),
+      );
     }
   }
 
   for (const round of seasons) {
     try {
       await processSeason(client, round);
+      await recordEwcPredictionAutomationHealth({ guildId: round.guild_id, season: round.season, ok: true }).catch((error) =>
+        logger.warn(`[ewc-predictions] health ${round.guild_id}/${round.season}: ${error.message}`),
+      );
     } catch (error) {
       logger.error(`[ewc-predictions] season ${round.guild_id}/${round.season}: ${error.message}`);
+      await recordEwcPredictionAutomationHealth({ guildId: round.guild_id, season: round.season, ok: false, error: error.message }).catch((healthError) =>
+        logger.warn(`[ewc-predictions] health ${round.guild_id}/${round.season}: ${healthError.message}`),
+      );
     }
   }
 

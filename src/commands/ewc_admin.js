@@ -42,6 +42,7 @@ import {
   scoreWeeklyPrediction,
 } from '../lib/ewcPredictions.js';
 import { fetchEwcClubStandings, fetchEwcEventSchedule, fetchEwcWeekGameResults } from '../services/liquipedia.js';
+import { runEwcPredictionAdminOperation } from '../lib/ewcPredictionAdmin.js';
 import {
   botChannelPermissionMessage,
   EMBED_BOARD_PERMISSIONS,
@@ -258,6 +259,12 @@ async function replyError(interaction, error) {
   else await interaction.reply(payload);
 }
 
+function predictionAdminEffects(interaction) {
+  return {
+    refreshLeaderboard: (guildId) => updateEwcPredictionLeaderboard(interaction.client, guildId),
+  };
+}
+
 export async function execute(interaction) {
   const sub = interaction.options.getSubcommand();
   const seasonYear = season(interaction);
@@ -332,40 +339,24 @@ export async function execute(interaction) {
       const lockBeforeHours = interaction.options.getInteger('lock_before_hours') ?? 24;
       const scoreDelayHours = interaction.options.getInteger('score_delay_hours') ?? config.ewcPredictions.scoreDelayHours;
       await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-      const schedule = await fetchEwcEventSchedule(Number(seasonYear));
-      const weeks = generateEwcWeekWindows(schedule.events, { openBeforeHours, lockBeforeHours, scoreDelayHours });
-      if (!weeks.length) throw new Error(`No dated EWC events were found for ${seasonYear}.`);
-      for (const week of weeks) {
-        await upsertEwcWeek({
-          guildId: interaction.guildId,
-          season: seasonYear,
-          weekKey: week.weekKey,
-          label: week.label,
-          startAt: week.startAt,
-          endAt: week.endAt,
-          openAt: week.openAt,
-          closeAt: week.closeAt,
-          scoreAfter: week.scoreAfter,
-          games: week.events,
-          createdBy: interaction.user.id,
-        });
-      }
-      const lines = weeks
-        .slice(0, 10)
-        .map((week) => {
-          const games = week.events.map((event) => event.game).join(', ');
-          return `- **${week.weekKey}**: ${week.label} - ${week.events.length} game(s): ${games}\n  opens ${formatTimestamp(week.openAt)} - last lock ${formatTimestamp(week.closeAt)} - scores ${formatTimestamp(week.scoreAfter)}`;
-        });
+      const result = await runEwcPredictionAdminOperation({
+        guildId: interaction.guildId,
+        season: seasonYear,
+        operation: 'generate_weeks',
+        args: { openBeforeHours, lockBeforeHours, scoreDelayHours },
+        actorId: interaction.user.id,
+        effects: predictionAdminEffects(interaction),
+      });
       await interaction.editReply(
-        `✅ Generated **${weeks.length}** EWC ${seasonYear} weekly prediction round(s) from ${schedule.events.length} event(s).\n` +
+        `✅ ${result.message}\n` +
           'Official 2026 weeks are anchored to the Paris event dates; events are scored in the week they **end**.\n' +
-          `Open-before: **${openBeforeHours}h**. Game lock-before: **${lockBeforeHours}h**. Score delay: **${scoreDelayHours}h**.\n\n${lines.join('\n')}`,
+          `Open-before: **${openBeforeHours}h**. Game lock-before: **${lockBeforeHours}h**. Score delay: **${scoreDelayHours}h**.`,
       );
       await sendAuditLog(interaction.client, interaction.guildId, {
         action: 'EWC Prediction Weeks Generated',
         actor: interaction.user,
         target: `EWC ${seasonYear}`,
-        details: `Weeks: ${weeks.length}\nEvents: ${schedule.events.length}\nOpen-before: ${openBeforeHours}h\nLock-before: ${lockBeforeHours}h\nScore delay: ${scoreDelayHours}h`,
+        details: `Weeks: ${result.weeks}\nEvents: ${result.events}\nOpen-before: ${openBeforeHours}h\nLock-before: ${lockBeforeHours}h\nScore delay: ${scoreDelayHours}h`,
         color: 'config',
       });
       return;
@@ -410,19 +401,23 @@ export async function execute(interaction) {
     if (sub === 'snapshot_week') {
       const weekKey = interaction.options.getString('week', true);
       const type = interaction.options.getString('type', true);
-      const round = await getEwcWeek(interaction.guildId, seasonYear, weekKey);
-      if (!round) throw new Error(`Week \`${weekKey}\` does not exist.`);
       await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-      const standings = await currentStandings(seasonYear);
-      await setEwcWeekSnapshot(round.id, type, standings);
+      const result = await runEwcPredictionAdminOperation({
+        guildId: interaction.guildId,
+        season: seasonYear,
+        operation: 'snapshot_week',
+        args: { weekKey, type },
+        actorId: interaction.user.id,
+        effects: predictionAdminEffects(interaction),
+      });
       await interaction.editReply({
-        content: `✅ Saved **${type}** snapshot for **${round.label || round.week_key}** with ${standings.length} clubs.`,
+        content: `✅ ${result.message} (${result.rows} clubs.)`,
       });
       await sendAuditLog(interaction.client, interaction.guildId, {
         action: 'EWC Week Snapshot Saved',
         actor: interaction.user,
-        target: `${round.season} ${round.week_key}`,
-        details: `Type: ${type}\nRows: ${standings.length}`,
+        target: `${seasonYear} ${result.round}`,
+        details: `Type: ${type}\nRows: ${result.rows}`,
         color: 'config',
       });
       return;
@@ -445,19 +440,22 @@ export async function execute(interaction) {
 
     if (sub === 'reopen_week') {
       const weekKey = interaction.options.getString('week', true);
-      const round = await getEwcWeek(interaction.guildId, seasonYear, weekKey);
-      if (!round) throw new Error(`Week \`${weekKey}\` does not exist.`);
-      await reopenEwcWeek(round.id);
-      await clearWeeklyPredictionScores(round.id);
       await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-      await updateEwcPredictionLeaderboard(interaction.client, interaction.guildId);
+      const result = await runEwcPredictionAdminOperation({
+        guildId: interaction.guildId,
+        season: seasonYear,
+        operation: 'reopen_week',
+        args: { weekKey },
+        actorId: interaction.user.id,
+        effects: predictionAdminEffects(interaction),
+      });
       await interaction.editReply({
-        content: `✅ Reopened **${round.label || round.week_key}** and cleared its prediction scores.`,
+        content: `✅ ${result.message}`,
       });
       await sendAuditLog(interaction.client, interaction.guildId, {
         action: 'EWC Prediction Week Reopened',
         actor: interaction.user,
-        target: `${round.season} ${round.week_key}`,
+        target: `${seasonYear} ${result.round}`,
         details: 'Scores were cleared. Existing picks are preserved.',
         color: 'config',
       });
@@ -469,22 +467,23 @@ export async function execute(interaction) {
       if (!interaction.options.getBoolean('confirm', true)) {
         throw new Error('Deletion not confirmed. Re-run with `confirm: True`.');
       }
-      const round = await getEwcWeek(interaction.guildId, seasonYear, weekKey);
-      if (!round) throw new Error(`Week \`${weekKey}\` does not exist.`);
-      if (round.status === 'scored') {
-        throw new Error('This week is already scored. Reopen it first if you really want to delete it.');
-      }
-      const picks = (await listWeeklyPredictions(round.id)).length;
-      const result = await deleteEwcWeek(round.id);
+      const result = await runEwcPredictionAdminOperation({
+        guildId: interaction.guildId,
+        season: seasonYear,
+        operation: 'delete_week',
+        args: { weekKey, confirmationWeekKey: weekKey },
+        actorId: interaction.user.id,
+        effects: predictionAdminEffects(interaction),
+      });
       await interaction.reply({
-        content: `🗑️ Deleted **${round.label || round.week_key}** (${result.predictions} prediction(s) removed).`,
+        content: `🗑️ ${result.message}`,
         flags: MessageFlags.Ephemeral,
       });
       await sendAuditLog(interaction.client, interaction.guildId, {
         action: 'EWC Prediction Week Deleted',
         actor: interaction.user,
-        target: `${round.season} ${round.week_key}`,
-        details: `Predictions removed: ${picks}`,
+        target: `${seasonYear} ${result.round}`,
+        details: `Predictions removed: ${result.predictions}`,
         color: 'config',
       });
       return;
@@ -492,59 +491,23 @@ export async function execute(interaction) {
 
     if (sub === 'score_week') {
       const weekKey = interaction.options.getString('week', true);
-      const round = await getEwcWeek(interaction.guildId, seasonYear, weekKey);
-      if (!round) throw new Error(`Week \`${weekKey}\` does not exist.`);
-      if (round.status === 'scored') {
-        throw new Error(`Week \`${weekKey}\` is already scored. Reopen it first if you need to re-score.`);
-      }
       await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-
-      const perGame = Array.isArray(round.games) && round.games.length > 0;
-      const baseline = round.baseline || [];
-      // Network fetch + the pending-results check stay OUTSIDE the transaction.
-      const results = perGame ? (round.results?.length ? round.results : await fetchEwcWeekGameResults(round.games)) : [];
-      const missingResults = perGame ? pendingEwcGameResults(results, round.games) : [];
-      if (missingResults.length) {
-        throw new Error(
-          `Missing complete placement results for: ${missingResults.map((result) => result.game || result.event || result.gameKey).join(', ')}.`,
-        );
-      }
-      if (!perGame && !baseline.length) throw new Error('This week has no baseline snapshot yet.');
-
-      const final = perGame ? round.final || [] : round.final?.length ? round.final : await currentStandings(seasonYear).catch(() => []);
-      if (!perGame && !final?.length) {
-        throw new Error('Could not fetch the final standings to score this week. Try again in a moment.');
-      }
-      const predictions = await listWeeklyPredictions(round.id);
-      let malformed = 0;
-      // Wrap all writes in a transaction so a mid-loop crash leaves scores consistent.
-      await transaction(async (tx) => {
-        for (const prediction of predictions) {
-          try {
-            const result = perGame
-              ? scorePerGameWeeklyPrediction(prediction.picks, round.games, results)
-              : scoreWeeklyPrediction(prediction.picks, baseline, final);
-            await saveWeeklyPredictionScore(interaction.guildId, round.id, prediction.user_id, result.score, result.details, tx);
-          } catch (error) {
-            malformed += 1;
-            await saveWeeklyPredictionScore(interaction.guildId, round.id, prediction.user_id, 0, {
-              error: error.message,
-              picks: prediction.picks,
-            }, tx);
-          }
-        }
-        if (perGame) await markEwcWeekScoredWithResults(round.id, final || [], results, tx);
-        else await markEwcWeekScored(round.id, final, tx);
+      const result = await runEwcPredictionAdminOperation({
+        guildId: interaction.guildId,
+        season: seasonYear,
+        operation: 'score_week',
+        args: { weekKey },
+        actorId: interaction.user.id,
+        effects: predictionAdminEffects(interaction),
       });
-      await updateEwcPredictionLeaderboard(interaction.client, interaction.guildId);
       await interaction.editReply({
-        content: `✅ Scored **${round.label || round.week_key}** for ${predictions.length} prediction(s)${perGame ? ` across ${round.games.length} game(s)` : ''}.`,
+        content: `✅ ${result.message}`,
       });
       await sendAuditLog(interaction.client, interaction.guildId, {
         action: 'EWC Prediction Week Scored',
         actor: interaction.user,
-        target: `${round.season} ${round.week_key}`,
-        details: `Mode: ${perGame ? 'per-game' : 'aggregate'}\nPredictions scored: ${predictions.length}${malformed ? `\nMalformed rows scored as 0: ${malformed}` : ''}`,
+        target: `${seasonYear} ${result.round}`,
+        details: `Mode: ${result.mode}\nPredictions scored: ${result.predictions}${result.malformed ? `\nMalformed rows scored as 0: ${result.malformed}` : ''}`,
         color: 'success',
       });
       return;
@@ -617,14 +580,16 @@ export async function execute(interaction) {
     }
 
     if (sub === 'reopen_season') {
-      const round = await getEwcSeason(interaction.guildId, seasonYear);
-      if (!round) throw new Error(`No season round exists for ${seasonYear}.`);
-      await reopenEwcSeason(interaction.guildId, seasonYear);
-      await clearSeasonPredictionScores(interaction.guildId, seasonYear);
       await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-      await updateEwcPredictionLeaderboard(interaction.client, interaction.guildId);
+      const result = await runEwcPredictionAdminOperation({
+        guildId: interaction.guildId,
+        season: seasonYear,
+        operation: 'reopen_season',
+        actorId: interaction.user.id,
+        effects: predictionAdminEffects(interaction),
+      });
       await interaction.editReply({
-        content: `✅ Reopened EWC ${seasonYear} season predictions and cleared season scores.`,
+        content: `✅ ${result.message}`,
       });
       await sendAuditLog(interaction.client, interaction.guildId, {
         action: 'EWC Season Prediction Reopened',
@@ -637,37 +602,22 @@ export async function execute(interaction) {
     }
 
     if (sub === 'score_season') {
-      const round = await getEwcSeason(interaction.guildId, seasonYear);
-      if (!round) throw new Error(`No season round exists for ${seasonYear}.`);
       await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-      const final = await currentStandings(seasonYear);
-      const predictions = await listSeasonPredictions(interaction.guildId, seasonYear);
-      let malformed = 0;
-      // Wrap all writes in a transaction so a mid-loop crash leaves scores consistent.
-      await transaction(async (tx) => {
-        for (const prediction of predictions) {
-          try {
-            const result = scoreSeasonPrediction(prediction.picks, final, round.top_size);
-            await saveSeasonPredictionScore(interaction.guildId, seasonYear, prediction.user_id, result.score, result.details, tx);
-          } catch (error) {
-            malformed += 1;
-            await saveSeasonPredictionScore(interaction.guildId, seasonYear, prediction.user_id, 0, {
-              error: error.message,
-              picks: prediction.picks,
-            }, tx);
-          }
-        }
-        await markEwcSeasonScored(interaction.guildId, seasonYear, final, tx);
+      const result = await runEwcPredictionAdminOperation({
+        guildId: interaction.guildId,
+        season: seasonYear,
+        operation: 'score_season',
+        actorId: interaction.user.id,
+        effects: predictionAdminEffects(interaction),
       });
-      await updateEwcPredictionLeaderboard(interaction.client, interaction.guildId);
       await interaction.editReply({
-        content: `✅ Scored EWC ${seasonYear} season predictions for ${predictions.length} member(s).`,
+        content: `✅ ${result.message}`,
       });
       await sendAuditLog(interaction.client, interaction.guildId, {
         action: 'EWC Season Prediction Scored',
         actor: interaction.user,
         target: seasonYear,
-        details: `Predictions scored: ${predictions.length}${malformed ? `\nMalformed rows scored as 0: ${malformed}` : ''}`,
+        details: `Predictions scored: ${result.predictions}${result.malformed ? `\nMalformed rows scored as 0: ${result.malformed}` : ''}`,
         color: 'success',
       });
       return;

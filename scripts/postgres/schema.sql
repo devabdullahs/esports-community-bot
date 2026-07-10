@@ -246,10 +246,41 @@ CREATE TABLE IF NOT EXISTS ewc_prediction_reminders (
   PRIMARY KEY (guild_id, week_id, game_key, kind)
 );
 
+CREATE TABLE IF NOT EXISTS ewc_prediction_operations (
+  id                   TEXT PRIMARY KEY,
+  guild_id             TEXT NOT NULL,
+  season               TEXT NOT NULL,
+  operation            TEXT NOT NULL,
+  args_json            TEXT NOT NULL,
+  status               TEXT NOT NULL,
+  idempotency_key      TEXT NOT NULL UNIQUE,
+  requested_actor_id   TEXT,
+  requested_actor_type TEXT NOT NULL,
+  requested_at         TEXT NOT NULL,
+  lease_token          TEXT,
+  lease_expires_at     BIGINT,
+  attempts             INTEGER NOT NULL DEFAULT 0,
+  started_at           TEXT,
+  completed_at         TEXT,
+  result_json          TEXT,
+  error_text           TEXT
+);
+
+CREATE TABLE IF NOT EXISTS ewc_prediction_operation_health (
+  guild_id        TEXT NOT NULL,
+  season          TEXT NOT NULL,
+  last_attempt_at TEXT,
+  last_success_at TEXT,
+  last_error      TEXT,
+  PRIMARY KEY (guild_id, season)
+);
+
 CREATE INDEX IF NOT EXISTS idx_ewc_weekly_predictions_week
   ON ewc_weekly_predictions(week_id, score DESC);
 CREATE INDEX IF NOT EXISTS idx_ewc_prediction_reminders_claim
   ON ewc_prediction_reminders(sent_at, claim_expires_at);
+CREATE INDEX IF NOT EXISTS idx_ewc_prediction_operations_claim
+  ON ewc_prediction_operations(status, lease_expires_at, requested_at);
 
 CREATE TABLE IF NOT EXISTS ewc_prediction_seasons (
   guild_id       TEXT NOT NULL,

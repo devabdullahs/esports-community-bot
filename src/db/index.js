@@ -345,6 +345,38 @@ db.exec(`
     PRIMARY KEY (guild_id, week_id, game_key, kind)
   );
 
+  -- Durable requests from the dashboard to the bot-owned prediction operations
+  -- consumer. JSON is deliberately bounded/sanitized by the DB helper: never
+  -- put source payloads, sessions, or Discord objects in this process boundary.
+  CREATE TABLE IF NOT EXISTS ewc_prediction_operations (
+    id                   TEXT PRIMARY KEY,
+    guild_id             TEXT NOT NULL,
+    season               TEXT NOT NULL,
+    operation            TEXT NOT NULL,
+    args_json            TEXT NOT NULL,
+    status               TEXT NOT NULL,
+    idempotency_key      TEXT NOT NULL UNIQUE,
+    requested_actor_id   TEXT,
+    requested_actor_type TEXT NOT NULL,
+    requested_at         TEXT NOT NULL,
+    lease_token          TEXT,
+    lease_expires_at     INTEGER,
+    attempts             INTEGER NOT NULL DEFAULT 0,
+    started_at           TEXT,
+    completed_at         TEXT,
+    result_json          TEXT,
+    error_text           TEXT
+  );
+
+  CREATE TABLE IF NOT EXISTS ewc_prediction_operation_health (
+    guild_id        TEXT NOT NULL,
+    season          TEXT NOT NULL,
+    last_attempt_at TEXT,
+    last_success_at TEXT,
+    last_error      TEXT,
+    PRIMARY KEY (guild_id, season)
+  );
+
   CREATE TABLE IF NOT EXISTS ewc_prediction_seasons (
     guild_id       TEXT NOT NULL,
     season         TEXT NOT NULL DEFAULT '2026',
@@ -387,6 +419,8 @@ db.exec(`
     ON ewc_weekly_predictions(week_id, score DESC);
   CREATE INDEX IF NOT EXISTS idx_ewc_prediction_reminders_claim
     ON ewc_prediction_reminders(sent_at, claim_expires_at);
+  CREATE INDEX IF NOT EXISTS idx_ewc_prediction_operations_claim
+    ON ewc_prediction_operations(status, lease_expires_at, requested_at);
   CREATE INDEX IF NOT EXISTS idx_ewc_season_predictions_season
     ON ewc_season_predictions(guild_id, season, score DESC);
   CREATE INDEX IF NOT EXISTS idx_ewc_club_championship_snapshots_fetched
