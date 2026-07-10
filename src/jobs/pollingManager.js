@@ -182,6 +182,7 @@ async function refreshMatchDetails(match, tournament, { force = false } = {}) {
   const payload = await liquipedia.fetchMatchDetails(tournament.game, match.external_id, {
     teamA: match.team_a,
     teamB: match.team_b,
+    maxAgeMs: force ? 0 : 300_000,
   });
   if (!payload) return;
   await upsertMatchDetails({

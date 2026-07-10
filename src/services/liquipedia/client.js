@@ -103,11 +103,15 @@ function scheduleParse(task) {
 // ---------------------------------------------------------------------------
 
 // Fetch a page's parsed HTML via the MediaWiki API (throttled, cached, with rate-limit backoff).
-export async function parsePage(game, page) {
+// Callers may require a shorter cache age, but every network request still uses
+// the same serialized queue and persistent backoff state.
+export async function parsePage(game, page, { maxAgeMs = CACHE_TTL_MS } = {}) {
   loadRateState();
+  const parsedMaxAge = Number(maxAgeMs);
+  const cacheMaxAgeMs = Number.isFinite(parsedMaxAge) ? Math.max(0, parsedMaxAge) : CACHE_TTL_MS;
   const key = `${game}/${page}`;
   const hit = cache.get(key);
-  if (hit && Date.now() - hit.at < CACHE_TTL_MS) return hit.data;
+  if (hit && Date.now() - hit.at < cacheMaxAgeMs) return hit.data;
   if (inFlight.has(key)) return inFlight.get(key);
 
   // If Liquipedia recently rate-limited us, don't touch the network — serve stale or fail fast.
@@ -118,7 +122,7 @@ export async function parsePage(game, page) {
 
   const promise = scheduleParse(async () => {
     const afterWait = cache.get(key);
-    if (afterWait && Date.now() - afterWait.at < CACHE_TTL_MS) return afterWait.data;
+    if (afterWait && Date.now() - afterWait.at < cacheMaxAgeMs) return afterWait.data;
 
     const { data } = await httpClient.get(apiUrl(game), {
       params: { action: 'parse', page, prop: 'text|displaytitle', format: 'json', redirects: true },

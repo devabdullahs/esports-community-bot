@@ -130,9 +130,9 @@ export async function fetchGameMatches(game) {
 
 // Per-match pages contain the map/game detail that tournament pages intentionally omit.
 // This still consumes the shared parsePage queue and cache; do not add another HTTP path.
-export async function fetchMatchDetails(game, matchPage, { teamA, teamB } = {}) {
+export async function fetchMatchDetails(game, matchPage, { teamA, teamB, maxAgeMs, parse = parsePage } = {}) {
   if (!MATCH_DETAIL_GAMES.has(game) || !matchPage) return null;
-  const data = await parsePage(game, matchPage);
+  const data = await parse(game, matchPage, { maxAgeMs });
   const html = data?.parse?.text?.['*'];
   if (!html) return null;
   return alignMatchDetailsSides(parseMatchDetails(game, html), { teamA, teamB });

@@ -8,6 +8,7 @@ process.env.DISCORD_CLIENT_ID = 'test-client-id';
 process.env.DB_PATH = ':memory:';
 
 const { alignMatchDetailsSides, parseMatchDetails } = await import('../src/services/liquipedia/matchDetailsParsers.js');
+const { fetchMatchDetails } = await import('../src/services/liquipedia/fetchers.js');
 
 const valorantHtml = readFileSync('tests/fixtures/liquipedia-valorant-match-details.html', 'utf8');
 const dotaHtml = readFileSync('tests/fixtures/liquipedia-dota2-match-details.html', 'utf8');
@@ -83,4 +84,21 @@ test('match details align page teams to the stored match order before storage', 
   assert.equal(aligned.maps[0].winner, 'b');
   assert.equal(aligned.maps[0].players.a[0].name, 'Verno');
   assert.equal(aligned.veto[0].team, 'a');
+});
+
+test('match details forwards its cache-age policy through the shared parse client', async () => {
+  let call = null;
+  const details = await fetchMatchDetails('valorant', 'Match:Fixture', {
+    teamA: '100 Thieves',
+    teamB: 'MIBR.LOS',
+    maxAgeMs: 0,
+    parse: async (...args) => {
+      call = args;
+      return { parse: { text: { '*': valorantHtml } } };
+    },
+  });
+
+  assert.deepEqual(call, ['valorant', 'Match:Fixture', { maxAgeMs: 0 }]);
+  assert.equal(details.maps[0].scoreA, 13);
+  assert.equal(details.maps[0].scoreB, 2);
 });
