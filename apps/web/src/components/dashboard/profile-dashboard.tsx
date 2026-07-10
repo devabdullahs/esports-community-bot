@@ -33,6 +33,7 @@ import {
 import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Progress, ProgressLabel, ProgressValue } from "@/components/ui/progress";
+import { WebPredictionPicker } from "@/components/predictions/web-prediction-picker";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   copy,
@@ -124,6 +125,21 @@ type MePayload = {
     lockedUnpickedGameKeys: string[];
     discordUrl: string;
   }>;
+  picker: {
+    weekly: Array<{
+      weekKey: string;
+      label: string;
+      games: Array<{
+        key: string;
+        game: string;
+        event: string | null;
+        lockAt: number | null;
+        state: "open" | "locked";
+        pick: string | null;
+      }>;
+    }>;
+    season: { topSize: number; status: string; closeAt: number | null; picks: string[] } | null;
+  } | null;
 };
 
 async function jsonOrThrow(response: Response) {
@@ -313,6 +329,7 @@ export function ProfileDashboard({
 
           {section !== "overview" ? <>{actionableRounds.length ? (
             <div className="flex flex-col gap-4">
+              <WebPredictionPicker picker={data.picker} locale={locale} queryKey={["me-ewc", guildId || "", season]} />
               {actionableRounds.map((round) => (
                 <Card key={round.weekKey}>
                   <CardHeader>
@@ -348,7 +365,7 @@ export function ProfileDashboard({
                       ) : null}
                     </div>
                     <div className="flex flex-wrap gap-2">
-                      <Button render={<a href={round.discordUrl} target="_blank" rel="noreferrer" />} nativeButton={false}>
+                      <Button render={<a href={round.discordUrl} target="_blank" rel="noreferrer" />} nativeButton={false} variant="outline">
                         <MessageCircleIcon data-icon="inline-start" />
                         {text.openMyPicks}
                       </Button>

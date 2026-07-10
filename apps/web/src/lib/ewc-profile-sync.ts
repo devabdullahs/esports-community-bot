@@ -17,7 +17,7 @@ import {
   getEwcUserProfileStats,
 } from "@bot/lib/ewcProfileStats.js";
 import { getSettings } from "@bot/db/settings.js";
-import { getWeeklyPrediction, listEwcWeeks } from "@bot/db/ewcPredictions.js";
+import { getEwcSeason, getSeasonPrediction, getWeeklyPrediction, listEwcWeeks } from "@bot/db/ewcPredictions.js";
 import { effectiveEwcWeekStatus } from "@bot/lib/ewcPredictions.js";
 import { categorizeEwcPredictionRounds, predictionRoundCompletion } from "@bot/lib/ewcPredictionRounds.js";
 import {
@@ -71,13 +71,14 @@ export async function getEwcMePayload({
   const link = await getEwcProfileLinkByAuthUser(authUserId);
   const activeGuildId = guildId || link?.guildId;
   const activeSeason = season || link?.season || DEFAULT_SEASON;
-  const [stats, actionableRounds] =
+  const [stats, actionableRounds, picker] =
     account && activeGuildId
       ? await Promise.all([
           getEwcUserProfileStats(activeGuildId, activeSeason, account.accountId, { includeHiddenPicks: true }),
           actionableRoundsForViewer(activeGuildId, activeSeason, account.accountId),
+          privatePickerForViewer(activeGuildId, activeSeason, account.accountId),
         ])
-      : [null, []];
+      : [null, [], null];
 
   return {
     discordUserId: account?.accountId || null,
@@ -86,6 +87,7 @@ export async function getEwcMePayload({
     // `currentRound` is retained while clients migrate to the full actionable list.
     currentRound: actionableRounds[0] || null,
     actionableRounds,
+    picker,
   };
 }
 
@@ -170,6 +172,54 @@ export async function actionableRoundsForViewer(guildId: string, season: string,
   const { actionable } = categorizeEwcPredictionRounds(weeks, now) as { actionable: HydratedWeek[] };
   const discordUrl = predictionPickerUrl(guildId, settings);
   return Promise.all(actionable.map((round) => projectRoundForViewer(round, guildId, discordUserId, now, discordUrl)));
+}
+
+// This projection is returned only from the authenticated /api/me route. It is
+// intentionally separate from the progress projection above so public/status
+// callers cannot accidentally inherit a member's selected club.
+export async function privatePickerForViewer(guildId: string, season: string, discordUserId: string) {
+  const now = Math.floor(Date.now() / 1000);
+  const [weeks, seasonRound, seasonPrediction] = await Promise.all([
+    listEwcWeeks(guildId, season) as Promise<HydratedWeek[]>,
+    getEwcSeason(guildId, season),
+    getSeasonPrediction(guildId, season, discordUserId),
+  ]);
+  const { actionable } = categorizeEwcPredictionRounds(weeks, now) as { actionable: HydratedWeek[] };
+  const weekly = await Promise.all(
+    actionable.map(async (round) => {
+      const prediction = (await getWeeklyPrediction(guildId, round.id, discordUserId)) as WeeklyPrediction;
+      const picks = new Map(
+        (Array.isArray(prediction?.picks) ? prediction.picks : [])
+          .filter((pick): pick is { gameKey?: string; pick?: string } => Boolean(pick && typeof pick === "object"))
+          .map((pick) => [String(pick.gameKey || ""), String(pick.pick || "")]),
+      );
+      return {
+        weekKey: round.week_key,
+        label: round.label || round.week_key,
+        games: (round.games || [])
+          .filter((game) => game.key)
+          .map((game) => ({
+            key: String(game.key),
+            game: game.game || String(game.key),
+            event: game.event || null,
+            lockAt: game.lockAt ?? null,
+            state: !game.lockAt || now < game.lockAt ? "open" : "locked",
+            pick: picks.get(String(game.key)) || null,
+          })),
+      };
+    }),
+  );
+  return {
+    weekly,
+    season: seasonRound
+      ? {
+          topSize: Number(seasonRound.top_size || 0),
+          status: String(seasonRound.status || "open"),
+          closeAt: seasonRound.close_at ?? null,
+          picks: Array.isArray(seasonPrediction?.picks) ? seasonPrediction.picks.filter((pick): pick is string => typeof pick === "string") : [],
+        }
+      : null,
+  };
 }
 
 export async function syncEwcProfileForAuthUser({

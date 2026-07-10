@@ -7,8 +7,6 @@ import {
   upsertSeasonClubPick,
   upsertWeeklyGamePick,
 } from '../db/ewcPredictions.js';
-import { resolveEwcClubPick } from './ewcClubCache.js';
-import { ewcGameParticipantTeams, matchParticipant } from './ewcGameTeams.js';
 
 function result(ok, code, message, extra = {}) {
   return { ok, code, message, ...extra };
@@ -46,6 +44,7 @@ function nonEmptyPicks(picks) {
 
 async function canonicalWeeklyPick(rawPick, game, resolvers) {
   const participants = await resolvers.participants(game.game, { eventUrl: game.eventUrl });
+  const { matchParticipant } = await import('./ewcGameTeams.js');
   const participant = matchParticipant(rawPick, participants);
   if (participant) return result(true, 'ok', '', { pick: participant });
   const resolved = await resolvers.club(rawPick, { wait: true, game: game.game, strictGame: true });
@@ -59,10 +58,13 @@ async function canonicalSeasonPick(rawPick, resolvers) {
   return result(true, 'ok', '', { pick: resolved.name });
 }
 
-const defaultResolvers = {
-  participants: ewcGameParticipantTeams,
-  club: resolveEwcClubPick,
-};
+async function defaultResolvers() {
+  const [{ resolveEwcClubPick }, { ewcGameParticipantTeams }] = await Promise.all([
+    import('./ewcClubCache.js'),
+    import('./ewcGameTeams.js'),
+  ]);
+  return { participants: ewcGameParticipantTeams, club: resolveEwcClubPick };
+}
 
 export async function submitWeeklyGamePick({
   guildId,
@@ -72,7 +74,7 @@ export async function submitWeeklyGamePick({
   gameKey,
   rawPick,
   submittedAt,
-  resolvers = defaultResolvers,
+  resolvers = null,
 }) {
   const submittedSecondValue = submittedSecond(submittedAt);
   if (!submittedSecondValue || !String(rawPick || '').trim()) return result(false, 'invalid_input', 'Choose a club before saving your pick.');
@@ -83,7 +85,7 @@ export async function submitWeeklyGamePick({
 
   // Club/participant resolution may refresh cached Liquipedia data, so it must finish
   // before the short transaction that revalidates the trusted submission time.
-  const canonical = await canonicalWeeklyPick(rawPick, initialGame, resolvers);
+  const canonical = await canonicalWeeklyPick(rawPick, initialGame, resolvers || await defaultResolvers());
   if (!canonical.ok) return canonical;
 
   return transaction(async (client) => {
@@ -113,7 +115,7 @@ export async function submitSeasonSlot({
   index,
   rawPick,
   submittedAt,
-  resolvers = defaultResolvers,
+  resolvers = null,
 }) {
   const submittedSecondValue = submittedSecond(submittedAt);
   const slot = Number(index);
@@ -125,7 +127,7 @@ export async function submitSeasonSlot({
   if (initialError) return initialError;
   if (slot >= Number(initialRound.top_size || 0)) return result(false, 'invalid_input', 'That season rank is not configured.');
 
-  const canonical = await canonicalSeasonPick(rawPick, resolvers);
+  const canonical = await canonicalSeasonPick(rawPick, resolvers || await defaultResolvers());
   if (!canonical.ok) return canonical;
 
   return transaction(async (client) => {

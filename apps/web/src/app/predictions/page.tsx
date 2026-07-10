@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import { DateTime } from "@/components/date-time";
 import { PartnerPlacement } from "@/components/partners/partner-placement";
+import { PredictionPickerEntry } from "@/components/predictions/prediction-picker-entry";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -210,6 +211,8 @@ export default async function PredictionsPage() {
           )}
         </CardContent>
       </Card>
+
+      <PredictionPickerEntry locale={locale} />
 
       {status.upcomingRounds.length || status.awaitingRounds.length ? (
         <section className="flex flex-col gap-4" aria-label={t.currentRound}>
