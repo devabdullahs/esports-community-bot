@@ -196,8 +196,13 @@ npm run web:dev
 npm run web:build
 npm run web:start
 npm --workspace @esports-community-bot/web run lint
+npm --workspace @esports-community-bot/web run typecheck:native
 npm --workspace @esports-community-bot/web run test
 ```
+
+The native type-check command uses TypeScript 7 for fast production-source
+diagnostics. Next.js and ESLint retain the TypeScript 6 compatibility API until
+their programmatic integrations support the native compiler directly.
 
 ## Notes
 
