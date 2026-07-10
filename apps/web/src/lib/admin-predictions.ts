@@ -29,6 +29,17 @@ type RawWeek = {
 };
 
 type RawPrediction = { score?: number | null };
+type RawOperation = {
+  id: string;
+  operation: string;
+  status: string;
+  requestedAt: string;
+  completedAt: string | null;
+  attempts: number;
+  result: unknown;
+  error: string | null;
+  args?: { weekKey?: unknown };
+};
 
 export type AdminPredictionRound = {
   weekKey: string;
@@ -67,7 +78,7 @@ export type AdminPredictionOperationsModel = {
 };
 
 function reminderSummary(rows: Array<{ sent_at?: string | null; claim_expires_at?: number | null; attempts?: number }>) {
-  return rows.reduce(
+  return rows.reduce<{ sent: number; claimed: number; attempts: number }>(
     (summary, row) => ({
       sent: summary.sent + (row.sent_at ? 1 : 0),
       claimed: summary.claimed + (!row.sent_at && row.claim_expires_at ? 1 : 0),
@@ -85,7 +96,7 @@ export async function getAdminPredictionOperationsModel({ season = DEFAULT_SEASO
   const [weeks, seasonRound, operations, health] = await Promise.all([
     listEwcWeeks(guildId, season) as Promise<RawWeek[]>,
     getEwcSeason(guildId, season) as Promise<{ status: string; scored_at?: string | null; final?: unknown[] | null } | null>,
-    listEwcPredictionOperations({ guildId, season, limit: 50 }),
+    listEwcPredictionOperations({ guildId, season, limit: 50 }) as Promise<RawOperation[]>,
     getEwcPredictionAutomationHealth(guildId, season),
   ]);
   const now = Math.floor(Date.now() / 1000);

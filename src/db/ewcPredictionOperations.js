@@ -59,6 +59,17 @@ function hydrate(row) {
   };
 }
 
+/**
+ * @param {{
+ *   guildId: string,
+ *   season: string,
+ *   operation: string,
+ *   args: unknown,
+ *   idempotencyKey: string,
+ *   requestedActorId?: string|null,
+ *   requestedActorType?: string
+ * }} input
+ */
 export async function enqueueEwcPredictionOperation({
   guildId,
   season,
@@ -97,6 +108,7 @@ export async function getEwcPredictionOperationByIdempotencyKey(idempotencyKey) 
   return hydrate(await get('SELECT * FROM ewc_prediction_operations WHERE idempotency_key = $1', [idempotencyKey]));
 }
 
+/** @param {{guildId?: string, season?: string, limit?: number}} filter */
 export async function listEwcPredictionOperations({ guildId, season, limit = 50 } = {}) {
   const params = [];
   const where = [];

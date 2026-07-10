@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { CheckIcon, LockIcon, SaveIcon } from "lucide-react";
 import { LocalDateTime } from "@/components/local-date-time";
@@ -42,13 +42,9 @@ export function WebPredictionPicker({
   const games = actionablePickerGames(picker?.weekly || []);
   const clubs = useMemo(() => knownPickerClubs(picker?.weekly || [], picker?.season?.picks || []), [picker]);
 
-  useEffect(() => {
-    setDrafts(Object.fromEntries(games.map((game) => [`${game.weekKey}:${game.key}`, game.pick || ""])));
-  }, [picker]);
-
   const weekly = useMutation({
-    mutationFn: ({ weekKey, gameKey, pick }: { weekKey: string; gameKey: string; pick: string }) =>
-      jsonOrThrow(fetch("/api/me/ewc/picks/weekly", {
+    mutationFn: async ({ weekKey, gameKey, pick }: { weekKey: string; gameKey: string; pick: string }) =>
+      jsonOrThrow(await fetch("/api/me/ewc/picks/weekly", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ weekKey, gameKey, pick }),
@@ -56,8 +52,8 @@ export function WebPredictionPicker({
     onSuccess: () => queryClient.invalidateQueries({ queryKey }),
   });
   const season = useMutation({
-    mutationFn: (body: { action: "set"; index: number; pick: string } | { action: "swap"; a: number; b: number }) =>
-      jsonOrThrow(fetch("/api/me/ewc/picks/season", {
+    mutationFn: async (body: { action: "set"; index: number; pick: string } | { action: "swap"; a: number; b: number }) =>
+      jsonOrThrow(await fetch("/api/me/ewc/picks/season", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
@@ -82,7 +78,7 @@ export function WebPredictionPicker({
           </div>
           {games.map((game) => {
             const key = `${game.weekKey}:${game.key}`;
-            const value = drafts[key] || "";
+            const value = drafts[key] ?? game.pick ?? "";
             const saving = weekly.isPending && weekly.variables?.weekKey === game.weekKey && weekly.variables?.gameKey === game.key;
             return (
               <FieldGroup key={key} className="rounded-lg border p-4">

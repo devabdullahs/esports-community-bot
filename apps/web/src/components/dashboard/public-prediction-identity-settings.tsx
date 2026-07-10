@@ -30,7 +30,7 @@ export function PublicPredictionIdentitySettings({ locale }: { locale: Locale })
   const queryClient = useQueryClient();
   const query = useQuery<IdentityPayload>({
     queryKey: ["me-ewc-public-identity"],
-    queryFn: () => jsonOrThrow(fetch("/api/me/ewc")),
+    queryFn: async () => jsonOrThrow(await fetch("/api/me/ewc")),
   });
   const mutation = useMutation({
     mutationFn: async (enabled: boolean) => jsonOrThrow(await fetch("/api/me/ewc/public-identity", { method: enabled ? "POST" : "DELETE" })),

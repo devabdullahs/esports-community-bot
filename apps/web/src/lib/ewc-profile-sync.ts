@@ -216,7 +216,7 @@ export async function privatePickerForViewer(guildId: string, season: string, di
           topSize: Number(seasonRound.top_size || 0),
           status: String(seasonRound.status || "open"),
           closeAt: seasonRound.close_at ?? null,
-          picks: Array.isArray(seasonPrediction?.picks) ? seasonPrediction.picks.filter((pick): pick is string => typeof pick === "string") : [],
+          picks: Array.isArray(seasonPrediction?.picks) ? seasonPrediction.picks.filter((pick: unknown): pick is string => typeof pick === "string") : [],
         }
       : null,
   };

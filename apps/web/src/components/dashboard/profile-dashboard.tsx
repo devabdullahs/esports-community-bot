@@ -465,7 +465,7 @@ export function ProfileDashboard({
                         return (
                           <AccordionItem key={week.weekKey} value={week.weekKey} disabled={!expandable}>
                             <AccordionTrigger>{summary}</AccordionTrigger>
-                            {expandable ? (
+                            {expandable && week.breakdown ? (
                               <AccordionContent>
                                 <ScoreBreakdown breakdown={week.breakdown} locale={locale} />
                               </AccordionContent>

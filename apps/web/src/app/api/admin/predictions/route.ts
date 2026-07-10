@@ -64,7 +64,11 @@ export async function POST(request: Request) {
   const season = body.season || DEFAULT_SEASON;
   if (!isSeason(season)) return NextResponse.json({ error: "Invalid season." }, { status: 400 });
   const validated = validateEwcPredictionAdminOperation(body.operation, body.args);
-  if (!validated.ok) return NextResponse.json({ error: validated.error }, { status: 400 });
+  if (!validated.ok) {
+    const error = "error" in validated ? validated.error : "Invalid prediction operation.";
+    return NextResponse.json({ error }, { status: 400 });
+  }
+  if (!("value" in validated)) return NextResponse.json({ error: "Invalid prediction operation." }, { status: 400 });
   const guildId = await resolveDefaultGuildId();
   if (!guildId) return NextResponse.json({ error: "No configured Discord guild." }, { status: 409 });
 
@@ -77,12 +81,14 @@ export async function POST(request: Request) {
     requestedActorId: gate.access.discordUserId,
     requestedActorType: "web-super-admin",
   });
+  if (!enqueued.operation) return NextResponse.json({ error: "Could not queue prediction operation." }, { status: 500 });
+  const operation = enqueued.operation;
   if (enqueued.created) {
-    recordAdminAudit(gate.access, "prediction.operation.enqueue", enqueued.operation.id, {
-      operation: enqueued.operation.operation,
+    recordAdminAudit(gate.access, "prediction.operation.enqueue", operation.id, {
+      operation: operation.operation,
       season,
-      status: enqueued.operation.status,
+      status: operation.status,
     });
   }
-  return NextResponse.json({ operation: enqueued.operation, created: enqueued.created }, { status: enqueued.created ? 202 : 200 });
+  return NextResponse.json({ operation, created: enqueued.created }, { status: enqueued.created ? 202 : 200 });
 }
