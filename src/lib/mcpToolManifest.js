@@ -164,8 +164,8 @@ export const MCP_TOOL_MANIFEST = Object.freeze([
     scope: 'game-or-media',
     title: { en: 'Create news draft', ar: 'إنشاء مسودة خبر' },
     description: {
-      en: 'Create a draft news post in an allowed game or media channel. It never publishes directly.',
-      ar: 'ينشئ مسودة خبر في لعبة أو قناة إعلامية مسموح بها، ولا ينشر مباشرة أبدا.',
+      en: 'Create a draft news post in an allowed game or media channel. Requires idempotencyKey for safe retries and never publishes directly.',
+      ar: 'ينشئ مسودة خبر في لعبة أو قناة إعلامية مسموح بها، ويتطلب idempotencyKey لإعادة المحاولة بأمان، ولا ينشر مباشرة أبدا.',
     },
   }),
   freezeEntry({
@@ -176,8 +176,8 @@ export const MCP_TOOL_MANIFEST = Object.freeze([
     scope: 'stream-game',
     title: { en: 'Update stream channel', ar: 'تحديث قناة بث' },
     description: {
-      en: 'Update allowed co-stream rows.',
-      ar: 'يحدث صفوف البث المشترك المسموح بها.',
+      en: 'Update allowed co-stream rows. Requires idempotencyKey for safe retries.',
+      ar: 'يحدث صفوف البث المشترك المسموح بها، ويتطلب idempotencyKey لإعادة المحاولة بأمان.',
     },
   }),
 ]);

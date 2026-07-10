@@ -56,6 +56,7 @@ const appTables = [
   'ewc_admin_media_scopes',
   'ewc_admin_audit_log',
   'ewc_mcp_keys',
+  'ewc_mcp_write_receipts',
   'stream_channels',
   'stream_channel_status',
   'stream_creator_announce_state',

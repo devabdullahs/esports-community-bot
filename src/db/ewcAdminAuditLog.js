@@ -24,9 +24,9 @@ function parseJson(value) {
  * @param {object|null} params.details  - Safe subset of action context (no secrets).
  *                                        Serialised to JSON before storage.
  */
-export async function recordAdminAudit({ actorId, actorName, action, target, details }) {
+export async function recordAdminAudit({ actorId, actorName, action, target, details }, client = null) {
   const detailsJson = details != null ? JSON.stringify(details) : null;
-  await run(
+  await (client || { run }).run(
     `INSERT INTO ewc_admin_audit_log (actor_id, actor_name, action, target, details)
      VALUES ($1, $2, $3, $4, $5)`,
     [actorId, actorName ?? null, action, target ?? null, detailsJson],

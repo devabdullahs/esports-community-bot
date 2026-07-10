@@ -304,44 +304,46 @@ export async function listPublishedMediaPosts({ mediaSlug, locale, limit = 50 } 
   return (await Promise.all(rows.map((row) => hydrate(row, locale)))).filter(Boolean);
 }
 
+export async function createEwcNewsPostInTx(tx, input) {
+  const value = normalizeInput(input);
+  const fallback = legacyTranslation(value);
+  const primary = value.authors[0] || null;
+  const now = nowText();
+  const row = await tx.get(
+    `INSERT INTO ewc_news_posts
+       (game_slug, locale, content_mode, default_locale, title, summary, body, status,
+        author_discord_id, author_name, cover_image_url, cover_placement, ewc,
+        created_at, updated_at, published_at, media_slug)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
+     RETURNING id`,
+    [
+      value.gameSlug || null,
+      fallback.locale,
+      value.contentMode,
+      value.defaultLocale,
+      fallback.title,
+      fallback.summary,
+      fallback.body,
+      value.status || 'draft',
+      primary?.discordId || null,
+      primary?.name || null,
+      value.coverImageUrl || null,
+      isNewsCoverPlacement(value.coverPlacement) ? value.coverPlacement : 'top',
+      value.ewc ? 1 : 0,
+      now,
+      now,
+      value.status === 'published' ? now : null,
+      value.mediaSlug || null,
+    ],
+  );
+  await replaceTranslations(row.id, value.translations, tx);
+  await replaceAuthors(row.id, value.authors, tx);
+  await syncLegacyColumns(row.id, value, tx);
+  return row.id;
+}
+
 export async function createEwcNewsPost(input) {
-  const id = await transaction(async (tx) => {
-    const value = normalizeInput(input);
-    const fallback = legacyTranslation(value);
-    const primary = value.authors[0] || null;
-    const now = nowText();
-    const row = await tx.get(
-      `INSERT INTO ewc_news_posts
-         (game_slug, locale, content_mode, default_locale, title, summary, body, status,
-          author_discord_id, author_name, cover_image_url, cover_placement, ewc,
-          created_at, updated_at, published_at, media_slug)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
-       RETURNING id`,
-      [
-        value.gameSlug || null,
-        fallback.locale,
-        value.contentMode,
-        value.defaultLocale,
-        fallback.title,
-        fallback.summary,
-        fallback.body,
-        value.status || 'draft',
-        primary?.discordId || null,
-        primary?.name || null,
-        value.coverImageUrl || null,
-        isNewsCoverPlacement(value.coverPlacement) ? value.coverPlacement : 'top',
-        value.ewc ? 1 : 0,
-        now,
-        now,
-        value.status === 'published' ? now : null,
-        value.mediaSlug || null,
-      ],
-    );
-    await replaceTranslations(row.id, value.translations, tx);
-    await replaceAuthors(row.id, value.authors, tx);
-    await syncLegacyColumns(row.id, value, tx);
-    return row.id;
-  });
+  const id = await transaction((tx) => createEwcNewsPostInTx(tx, input));
   return getEwcNewsPostById(id);
 }
 

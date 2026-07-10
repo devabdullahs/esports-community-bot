@@ -100,13 +100,29 @@ old key in `/admin/mcp`.
 | `search_players` | Public player directory search with safe public fields. Always-on. | No |
 | `get_public_ewc_leaderboard` | Public EWC prediction leaderboard projection. Always-on. | No |
 | `list_admin_queue` | List reported comments that need moderation review. Key-selected. | No |
-| `create_news_draft` | Create a draft news post in an allowed game or media channel. It never publishes directly. Key-selected. | Yes |
-| `update_stream_channel` | Update allowed game-scoped co-stream rows. Super keys can update all stream rows. Key-selected. | Yes |
+| `create_news_draft` | Create a draft news post in an allowed game or media channel. Requires `idempotencyKey`; never publishes directly. Key-selected. | Yes |
+| `update_stream_channel` | Update allowed game-scoped co-stream rows. Requires `idempotencyKey`; super keys can update all stream rows. Key-selected. | Yes |
 
 Every successful write records an admin audit entry with an MCP actor id like:
 
 ```text
 mcp:<key-id>:<owner-discord-id>
+```
+
+Write tools require an `idempotencyKey`: a caller-generated UUID or unique
+opaque token. Reuse it only when retrying the exact same operation after a
+timeout or lost response. A retry with the same MCP key, tool, and
+`idempotencyKey` returns the original identifiers instead of writing again.
+
+Example write arguments:
+
+```json
+{
+  "idempotencyKey": "018f7b3d-atomic-draft-001",
+  "title": "Draft title",
+  "summary": "Draft summary",
+  "gameSlug": "valorant"
+}
 ```
 
 ## Quick Test With curl
@@ -234,7 +250,7 @@ Authorization header without the bridge.
 - "Use `get_site_overview` and summarize anything that needs admin attention."
 - "Search draft news about Valorant and list what still needs review."
 - "Get tournament status for tournament id 123 and explain live/upcoming issues."
-- "Create a draft Arabic news post for the Valorant game. Do not publish it."
+- "Create a draft Arabic news post for the Valorant game with a unique idempotencyKey. Do not publish it."
 - "Check the EWC club summary for Team Falcons, Twisted Minds, and Team Liquid."
 
 ## Troubleshooting
