@@ -7,6 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
+    "typecheck:native": "tsc --project tsconfig.native.json --pretty false",
     "auth:migrate": "npx @better-auth/cli@latest migrate --config src/lib/auth.ts --yes",
     "test": "vitest run"
   },
@@ -42,11 +43,12 @@
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "@typescript/native": "npm:typescript@^7.0.2",
     "eslint": "^9",
     "eslint-config-next": "16.2.7",
     "shadcn": "^4.11.0",
     "tailwindcss": "^4",
-    "typescript": "^5",
+    "typescript": "npm:@typescript/typescript6@^6.0.2",
     "vitest": "^4.1.8"
   }
 }
