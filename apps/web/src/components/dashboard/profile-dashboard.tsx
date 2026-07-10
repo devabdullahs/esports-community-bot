@@ -149,7 +149,7 @@ export function ProfileDashboard({
       ),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ["me-ewc"] });
-      router.replace(`/me?season=${encodeURIComponent(season)}`);
+      router.replace(localizedPath(`/me?season=${encodeURIComponent(season)}`, locale));
     },
   });
 

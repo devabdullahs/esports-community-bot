@@ -9,7 +9,7 @@ import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { localizeText } from "@/lib/community-content";
 import { getAdminCopy } from "@/lib/admin-copy";
 import type { GameRecord } from "@/lib/games";
-import type { Locale } from "@/lib/i18n";
+import { localizedPath, type Locale } from "@/lib/i18n";
 import type { NewsPost } from "@/lib/news";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -91,7 +91,11 @@ export function NewsList({
         <p className="text-sm text-muted-foreground">
           {t.newsList.postsCount(posts.length)}
         </p>
-        <Button render={<Link href={newPostHref} />} nativeButton={false} className="w-full sm:w-auto">
+        <Button
+          render={<Link href={localizedPath(newPostHref, locale)} />}
+          nativeButton={false}
+          className="w-full sm:w-auto"
+        >
           <PlusIcon data-icon="inline-start" />
           {t.newsList.newPost}
         </Button>
@@ -140,7 +144,7 @@ export function NewsList({
 
                 <div className="mt-3 flex justify-end gap-1">
                   <Button
-                    render={<Link href={`/admin/news/${post.id}`} />}
+                    render={<Link href={localizedPath(`/admin/news/${post.id}`, locale)} />}
                     nativeButton={false}
                     variant="ghost"
                     size="icon-sm"
@@ -211,7 +215,7 @@ export function NewsList({
                     <TableCell>
                       <div className="flex justify-end gap-1">
                         <Button
-                          render={<Link href={`/admin/news/${post.id}`} />}
+                          render={<Link href={localizedPath(`/admin/news/${post.id}`, locale)} />}
                           nativeButton={false}
                           variant="ghost"
                           size="icon-sm"

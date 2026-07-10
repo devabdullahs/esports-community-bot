@@ -4,6 +4,7 @@ import {
   LOCALE_COOKIE_NAME,
   LOCALE_ROUTE_HEADER,
   type Locale,
+  isLocalePreferencePath,
   isLocaleRoutedPath,
   localeFromPathname,
   localeFromString,
@@ -48,6 +49,17 @@ export function proxy(request: NextRequest) {
       });
     }
     if (!isLocaleRoutedPath(request.nextUrl.pathname)) return NextResponse.next();
+
+    const cookieLocale = localeFromString(
+      request.cookies.get(LOCALE_COOKIE_NAME)?.value,
+    );
+    if (cookieLocale === "ar" && isLocalePreferencePath(request.nextUrl.pathname)) {
+      const url = request.nextUrl.clone();
+      url.pathname = localizedPath(url.pathname, "ar");
+      const response = NextResponse.redirect(url);
+      setLocaleCookie(response, "ar");
+      return response;
+    }
 
     const response = NextResponse.next({
       request: { headers: requestWithLocale(request, "en") },

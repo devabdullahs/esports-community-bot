@@ -1,6 +1,8 @@
 import { Fragment, type ReactNode } from "react";
 import Link from "next/link";
 import { ArrowLeftIcon } from "lucide-react";
+import { localizedPath } from "@/lib/i18n";
+import { getRequestLocale } from "@/lib/request-locale";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -23,7 +25,7 @@ const maxWidthClasses = {
 // The final crumb is the current page; preceding crumbs link upward.
 export type AdminCrumb = { label: string; href?: string };
 
-export function AdminPageShell({
+export async function AdminPageShell({
   breadcrumbs,
   backHref,
   backLabel,
@@ -46,6 +48,8 @@ export function AdminPageShell({
   children: ReactNode;
   maxWidth?: keyof typeof maxWidthClasses;
 }) {
+  const locale = await getRequestLocale();
+  const hrefForLocale = (href: string) => localizedPath(href, locale);
   // The back action derives from the nearest preceding linked crumb so the
   // two can never disagree; explicit backHref/backLabel is the fallback for
   // pages without breadcrumbs.
@@ -70,7 +74,7 @@ export function AdminPageShell({
           <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
             {back ? (
               <Button
-                render={<Link href={back.href} />}
+                render={<Link href={hrefForLocale(back.href)} />}
                 nativeButton={false}
                 variant="ghost"
                 size="sm"
@@ -91,7 +95,7 @@ export function AdminPageShell({
                           {isLast || !crumb.href ? (
                             <BreadcrumbPage>{crumb.label}</BreadcrumbPage>
                           ) : (
-                            <BreadcrumbLink render={<Link href={crumb.href} />}>
+                            <BreadcrumbLink render={<Link href={hrefForLocale(crumb.href)} />}>
                               {crumb.label}
                             </BreadcrumbLink>
                           )}

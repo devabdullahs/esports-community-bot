@@ -19,7 +19,7 @@ import {
   UsersIcon,
   type LucideIcon,
 } from "lucide-react";
-import { copy, type Locale } from "@/lib/i18n";
+import { copy, localizedPath, stripLocalePrefix, type Locale } from "@/lib/i18n";
 import {
   adminNavSections,
   isActiveAdminPath,
@@ -110,12 +110,13 @@ export function AdminDashboardShell({
                   <SidebarMenu>
                     {section.items.map((item) => {
                       const Icon = NAV_ICONS[item.icon];
-                      const active = isActiveAdminPath(pathname, item);
+                      const active = isActiveAdminPath(stripLocalePrefix(pathname), item);
+                      const href = localizedPath(item.href, locale);
                       return (
                         <SidebarMenuItem key={item.href}>
                           <SidebarMenuButton
                             render={
-                              <Link href={item.href} aria-current={active ? "page" : undefined} />
+                              <Link href={href} aria-current={active ? "page" : undefined} />
                             }
                             isActive={active}
                             tooltip={{
@@ -137,7 +138,10 @@ export function AdminDashboardShell({
           <SidebarFooter>
             <SidebarMenu>
               <SidebarMenuItem>
-                <SidebarMenuButton render={<Link href="/" />} tooltip={common.home}>
+                <SidebarMenuButton
+                  render={<Link href={localizedPath("/", locale)} />}
+                  tooltip={common.home}
+                >
                   <HomeIcon />
                   <span>{common.home}</span>
                 </SidebarMenuButton>
@@ -159,7 +163,7 @@ export function AdminDashboardShell({
                 </span>
               ) : null}
               <Button
-                render={<Link href="/" />}
+                render={<Link href={localizedPath("/", locale)} />}
                 nativeButton={false}
                 variant="ghost"
                 size="icon-sm"

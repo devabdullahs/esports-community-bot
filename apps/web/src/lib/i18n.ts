@@ -120,7 +120,13 @@ function isPathUnder(pathname: string, prefix: string) {
 export function isLocaleRoutedPath(pathname: string) {
   const { pathname: rawPathname } = splitHref(pathname);
   const cleanPath = stripLocalePrefix(rawPathname);
-  return !["/admin", "/api", "/login", "/me"].some((prefix) =>
+  return !isPathUnder(cleanPath, "/api");
+}
+
+export function isLocalePreferencePath(pathname: string) {
+  const { pathname: rawPathname } = splitHref(pathname);
+  const cleanPath = stripLocalePrefix(rawPathname);
+  return ["/admin", "/login", "/me"].some((prefix) =>
     isPathUnder(cleanPath, prefix),
   );
 }

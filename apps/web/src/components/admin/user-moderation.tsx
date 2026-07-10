@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { BanIcon, CheckIcon, EyeOffIcon, Loader2Icon, Trash2Icon, UndoIcon } from "lucide-react";
 import { LocalDateTime } from "@/components/local-date-time";
 import { getAdminCopy } from "@/lib/admin-copy";
-import type { Locale } from "@/lib/i18n";
+import { localizedPath, type Locale } from "@/lib/i18n";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -152,7 +152,10 @@ export function UserModeration({
                 <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
                   <Badge variant="outline">{t.comments.filters[c.status as keyof typeof t.comments.filters] ?? c.status}</Badge>
                   <LocalDateTime value={c.createdAt} locale={locale} />
-                  <a href={`/admin/news/${c.postId}`} className="underline-offset-2 hover:underline">
+                  <a
+                    href={localizedPath(`/admin/news/${c.postId}`, locale)}
+                    className="underline-offset-2 hover:underline"
+                  >
                     {t.comments.postFallback(c.postId)}
                   </a>
                 </div>

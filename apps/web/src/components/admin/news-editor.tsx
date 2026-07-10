@@ -40,7 +40,7 @@ import {
 } from "@bot/lib/markdownTools.js";
 import { localizeText } from "@/lib/community-content";
 import type { GameRecord } from "@/lib/games";
-import { copy as i18nCopy, type Locale } from "@/lib/i18n";
+import { copy as i18nCopy, localizedPath, type Locale } from "@/lib/i18n";
 import { safeUrlOrUndefined } from "@/lib/safe-url";
 import { cn } from "@/lib/utils";
 import type {
@@ -693,7 +693,9 @@ export function NewsEditor({
       setStatus(targetStatus);
       // Media posts return to their channel page (where the flow started), not
       // the general admin dashboard.
-      router.push(isMedia ? `/admin/media/${mediaChannel!.slug}` : "/admin");
+      router.push(
+        localizedPath(isMedia ? `/admin/media/${mediaChannel!.slug}` : "/admin", locale),
+      );
       router.refresh();
     } catch (err) {
       setError((err as Error).message);
@@ -717,7 +719,9 @@ export function NewsEditor({
       const res = await fetch(`/api/admin/news/${post.id}`, { method: "DELETE" });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error || t.deleteFailed);
-      router.push(isMedia ? `/admin/media/${mediaChannel!.slug}` : "/admin");
+      router.push(
+        localizedPath(isMedia ? `/admin/media/${mediaChannel!.slug}` : "/admin", locale),
+      );
       router.refresh();
     } catch (err) {
       setError((err as Error).message);

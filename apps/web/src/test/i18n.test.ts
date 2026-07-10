@@ -4,6 +4,7 @@ import {
   formatMatchCount,
   formatMatchStatusCount,
   formatResultCount,
+  isLocalePreferencePath,
   localizedPath,
   stripLocalePrefix,
 } from "@/lib/i18n";
@@ -75,10 +76,21 @@ describe("locale routing helpers", () => {
     expect(localizedPath("/games?tab=live", "ar")).toBe("/ar/games?tab=live");
   });
 
-  test("does not locale-prefix private or API routes", () => {
-    expect(localizedPath("/admin", "ar")).toBe("/admin");
+  test("locale-prefixes every user-facing route but never API routes", () => {
+    expect(localizedPath("/admin", "ar")).toBe("/ar/admin");
+    expect(localizedPath("/login?callbackURL=%2Far%2Fme", "ar")).toBe(
+      "/ar/login?callbackURL=%2Far%2Fme",
+    );
     expect(localizedPath("/api/tournaments", "ar")).toBe("/api/tournaments");
-    expect(localizedPath("/me", "ar")).toBe("/me");
+    expect(localizedPath("/me", "ar")).toBe("/ar/me");
+  });
+
+  test("recognizes legacy unprefixed account and admin paths", () => {
+    expect(isLocalePreferencePath("/admin/mcp")).toBe(true);
+    expect(isLocalePreferencePath("/me?tab=notifications")).toBe(true);
+    expect(isLocalePreferencePath("/login")).toBe(true);
+    expect(isLocalePreferencePath("/games")).toBe(false);
+    expect(isLocalePreferencePath("/api/me/follows")).toBe(false);
   });
 
   test("normalizes locale prefixes and directions", () => {

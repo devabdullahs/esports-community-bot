@@ -2,14 +2,17 @@ import { notFound, redirect } from "next/navigation";
 import { AdminDashboardShell } from "@/components/admin/admin-dashboard-shell";
 import { getAdminAccess } from "@/lib/admin";
 import { getAdminCopy } from "@/lib/admin-copy";
+import { localizedPath } from "@/lib/i18n";
 import { getRequestLocale } from "@/lib/request-locale";
 
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
-  const access = await getAdminAccess();
-  if (!access.session) redirect("/login?callbackURL=/admin");
+  const [access, locale] = await Promise.all([getAdminAccess(), getRequestLocale()]);
+  if (!access.session) {
+    const callbackURL = localizedPath("/admin", locale);
+    redirect(localizedPath(`/login?callbackURL=${encodeURIComponent(callbackURL)}`, locale));
+  }
   if (!access.allowed) notFound(); // don't advertise the admin area to non-staff
 
-  const locale = await getRequestLocale();
   const t = getAdminCopy(locale);
   const roleLabel = access.isSuper ? t.common.superAdmin : t.dashboard.roleScoped;
   const canManageGamePosts =
