@@ -38,6 +38,15 @@ export function proxy(request: NextRequest) {
 
   const routeLocale = localeFromPathname(request.nextUrl.pathname);
   if (!routeLocale) {
+    // A localized rewrite can pass through the proxy again at its stripped
+    // pathname. Keep the locale selected by the first pass instead of
+    // replacing it with the canonical English locale.
+    const forwardedLocale = localeFromString(request.headers.get(LOCALE_ROUTE_HEADER));
+    if (forwardedLocale) {
+      return NextResponse.next({
+        request: { headers: requestWithLocale(request, forwardedLocale) },
+      });
+    }
     if (!isLocaleRoutedPath(request.nextUrl.pathname)) return NextResponse.next();
 
     const response = NextResponse.next({

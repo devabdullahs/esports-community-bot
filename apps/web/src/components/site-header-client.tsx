@@ -6,6 +6,7 @@ import {
   CrownIcon,
   Gamepad2Icon,
   LanguagesIcon,
+  ListOrderedIcon,
   LogOutIcon,
   type LucideIcon,
   MedalIcon,
@@ -155,6 +156,7 @@ export function SiteHeaderClient({
     { href: "/news/ewc", label: text.common.ewcNews, icon: NewspaperIcon },
     { href: "/tournaments/ewc", label: text.common.ewcTournaments, icon: TrophyIcon },
     { href: "/clubs", label: text.common.ewcClubs, icon: UsersIcon },
+    { href: "/clubs/standings", label: text.common.ewcClubStandings, icon: ListOrderedIcon },
     { href: "/predictions", label: text.common.predictions, icon: TargetIcon },
     { href: "/leaderboard", label: text.common.publicLeaderboard, icon: CrownIcon },
   ];
@@ -178,6 +180,12 @@ export function SiteHeaderClient({
       return (
         isActivePath(pathname, full) &&
         !isActivePath(pathname, localizedPath(`${href}/ewc`, locale))
+      );
+    }
+    if (href === "/clubs") {
+      return (
+        isActivePath(pathname, full) &&
+        !isActivePath(pathname, localizedPath("/clubs/standings", locale))
       );
     }
     return isActivePath(pathname, full);

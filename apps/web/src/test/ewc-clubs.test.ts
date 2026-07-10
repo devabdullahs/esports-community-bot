@@ -39,6 +39,9 @@ describe("EWC club tracker helpers", () => {
 
   test("database fallback returns local points and qualified games", async () => {
     const { get, run } = await import("@bot/db/client.js");
+    const { upsertEwcClubChampionshipSnapshot } = await import(
+      "@bot/db/ewcClubChampionshipSnapshots.js"
+    );
     await run(
       `INSERT OR IGNORE INTO ewc_games
          (slug, title_json, description_json, status_json, owner_json, focus_json, sort_order)
@@ -64,14 +67,20 @@ describe("EWC club tracker helpers", () => {
        VALUES ($1, 'Standings', 2, 'Games Only Club', '8')`,
       [tournament.id],
     );
+    await upsertEwcClubChampionshipSnapshot({
+      season: "2026",
+      sourceUrl: "https://liquipedia.net/esports/Esports_World_Cup/2026/Club_Championship_Standings",
+      standings: [{ rank: 1, team: "Probe Club", points: 123 }],
+      prizepool: [],
+      fetchedAt: "2026-07-10T10:00:00.000Z",
+    });
     await run(
       `INSERT INTO ewc_prediction_weeks
-         (guild_id, season, week_key, label, status, final_json, results_json)
-       VALUES ($1, '2026', $2, 'Probe Week', 'scored', $3, $4)`,
+         (guild_id, season, week_key, label, status, results_json)
+       VALUES ($1, '2026', $2, 'Probe Week', 'scored', $3)`,
       [
         "guild",
         "mcp-fallback-probe",
-        JSON.stringify([{ rank: 1, team: "Probe Club", points: 123 }]),
         JSON.stringify([
           {
             game: "Probe Game",
@@ -85,7 +94,7 @@ describe("EWC club tracker helpers", () => {
     const club = tracker.clubs.find((entry) => entry.name === "Probe Club");
     const gamesOnlyClub = tracker.clubs.find((entry) => entry.name === "Games Only Club");
 
-    expect(tracker.dataSource).toBe("database-fallback");
+    expect(tracker.dataSource).toBe("stored-snapshot");
     expect(club).toMatchObject({
       points: 123,
       qualifiedGames: [expect.objectContaining({ shortLabel: "Probe Game" })],

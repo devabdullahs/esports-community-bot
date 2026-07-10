@@ -267,8 +267,19 @@ CREATE TABLE IF NOT EXISTS ewc_season_predictions (
   PRIMARY KEY (guild_id, season, user_id)
 );
 
+CREATE TABLE IF NOT EXISTS ewc_club_championship_snapshots (
+  season          TEXT PRIMARY KEY,
+  source_url      TEXT NOT NULL,
+  standings_json  TEXT NOT NULL,
+  prizepool_json  TEXT NOT NULL DEFAULT '[]',
+  fetched_at      TEXT NOT NULL,
+  updated_at      TEXT NOT NULL DEFAULT (to_char(now() AT TIME ZONE 'UTC', 'YYYY-MM-DD HH24:MI:SS'))
+);
+
 CREATE INDEX IF NOT EXISTS idx_ewc_season_predictions_season
   ON ewc_season_predictions(guild_id, season, score DESC);
+CREATE INDEX IF NOT EXISTS idx_ewc_club_championship_snapshots_fetched
+  ON ewc_club_championship_snapshots(fetched_at DESC);
 
 CREATE TABLE IF NOT EXISTS ewc_profile_links (
   auth_user_id     TEXT NOT NULL,
