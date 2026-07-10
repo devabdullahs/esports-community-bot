@@ -206,6 +206,52 @@ describe("EWC profile routes", () => {
     expect(JSON.stringify(body.currentRound)).not.toContain("Team Falcons");
   });
 
+  test("GET /api/me/ewc projects progress for every overlapping actionable round without pick values", async () => {
+    const user = {
+      authUserId: "dev-ewc-overlap-user",
+      discordUserId: "200000000000048107",
+      guildId: "920000000000000107",
+    };
+    useDevSession(user.authUserId, user.discordUserId);
+    await seedProfileLink(user);
+    const now = Math.floor(Date.now() / 1000);
+    const { upsertEwcWeek, upsertWeeklyGamePick } = await import("@bot/db/ewcPredictions.js");
+    const first = await upsertEwcWeek({
+      guildId: user.guildId,
+      season: SEASON,
+      weekKey: "overlap-first",
+      label: "Overlap first",
+      openAt: now - 60,
+      closeAt: now + 1_800,
+      games: [{ key: "first-picked", game: "Valorant", event: "EWC Valorant", lockAt: now + 900 }],
+      createdBy: "web-test",
+    });
+    await upsertEwcWeek({
+      guildId: user.guildId,
+      season: SEASON,
+      weekKey: "overlap-second",
+      label: "Overlap second",
+      openAt: now - 60,
+      closeAt: now + 3_600,
+      games: [{ key: "second-open", game: "Dota 2", event: "EWC Dota", lockAt: now + 1_200 }],
+      createdBy: "web-test",
+    });
+    await upsertWeeklyGamePick({
+      guildId: user.guildId,
+      weekId: first.id,
+      userId: user.discordUserId,
+      gameKey: "first-picked",
+      pick: "Team Falcons",
+    });
+
+    const body = await (await meGET(new Request("http://localhost/api/me/ewc"))).json();
+    expect(body.actionableRounds).toHaveLength(2);
+    expect(body.actionableRounds.map((round: { weekKey: string }) => round.weekKey)).toEqual(["overlap-first", "overlap-second"]);
+    expect(body.actionableRounds[0]).toMatchObject({ pickedGames: 1, openUnpickedGameKeys: [] });
+    expect(body.actionableRounds[1]).toMatchObject({ pickedGames: 0, openUnpickedGameKeys: ["second-open"] });
+    expect(JSON.stringify(body.actionableRounds)).not.toContain("Team Falcons");
+  });
+
   test("POST /api/me/ewc creates the profile link with a same-origin request", async () => {
     const user = USERS.link;
     useDevSession(user.authUserId, user.discordUserId);

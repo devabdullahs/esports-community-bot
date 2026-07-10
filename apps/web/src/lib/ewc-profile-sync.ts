@@ -18,7 +18,7 @@ import {
 } from "@bot/lib/ewcProfileStats.js";
 import { getWeeklyPrediction, listEwcWeeks } from "@bot/db/ewcPredictions.js";
 import { effectiveEwcWeekStatus } from "@bot/lib/ewcPredictions.js";
-import { selectCurrentOpenEwcWeek } from "@bot/lib/ewcPredictionRounds.js";
+import { categorizeEwcPredictionRounds } from "@bot/lib/ewcPredictionRounds.js";
 import {
   deleteDiscordRoleConnection,
   updateDiscordRoleConnection,
@@ -70,19 +70,21 @@ export async function getEwcMePayload({
   const link = await getEwcProfileLinkByAuthUser(authUserId);
   const activeGuildId = guildId || link?.guildId;
   const activeSeason = season || link?.season || DEFAULT_SEASON;
-  const [stats, currentRound] =
+  const [stats, actionableRounds] =
     account && activeGuildId
       ? await Promise.all([
           getEwcUserProfileStats(activeGuildId, activeSeason, account.accountId, { includeHiddenPicks: true }),
-          currentRoundForViewer(activeGuildId, activeSeason, account.accountId),
+          actionableRoundsForViewer(activeGuildId, activeSeason, account.accountId),
         ])
-      : [null, null];
+      : [null, []];
 
   return {
     discordUserId: account?.accountId || null,
     link,
     stats,
-    currentRound,
+    // `currentRound` is retained while clients migrate to the full actionable list.
+    currentRound: actionableRounds[0] || null,
+    actionableRounds,
   };
 }
 
@@ -90,17 +92,16 @@ type HydratedWeek = {
   id: number;
   week_key: string;
   label?: string | null;
+  status?: string | null;
+  open_at?: number | null;
   close_at?: number | null;
+  score_after?: number | null;
   games?: Array<{ key?: string; game?: string; event?: string; lockAt?: number | null }>;
 };
 
 type WeeklyPrediction = { picks?: Array<string | { gameKey?: string; pick?: string }> } | null;
 
-async function currentRoundForViewer(guildId: string, season: string, discordUserId: string) {
-  const now = Math.floor(Date.now() / 1000);
-  const weeks = (await listEwcWeeks(guildId, season)) as HydratedWeek[];
-  const round = selectCurrentOpenEwcWeek(weeks, now) as HydratedWeek | null;
-  if (!round) return null;
+async function projectRoundForViewer(round: HydratedWeek, guildId: string, discordUserId: string, now: number) {
 
   const state = effectiveEwcWeekStatus(round, now) as {
     label: string;
@@ -117,9 +118,16 @@ async function currentRoundForViewer(guildId: string, season: string, discordUse
       .filter((key) => key && gameKeys.has(key)),
   );
   const openGames = games.filter((game) => !game.lockAt || now < game.lockAt);
-  const remainingGameKeys = openGames
+  const lockedGames = games.filter((game) => game.lockAt && now >= game.lockAt);
+  const openUnpickedGameKeys = openGames
     .map((game) => String(game.key || ""))
     .filter((key) => key && !pickedGameKeys.has(key));
+  const lockedUnpickedGameKeys = lockedGames
+    .map((game) => String(game.key || ""))
+    .filter((key) => key && !pickedGameKeys.has(key));
+  const openLocks = openGames
+    .map((game) => Number(game.lockAt))
+    .filter((lockAt) => Number.isFinite(lockAt));
 
   return {
     id: round.id,
@@ -127,13 +135,36 @@ async function currentRoundForViewer(guildId: string, season: string, discordUse
     label: round.label || round.week_key,
     status: state.label,
     closesAt: round.close_at ?? null,
+    nextLockAt: openLocks.length ? Math.min(...openLocks) : round.close_at ?? null,
     openGames: state.openGames,
     lockedGames: state.lockedGames,
     totalGames: state.totalGames,
     pickedGames: pickedGameKeys.size,
-    remainingGameKeys,
+    pickedGameKeys: [...pickedGameKeys],
+    openUnpickedGames: openUnpickedGameKeys.length,
+    openUnpickedGameKeys,
+    lockedUnpickedGames: lockedUnpickedGameKeys.length,
+    lockedUnpickedGameKeys,
+    // Compatibility for callers that used the one-round projection before plan 083.
+    remainingGameKeys: openUnpickedGameKeys,
+    games: games
+      .filter((game) => game.key)
+      .map((game) => ({
+        key: String(game.key),
+        game: game.game || String(game.key),
+        event: game.event || null,
+        lockAt: game.lockAt ?? null,
+        state: !game.lockAt || now < game.lockAt ? "open" : "locked",
+      })),
     discordUrl: `https://discord.com/channels/${guildId}`,
   };
+}
+
+export async function actionableRoundsForViewer(guildId: string, season: string, discordUserId: string) {
+  const now = Math.floor(Date.now() / 1000);
+  const weeks = (await listEwcWeeks(guildId, season)) as HydratedWeek[];
+  const { actionable } = categorizeEwcPredictionRounds(weeks, now) as { actionable: HydratedWeek[] };
+  return Promise.all(actionable.map((round) => projectRoundForViewer(round, guildId, discordUserId, now)));
 }
 
 export async function syncEwcProfileForAuthUser({

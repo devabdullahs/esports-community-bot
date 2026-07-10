@@ -44,6 +44,7 @@ const COPY = {
     description:
       "Make your picks in Discord, then track the current round, your score, and the community leaderboard here.",
     currentRound: "Current round",
+    activeRounds: "Open rounds",
     open: "Predictions are open",
     upcoming: "Next round",
     awaiting: "Awaiting scoring",
@@ -55,6 +56,8 @@ const COPY = {
     closes: "Closes",
     opens: "Opens",
     scoring: "Results are being finalized",
+    nextLock: "Next lock",
+    games: (count: number) => `${count} games`,
     profileTitle: "Your prediction profile",
     profileDescription: "See your remaining picks, rank, points, and weekly history.",
     openProfile: "Open my profile",
@@ -68,6 +71,7 @@ const COPY = {
     description:
       "\u0642\u062f\u0651\u0645 \u062a\u0648\u0642\u0639\u0627\u062a\u0643 \u0639\u0628\u0631 \u062f\u064a\u0633\u0643\u0648\u0631\u062f\u060c \u062b\u0645 \u062a\u0627\u0628\u0639 \u0627\u0644\u062c\u0648\u0644\u0629 \u0627\u0644\u062d\u0627\u0644\u064a\u0629 \u0648\u0646\u0642\u0627\u0637\u0643 \u0648\u062a\u0631\u062a\u064a\u0628 \u0627\u0644\u0645\u062c\u062a\u0645\u0639 \u0647\u0646\u0627.",
     currentRound: "\u0627\u0644\u062c\u0648\u0644\u0629 \u0627\u0644\u062d\u0627\u0644\u064a\u0629",
+    activeRounds: "\u0627\u0644\u062c\u0648\u0644\u0627\u062a \u0627\u0644\u0645\u0641\u062a\u0648\u062d\u0629",
     open: "\u0627\u0644\u062a\u0648\u0642\u0639\u0627\u062a \u0645\u0641\u062a\u0648\u062d\u0629",
     upcoming: "\u0627\u0644\u062c\u0648\u0644\u0629 \u0627\u0644\u0642\u0627\u062f\u0645\u0629",
     awaiting: "\u0628\u0627\u0646\u062a\u0638\u0627\u0631 \u0627\u062d\u062a\u0633\u0627\u0628 \u0627\u0644\u0646\u062a\u0627\u0626\u062c",
@@ -79,6 +83,8 @@ const COPY = {
     closes: "\u064a\u0646\u062a\u0647\u064a",
     opens: "\u064a\u0641\u062a\u062d",
     scoring: "\u062c\u0627\u0631\u064d \u0627\u0639\u062a\u0645\u0627\u062f \u0627\u0644\u0646\u062a\u0627\u0626\u062c",
+    nextLock: "\u0627\u0644\u0625\u063a\u0644\u0627\u0642 \u0627\u0644\u0642\u0627\u062f\u0645",
+    games: (count: number) => `${count} \u0645\u0628\u0627\u0631\u064a\u0627\u062a`,
     profileTitle: "\u0645\u0644\u0641 \u062a\u0648\u0642\u0639\u0627\u062a\u0643",
     profileDescription: "\u062a\u0627\u0628\u0639 \u0627\u062e\u062a\u064a\u0627\u0631\u0627\u062a\u0643 \u0627\u0644\u0645\u062a\u0628\u0642\u064a\u0629 \u0648\u062a\u0631\u062a\u064a\u0628\u0643 \u0648\u0646\u0642\u0627\u0637\u0643 \u0648\u0633\u062c\u0644\u0643 \u0627\u0644\u0623\u0633\u0628\u0648\u0639\u064a.",
     openProfile: "\u0627\u0641\u062a\u062d \u0645\u0644\u0641\u064a",
@@ -107,12 +113,12 @@ export default async function PredictionsPage() {
     season: "2026",
     state: "idle" as const,
     round: null,
+    rounds: [],
+    upcomingRounds: [],
+    awaitingRounds: [],
   }));
   const leaderboardHref = localizedPath("/leaderboard", locale);
   const round = status.round;
-  const progress = round?.totalGames
-    ? Math.round(((round.totalGames - round.openGames) / round.totalGames) * 100)
-    : 0;
   const stateLabel =
     status.state === "open"
       ? t.open
@@ -137,7 +143,7 @@ export default async function PredictionsPage() {
 
       <Card>
         <CardHeader>
-          <CardTitle>{round?.label || t.currentRound}</CardTitle>
+          <CardTitle>{status.rounds.length ? t.activeRounds : round?.label || t.currentRound}</CardTitle>
           <CardDescription>{stateLabel}</CardDescription>
           <CardAction>
             <Badge variant={status.state === "open" ? "default" : "secondary"}>
@@ -147,24 +153,44 @@ export default async function PredictionsPage() {
           </CardAction>
         </CardHeader>
         <CardContent>
-          {round ? (
+          {status.rounds.length ? (
+            <div className="flex flex-col gap-6">
+              {status.rounds.map((activeRound) => {
+                const progress = activeRound.totalGames
+                  ? Math.round(((activeRound.totalGames - activeRound.openGames) / activeRound.totalGames) * 100)
+                  : 0;
+                return (
+                  <section key={activeRound.weekKey} className="flex flex-col gap-4 border-b pb-6 last:border-b-0 last:pb-0">
+                    <div className="flex flex-wrap items-start justify-between gap-2">
+                      <h2 className="font-medium">{activeRound.label}</h2>
+                      <Badge variant="outline">{t.games(activeRound.totalGames)}</Badge>
+                    </div>
+                    {activeRound.totalGames ? (
+                      <Progress value={progress}>
+                        <ProgressLabel>{t.roundProgress}</ProgressLabel>
+                        <ProgressValue>{`${progress}%`}</ProgressValue>
+                      </Progress>
+                    ) : null}
+                    <div className="flex flex-wrap gap-2">
+                      <Badge variant="secondary">{t.openGames(activeRound.openGames)}</Badge>
+                      <Badge variant="outline">{t.lockedGames(activeRound.lockedGames)}</Badge>
+                    </div>
+                    {activeRound.nextLockAt ? (
+                      <p className="text-sm text-muted-foreground">
+                        {t.nextLock}: <DateTime value={new Date(activeRound.nextLockAt * 1000).toISOString()} locale={locale} />
+                      </p>
+                    ) : null}
+                  </section>
+                );
+              })}
+            </div>
+          ) : round ? (
             <div className="flex flex-col gap-5">
-              {round.totalGames ? (
-                <Progress value={progress}>
-                  <ProgressLabel>{t.roundProgress}</ProgressLabel>
-                  <ProgressValue>{`${progress}%`}</ProgressValue>
-                </Progress>
-              ) : null}
               <div className="flex flex-wrap gap-2">
                 <Badge variant="secondary">{t.openGames(round.openGames)}</Badge>
                 <Badge variant="outline">{t.lockedGames(round.lockedGames)}</Badge>
                 {status.state === "awaiting-scoring" ? <Badge variant="outline">{t.scoring}</Badge> : null}
               </div>
-              {status.state === "open" && round.closesAt ? (
-                <p className="text-sm text-muted-foreground">
-                  {t.closes}: <DateTime value={new Date(round.closesAt * 1000).toISOString()} locale={locale} />
-                </p>
-              ) : null}
               {status.state === "upcoming" && round.opensAt ? (
                 <p className="text-sm text-muted-foreground">
                   {t.opens}: <DateTime value={new Date(round.opensAt * 1000).toISOString()} locale={locale} />
@@ -184,6 +210,29 @@ export default async function PredictionsPage() {
           )}
         </CardContent>
       </Card>
+
+      {status.upcomingRounds.length || status.awaitingRounds.length ? (
+        <section className="flex flex-col gap-4" aria-label={t.currentRound}>
+          {status.upcomingRounds.map((upcomingRound) => (
+            <div key={upcomingRound.weekKey} className="flex flex-wrap items-center justify-between gap-2 border-b pb-4">
+              <div>
+                <p className="font-medium">{upcomingRound.label}</p>
+                <p className="text-sm text-muted-foreground">{t.upcoming}</p>
+              </div>
+              {upcomingRound.opensAt ? <Badge variant="outline"><DateTime value={new Date(upcomingRound.opensAt * 1000).toISOString()} locale={locale} /></Badge> : null}
+            </div>
+          ))}
+          {status.awaitingRounds.map((awaitingRound) => (
+            <div key={awaitingRound.weekKey} className="flex flex-wrap items-center justify-between gap-2 border-b pb-4 last:border-b-0">
+              <div>
+                <p className="font-medium">{awaitingRound.label}</p>
+                <p className="text-sm text-muted-foreground">{t.awaiting}</p>
+              </div>
+              <Badge variant="outline">{t.scoring}</Badge>
+            </div>
+          ))}
+        </section>
+      ) : null}
 
       <section className="grid gap-4 md:grid-cols-2">
         <Card size="sm" className="h-full">

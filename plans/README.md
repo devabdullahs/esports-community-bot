@@ -105,7 +105,7 @@ or optimize for guild counts.
 | 080  | Persist and publish a first-class EWC Club Championship standings leaderboard | P2 | L | - | DONE |
 | 081  | Make the public MCP fast, complete, and directly linkable | P2 | M-L | 080 | DONE |
 | 082  | Make prediction writes atomic and deadline-safe | P1 | M | - | DONE (this commit) |
-| 083  | Surface every actionable prediction round | P1 | M | - | TODO |
+| 083  | Surface every actionable prediction round | P1 | M | - | DONE (this commit) |
 | 084  | Make prediction deadlines and completion truthful | P1 | M | 083 | TODO |
 | 085  | Remove Discord prediction picker component ceilings | P2 | M | 082 | TODO |
 | 086  | Make prediction ranks tie-aware on every surface | P2 | M | - | TODO |
