@@ -7,6 +7,8 @@ import test from 'node:test';
 const dir = mkdtempSync(join(tmpdir(), 'ewc-operations-'));
 process.env.DB_PATH = join(dir, 'bot.sqlite');
 process.env.LOG_LEVEL = 'error';
+process.env.DISCORD_TOKEN = 'test-token';
+process.env.DISCORD_CLIENT_ID = 'test-client-id';
 
 const { closeDb } = await import('../src/db/index.js');
 const {
