@@ -38,6 +38,7 @@ import { selectCurrentOpenEwcWeek } from '../lib/ewcPredictionRounds.js';
 import { searchEwcClubChoices } from '../lib/ewcClubCache.js';
 import { ewcGameParticipantTeams } from '../lib/ewcGameTeams.js';
 import { submitSeasonSlot, submitWeeklyGamePick } from '../lib/ewcPredictionWrites.js';
+import { weeklyModalSelection, weeklyPickerPage, weeklyPickerPageForGame } from '../lib/ewcWeeklyPicker.js';
 import { announceEwcParticipation } from '../lib/ewcParticipation.js';
 import { updateEwcPredictionLeaderboard } from '../jobs/ewcPredictions.js';
 import { renderEwcShareCard } from '../lib/ewcShareCard.js';
@@ -232,25 +233,16 @@ function formatPicks(picks) {
   return picks.map((pick, index) => `**${index + 1}.** ${pick}`).join('\n');
 }
 
-function formatWeeklyGamePicks(round, picks) {
-  const byGame = new Map((picks || []).filter((pick) => typeof pick === 'object').map((pick) => [pick.gameKey, pick]));
-  const games = round.games || [];
-  if (!games.length) return formatPicks(picks || []);
-  return games
-    .map((game) => {
-      const pick = byGame.get(game.key);
-      const lock = game.lockAt ? ` - locks ${formatTimestamp(game.lockAt)}` : '';
-      return `**${gameLabel(game)}**\n${pick?.pick ? `Pick: **${pick.pick}**` : '_No pick yet_'}${lock}`;
-    })
-    .join('\n\n');
+function weeklyGameId(seasonYear, weekKey, gameKey, page, ownerId) {
+  return `ewc_predict:wg:${seasonYear}:${weekKey}:${gameKey}:${page}:${ownerId}`;
 }
 
-function weeklyGameId(seasonYear, weekKey, gameKey, ownerId) {
-  return `ewc_predict:wg:${seasonYear}:${weekKey}:${gameKey}:${ownerId}`;
+function weeklyPickModalId(seasonYear, weekKey, gameKey, page, ownerId) {
+  return `ewc_predict:wpm:${seasonYear}:${weekKey}:${gameKey}:${page}:${ownerId}`;
 }
 
-function weeklyPickModalId(seasonYear, weekKey, gameKey, ownerId) {
-  return `ewc_predict:wpm:${seasonYear}:${weekKey}:${gameKey}:${ownerId}`;
+function weeklyPageId(seasonYear, weekKey, page, ownerId) {
+  return `ewc_predict:wp:${seasonYear}:${weekKey}:${page}:${ownerId}`;
 }
 
 function weeklyWeekSelectId(seasonYear, ownerId) {
@@ -295,7 +287,7 @@ function visibleWeeklySelectWeeks(weeks, currentWeekKey) {
   return withGames.slice(start, start + 25);
 }
 
-export async function weeklyPickPayload(guildId, seasonYear, weekKey, userId) {
+export async function weeklyPickPayload(guildId, seasonYear, weekKey, userId, page = 0) {
   const round = await getEwcWeek(guildId, seasonYear, weekKey);
   if (!round) return { error: 'That prediction round does not exist.' };
   if (!round.games?.length) {
@@ -304,6 +296,7 @@ export async function weeklyPickPayload(guildId, seasonYear, weekKey, userId) {
 
   const saved = await getWeeklyPrediction(guildId, round.id, userId);
   const picks = saved?.picks || [];
+  const pageModel = weeklyPickerPage(round.games, picks, page);
 
   // Components V2: one Section per game so its button sits in line with the game,
   // and the message edits in place to show each pick. (V2 messages can't carry an embed.)
@@ -313,10 +306,13 @@ export async function weeklyPickPayload(guildId, seasonYear, weekKey, userId) {
       `## EWC Weekly Picks — ${round.label || round.week_key}\n-# Each game locks independently before it starts. Tap a game to pick or change it.`,
     ),
   );
-  container.addTextDisplayComponents(new TextDisplayBuilder().setContent(`-# Status: ${weeklySelectStatus(round)}`));
-  // V2 budget is 40 components total; each game uses 3 (section + text + button), so stay well under.
-  round.games.slice(0, 12).forEach((game) => {
-    const existing = picks.find((p) => p && typeof p === 'object' && p.gameKey === game.key);
+  container.addTextDisplayComponents(
+    new TextDisplayBuilder().setContent(
+      `-# Status: ${weeklySelectStatus(round)} · ${pageModel.pickedGames}/${pageModel.totalGames} picked · Page ${pageModel.page + 1}/${pageModel.totalPages}`,
+    ),
+  );
+  pageModel.games.forEach((game) => {
+    const existing = game.existingPick;
     const locked = Boolean(gameClosedMessage(round, game));
     const lockTxt = game.lockAt ? ` · locks ${formatTimestamp(game.lockAt)}` : '';
     const status = locked ? '🔒 Locked' : existing?.pick ? `Pick: **${existing.pick}**` : '*No pick yet*';
@@ -326,7 +322,7 @@ export async function weeklyPickPayload(guildId, seasonYear, weekKey, userId) {
         .addTextDisplayComponents(new TextDisplayBuilder().setContent(text.slice(0, 4000)))
         .setButtonAccessory(
           new ButtonBuilder()
-            .setCustomId(weeklyGameId(seasonYear, round.week_key, game.key, userId))
+            .setCustomId(weeklyGameId(seasonYear, round.week_key, game.key, pageModel.page, userId))
             .setLabel(locked ? 'Locked' : existing?.pick ? 'Change' : 'Pick')
             .setStyle(locked ? ButtonStyle.Secondary : existing?.pick ? ButtonStyle.Success : ButtonStyle.Primary)
             .setDisabled(locked),
@@ -352,6 +348,23 @@ export async function weeklyPickPayload(guildId, seasonYear, weekKey, userId) {
                 .setDefault(week.week_key === round.week_key),
             ),
           ),
+      ),
+    );
+  }
+
+  if (pageModel.totalPages > 1) {
+    container.addActionRowComponents(
+      new ActionRowBuilder().addComponents(
+        new ButtonBuilder()
+          .setCustomId(weeklyPageId(seasonYear, round.week_key, pageModel.page - 1, userId))
+          .setLabel('Previous')
+          .setStyle(ButtonStyle.Secondary)
+          .setDisabled(pageModel.page === 0),
+        new ButtonBuilder()
+          .setCustomId(weeklyPageId(seasonYear, round.week_key, pageModel.page + 1, userId))
+          .setLabel('Next')
+          .setStyle(ButtonStyle.Secondary)
+          .setDisabled(pageModel.page >= pageModel.totalPages - 1),
       ),
     );
   }
@@ -557,48 +570,13 @@ function weekChoiceStatus(week) {
   return state.label;
 }
 
-async function autocompleteWeeklyGame(interaction) {
-  const q = String(interaction.options.getFocused() || '').toLowerCase();
-  const seasonYear = season(interaction);
-  const weekKey = interaction.options.getString('week');
-  const round = weekKey ? await getEwcWeek(interaction.guildId, seasonYear, weekKey) : null;
-  const games = round?.games || [];
-  await interaction.respond(
-    games
-      .filter((game) => {
-        const hay = `${game.game || ''} ${game.event || ''}`.toLowerCase();
-        return !q || hay.includes(q);
-      })
-      .slice(0, 25)
-      .map((game) => ({
-        name: `${game.game}${game.event ? ` - ${game.event}` : ''}`.slice(0, 100),
-        value: game.key,
-      })),
-  );
-}
-
 export async function autocomplete(interaction) {
   const focused = interaction.options.getFocused(true);
   if (focused.name === 'week') {
     await autocompleteWeek(interaction);
     return;
   }
-  if (focused.name === 'game') {
-    await autocompleteWeeklyGame(interaction);
-    return;
-  }
-  if (focused.name === 'team') {
-    const seasonYear = season(interaction);
-    const weekKey = interaction.options.getString('week');
-    const gameKey = interaction.options.getString('game');
-    const round = weekKey ? await getEwcWeek(interaction.guildId, seasonYear, weekKey) : null;
-    const game = gameKey ? findRoundGame(round, gameKey) : null;
-    await interaction.respond(
-      game ? await weeklyGameTeamOptions(game, focused.value) : await searchEwcClubChoices(focused.value),
-    );
-    return;
-  }
-  await interaction.respond(await searchEwcClubChoices(focused.value));
+  await interaction.respond([]);
 }
 
 function modalSelectValues(interaction, customId) {
@@ -640,15 +618,11 @@ async function weeklyGameTeamOptions(game, query = '', { limit = 25 } = {}) {
   return out;
 }
 
-function selectedWeeklyPickValue(interaction) {
-  for (const customId of ['club', 'club_2', 'club_3', 'club_4']) {
-    const selected = modalSelectValues(interaction, customId)[0];
-    if (selected) return selected;
-  }
-  return '';
+function weeklySelectedValues(interaction) {
+  return ['club', 'club_2', 'club_3', 'club_4'].flatMap((customId) => modalSelectValues(interaction, customId));
 }
 
-async function showWeeklyPickModal(interaction, { seasonYear, weekKey, gameKey, ownerId }) {
+async function showWeeklyPickModal(interaction, { seasonYear, weekKey, gameKey, page, ownerId }) {
   if (ownerId && interaction.user.id !== ownerId) {
     await interaction.reply({
       content: 'These buttons belong to whoever ran `/ewc_predict weekly`.',
@@ -672,11 +646,11 @@ async function showWeeklyPickModal(interaction, { seasonYear, weekKey, gameKey, 
   const current = await getExistingGamePick(interaction.guildId, round, interaction.user.id, gameKey);
   const choices = await weeklyGameTeamOptions(game, '', { limit: 100 });
   const modal = new ModalBuilder()
-    .setCustomId(weeklyPickModalId(seasonYear, weekKey, gameKey, interaction.user.id))
+    .setCustomId(weeklyPickModalId(seasonYear, weekKey, gameKey, page, interaction.user.id))
     .setTitle(`${game.game || 'Game'} pick`.slice(0, 45));
 
   if (choices.length) {
-    const choiceChunks = chunk(choices, 25).slice(0, 4);
+    const choiceChunks = chunk(choices, 25);
     for (const [index, choiceChunk] of choiceChunks.entries()) {
       const start = index * 25 + 1;
       const end = start + choiceChunk.length - 1;
@@ -685,16 +659,12 @@ async function showWeeklyPickModal(interaction, { seasonYear, weekKey, gameKey, 
         .setPlaceholder(choiceChunks.length > 1 ? `Choose a pick (${start}-${end})` : 'Choose a pick')
         .setRequired(false)
         .addOptions(
-          choiceChunk.map((choice) => {
-            const option = new StringSelectMenuOptionBuilder().setLabel(choice.value.slice(0, 100)).setValue(choice.value.slice(0, 100));
-            if (current?.pick === choice.value) option.setDefault(true);
-            return option;
-          }),
+          choiceChunk.map((choice) => new StringSelectMenuOptionBuilder().setLabel(choice.value.slice(0, 100)).setValue(choice.value.slice(0, 100))),
         );
       modal.addLabelComponents(
         new LabelBuilder()
           .setLabel(choiceChunks.length > 1 ? `Pick ${start}-${end}` : 'Pick')
-          .setDescription('Use the manual field if your pick is not listed.')
+          .setDescription(`${index === 0 && current?.pick ? `Current pick: ${current.pick}. ` : ''}Use the manual field if your pick is not listed.`.slice(0, 100))
           .setStringSelectMenuComponent(select),
       );
     }
@@ -706,8 +676,6 @@ async function showWeeklyPickModal(interaction, { seasonYear, weekKey, gameKey, 
     .setRequired(!choices.length)
     .setMaxLength(100)
     .setPlaceholder('GO1');
-  if (current?.pick && !choices.some((choice) => choice.value === current.pick)) input.setValue(current.pick.slice(0, 100));
-
   modal.addLabelComponents(
     new LabelBuilder()
       .setLabel(choices.length ? 'Manual pick' : 'Pick')
@@ -718,7 +686,7 @@ async function showWeeklyPickModal(interaction, { seasonYear, weekKey, gameKey, 
   await interaction.showModal(modal);
 }
 
-async function handleWeeklyPickModal(interaction, { seasonYear, weekKey, gameKey, ownerId }) {
+async function handleWeeklyPickModal(interaction, { seasonYear, weekKey, gameKey, page, ownerId }) {
   if (ownerId && interaction.user.id !== ownerId) {
     await interaction.reply({
       content: 'This modal belongs to whoever opened the weekly picker.',
@@ -744,12 +712,16 @@ async function handleWeeklyPickModal(interaction, { seasonYear, weekKey, gameKey
   }
 
   const manual = modalTextValue(interaction, 'club_text').replace(/\s+/g, ' ').trim();
-  const selected = selectedWeeklyPickValue(interaction);
-  const rawPick = manual || selected;
-  if (!rawPick) {
+  const selection = weeklyModalSelection({ manual, selections: weeklySelectedValues(interaction) });
+  if (selection.kind === 'empty') {
     await interaction.followUp({ content: '❌ Choose a club from the list or type one manually.', flags: MessageFlags.Ephemeral });
     return;
   }
+  if (selection.kind === 'ambiguous') {
+    await interaction.followUp({ content: '❌ Choose only one club or type your pick manually.', flags: MessageFlags.Ephemeral });
+    return;
+  }
+  const rawPick = selection.pick;
 
   const write = await submitWeeklyGamePick({
     guildId: interaction.guildId,
@@ -767,7 +739,13 @@ async function handleWeeklyPickModal(interaction, { seasonYear, weekKey, gameKey
   const saved = write.prediction;
 
   // Re-render the picker in place so the new pick shows in line with its game.
-  const payload = await weeklyPickPayload(interaction.guildId, seasonYear, weekKey, interaction.user.id);
+  const payload = await weeklyPickPayload(
+    interaction.guildId,
+    seasonYear,
+    weekKey,
+    interaction.user.id,
+    weeklyPickerPageForGame(round.games, gameKey),
+  );
   if (payload.error) {
     await interaction.followUp({ content: `❌ ${payload.error}`, flags: MessageFlags.Ephemeral });
     return;
@@ -941,7 +919,6 @@ function refreshPredictionBoard(interaction) {
 export async function execute(interaction) {
   const sub = interaction.options.getSubcommand();
   const seasonYear = season(interaction);
-  const submittedAt = interactionSubmittedAt(interaction);
 
   if (sub === 'weekly') {
     let weekKey = interaction.options.getString('week');
@@ -953,69 +930,15 @@ export async function execute(interaction) {
       }
       weekKey = current.week_key;
     }
-    const gameKey = interaction.options.getString('game');
-    const pick = interaction.options.getString('team');
-    const round = await getEwcWeek(interaction.guildId, seasonYear, weekKey);
-
-    if (!gameKey && !pick) {
-      const payload = await weeklyPickPayload(interaction.guildId, seasonYear, weekKey, interaction.user.id);
-      if (payload.error) {
-        await interaction.reply({ content: `❌ ${payload.error}`, flags: MessageFlags.Ephemeral });
-        return;
-      }
-      await interaction.reply({
-        components: payload.components,
-        flags: MessageFlags.Ephemeral | MessageFlags.IsComponentsV2,
-      });
+    const payload = await weeklyPickPayload(interaction.guildId, seasonYear, weekKey, interaction.user.id);
+    if (payload.error) {
+      await interaction.reply({ content: `❌ ${payload.error}`, flags: MessageFlags.Ephemeral });
       return;
     }
-
-    if (!gameKey || !pick) {
-      await interaction.reply({
-        content: '❌ Use `/ewc_predict weekly` with just the week, then choose a game button.',
-        flags: MessageFlags.Ephemeral,
-      });
-      return;
-    }
-
-    const game = findRoundGame(round, gameKey);
-    const closed = round?.games?.length ? gameClosedMessage(round, game) : roundClosedMessage(round);
-    if (closed) {
-      await interaction.reply({ content: `❌ ${closed}`, flags: MessageFlags.Ephemeral });
-      return;
-    }
-    if (!round.games?.length) {
-      await interaction.reply({
-        content: '❌ This is an old aggregate weekly round. Ask an admin to regenerate the official EWC weeks before weekly picks open.',
-        flags: MessageFlags.Ephemeral,
-      });
-      return;
-    }
-    const write = await submitWeeklyGamePick({
-      guildId: interaction.guildId,
-      season: seasonYear,
-      userId: interaction.user.id,
-      weekKey,
-      gameKey,
-      rawPick: pick,
-      submittedAt,
-    });
-    if (!write.ok) {
-      await interaction.reply({ content: `❌ ${write.message}`, flags: MessageFlags.Ephemeral });
-      return;
-    }
-    const saved = write.prediction;
     await interaction.reply({
-      embeds: [
-        new EmbedBuilder()
-          .setColor(0x57f287)
-          .setTitle(`✅ ${game.game} pick locked — ${round.label || round.week_key}`)
-          .setDescription(formatWeeklyGamePicks(round, saved.picks))
-          .setFooter({ text: 'You can rerun this command before a game locks to change only that game pick.' }),
-      ],
-      flags: MessageFlags.Ephemeral,
+      components: payload.components,
+      flags: MessageFlags.Ephemeral | MessageFlags.IsComponentsV2,
     });
-    if (saved.firstPick) await announceWeeklyParticipation(interaction, write.round);
     return;
   }
 
@@ -1279,8 +1202,8 @@ export async function handleComponent(interaction) {
   const parts = interaction.customId.split(':');
   const action = parts[1];
   if (action === 'wg') {
-    const [, , seasonYear, weekKey, gameKey, ownerId] = parts;
-    await showWeeklyPickModal(interaction, { seasonYear, weekKey, gameKey, ownerId });
+    const [, , seasonYear, weekKey, gameKey, page, ownerId] = parts;
+    await showWeeklyPickModal(interaction, { seasonYear, weekKey, gameKey, page, ownerId });
     return;
   }
   if (action === 'sg') {
@@ -1303,6 +1226,23 @@ export async function handleComponent(interaction) {
       return;
     }
     const payload = await weeklyPickPayload(interaction.guildId, seasonYear, weekKey, interaction.user.id);
+    if (payload.error) {
+      await interaction.reply({ content: `❌ ${payload.error}`, flags: MessageFlags.Ephemeral });
+      return;
+    }
+    await interaction.update({ components: payload.components });
+    return;
+  }
+  if (action === 'wp') {
+    const [, , seasonYear, weekKey, page, ownerId] = parts;
+    if (ownerId && interaction.user.id !== ownerId) {
+      await interaction.reply({
+        content: 'These page controls belong to whoever opened the weekly picker.',
+        flags: MessageFlags.Ephemeral,
+      });
+      return;
+    }
+    const payload = await weeklyPickPayload(interaction.guildId, seasonYear, weekKey, interaction.user.id, Number(page) || 0);
     if (payload.error) {
       await interaction.reply({ content: `❌ ${payload.error}`, flags: MessageFlags.Ephemeral });
       return;
@@ -1379,8 +1319,8 @@ export async function handleModal(interaction) {
   const parts = interaction.customId.split(':');
   const action = parts[1];
   if (action === 'wpm') {
-    const [, , seasonYear, weekKey, gameKey, ownerId] = parts;
-    await handleWeeklyPickModal(interaction, { seasonYear, weekKey, gameKey, ownerId });
+    const [, , seasonYear, weekKey, gameKey, page, ownerId] = parts;
+    await handleWeeklyPickModal(interaction, { seasonYear, weekKey, gameKey, page, ownerId });
     return;
   }
   if (action === 'spm') {

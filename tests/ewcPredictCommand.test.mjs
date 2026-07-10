@@ -31,3 +31,9 @@ test('ewc_predict does not expose a season option to members', () => {
 
   assert.deepEqual(seasonOptions, []);
 });
+
+test('ewc_predict weekly exposes only the guided week option', () => {
+  const command = data.toJSON();
+  const weekly = command.options?.find((option) => option.name === 'weekly');
+  assert.deepEqual(weekly?.options?.map((option) => option.name), ['week']);
+});
