@@ -292,6 +292,70 @@ export async function listLatestPublishedEwcNewsPosts({ locale, limit = 4, ewcOn
   return (await Promise.all(rows.map((row) => hydrate(row, locale)))).filter(Boolean);
 }
 
+// Bounded public search used by MCP clients. Shared posts search their one
+// canonical translation; translated posts search only the requested locale.
+// Legacy rows without side-table translations remain searchable as a fallback.
+export async function searchPublishedEwcNewsPosts({
+  query = '',
+  locale = 'en',
+  gameSlug = null,
+  mediaSlug = null,
+  ewcOnly = false,
+  limit = 10,
+  offset = 0,
+} = {}) {
+  const where = ["p.status = 'published'"];
+  const params = [];
+
+  if (mediaSlug) {
+    params.push(mediaSlug);
+    where.push(`p.media_slug = $${params.length}`);
+  } else {
+    where.push('p.media_slug IS NULL');
+    if (gameSlug) {
+      params.push(gameSlug);
+      where.push(`p.game_slug = $${params.length}`);
+    }
+  }
+  if (ewcOnly) where.push('p.ewc = 1');
+
+  const cleanedQuery = String(query || '').replace(/\s+/g, ' ').trim().slice(0, 120);
+  if (cleanedQuery) {
+    params.push(locale === 'ar' ? 'ar' : 'en');
+    const localePlaceholder = `$${params.length}`;
+    params.push(`%${cleanedQuery.toLowerCase()}%`);
+    const queryPlaceholder = `$${params.length}`;
+    where.push(`(
+      EXISTS (
+        SELECT 1
+          FROM ewc_news_post_translations tr
+         WHERE tr.post_id = p.id
+           AND (p.content_mode = 'shared' OR tr.locale = ${localePlaceholder})
+           AND LOWER(COALESCE(tr.title, '') || ' ' || COALESCE(tr.summary, '') || ' ' || COALESCE(tr.body, ''))
+               LIKE ${queryPlaceholder}
+      )
+      OR (
+        NOT EXISTS (SELECT 1 FROM ewc_news_post_translations existing WHERE existing.post_id = p.id)
+        AND LOWER(COALESCE(p.title, '') || ' ' || COALESCE(p.summary, '') || ' ' || COALESCE(p.body, ''))
+            LIKE ${queryPlaceholder}
+      )
+    )`);
+  }
+
+  const safeLimit = Math.max(1, Math.min(100, Math.floor(Number(limit)) || 10));
+  const safeOffset = Math.max(0, Math.min(100_000, Math.floor(Number(offset)) || 0));
+  params.push(safeLimit, safeOffset);
+  const rows = await all(
+    `SELECT p.*
+       FROM ewc_news_posts p
+      WHERE ${where.join(' AND ')}
+      ORDER BY p.published_at DESC, p.id DESC
+      LIMIT $${params.length - 1} OFFSET $${params.length}`,
+    params,
+  );
+  return (await Promise.all(rows.map((row) => hydrate(row, locale)))).filter(Boolean);
+}
+
 // Public media-channel posts: published posts owned by one media channel.
 export async function listPublishedMediaPosts({ mediaSlug, locale, limit = 50 } = {}) {
   const rows = await all(

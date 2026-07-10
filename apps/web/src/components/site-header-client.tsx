@@ -176,8 +176,10 @@ export function SiteHeaderClient({
     document.cookie = `${LOCALE_COOKIE_NAME}=${nextLocale}; Path=/; Max-Age=${LOCALE_COOKIE_MAX_AGE}; SameSite=Lax`;
     const currentPath =
       `${window.location.pathname}${window.location.search}${window.location.hash}` || "/";
-    router.push(localizedPath(currentPath, nextLocale));
-    router.refresh();
+    // Locale changes update the root document's lang/dir as well as route data.
+    // A full navigation also prevents a refresh of the old /ar route from
+    // racing and writing the previous locale cookie back after the switch.
+    window.location.assign(localizedPath(currentPath, nextLocale));
   }
 
   // In RTL the inline-end edge is the physical left, so flip the sheet side so

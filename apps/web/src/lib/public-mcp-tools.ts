@@ -20,11 +20,10 @@ import { currentSeason } from "@/lib/env";
 import { listGamesCached, type GameRecord } from "@/lib/games";
 import type { Locale } from "@/lib/i18n";
 import {
-  listLatestPublishedNewsPostsCached,
-  listPublishedMediaPostsCached,
-  listPublishedNewsPostsCached,
+  searchPublishedNewsPostsCached,
   type NewsPost,
 } from "@/lib/news";
+import { absoluteUrl } from "@/lib/metadata";
 import type { PlayerProfile, TeamProfile } from "@/lib/pandascore-profiles";
 import { getPublicEwcLeaderboardCached } from "@/lib/public-ewc-leaderboard";
 import { resolveDefaultGuildId } from "@/lib/guild";
@@ -73,6 +72,7 @@ function localized(value: GameRecord["title"], locale: Locale) {
 function publicGame(game: GameRecord, locale: Locale) {
   return {
     slug: game.slug,
+    webUrl: absoluteUrl(`/games/${game.slug}`),
     title: localized(game.title, locale),
     description: localized(game.description, locale),
     status: localized(game.status, locale),
@@ -83,8 +83,8 @@ function publicGame(game: GameRecord, locale: Locale) {
 }
 
 function newsUrl(post: NewsPost) {
-  if (post.mediaSlug) return `/media/${post.mediaSlug}/news/${post.id}`;
-  return post.gameSlug ? `/games/${post.gameSlug}/news/${post.id}` : `/news/${post.id}`;
+  if (post.mediaSlug) return absoluteUrl(`/media/${post.mediaSlug}/news/${post.id}`);
+  return absoluteUrl(post.gameSlug ? `/games/${post.gameSlug}/news/${post.id}` : `/news/${post.id}`);
 }
 
 function publicNewsPost(post: NewsPost) {
@@ -112,6 +112,7 @@ function publicNewsPost(post: NewsPost) {
 function safeTeam(team: TeamProfile) {
   return {
     id: team.id,
+    webUrl: absoluteUrl(`/teams/${team.id}`),
     game: team.game,
     name: team.name,
     slug: team.slug,
@@ -128,6 +129,7 @@ function safeTeam(team: TeamProfile) {
 function safePlayer(player: PlayerProfile) {
   return {
     id: player.id,
+    webUrl: absoluteUrl(`/players/${player.id}`),
     game: player.game,
     name: player.name,
     slug: player.slug,
@@ -154,6 +156,7 @@ function safePlayer(player: PlayerProfile) {
 function publicClub(club: EwcClubTrackerClub) {
   return {
     name: club.name,
+    webUrl: absoluteUrl("/clubs"),
     pageUrl: club.pageUrl,
     logo: club.logo,
     region: club.region,
@@ -186,6 +189,7 @@ function publicClub(club: EwcClubTrackerClub) {
 function publicCoStream(stream: CoStream) {
   return {
     id: stream.id,
+    webUrl: absoluteUrl("/co-streams"),
     label: stream.label,
     creatorKey: stream.creatorKey,
     gameSlugs: stream.gameSlugs,
@@ -272,6 +276,8 @@ export function registerPublicMcpTools(
       ]);
 
       return jsonResult({
+        webUrl: absoluteUrl("/"),
+        generatedAt: new Date().toISOString(),
         games: games.length,
         activeTournaments: tournaments.length,
         liveMatches: tournaments.reduce((sum, t) => sum + t.matchCounts.running, 0),
@@ -307,34 +313,39 @@ export function registerPublicMcpTools(
         mediaSlug: z.string().max(80).optional(),
         ewcOnly: z.boolean().optional(),
         limit: z.number().int().min(1).max(25).optional(),
+        offset: z.number().int().min(0).max(100_000).optional(),
       },
     },
-    async ({ query = "", locale = "en", gameSlug = "", mediaSlug = "", ewcOnly = false, limit = 10 }) => {
+    async ({
+      query = "",
+      locale = "en",
+      gameSlug = "",
+      mediaSlug = "",
+      ewcOnly = false,
+      limit = 10,
+      offset = 0,
+    }) => {
       const cleanGame = cleanGameSlug(gameSlug);
       const cleanMedia = String(mediaSlug || "").trim().toLowerCase().slice(0, 80);
       const fetchLimit = clampInt(limit, 1, 25, 10);
-      const haystack = query.trim().toLowerCase();
-      let posts: NewsPost[];
+      const safeOffset = clampInt(offset, 0, 100_000, 0);
+      const rows = await searchPublishedNewsPostsCached(
+        query.trim(),
+        locale,
+        cleanGame,
+        cleanMedia,
+        ewcOnly,
+        fetchLimit + 1,
+        safeOffset,
+      );
+      const hasMore = rows.length > fetchLimit;
+      const posts = rows.slice(0, fetchLimit).map(publicNewsPost);
 
-      if (cleanMedia) {
-        posts = await listPublishedMediaPostsCached(cleanMedia, locale, 100);
-      } else if (cleanGame) {
-        posts = await listPublishedNewsPostsCached(cleanGame, locale);
-      } else {
-        posts = await listLatestPublishedNewsPostsCached(locale, 51, ewcOnly, 0);
-      }
-
-      const filtered = posts
-        .filter((post) => !ewcOnly || post.ewc)
-        .filter((post) => {
-          if (!haystack) return true;
-          return [post.title, post.summary, post.body]
-            .some((value) => value.toLowerCase().includes(haystack));
-        })
-        .slice(0, fetchLimit)
-        .map(publicNewsPost);
-
-      return jsonResult({ posts: filtered });
+      return jsonResult({
+        posts,
+        nextOffset: hasMore ? safeOffset + posts.length : null,
+        webUrl: absoluteUrl(cleanMedia ? `/media/${cleanMedia}` : cleanGame ? `/games/${cleanGame}` : "/news"),
+      });
     },
   );
 
@@ -352,7 +363,10 @@ export function registerPublicMcpTools(
     async ({ tournamentId, limit = 50, offset = 0 }) => {
       const data = await getTournamentMatchesCached(tournamentId, { limit, offset });
       if (!data) return errorResult("Tournament not found.");
-      return jsonResult(data as unknown as Record<string, unknown>);
+      return jsonResult({
+        ...(data as unknown as Record<string, unknown>),
+        webUrl: absoluteUrl(`/tournaments/${tournamentId}`),
+      });
     },
   );
 
@@ -377,6 +391,7 @@ export function registerPublicMcpTools(
         .slice(0, clampInt(limit, 1, 100, 25))
         .map((t) => ({
           id: t.id,
+          webUrl: absoluteUrl(`/tournaments/${t.id}`),
           name: t.name,
           game: t.game,
           source: t.source,
@@ -418,6 +433,7 @@ export function registerPublicMcpTools(
       return jsonResult({
         sourceUrl: tracker.sourceUrl,
         standingsSourceUrl: tracker.standingsSourceUrl,
+        webUrl: absoluteUrl("/clubs"),
         updatedAt: tracker.updatedAt,
         dataSource: tracker.dataSource ?? "liquipedia",
         warning: tracker.warning ?? null,
@@ -520,7 +536,10 @@ export function registerPublicMcpTools(
         limit,
         offset,
       });
-      return jsonResult(leaderboard as unknown as Record<string, unknown>);
+      return jsonResult({
+        ...(leaderboard as unknown as Record<string, unknown>),
+        webUrl: absoluteUrl(`/leaderboard/${resolvedGuildId}/${season}`),
+      });
     },
   );
 

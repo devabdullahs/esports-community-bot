@@ -89,7 +89,11 @@ export function McpScopePicker({
           </span>
           <ChevronsUpDownIcon className="shrink-0 opacity-50" data-icon="inline-end" />
         </PopoverTrigger>
-        <PopoverContent align="start" className="w-[min(90vw,20rem)] p-0">
+        <PopoverContent
+          align="start"
+          className="w-[min(90vw,20rem)] p-0"
+          initialFocus={(openType) => openType === "keyboard"}
+        >
           <Command shouldFilter={false}>
             <CommandInput
               value={query}
