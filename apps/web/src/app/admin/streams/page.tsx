@@ -26,8 +26,10 @@ export default async function AdminStreamsPage() {
 
   return (
     <AdminPageShell
-      backHref="/admin"
-      backLabel={t.common.backToAdmin}
+      breadcrumbs={[
+        { label: t.dashboard.title, href: "/admin" },
+        { label: t.dashboard.links.streamsTitle },
+      ]}
       eyebrow={t.common.adminPublishing}
       title={t.dashboard.links.streamsTitle}
       description={t.dashboard.links.streamsDescription}

@@ -8,6 +8,7 @@
 
 ## Status
 
+- **Execution**: DONE (2026-07-10)
 - **Priority**: P2
 - **Effort**: L
 - **Risk**: MED
@@ -228,15 +229,15 @@ With seeded data and both locales, verify:
 
 ## Done criteria
 
-- [ ] Maximum access is no longer the default or reset state.
-- [ ] All selection controls use accessible Base UI shadcn primitives.
-- [ ] Game/media choices are searchable and show selected counts.
-- [ ] Always-on tools are clearly fixed and not misleading toggles.
-- [ ] Owner identity is read-only by design, not editable/disabled form input.
-- [ ] Plaintext secret is memory-only and accompanied by client setup actions.
-- [ ] Existing keys have localized status/timestamps and an empty state.
-- [ ] All required repo checks pass.
-- [ ] Plan 075 is marked DONE.
+- [x] Maximum access is no longer the default or reset state.
+- [x] All selection controls use accessible Base UI shadcn primitives.
+- [x] Game/media choices are searchable and show selected counts.
+- [x] Always-on tools are clearly fixed and not misleading toggles.
+- [x] Owner identity is read-only by design, not editable/disabled form input.
+- [x] Plaintext secret is memory-only and accompanied by client setup actions.
+- [x] Existing keys have localized status/timestamps and an empty state.
+- [x] All required repo checks pass.
+- [x] Plan 075 is marked DONE.
 
 ## STOP conditions
 

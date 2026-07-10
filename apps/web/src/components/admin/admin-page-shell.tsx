@@ -1,16 +1,17 @@
-import type { ReactNode } from "react";
+import { Fragment, type ReactNode } from "react";
 import Link from "next/link";
 import { ArrowLeftIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
-  Card,
-  CardAction,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+  Breadcrumb,
+  BreadcrumbItem,
+  BreadcrumbLink,
+  BreadcrumbList,
+  BreadcrumbPage,
+  BreadcrumbSeparator,
+} from "@/components/ui/breadcrumb";
 
 const maxWidthClasses = {
   "4xl": "max-w-4xl",
@@ -18,7 +19,12 @@ const maxWidthClasses = {
   "6xl": "max-w-6xl",
 } as const;
 
+// Page-owned hierarchy: each server page supplies its real entity labels.
+// The final crumb is the current page; preceding crumbs link upward.
+export type AdminCrumb = { label: string; href?: string };
+
 export function AdminPageShell({
+  breadcrumbs,
   backHref,
   backLabel,
   eyebrow,
@@ -29,6 +35,7 @@ export function AdminPageShell({
   children,
   maxWidth = "4xl",
 }: {
+  breadcrumbs?: AdminCrumb[];
   backHref?: string;
   backLabel?: string;
   eyebrow?: string;
@@ -39,52 +46,90 @@ export function AdminPageShell({
   children: ReactNode;
   maxWidth?: keyof typeof maxWidthClasses;
 }) {
+  // The back action derives from the nearest preceding linked crumb so the
+  // two can never disagree; explicit backHref/backLabel is the fallback for
+  // pages without breadcrumbs.
+  const parentCrumb = breadcrumbs
+    ? [...breadcrumbs.slice(0, -1)].reverse().find((crumb) => crumb.href)
+    : undefined;
+  const back = parentCrumb
+    ? { href: parentCrumb.href!, label: parentCrumb.label }
+    : backHref && backLabel
+      ? { href: backHref, label: backLabel }
+      : null;
+
   return (
     <main
       className={cn(
-        "mx-auto flex w-full flex-1 flex-col gap-6 px-4 py-6 sm:gap-7 sm:px-8 sm:py-8 lg:py-10",
+        "mx-auto flex w-full flex-1 flex-col gap-5 px-4 py-5 sm:gap-6 sm:px-6 sm:py-6",
         maxWidthClasses[maxWidth],
       )}
     >
-      {backHref && backLabel ? (
-        <Button
-          render={<Link href={backHref} />}
-          nativeButton={false}
-          variant="ghost"
-          className="-ms-2 w-fit text-muted-foreground hover:text-foreground"
-        >
-          <ArrowLeftIcon data-icon="inline-start" className="rtl:rotate-180" />
-          {backLabel}
-        </Button>
-      ) : null}
-
-      <Card className="overflow-hidden border-border/70 bg-card/70 py-0 shadow-sm">
-        <CardHeader className="gap-4 bg-muted/10 p-5 sm:p-6">
-          <div className="flex flex-col items-start justify-between gap-4 sm:flex-row">
-            <div className="flex min-w-0 flex-col gap-3">
-              {eyebrow ? (
-                <p className="text-sm font-medium text-primary">{eyebrow}</p>
-              ) : null}
-              <div className="flex flex-wrap items-center gap-2">
-                <CardTitle className="text-balance text-2xl leading-tight sm:text-4xl">
-                  {title}
-                </CardTitle>
-                {badge ? <Badge variant="secondary">{badge}</Badge> : null}
-              </div>
-              {description ? (
-                <CardDescription className="max-w-3xl text-sm leading-6 text-muted-foreground sm:text-base sm:leading-7">
-                  {description}
-                </CardDescription>
-              ) : null}
-            </div>
-            {actions ? (
-              <CardAction className="flex w-full shrink-0 flex-col items-stretch gap-2 sm:w-auto sm:flex-row sm:flex-wrap sm:items-start sm:justify-end">
-                {actions}
-              </CardAction>
+      <header className="flex flex-col gap-2">
+        {breadcrumbs?.length || back ? (
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+            {back ? (
+              <Button
+                render={<Link href={back.href} />}
+                nativeButton={false}
+                variant="ghost"
+                size="sm"
+                className="-ms-2 w-fit text-muted-foreground hover:text-foreground"
+              >
+                <ArrowLeftIcon data-icon="inline-start" className="rtl:rotate-180" />
+                {back.label}
+              </Button>
+            ) : null}
+            {breadcrumbs?.length ? (
+              <Breadcrumb>
+                <BreadcrumbList>
+                  {breadcrumbs.map((crumb, index) => {
+                    const isLast = index === breadcrumbs.length - 1;
+                    return (
+                      <Fragment key={`${crumb.label}-${index}`}>
+                        <BreadcrumbItem>
+                          {isLast || !crumb.href ? (
+                            <BreadcrumbPage>{crumb.label}</BreadcrumbPage>
+                          ) : (
+                            <BreadcrumbLink render={<Link href={crumb.href} />}>
+                              {crumb.label}
+                            </BreadcrumbLink>
+                          )}
+                        </BreadcrumbItem>
+                        {!isLast ? <BreadcrumbSeparator /> : null}
+                      </Fragment>
+                    );
+                  })}
+                </BreadcrumbList>
+              </Breadcrumb>
             ) : null}
           </div>
-        </CardHeader>
-      </Card>
+        ) : null}
+
+        <div className="flex flex-col items-start justify-between gap-3 xl:flex-row xl:items-center">
+          <div className="min-w-0 flex-1">
+            {eyebrow ? (
+              <p className="text-xs font-medium tracking-wide text-primary">{eyebrow}</p>
+            ) : null}
+            <div className="flex flex-wrap items-center gap-2">
+              <h1 className="text-balance text-xl font-semibold leading-tight sm:text-2xl">
+                {title}
+              </h1>
+              {badge ? <Badge variant="secondary">{badge}</Badge> : null}
+            </div>
+            {description ? (
+              <p className="mt-1 max-w-3xl text-sm leading-6 text-muted-foreground">
+                {description}
+              </p>
+            ) : null}
+          </div>
+          {actions ? (
+            <div className="flex w-full shrink-0 flex-col items-stretch gap-2 sm:flex-row sm:flex-wrap sm:items-center xl:w-auto xl:justify-end">
+              {actions}
+            </div>
+          ) : null}
+        </div>
+      </header>
 
       {children}
     </main>

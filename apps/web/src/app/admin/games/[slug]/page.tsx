@@ -1,12 +1,11 @@
-import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { ArrowLeftIcon } from "lucide-react";
+import { AdminPageShell } from "@/components/admin/admin-page-shell";
 import { GameEditor } from "@/components/admin/game-editor";
 import { canManageGame, getAdminAccess } from "@/lib/admin";
 import { getAdminCopy } from "@/lib/admin-copy";
+import { localizeText } from "@/lib/community-content";
 import { getGame } from "@/lib/games";
 import { getRequestLocale } from "@/lib/request-locale";
-import { Button } from "@/components/ui/button";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -28,21 +27,16 @@ export default async function EditGamePage({
   const t = getAdminCopy(locale);
 
   return (
-    <main className="mx-auto flex w-full max-w-4xl flex-1 flex-col gap-6 px-4 py-8 sm:px-8 sm:py-10">
-      <Button
-        render={<Link href="/admin/games" />}
-        nativeButton={false}
-        variant="ghost"
-        className="w-fit"
-      >
-        <ArrowLeftIcon data-icon="inline-start" />
-        {t.common.backToGames}
-      </Button>
-      <div>
-        <p className="text-sm text-muted-foreground">{t.common.adminPublishing}</p>
-        <h1 className="text-3xl font-semibold leading-tight">{t.games.editTitle}</h1>
-      </div>
+    <AdminPageShell
+      breadcrumbs={[
+        { label: t.dashboard.title, href: "/admin" },
+        { label: t.games.title, href: "/admin/games" },
+        { label: localizeText(game.title, locale) },
+      ]}
+      eyebrow={t.common.adminPublishing}
+      title={t.games.editTitle}
+    >
       <GameEditor mode="edit" game={game} locale={locale} />
-    </main>
+    </AdminPageShell>
   );
 }

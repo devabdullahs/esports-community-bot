@@ -156,8 +156,10 @@ export default async function AdminAnalyticsPage() {
   return (
     <AdminPageShell
       maxWidth="6xl"
-      backHref="/admin"
-      backLabel={adminCopy.common.backToAdmin}
+      breadcrumbs={[
+        { label: adminCopy.dashboard.title, href: "/admin" },
+        { label: t.title },
+      ]}
       eyebrow={t.eyebrow}
       title={t.title}
       description={t.description}

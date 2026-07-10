@@ -10,6 +10,7 @@
 
 ## Status
 
+- **Execution**: DONE (2026-07-10)
 - **Priority**: P2
 - **Effort**: L
 - **Risk**: MED
@@ -247,15 +248,15 @@ Capture/check at 390x844, 768x1024, and 1440x900 in English and Arabic:
 
 ## Done criteria
 
-- [ ] One shadcn Sidebar handles desktop, mobile, grouping, and collapse.
-- [ ] One compact unframed `AdminPageShell` handles admin page headings.
-- [ ] Dynamic pages supply entity-aware breadcrumbs and matching back targets.
-- [ ] Every repeated manual shell listed above is migrated.
-- [ ] Arabic direction and arrow behavior are correct.
-- [ ] RBAC/data behavior is unchanged.
-- [ ] No nested cards or mobile horizontal overflow are introduced.
-- [ ] All required repo checks pass.
-- [ ] Plan 076 is marked DONE.
+- [x] One shadcn Sidebar handles desktop, mobile, grouping, and collapse.
+- [x] One compact unframed `AdminPageShell` handles admin page headings.
+- [x] Dynamic pages supply entity-aware breadcrumbs and matching back targets.
+- [x] Every repeated manual shell listed above is migrated.
+- [x] Arabic direction and arrow behavior are correct.
+- [x] RBAC/data behavior is unchanged.
+- [x] No nested cards or mobile horizontal overflow are introduced.
+- [x] All required repo checks pass.
+- [x] Plan 076 is marked DONE.
 
 ## STOP conditions
 

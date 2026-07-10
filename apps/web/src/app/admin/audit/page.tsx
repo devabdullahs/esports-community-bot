@@ -36,8 +36,10 @@ export default async function AdminAuditPage() {
   return (
     <AdminPageShell
       maxWidth="5xl"
-      backHref="/admin"
-      backLabel={t.common.backToAdmin}
+      breadcrumbs={[
+        { label: t.dashboard.title, href: "/admin" },
+        { label: t.audit.title },
+      ]}
       eyebrow={t.common.superAdmin}
       title={t.audit.title}
       description={t.audit.description}

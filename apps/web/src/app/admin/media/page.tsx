@@ -22,8 +22,10 @@ export default async function AdminMediaPage() {
 
   return (
     <AdminPageShell
-      backHref="/admin"
-      backLabel={t.common.backToAdmin}
+      breadcrumbs={[
+        { label: t.dashboard.title, href: "/admin" },
+        { label: t.media.title },
+      ]}
       eyebrow={t.common.channelPublishing}
       title={t.media.title}
       description={access.isSuper ? t.media.descriptionSuper : t.media.descriptionScoped}

@@ -1,6 +1,5 @@
 import {
   ActivityIcon,
-  BarChart3Icon,
   CheckCircle2Icon,
   FileTextIcon,
   Gamepad2Icon,
@@ -10,10 +9,10 @@ import {
   NewspaperIcon,
   PenLineIcon,
   ShieldIcon,
-  SparklesIcon,
   Tv2Icon,
 } from "lucide-react";
 import Link from "next/link";
+import { AdminPageShell } from "@/components/admin/admin-page-shell";
 import { NewsList } from "@/components/admin/news-list";
 import { canManageGame, canManageMedia, getAdminAccess } from "@/lib/admin";
 import { getAdminCopy } from "@/lib/admin-copy";
@@ -67,87 +66,44 @@ export default async function AdminPage() {
       : t.dashboard.eyebrow;
 
   return (
-    <main className="mx-auto flex w-full max-w-6xl flex-1 flex-col gap-8 overflow-hidden px-4 py-6 sm:px-6 lg:gap-10 lg:px-8 lg:py-10">
-      <section className="grid min-w-0 gap-4 lg:grid-cols-[minmax(0,1fr)_22rem]">
-        <Card className="overflow-hidden border-border/70 bg-card/70 shadow-sm">
-          <CardHeader className="gap-6 border-b border-border/60 bg-muted/10 p-5 sm:gap-7 sm:p-7">
-            <div className="flex flex-wrap items-center gap-2">
-              <Badge variant="secondary" className="w-fit">
-                <SparklesIcon data-icon="inline-start" />
-                {roleLabel}
-              </Badge>
-              {access.displayName ? (
-                <span className="text-sm text-muted-foreground">
-                  {access.displayName}
-                </span>
-              ) : null}
-            </div>
-            <div className="max-w-3xl">
-              <CardTitle className="text-balance text-2xl leading-tight sm:text-4xl">
-                {t.dashboard.title}
-              </CardTitle>
-              <CardDescription className="mt-3 text-sm leading-6 sm:text-base sm:leading-7">
-                {t.dashboard.description}
-              </CardDescription>
-            </div>
-            {access.allowed ? (
-              <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:flex-wrap">
-                {canManageGamePosts ? (
-                  <Button
-                    render={<Link href="/admin/news/new" />}
-                    nativeButton={false}
-                    className="w-full sm:w-auto"
-                  >
-                    <PenLineIcon data-icon="inline-start" />
-                    {t.dashboard.quickNewPost}
-                  </Button>
-                ) : null}
-                {canManageMediaPosts ? (
-                  <Button
-                    render={<Link href="/admin/news/new/media" />}
-                    nativeButton={false}
-                    variant="outline"
-                    className="w-full sm:w-auto"
-                  >
-                    <Tv2Icon data-icon="inline-start" />
-                    {t.dashboard.quickNewMediaPost}
-                  </Button>
-                ) : null}
-                <Button
-                  render={<Link href="/admin/comments" />}
-                  nativeButton={false}
-                  variant="outline"
-                  className="w-full sm:w-auto"
-                >
-                  <MessagesSquareIcon data-icon="inline-start" />
-                  {t.dashboard.quickComments}
-                </Button>
-                <Button
-                  render={<Link href="/admin/games" />}
-                  nativeButton={false}
-                  variant="outline"
-                  className="w-full sm:w-auto"
-                >
-                  <Gamepad2Icon data-icon="inline-start" />
-                  {t.dashboard.quickGames}
-                </Button>
-                {access.isSuper ? (
-                  <Button
-                    render={<Link href="/admin/analytics" />}
-                    nativeButton={false}
-                    variant="outline"
-                    className="w-full sm:w-auto"
-                  >
-                    <BarChart3Icon data-icon="inline-start" />
-                    {t.dashboard.quickAnalytics}
-                  </Button>
-                ) : null}
-              </div>
+    <AdminPageShell
+      maxWidth="6xl"
+      eyebrow={roleLabel}
+      title={t.dashboard.title}
+      description={t.dashboard.description}
+      actions={
+        access.allowed ? (
+          <>
+            {canManageGamePosts ? (
+              <Button render={<Link href="/admin/news/new" />} nativeButton={false}>
+                <PenLineIcon data-icon="inline-start" />
+                {t.dashboard.quickNewPost}
+              </Button>
             ) : null}
-          </CardHeader>
-        </Card>
-
-        <Card className="min-w-0 border-border/70 bg-card/70 shadow-sm">
+            {canManageMediaPosts ? (
+              <Button
+                render={<Link href="/admin/news/new/media" />}
+                nativeButton={false}
+                variant="outline"
+              >
+                <Tv2Icon data-icon="inline-start" />
+                {t.dashboard.quickNewMediaPost}
+              </Button>
+            ) : null}
+            <Button
+              render={<Link href="/admin/comments" />}
+              nativeButton={false}
+              variant="outline"
+            >
+              <MessagesSquareIcon data-icon="inline-start" />
+              {t.dashboard.quickComments}
+            </Button>
+          </>
+        ) : null
+      }
+    >
+      <section className="flex min-w-0 justify-end">
+        <Card className="w-full min-w-0 border-border/70 bg-card/70 shadow-sm lg:max-w-md">
           <CardHeader className="p-5 sm:p-7">
             <div className="flex items-start gap-3">
               <span className="rounded-lg border border-primary/30 bg-primary/10 p-2 text-primary">
@@ -287,7 +243,7 @@ export default async function AdminPage() {
           <NewsList posts={posts} games={games} locale={locale} />
         </section>
       ) : null}
-    </main>
+    </AdminPageShell>
   );
 }
 

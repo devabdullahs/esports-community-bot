@@ -147,6 +147,19 @@ describe("/api/admin/mcp-keys self-service", () => {
     expect(body.key.tools).toEqual(["create_news_draft", "get_site_overview"]);
   });
 
+  test("rejects keys with zero selectable tools, including non-manifest names", async () => {
+    mockAccess.mockResolvedValue(scopedAccess());
+
+    // Always-on names (list_games) and unknown names are filtered before the
+    // zero-tools check, so all three payloads must 400.
+    for (const tools of [[], ["not_a_tool"], ["list_games"]]) {
+      const response = await keysPOST(req("POST", { label: "Empty", tools }));
+      expect(response.status).toBe(400);
+      const body = await response.json();
+      expect(body.error).toMatch(/at least one/i);
+    }
+  });
+
   test("scoped admin keys with cleared scopes do not silently become full-scope keys", async () => {
     mockAccess.mockResolvedValue(scopedAccess());
 

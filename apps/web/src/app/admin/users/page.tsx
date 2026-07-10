@@ -55,8 +55,10 @@ export default async function AdminUsersPage({
   return (
     <AdminPageShell
       maxWidth="6xl"
-      backHref="/admin"
-      backLabel={t.common.backToAdmin}
+      breadcrumbs={[
+        { label: t.dashboard.title, href: "/admin" },
+        { label: t.users.title },
+      ]}
       eyebrow={t.common.superAdmin}
       title={t.users.title}
       description={t.users.description}

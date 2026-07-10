@@ -25,8 +25,10 @@ export default async function AdminTeamPage() {
 
   return (
     <AdminPageShell
-      backHref="/admin"
-      backLabel={t.common.backToAdmin}
+      breadcrumbs={[
+        { label: t.dashboard.title, href: "/admin" },
+        { label: t.team.title },
+      ]}
       eyebrow={t.common.superAdmin}
       title={t.team.title}
       description={t.team.description}

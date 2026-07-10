@@ -97,8 +97,8 @@ or optimize for guild counts.
 | 072  | Make MCP writes atomic, audited, and idempotent | P1 | L | 070 | DONE |
 | 073  | Let admin MCP clients discover usable scopes and resource IDs | P2 | M | 069 | DONE |
 | 074  | Confirm client-side admin navigation when a news draft is dirty | P1 | M | - | DONE |
-| 075  | Redesign MCP key creation around purpose, least privilege, and setup success | P2 | L | 069, 073 | TODO |
-| 076  | Standardize the admin workspace with shadcn Sidebar and entity-aware navigation | P2 | L | 074 | TODO |
+| 075  | Redesign MCP key creation around purpose, least privilege, and setup success | P2 | L | 069, 073 | DONE |
+| 076  | Standardize the admin workspace with shadcn Sidebar and entity-aware navigation | P2 | L | 074 | DONE |
 Status values: TODO | IN PROGRESS | DONE | BLOCKED (reason) | REJECTED (rationale) | SUPERSEDED.
 
 ## MCP + admin experience audit (2026-07-09 @ `5091ff1`)
