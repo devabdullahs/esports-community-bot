@@ -152,7 +152,7 @@ export default async function PredictionsPage() {
               {round.totalGames ? (
                 <Progress value={progress}>
                   <ProgressLabel>{t.roundProgress}</ProgressLabel>
-                  <ProgressValue>{progress}%</ProgressValue>
+                  <ProgressValue>{() => `${progress}%`}</ProgressValue>
                 </Progress>
               ) : null}
               <div className="flex flex-wrap gap-2">

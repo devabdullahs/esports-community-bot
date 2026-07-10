@@ -285,7 +285,7 @@ export function ProfileDashboard({
                 >
                   <ProgressLabel>{text.pickProgress}</ProgressLabel>
                   <ProgressValue>
-                    {formatNumber(currentRound.pickedGames, locale)}/{formatNumber(currentRound.totalGames, locale)}
+                    {() => `${formatNumber(currentRound.pickedGames, locale)}/${formatNumber(currentRound.totalGames, locale)}`}
                   </ProgressValue>
                 </Progress>
                 <div className="flex flex-wrap gap-2">
