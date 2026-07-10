@@ -17,6 +17,7 @@ import {
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -32,6 +33,7 @@ import {
 import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Progress, ProgressLabel, ProgressValue } from "@/components/ui/progress";
+import { WebPredictionPicker } from "@/components/predictions/web-prediction-picker";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   copy,
@@ -39,6 +41,12 @@ import {
   localizedPath,
   type Locale,
 } from "@/lib/i18n";
+import {
+  isExpandableScoreBreakdown,
+  scoreBreakdownStatusKey,
+  type PredictionBreakdown,
+  type PredictionBreakdownRow,
+} from "@/lib/prediction-breakdown-model";
 
 type MePayload = {
   user: {
@@ -65,6 +73,7 @@ type MePayload = {
     topTeams: string[];
     seasonPicks: string[];
     seasonScore: number | null;
+    seasonBreakdown: PredictionBreakdown | null;
     showcaseUsername: string;
     recentWeekly: Array<{
       weekKey: string;
@@ -73,6 +82,7 @@ type MePayload = {
       score: number | null;
       picks: string[];
       bonus: number;
+      breakdown: PredictionBreakdown | null;
     }>;
   } | null;
   currentRound: {
@@ -81,12 +91,62 @@ type MePayload = {
     label: string;
     status: string;
     closesAt: number | null;
+    finalLockAt: number | null;
     openGames: number;
     lockedGames: number;
     totalGames: number;
     pickedGames: number;
     remainingGameKeys: string[];
+    openUnpickedGames: number;
+    openUnpickedGameKeys: string[];
+    lockedUnpickedGames: number;
+    lockedUnpickedGameKeys: string[];
+    nextLockAt: number | null;
+    isComplete: boolean;
     discordUrl: string;
+  } | null;
+  actionableRounds: Array<{
+    id: number;
+    weekKey: string;
+    label: string;
+    status: string;
+    closesAt: number | null;
+    nextLockAt: number | null;
+    finalLockAt: number | null;
+    openGames: number;
+    lockedGames: number;
+    totalGames: number;
+    pickedGames: number;
+    isComplete: boolean;
+    remainingGameKeys: string[];
+    openUnpickedGames: number;
+    openUnpickedGameKeys: string[];
+    lockedUnpickedGames: number;
+    lockedUnpickedGameKeys: string[];
+    discordUrl: string;
+  }>;
+  picker: {
+    weekly: Array<{
+      weekKey: string;
+      label: string;
+      games: Array<{
+        key: string;
+        game: string;
+        event: string | null;
+        lockAt: number | null;
+        state: "open" | "locked";
+        pick: string | null;
+        choices?: string[];
+      }>;
+    }>;
+    season: {
+      topSize: number;
+      status: string;
+      openAt: number | null;
+      closeAt: number | null;
+      picks: string[];
+      choices: string[];
+    } | null;
   } | null;
 };
 
@@ -191,6 +251,7 @@ export function ProfileDashboard({
   const data = query.data;
   const stats = data.stats;
   const currentRound = data.currentRound;
+  const actionableRounds = data.actionableRounds || (currentRound ? [currentRound] : []);
 
   return (
     <div className="flex flex-col gap-6">
@@ -274,61 +335,61 @@ export function ProfileDashboard({
             <StatCard label={text.weeklyWins} value={formatNumber(stats.weeklyWins, locale)} icon={MedalIcon} />
           </section> : null}
 
-          {section !== "overview" ? <>{currentRound ? (
-            <Card>
-              <CardHeader>
-                <CardTitle>{currentRound.label}</CardTitle>
-                <CardDescription>{text.currentRoundDescription}</CardDescription>
-                <CardAction>
-                  <Badge variant={currentRound.status === "open" ? "default" : "secondary"}>
-                    <Clock3Icon data-icon="inline-start" />
-                    {text.roundStatus[currentRound.status as keyof typeof text.roundStatus] || currentRound.status}
-                  </Badge>
-                </CardAction>
-              </CardHeader>
-              <CardContent className="flex flex-col gap-5">
-                <Progress
-                  value={currentRound.totalGames ? Math.min(100, Math.round((currentRound.pickedGames / currentRound.totalGames) * 100)) : 0}
-                >
-                  <ProgressLabel>{text.pickProgress}</ProgressLabel>
-                  <ProgressValue>
-                    {() => `${formatNumber(currentRound.pickedGames, locale)}/${formatNumber(currentRound.totalGames, locale)}`}
-                  </ProgressValue>
-                </Progress>
-                <div className="flex flex-wrap gap-2">
-                  <Badge variant="secondary">
-                    <ListChecksIcon data-icon="inline-start" />
-                    {text.remainingPicks(currentRound.remainingGameKeys.length)}
-                  </Badge>
-                  {currentRound.lockedGames ? (
-                    <Badge variant="outline">{text.lockedGames(currentRound.lockedGames)}</Badge>
-                  ) : null}
-                  {currentRound.closesAt ? (
-                    <Badge variant="outline">
-                      {text.closes}{" "}
-                      <LocalDateTime
-                        value={new Date(currentRound.closesAt * 1000).toISOString()}
-                        locale={locale}
-                      />
-                    </Badge>
-                  ) : null}
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  <Button render={<a href={currentRound.discordUrl} target="_blank" rel="noreferrer" />} nativeButton={false}>
-                    <MessageCircleIcon data-icon="inline-start" />
-                    {text.openDiscord}
-                  </Button>
-                  <Button
-                    render={<Link href={localizedPath(`/leaderboard/${stats.guildId}/${stats.season}`, locale)} />}
-                    nativeButton={false}
-                    variant="outline"
-                  >
-                    <TrophyIcon data-icon="inline-start" />
-                    {text.leaderboard}
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
+          {section !== "overview" ? <>{actionableRounds.length ? (
+            <div className="flex flex-col gap-4">
+              <WebPredictionPicker picker={data.picker} locale={locale} queryKey={["me-ewc", guildId || "", season]} />
+              {actionableRounds.map((round) => (
+                <Card key={round.weekKey}>
+                  <CardHeader>
+                    <CardTitle>{round.label}</CardTitle>
+                    <CardDescription>{text.currentRoundDescription}</CardDescription>
+                    <CardAction>
+                      <Badge variant={round.status === "open" ? "default" : "secondary"}>
+                        <Clock3Icon data-icon="inline-start" />
+                        {text.roundStatus[round.status as keyof typeof text.roundStatus] || round.status}
+                      </Badge>
+                    </CardAction>
+                  </CardHeader>
+                  <CardContent className="flex flex-col gap-5">
+                    <Progress
+                      value={round.totalGames ? Math.min(100, Math.round((round.pickedGames / round.totalGames) * 100)) : 0}
+                    >
+                      <ProgressLabel>{text.pickProgress}</ProgressLabel>
+                      <ProgressValue>
+                        {() => `${formatNumber(round.pickedGames, locale)}/${formatNumber(round.totalGames, locale)}`}
+                      </ProgressValue>
+                    </Progress>
+                    <div className="flex flex-wrap gap-2">
+                      <Badge variant="secondary">
+                        <ListChecksIcon data-icon="inline-start" />
+                        {round.isComplete ? text.picksComplete : text.remainingPicks(round.openUnpickedGames)}
+                      </Badge>
+                      {round.lockedUnpickedGames ? <Badge variant="outline">{text.missedPicks(round.lockedUnpickedGames)}</Badge> : null}
+                      {round.nextLockAt ? (
+                        <Badge variant="outline">
+                          {text.nextLock}{" "}
+                          <LocalDateTime value={new Date(round.nextLockAt * 1000).toISOString()} locale={locale} />
+                        </Badge>
+                      ) : null}
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      <Button render={<a href={round.discordUrl} target="_blank" rel="noreferrer" />} nativeButton={false} variant="outline">
+                        <MessageCircleIcon data-icon="inline-start" />
+                        {text.openMyPicks}
+                      </Button>
+                      <Button
+                        render={<Link href={localizedPath(`/leaderboard/${stats.guildId}/${stats.season}`, locale)} />}
+                        nativeButton={false}
+                        variant="outline"
+                      >
+                        <TrophyIcon data-icon="inline-start" />
+                        {text.leaderboard}
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
           ) : (
             <Alert>
               <CalendarDaysIcon />
@@ -380,6 +441,11 @@ export function ProfileDashboard({
                     <p className="text-sm text-muted-foreground">{text.noSeasonPicks}</p>
                   )}
                 </CardContent>
+                {stats.seasonBreakdown ? (
+                  <CardContent>
+                    <ScoreBreakdown breakdown={stats.seasonBreakdown} locale={locale} />
+                  </CardContent>
+                ) : null}
               </Card>
             </TabsContent>
             <TabsContent value="weekly">
@@ -390,29 +456,36 @@ export function ProfileDashboard({
                 </CardHeader>
                 <CardContent className="flex flex-col gap-3">
                   {stats.recentWeekly.length ? (
-                    stats.recentWeekly.map((week) => (
-                      <div key={week.weekKey} className="flex flex-col gap-2 rounded-md border p-3">
-                        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                          <div className="min-w-0">
-                            <p className="font-medium">{week.label}</p>
-                            <p className="truncate text-sm text-muted-foreground">
-                              {week.picks.join(", ") || text.noPicks}
-                            </p>
+                    <Accordion defaultValue={[]}>
+                      {stats.recentWeekly.map((week) => {
+                        const expandable = isExpandableScoreBreakdown(week.breakdown);
+                        const summary = (
+                          <div className="flex min-w-0 flex-1 flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+                            <div className="min-w-0">
+                              <p className="font-medium">{week.label}</p>
+                              <p className="truncate text-sm text-muted-foreground">{week.picks.join(", ") || text.noPicks}</p>
+                            </div>
+                            <Badge variant={week.score == null ? "outline" : "secondary"}>
+                              {week.score == null ? week.status : formatNumber(week.score, locale)}
+                            </Badge>
                           </div>
-                          <Badge variant={week.score == null ? "outline" : "secondary"}>
-                            {week.score == null ? week.status : formatNumber(week.score, locale)}
-                          </Badge>
-                        </div>
-                        {week.bonus ? (
-                          <>
-                            <Separator />
-                            <p className="text-sm text-muted-foreground">
-                              {text.sweepBonus}: {formatNumber(week.bonus, locale)}
-                            </p>
-                          </>
-                        ) : null}
-                      </div>
-                    ))
+                        );
+                        return (
+                          <AccordionItem key={week.weekKey} value={week.weekKey} disabled={!expandable}>
+                            <AccordionTrigger>{summary}</AccordionTrigger>
+                            {expandable && week.breakdown ? (
+                              <AccordionContent>
+                                <ScoreBreakdown breakdown={week.breakdown} locale={locale} />
+                              </AccordionContent>
+                            ) : week.bonus ? (
+                              <p className="pb-2 text-sm text-muted-foreground">
+                                {text.sweepBonus}: {formatNumber(week.bonus, locale)}
+                              </p>
+                            ) : null}
+                          </AccordionItem>
+                        );
+                      })}
+                    </Accordion>
                   ) : (
                     <p className="text-sm text-muted-foreground">{text.noWeeklyPicks}</p>
                   )}
@@ -429,6 +502,78 @@ export function ProfileDashboard({
       ) : null}
     </div>
   );
+}
+
+function ScoreBreakdown({ breakdown, locale }: { breakdown: PredictionBreakdown; locale: Locale }) {
+  const text = copy[locale].profile;
+  if (!breakdown.available) {
+    return (
+      <Alert variant="destructive">
+        <AlertTitle>{text.scoreDetailsUnavailable}</AlertTitle>
+        <AlertDescription>{text.scoreIntegrityWarning}</AlertDescription>
+      </Alert>
+    );
+  }
+
+  return (
+    <div className="flex flex-col gap-3 pt-2">
+      {breakdown.integrity === "mismatch" ? (
+        <Alert variant="destructive">
+          <AlertTitle>{text.scoreIntegrityWarning}</AlertTitle>
+          <AlertDescription>{text.scoreDetailsUnavailable}</AlertDescription>
+        </Alert>
+      ) : null}
+      {breakdown.rows.map((row, index) => (
+        <div key={`${row.pick || row.game || "row"}-${index}`} className="flex flex-col gap-2">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <p className="font-medium">{breakdownRowTitle(row, index, breakdown.kind, locale)}</p>
+            <Badge variant="secondary">{text.scoreStatus[scoreBreakdownStatusKey(row.status)]}</Badge>
+          </div>
+          <p className="break-words text-sm text-muted-foreground">{breakdownRowDetail(row, breakdown.kind, locale)}</p>
+          <Badge variant="outline">{text.scorePoints}: {formatNumber(row.points, locale)}</Badge>
+          {index < breakdown.rows.length - 1 ? <Separator /> : null}
+        </div>
+      ))}
+      <Separator />
+      <div className="flex flex-wrap gap-2">
+        <Badge variant="secondary">{text.scoreTotal}: {formatNumber(breakdown.total, locale)}</Badge>
+        {breakdown.bonus ? <Badge variant="outline">{text.scoreBonus}: {formatNumber(breakdown.bonus, locale)}</Badge> : null}
+      </div>
+    </div>
+  );
+}
+
+function breakdownRowTitle(row: PredictionBreakdownRow, index: number, kind: PredictionBreakdown["kind"], locale: Locale): string {
+  const text = copy[locale].profile;
+  if (kind === "weekly-per-game") return row.game || `${text.scoreDetails} ${formatNumber(index + 1, locale)}`;
+  if (kind === "season") return `${text.scorePredictedRank} #${formatNumber(row.predictedRank || index + 1, locale)}`;
+  return `${text.scorePick} ${formatNumber(index + 1, locale)}`;
+}
+
+function breakdownRowDetail(row: PredictionBreakdownRow, kind: PredictionBreakdown["kind"], locale: Locale): string {
+  const text = copy[locale].profile;
+  if (kind === "weekly-per-game") {
+    return [
+      `${text.scorePick}: ${row.pick || "—"}`,
+      `${text.scoreMatched}: ${row.matchedClub || "—"}`,
+      row.placement ? `${text.scorePlacement}: ${row.placement}` : null,
+      row.winner ? `${text.scoreWinner}: ${row.winner}` : null,
+    ].filter(Boolean).join(" · ");
+  }
+  if (kind === "season") {
+    return [
+      `${text.scorePick}: ${row.pick || "—"}`,
+      `${text.scoreMatched}: ${row.matchedTeam || "—"}`,
+      `${text.scoreActualRank}: ${row.actualRank == null ? "—" : formatNumber(row.actualRank, locale)}`,
+      `${text.scoreHitPoints}: ${formatNumber(row.hitPoints || 0, locale)}`,
+      `${text.scoreExactBonus}: ${formatNumber(row.exactBonus || 0, locale)}`,
+    ].join(" · ");
+  }
+  return [
+    `${text.scorePick}: ${row.pick || "—"}`,
+    `${text.scoreMatched}: ${row.matchedTeam || "—"}`,
+    `${text.scorePredictedRank}: ${row.weeklyRank == null ? "—" : formatNumber(row.weeklyRank, locale)}`,
+  ].join(" · ");
 }
 
 function StatCard({

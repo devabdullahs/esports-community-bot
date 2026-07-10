@@ -12,7 +12,7 @@ process.env.DISCORD_CLIENT_ID = 'test-client-id';
 
 const { closeDb } = await import('../src/db/index.js');
 const { upsertEwcWeek, setEwcWeekStatus, upsertEwcSeason } = await import('../src/db/ewcPredictions.js');
-const { currentOpenWeek, seasonSlotState, weeklyPickPayload } = await import('../src/commands/ewc_predict.js');
+const { currentOpenWeek, handleComponent, seasonSlotState, weeklyPickPayload } = await import('../src/commands/ewc_predict.js');
 const { anyRoundOpen } = await import('../src/jobs/ewcPredictions.js');
 
 test.after(() => {
@@ -58,6 +58,13 @@ function findComponent(node, predicate) {
   return null;
 }
 
+function findComponents(node, predicate, found = []) {
+  if (!node || typeof node !== 'object') return found;
+  if (predicate(node)) found.push(node);
+  for (const child of node.components || []) findComponents(child, predicate, found);
+  return found;
+}
+
 test('weeklyPickPayload includes a week switcher with week statuses', async () => {
   const guildId = 'guild-picker-week-select';
   const now = Math.floor(Date.now() / 1000);
@@ -96,6 +103,45 @@ test('weeklyPickPayload includes a week switcher with week statuses', async () =
   assert.equal(openOption?.default, true);
   assert.match(`${openOption?.label} ${openOption?.description}`, /Open/);
   assert.match(`${lockedOption?.label} ${lockedOption?.description}`, /Locked/);
+});
+
+test('weeklyPickPayload paginates every game and keeps page controls owner-bound', async () => {
+  const guildId = 'guild-picker-pages';
+  const now = Math.floor(Date.now() / 1000);
+  const games = Array.from({ length: 13 }, (_, index) => ({
+    key: `game-${index + 1}`,
+    game: `Game ${index + 1}`,
+    event: 'EWC',
+    lockAt: now + 3600,
+  }));
+  await upsertEwcWeek({
+    guildId,
+    season: '2026',
+    weekKey: 'page-week',
+    label: 'Page week',
+    openAt: now - 60,
+    closeAt: now + 7200,
+    games,
+    createdBy: 'admin',
+  });
+
+  const first = (await weeklyPickPayload(guildId, '2026', 'page-week', 'picker-owner', 0)).components[0].toJSON();
+  const last = (await weeklyPickPayload(guildId, '2026', 'page-week', 'picker-owner', 1)).components[0].toJSON();
+  assert.match(JSON.stringify(first), /Game 1/);
+  assert.doesNotMatch(JSON.stringify(first), /Game 13/);
+  assert.match(JSON.stringify(last), /Game 13/);
+  const pageControls = findComponents(first, (component) => String(component.custom_id || '').startsWith('ewc_predict:wp:'));
+  assert.equal(pageControls.length, 2);
+  assert.ok(pageControls.every((component) => component.custom_id.length < 100));
+
+  const replies = [];
+  await handleComponent({
+    customId: 'ewc_predict:wp:2026:page-week:1:picker-owner',
+    guildId,
+    user: { id: 'another-member' },
+    reply: async (payload) => { replies.push(payload); },
+  });
+  assert.match(replies[0]?.content || '', /belong to whoever opened/i);
 });
 
 test('anyRoundOpen is true when only the season round is open (weekly week opens later)', async () => {

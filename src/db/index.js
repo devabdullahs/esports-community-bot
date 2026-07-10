@@ -333,6 +333,50 @@ db.exec(`
     PRIMARY KEY (guild_id, week_id, user_id)
   );
 
+  CREATE TABLE IF NOT EXISTS ewc_prediction_reminders (
+    guild_id          TEXT NOT NULL,
+    week_id           INTEGER NOT NULL REFERENCES ewc_prediction_weeks(id) ON DELETE CASCADE,
+    game_key          TEXT NOT NULL,
+    kind              TEXT NOT NULL,
+    sent_at           TEXT,
+    claim_token       TEXT,
+    claim_expires_at  INTEGER,
+    attempts          INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (guild_id, week_id, game_key, kind)
+  );
+
+  -- Durable requests from the dashboard to the bot-owned prediction operations
+  -- consumer. JSON is deliberately bounded/sanitized by the DB helper: never
+  -- put source payloads, sessions, or Discord objects in this process boundary.
+  CREATE TABLE IF NOT EXISTS ewc_prediction_operations (
+    id                   TEXT PRIMARY KEY,
+    guild_id             TEXT NOT NULL,
+    season               TEXT NOT NULL,
+    operation            TEXT NOT NULL,
+    args_json            TEXT NOT NULL,
+    status               TEXT NOT NULL,
+    idempotency_key      TEXT NOT NULL UNIQUE,
+    requested_actor_id   TEXT,
+    requested_actor_type TEXT NOT NULL,
+    requested_at         TEXT NOT NULL,
+    lease_token          TEXT,
+    lease_expires_at     INTEGER,
+    attempts             INTEGER NOT NULL DEFAULT 0,
+    started_at           TEXT,
+    completed_at         TEXT,
+    result_json          TEXT,
+    error_text           TEXT
+  );
+
+  CREATE TABLE IF NOT EXISTS ewc_prediction_operation_health (
+    guild_id        TEXT NOT NULL,
+    season          TEXT NOT NULL,
+    last_attempt_at TEXT,
+    last_success_at TEXT,
+    last_error      TEXT,
+    PRIMARY KEY (guild_id, season)
+  );
+
   CREATE TABLE IF NOT EXISTS ewc_prediction_seasons (
     guild_id       TEXT NOT NULL,
     season         TEXT NOT NULL DEFAULT '2026',
@@ -373,6 +417,10 @@ db.exec(`
 
   CREATE INDEX IF NOT EXISTS idx_ewc_weekly_predictions_week
     ON ewc_weekly_predictions(week_id, score DESC);
+  CREATE INDEX IF NOT EXISTS idx_ewc_prediction_reminders_claim
+    ON ewc_prediction_reminders(sent_at, claim_expires_at);
+  CREATE INDEX IF NOT EXISTS idx_ewc_prediction_operations_claim
+    ON ewc_prediction_operations(status, lease_expires_at, requested_at);
   CREATE INDEX IF NOT EXISTS idx_ewc_season_predictions_season
     ON ewc_season_predictions(guild_id, season, score DESC);
   CREATE INDEX IF NOT EXISTS idx_ewc_club_championship_snapshots_fetched
@@ -383,6 +431,11 @@ db.exec(`
     discord_user_id  TEXT PRIMARY KEY,
     guild_id         TEXT NOT NULL,
     season           TEXT NOT NULL DEFAULT '2026',
+    public_identity_enabled    INTEGER NOT NULL DEFAULT 0,
+    public_display_name        TEXT,
+    public_avatar_url          TEXT,
+    public_avatar_token        TEXT UNIQUE,
+    public_identity_updated_at TEXT,
     last_synced_at   TEXT,
     last_sync_error  TEXT,
     created_at       TEXT NOT NULL DEFAULT (datetime('now')),
@@ -750,6 +803,14 @@ ensureColumns('ewc_prediction_weeks', [
   ['open_announced_at', 'TEXT'],
 ]);
 ensureColumns('ewc_prediction_seasons', [['score_after', 'INTEGER'], ['best_weeks', 'INTEGER']]);
+ensureColumns('ewc_profile_links', [
+  ['public_identity_enabled', 'INTEGER NOT NULL DEFAULT 0'],
+  ['public_display_name', 'TEXT'],
+  ['public_avatar_url', 'TEXT'],
+  ['public_avatar_token', 'TEXT'],
+  ['public_identity_updated_at', 'TEXT'],
+]);
+db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_ewc_profile_links_public_avatar_token ON ewc_profile_links(public_avatar_token)');
 ensureColumns('post_comments', [['author_avatar_url', 'TEXT']]);
 ensureColumns('stream_channels', [
   ['creator_key', "TEXT NOT NULL DEFAULT ''"],

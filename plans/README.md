@@ -104,7 +104,112 @@ or optimize for guild counts.
 | 079  | Turn `/me` and `/predictions` into one coherent account and prediction hub | P2 | M-L | 078 | DONE |
 | 080  | Persist and publish a first-class EWC Club Championship standings leaderboard | P2 | L | - | DONE |
 | 081  | Make the public MCP fast, complete, and directly linkable | P2 | M-L | 080 | DONE |
+| 082  | Make prediction writes atomic and deadline-safe | P1 | M | - | DONE (this commit) |
+| 083  | Surface every actionable prediction round | P1 | M | - | DONE (this commit) |
+| 084  | Make prediction deadlines and completion truthful | P1 | M | 083 | DONE (this commit) |
+| 085  | Remove Discord prediction picker component ceilings | P2 | M | 082 | DONE (this commit) |
+| 086  | Make prediction ranks tie-aware on every surface | P2 | M | - | DONE (this commit) |
+| 087  | Add explainable prediction score breakdowns | P2 | M | 082 | DONE (this commit) |
+| 088  | Add secure website prediction submission | P2 | L | 082, 083, 084 | DONE (this commit) |
+| 089  | Localize the complete Discord prediction experience | P2 | M | 084, 085, 087 | TODO — STOP: installed discord.js application-command locale enum lacks Arabic |
+| 090  | Add a secure admin prediction operations center | P3 | L | 082, 084 | DONE (`69d9eb2`) |
+| 091  | Add opt-in public predictor identities | P3 | M | 086 | DONE (`97f91c7`) |
 Status values: TODO | IN PROGRESS | DONE | BLOCKED (reason) | REJECTED (rationale) | SUPERSEDED.
+
+## Prediction-system audit (2026-07-10 @ `2301227`)
+
+Standard scoped audit of EWC prediction submission, lock/deadline behavior,
+weekly/season scoring projections, leaderboards, linked-role metadata, Discord
+interaction UX, authenticated website profile/status UX, and prediction admin
+operations. The operator selected every vetted finding and direction, producing
+plans 082-091. No application source was changed.
+
+Recommended execution order:
+
+1. **Write integrity first**: 082 is the prerequisite for any additional writer.
+   It makes lock decisions trusted and incremental JSON updates atomic on both
+   databases.
+2. **Read/funnel correctness**: 083, 085, 086, and 087 may proceed after their
+   listed dependencies; 083 is the prerequisite for 084's multi-round
+   completion/reminder experience.
+3. **Member experience**: execute 084 after 083. Execute 089 after 084, 085, and
+   087 so localization lands on the final interaction shapes rather than being
+   repeatedly rewritten.
+4. **New write surface**: execute 088 only after 082, 083, and 084. Website
+   routes must adapt the shared domain service, never call DB upserts directly.
+5. **Operations and identity**: 090 follows 082+084; 091 follows 086. These can
+   run independently of 088/089 once their prerequisites land.
+
+Vetted findings mapped to plans:
+
+- **BUG-082**: weekly/season mutations check locks before asynchronous
+  resolution and replace a read-modify-written JSON array, allowing late writes,
+  lost concurrent edits, and duplicate first-pick signals
+  (`ewc_predict.js:735-766,877-938`, `ewcPredictions.js:214-232,390-406`).
+- **BUG-083**: web projections select one current round although official event
+  windows overlap (`ewcPredictionRounds.js:3-16`,
+  `public-prediction-status.ts:65-93`, `ewc-profile-sync.ts:99-136`). Production
+  Week 4's MLBB lock coincides with the moment Week 3 stops winning selection,
+  so the website can hide that pick for its whole actionable window.
+- **BUG-084**: opening/profile copy emphasizes the final round close although
+  games lock independently (`ewcPredictions.js:312-321`,
+  `ewc-profile-sync.ts:119-135`). A read-only production aggregate found four
+  complete and three incomplete Week 1 submissions; all incomplete submissions
+  began before their missing games locked.
+- **BUG-085**: the Discord picker renders only 12 games, while independent
+  optional choice chunks plus first-selected parsing can ignore a cross-chunk
+  edit (`ewc_predict.js:313-331,639-696`). Current official weeks have at most
+  four games, so the 12-game ceiling is a future boundary; the large-choice edit
+  path is reachable today.
+- **BUG-086**: positional/`ROW_NUMBER` ranking gives equal scores different ranks
+  and zero-point maxima count as weekly wins (`ewcPredictions.js:272-281,
+  442-451,540-547`, `ewcProfileStats.js:95-111,295-307`).
+- **DIR-087**: authoritative score details are stored but discarded before
+  member UI, preventing members from explaining totals
+  (`ewcPredictions.js:242-304`, `ewcProfileStats.js:225-237`,
+  `profile-dashboard.tsx:393-413`).
+- **DIR-088**: the authenticated website can identify a verified Discord member
+  and show private progress but has no prediction writer; its page explicitly
+  sends members back to Discord.
+- **DIR-089**: Discord prediction metadata, pickers, modals, errors, and controls
+  are English-only despite an Arabic-majority community and bilingual guide.
+- **DIR-090**: prediction operations live in the Discord admin command and logs;
+  no secure web health/recovery surface exists.
+- **DIR-091**: public rows intentionally protect Discord IDs but are all labeled
+  `Member ####`; explicit, revocable consent can make the competition social
+  without reopening the ID leak.
+
+Verification performed during audit:
+
+- 64 focused bot prediction tests passed.
+- 13 focused web prediction/profile/leaderboard tests passed.
+- `npm audit --omit=dev --audit-level=high` reported no high/critical production
+  advisory. The two moderate Next/PostCSS findings require a breaking forced
+  resolution and were not made a prediction-system plan.
+
+Considered and rejected in this pass:
+
+- **Continuous polling as a standalone fix**: not worth a separate plan.
+  TanStack Query refetches on focus/reconnect and the global route freshness
+  guard refreshes revisited/long-hidden routes. Plans 083/084 should update the
+  bounded prediction model without introducing WebSockets.
+- **Discord leaderboard member-fetch N+1**: bounded to small leaderboard/image
+  sets, benefits from Discord caches, and runs in a single-guild background job.
+- **Publishing names by default**: rejected on privacy grounds. Plan 091 is
+  explicitly opt-in and preserves anonymous fallback.
+- **Changing scoring point values/bonuses**: no correctness defect was found in
+  the characterized formulas; plans improve writes, rank semantics, and
+  explanations without rebasing the competition.
+- **A new generic notification type for prediction DMs**: deferred. Plan 084
+  uses restrained channel reminders; personal DMs require a separate preference
+  and migration decision.
+
+Not audited in this pass: unrelated match/Liquipedia parsing and rate behavior,
+co-streams, news/CMS, general MCP/admin behavior outside prediction dependencies,
+and live visual acceptance inside Discord clients. The full repo test/build
+matrix was not rerun because this was a read-only planning audit; every plan
+requires it during execution. Existing untracked Discord image assets were left
+untouched.
 
 ## End-user, predictions, notifications, standings, and public MCP audit (2026-07-10 @ `ba288a1`)
 

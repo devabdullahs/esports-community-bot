@@ -65,6 +65,10 @@ function scopeRows(rows, { slug, gameName, eventPath }) {
 // ALONE: they are the curated field (e.g. a fighters participants table), while
 // matches would add whole qualifier brackets (170+ LCQ entrants). Deduped by the
 // same normalization scoring uses, so a picked name matches results at scoring.
+/**
+ * @param {string} gameName
+ * @param {{ eventUrl?: string | null }} [options]
+ */
 export async function ewcGameParticipantTeams(gameName, { eventUrl = null } = {}) {
   const slug = slugForGameName(gameName);
   if (!slug) return [];

@@ -21,7 +21,7 @@ function week(overrides: Record<string, unknown> = {}) {
 }
 
 describe("selectPublicPredictionStatus", () => {
-  it("prefers the actionable round closing first", () => {
+  it("returns every actionable round in next-lock order", () => {
     const result = selectPublicPredictionStatus(
       [
         week({ id: 2, week_key: "later", close_at: 4_000 }),
@@ -31,12 +31,14 @@ describe("selectPublicPredictionStatus", () => {
     );
 
     expect(result.state).toBe("open");
+    expect(result.rounds.map((round) => round.weekKey)).toEqual(["urgent", "later"]);
     expect(result.round).toMatchObject({
       weekKey: "urgent",
       status: "partly open",
       openGames: 1,
       lockedGames: 1,
       totalGames: 2,
+      nextLockAt: 2_500,
     });
   });
 
@@ -65,6 +67,6 @@ describe("selectPublicPredictionStatus", () => {
 
   it("returns idle after rounds are scored", () => {
     const result = selectPublicPredictionStatus([week({ status: "scored" })], NOW);
-    expect(result).toEqual({ state: "idle", round: null });
+    expect(result).toEqual({ state: "idle", round: null, rounds: [], upcomingRounds: [], awaitingRounds: [] });
   });
 });

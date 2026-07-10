@@ -14,6 +14,7 @@ import {
 import { ArrowDownUpIcon, SearchIcon } from "lucide-react";
 import { useMemo, useState } from "react";
 import { Badge } from "@/components/ui/badge";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -33,6 +34,7 @@ import {
 export type LeaderboardRow = {
   rank: number;
   displayName: string;
+  avatarUrl?: string | null;
   overallPoints: number;
   weeksScored: number;
   weeklyWins: number;
@@ -77,8 +79,12 @@ export function LeaderboardTable({
         accessorKey: "displayName",
         header: text.common.member,
         cell: ({ row }) => (
-          <div className="flex min-w-0 flex-col sm:min-w-44">
-            <span className="font-medium">{row.original.displayName}</span>
+          <div className="flex min-w-0 items-center gap-2 sm:min-w-44">
+            <Avatar size="sm">
+              <AvatarImage src={row.original.avatarUrl || undefined} alt="" />
+              <AvatarFallback>{row.original.displayName.slice(0, 2).toUpperCase()}</AvatarFallback>
+            </Avatar>
+            <span className="min-w-0 truncate font-medium">{row.original.displayName}</span>
           </div>
         ),
       },
