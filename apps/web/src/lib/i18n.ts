@@ -372,7 +372,7 @@ const baseCopy = {
       badge: "Public board",
       rankedMembers: "Ranked members",
       topScore: "Top score",
-      searchPlaceholder: "Search members or teams",
+      searchPagePlaceholder: "Search members or teams on this page",
       empty: "No ranked predictions yet.",
       noBoardTitle: "No leaderboard yet",
       noBoardDescription: "Once the community runs a prediction season, its ranking shows up here automatically.",
@@ -869,7 +869,7 @@ const baseCopy = {
       badge: "\u0644\u0648\u062d\u0629 \u0639\u0627\u0645\u0629",
       rankedMembers: "\u0627\u0644\u0623\u0639\u0636\u0627\u0621 \u0627\u0644\u0645\u0635\u0646\u0641\u0648\u0646",
       topScore: "\u0623\u0639\u0644\u0649 \u0646\u0642\u0627\u0637",
-      searchPlaceholder: "\u0627\u0628\u062d\u062b \u0639\u0646 \u0639\u0636\u0648 \u0623\u0648 \u0641\u0631\u064a\u0642",
+      searchPagePlaceholder: "\u0627\u0628\u062d\u062b \u0639\u0646 \u0639\u0636\u0648 \u0623\u0648 \u0641\u0631\u064a\u0642 \u0641\u064a \u0647\u0630\u0647 \u0627\u0644\u0635\u0641\u062d\u0629",
       empty: "\u0644\u0627 \u062a\u0648\u062c\u062f \u062a\u0648\u0642\u0639\u0627\u062a \u0645\u0635\u0646\u0641\u0629 \u062d\u062a\u0649 \u0627\u0644\u0622\u0646.",
       noBoardTitle: "\u0644\u0627 \u062a\u0648\u062c\u062f \u0644\u0648\u062d\u0629 \u0635\u062f\u0627\u0631\u0629 \u0628\u0639\u062f",
       noBoardDescription: "\u0628\u0645\u062c\u0631\u062f \u0623\u0646 \u064a\u064f\u0637\u0644\u0642 \u0627\u0644\u0645\u062c\u062a\u0645\u0639 \u0645\u0648\u0633\u0645 \u062a\u0648\u0642\u0639\u0627\u062a\u060c \u0633\u064a\u0638\u0647\u0631 \u062a\u0631\u062a\u064a\u0628\u0647 \u0647\u0646\u0627 \u062a\u0644\u0642\u0627\u0626\u064a\u064b\u0627.",
@@ -1181,7 +1181,6 @@ export const copy = {
       ...baseCopy.en.leaderboard,
       title: (season: string) => "EWC " + season + " prediction leaderboard",
       description: (total: number) => formatNumber(total, "en") + " ranked member" + (total === 1 ? "" : "s") + " this season",
-      page: (page: number, pages: number) => "Page " + formatNumber(page, "en") + " of " + formatNumber(pages, "en"),
       showing: (start: number, end: number, total: number) =>
         "Showing " + formatNumber(start, "en") + "–" + formatNumber(end, "en") + " of " + formatNumber(total, "en"),
     },
@@ -1197,7 +1196,6 @@ export const copy = {
       ...baseCopy.ar.leaderboard,
       title: (season: string) => "\u0644\u0648\u062d\u0629 \u062a\u0648\u0642\u0639\u0627\u062a EWC " + season,
       description: (total: number) => formatNumber(total, "ar") + " \u0639\u0636\u0648 \u0641\u064a \u0627\u0644\u062a\u0631\u062a\u064a\u0628 \u0647\u0630\u0627 \u0627\u0644\u0645\u0648\u0633\u0645",
-      page: (page: number, pages: number) => "\u0635\u0641\u062d\u0629 " + formatNumber(page, "ar") + " \u0645\u0646 " + formatNumber(pages, "ar"),
       showing: (start: number, end: number, total: number) =>
         "\u0639\u0631\u0636 " + formatNumber(start, "ar") + "\u2013" + formatNumber(end, "ar") + " \u0645\u0646 " + formatNumber(total, "ar"),
     },
