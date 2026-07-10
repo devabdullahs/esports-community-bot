@@ -111,8 +111,8 @@ or optimize for guild counts.
 | 086  | Make prediction ranks tie-aware on every surface | P2 | M | - | DONE (this commit) |
 | 087  | Add explainable prediction score breakdowns | P2 | M | 082 | DONE (this commit) |
 | 088  | Add secure website prediction submission | P2 | L | 082, 083, 084 | DONE (this commit) |
-| 089  | Localize the complete Discord prediction experience | P2 | M | 084, 085, 087 | TODO |
-| 090  | Add a secure admin prediction operations center | P3 | L | 082, 084 | TODO |
+| 089  | Localize the complete Discord prediction experience | P2 | M | 084, 085, 087 | TODO — STOP: installed discord.js application-command locale enum lacks Arabic |
+| 090  | Add a secure admin prediction operations center | P3 | L | 082, 084 | DONE (`69d9eb2`) |
 | 091  | Add opt-in public predictor identities | P3 | M | 086 | TODO |
 Status values: TODO | IN PROGRESS | DONE | BLOCKED (reason) | REJECTED (rationale) | SUPERSEDED.
 
