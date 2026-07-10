@@ -162,12 +162,12 @@ export default async function PredictionsPage() {
               </div>
               {status.state === "open" && round.closesAt ? (
                 <p className="text-sm text-muted-foreground">
-                  {t.closes}: <DateTime value={round.closesAt} locale={locale} />
+                  {t.closes}: <DateTime value={new Date(round.closesAt * 1000).toISOString()} locale={locale} />
                 </p>
               ) : null}
               {status.state === "upcoming" && round.opensAt ? (
                 <p className="text-sm text-muted-foreground">
-                  {t.opens}: <DateTime value={round.opensAt} locale={locale} />
+                  {t.opens}: <DateTime value={new Date(round.opensAt * 1000).toISOString()} locale={locale} />
                 </p>
               ) : null}
             </div>

@@ -269,11 +269,18 @@ describe("/api/mcp tools", () => {
   test("runs public-only read tools through admin MCP without a second MCP config", async () => {
     const key = await createKey({ tools: ["get_site_overview"] });
     const response = await mcpPOST(mcpRequest(key.secret, toolCall("list_games", { locale: "en" })));
+    const standingsResponse = await mcpPOST(
+      mcpRequest(key.secret, toolCall("get_ewc_club_standings", { limit: 5 })),
+    );
 
     expect(response.status).toBe(200);
     const body = await parseMcpResponse(response);
     expect(body.result.isError).not.toBe(true);
     expect(body.result.structuredContent.games).toEqual(expect.any(Array));
+    expect(standingsResponse.status).toBe(200);
+    const standings = await parseMcpResponse(standingsResponse);
+    expect(standings.result.isError).not.toBe(true);
+    expect(standings.result.structuredContent.rows).toEqual(expect.any(Array));
   });
 
   test("discovers scoped capabilities without an explicit discovery grant", async () => {

@@ -30,6 +30,16 @@ test('public news search finds old translated posts and excludes drafts', async 
   });
   await createEwcNewsPost({
     gameSlug: 'valorant',
+    mediaSlug: 'search-media',
+    status: 'published',
+    contentMode: 'shared',
+    defaultLocale: 'en',
+    translations: {
+      en: { title: 'Media filter sentinel', summary: '', body: 'Combined owner search.' },
+    },
+  });
+  await createEwcNewsPost({
+    gameSlug: 'valorant',
     status: 'draft',
     contentMode: 'shared',
     defaultLocale: 'en',
@@ -64,6 +74,23 @@ test('public news search finds old translated posts and excludes drafts', async 
     gameSlug: 'valorant',
   });
   assert.deepEqual(arabic.map((post) => post.locale), ['ar']);
+
+  const combined = await searchPublishedEwcNewsPosts({
+    query: 'media filter',
+    locale: 'en',
+    gameSlug: 'valorant',
+    mediaSlug: 'search-media',
+  });
+  assert.deepEqual(combined.map((post) => post.title), ['Media filter sentinel']);
+  assert.deepEqual(
+    await searchPublishedEwcNewsPosts({
+      query: 'media filter',
+      locale: 'en',
+      gameSlug: 'dota2',
+      mediaSlug: 'search-media',
+    }),
+    [],
+  );
 });
 
 test('public news search uses stable pagination', async () => {

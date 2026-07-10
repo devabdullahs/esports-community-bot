@@ -12,9 +12,13 @@ import {
 } from "@/lib/entity-directory";
 import {
   filterEwcClubTracker,
-  getEwcClubTrackerForMcp,
+  getStoredEwcClubTrackerCached,
   type EwcClubTrackerClub,
 } from "@/lib/ewc-clubs";
+import {
+  filterEwcClubStandings,
+  getStoredEwcClubStandingsCached,
+} from "@/lib/ewc-club-standings";
 import { CLUB_REGION_IDS } from "@/lib/ewc-club-regions";
 import { currentSeason } from "@/lib/env";
 import { listGamesCached, type GameRecord } from "@/lib/games";
@@ -88,9 +92,11 @@ function newsUrl(post: NewsPost) {
 }
 
 function publicNewsPost(post: NewsPost) {
+  const webUrl = newsUrl(post);
   return {
     id: post.id,
-    url: newsUrl(post),
+    webUrl,
+    url: webUrl,
     title: post.title,
     summary: post.summary,
     bodyPreview: post.body.slice(0, 1_500),
@@ -142,6 +148,7 @@ function safePlayer(player: PlayerProfile) {
     resolvedTeam: player.resolved_team_id
       ? {
           id: player.resolved_team_id,
+          webUrl: absoluteUrl(`/teams/${player.resolved_team_id}`),
           name: player.resolved_team_name,
           slug: player.resolved_team_slug,
           imageUrl: player.resolved_team_image_url,
@@ -297,7 +304,7 @@ export function registerPublicMcpTools(
     },
     async ({ locale = "en" }) => {
       const games = (await listGamesCached()).map((game) => publicGame(game, locale));
-      return jsonResult({ games });
+      return jsonResult({ webUrl: absoluteUrl("/games"), games });
     },
   );
 
@@ -357,7 +364,7 @@ export function registerPublicMcpTools(
       inputSchema: {
         tournamentId: z.number().int().positive(),
         limit: z.number().int().min(1).max(100).optional(),
-        offset: z.number().int().min(0).optional(),
+        offset: z.number().int().min(0).max(100_000).optional(),
       },
     },
     async ({ tournamentId, limit = 50, offset = 0 }) => {
@@ -404,7 +411,7 @@ export function registerPublicMcpTools(
           lastMatchAt: t.last_match_at,
           createdAt: t.created_at,
         }));
-      return jsonResult({ tournaments });
+      return jsonResult({ webUrl: absoluteUrl("/tournaments"), tournaments });
     },
   );
 
@@ -421,7 +428,7 @@ export function registerPublicMcpTools(
       },
     },
     async ({ query = "", region = "all", scope = "featured", limit = 20 }) => {
-      const tracker = await getEwcClubTrackerForMcp(8_000);
+      const tracker = await getStoredEwcClubTrackerCached();
       const clubs = filterEwcClubTracker(tracker, {
         region,
         q: query,
@@ -434,11 +441,48 @@ export function registerPublicMcpTools(
         sourceUrl: tracker.sourceUrl,
         standingsSourceUrl: tracker.standingsSourceUrl,
         webUrl: absoluteUrl("/clubs"),
+        season: tracker.season,
         updatedAt: tracker.updatedAt,
-        dataSource: tracker.dataSource ?? "liquipedia",
+        dataSource: tracker.dataSource,
+        stale: tracker.stale,
         warning: tracker.warning ?? null,
         summary: tracker.summary,
         clubs,
+      });
+    },
+  );
+
+  if (!excluded.has("get_ewc_club_standings")) server.registerTool(
+    "get_ewc_club_standings",
+    {
+      title: "Get EWC Club Championship Standings",
+      description: "Return official rank-ordered EWC Club Championship standings from stored data.",
+      inputSchema: {
+        query: z.string().max(120).optional(),
+        region: z.enum(CLUB_REGION_IDS).optional(),
+        season: z.string().optional(),
+        limit: z.number().int().min(1).max(60).optional(),
+        offset: z.number().int().min(0).max(100_000).optional(),
+      },
+    },
+    async ({ query = "", region = "all", season = "", limit = 25, offset = 0 }) => {
+      if (season && !isSeason(season)) return errorResult("Season must be a four-digit year.");
+      const standings = await getStoredEwcClubStandingsCached(season);
+      const filtered = filterEwcClubStandings(standings.rows, { region, q: query });
+      const safeLimit = clampInt(limit, 1, 60, 25);
+      const safeOffset = clampInt(offset, 0, 100_000, 0);
+      const rows = filtered.slice(safeOffset, safeOffset + safeLimit);
+      return jsonResult({
+        season: standings.season,
+        sourceUrl: standings.sourceUrl,
+        webUrl: absoluteUrl("/clubs/standings"),
+        updatedAt: standings.updatedAt,
+        dataSource: standings.dataSource,
+        stale: standings.stale,
+        warning: standings.warning ?? null,
+        total: filtered.length,
+        nextOffset: safeOffset + rows.length < filtered.length ? safeOffset + rows.length : null,
+        rows,
       });
     },
   );
@@ -461,7 +505,7 @@ export function registerPublicMcpTools(
         .filter((stream) => !cleanGame || stream.gameSlugs.includes(cleanGame))
         .slice(0, clampInt(limit, 1, 100, 50))
         .map(publicCoStream);
-      return jsonResult({ streams });
+      return jsonResult({ webUrl: absoluteUrl("/co-streams"), streams });
     },
   );
 
@@ -474,17 +518,24 @@ export function registerPublicMcpTools(
         query: z.string().max(80).optional(),
         gameSlug: z.string().max(40).optional(),
         limit: z.number().int().min(1).max(50).optional(),
-        offset: z.number().int().min(0).optional(),
+        offset: z.number().int().min(0).max(100_000).optional(),
       },
     },
     async ({ query = "", gameSlug = "", limit = 20, offset = 0 }) => {
+      const safeLimit = clampInt(limit, 1, 50, 20);
+      const safeOffset = clampInt(offset, 0, 100_000, 0);
       const result = await listTeamsDirectory({
         game: cleanGameSlug(gameSlug) || null,
         q: cleanDirectoryQuery(query) || null,
-        limit: clampInt(limit, 1, 50, 20),
-        offset: clampInt(offset, 0, 100_000, 0),
+        limit: safeLimit,
+        offset: safeOffset,
       });
-      return jsonResult({ total: result.total, teams: result.teams.map(safeTeam) });
+      return jsonResult({
+        webUrl: absoluteUrl("/teams"),
+        total: result.total,
+        nextOffset: safeOffset + result.teams.length < result.total ? safeOffset + result.teams.length : null,
+        teams: result.teams.map(safeTeam),
+      });
     },
   );
 
@@ -497,17 +548,24 @@ export function registerPublicMcpTools(
         query: z.string().max(80).optional(),
         gameSlug: z.string().max(40).optional(),
         limit: z.number().int().min(1).max(50).optional(),
-        offset: z.number().int().min(0).optional(),
+        offset: z.number().int().min(0).max(100_000).optional(),
       },
     },
     async ({ query = "", gameSlug = "", limit = 20, offset = 0 }) => {
+      const safeLimit = clampInt(limit, 1, 50, 20);
+      const safeOffset = clampInt(offset, 0, 100_000, 0);
       const result = await listPlayersDirectory({
         game: cleanGameSlug(gameSlug) || null,
         q: cleanDirectoryQuery(query) || null,
-        limit: clampInt(limit, 1, 50, 20),
-        offset: clampInt(offset, 0, 100_000, 0),
+        limit: safeLimit,
+        offset: safeOffset,
       });
-      return jsonResult({ total: result.total, players: result.players.map(safePlayer) });
+      return jsonResult({
+        webUrl: absoluteUrl("/players"),
+        total: result.total,
+        nextOffset: safeOffset + result.players.length < result.total ? safeOffset + result.players.length : null,
+        players: result.players.map(safePlayer),
+      });
     },
   );
 

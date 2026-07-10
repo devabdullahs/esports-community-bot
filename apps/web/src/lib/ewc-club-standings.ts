@@ -4,6 +4,7 @@ import { unstable_cache } from "next/cache";
 import { clubKey, clubKeys, type ClubRegionId } from "@/lib/ewc-club-regions";
 import {
   getEwcClubTrackerCached,
+  getStoredEwcClubTrackerCached,
   type EwcClubTracker,
 } from "@/lib/ewc-clubs";
 
@@ -110,3 +111,16 @@ export const getEwcClubStandingsCached = unstable_cache(
   ["ewc-club-championship-standings-v1"],
   { revalidate: 60 },
 );
+
+export async function getStoredEwcClubStandingsCached(season = ""): Promise<EwcClubStandings> {
+  const tracker = await getStoredEwcClubTrackerCached(season);
+  return {
+    season: tracker.season,
+    sourceUrl: tracker.standingsSourceUrl,
+    updatedAt: tracker.updatedAt,
+    dataSource: tracker.dataSource,
+    stale: tracker.stale,
+    ...(tracker.warning ? { warning: tracker.warning } : {}),
+    rows: projectEwcClubStandings(tracker.clubs),
+  };
+}

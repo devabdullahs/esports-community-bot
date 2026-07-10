@@ -312,10 +312,10 @@ export async function searchPublishedEwcNewsPosts({
     where.push(`p.media_slug = $${params.length}`);
   } else {
     where.push('p.media_slug IS NULL');
-    if (gameSlug) {
-      params.push(gameSlug);
-      where.push(`p.game_slug = $${params.length}`);
-    }
+  }
+  if (gameSlug) {
+    params.push(gameSlug);
+    where.push(`p.game_slug = $${params.length}`);
   }
   if (ewcOnly) where.push('p.ewc = 1');
 

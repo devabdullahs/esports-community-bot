@@ -99,7 +99,65 @@ or optimize for guild counts.
 | 074  | Confirm client-side admin navigation when a news draft is dirty | P1 | M | - | DONE |
 | 075  | Redesign MCP key creation around purpose, least privilege, and setup success | P2 | L | 069, 073 | DONE |
 | 076  | Standardize the admin workspace with shadcn Sidebar and entity-aware navigation | P2 | L | 074 | DONE |
+| 077  | Make the prediction leaderboard use one truthful pagination model | P1 | S-M | - | DONE |
+| 078  | Make notifications discoverable, live, paginated, and failure-safe | P1 | M | - | DONE |
+| 079  | Turn `/me` and `/predictions` into one coherent account and prediction hub | P2 | M-L | 078 | DONE |
+| 080  | Persist and publish a first-class EWC Club Championship standings leaderboard | P2 | L | - | DONE |
+| 081  | Make the public MCP fast, complete, and directly linkable | P2 | M-L | 080 | DONE |
 Status values: TODO | IN PROGRESS | DONE | BLOCKED (reason) | REJECTED (rationale) | SUPERSEDED.
+
+## End-user, predictions, notifications, standings, and public MCP audit (2026-07-10 @ `ba288a1`)
+
+Focused source audit of the public account/profile experience, notification
+inbox, prediction landing page and leaderboard, EWC club tracker, and public
+MCP. The operator requested plans for every named surface, so all five vetted
+work packages were planned without an additional selection round. No
+application source was changed.
+
+Recommended execution order:
+
+1. **Immediate correctness**: 077 and 078 can run in parallel. They remove the
+   prediction leaderboard's double pagination and make notification actions
+   refreshable, reachable, and reversible.
+2. **Account experience**: 079 after 078, because the account workspace should
+   compose the completed inbox/query model rather than duplicate it.
+3. **Authoritative standings data**: 080 can run alongside 077/078. It persists
+   the successful bot refresh before adding a rank-ordered public page.
+4. **Public MCP contract**: 081 after 080. MCP then consumes the stored
+   standings projection instead of waiting on Liquipedia and can expose a
+   clearly named Club Championship standings tool.
+
+Vetted findings mapped to plans:
+
+- **BUG-077**: the server fetches and labels 100 rows while TanStack Table's
+  implicit client page renders ten (`leaderboard/.../page.tsx:28-79`,
+  `leaderboard-table.tsx:155-165,213-224`).
+- **BUG-078**: notifications load only once and only the first 20 are reachable;
+  unfollow/mark-all failure handling is incomplete
+  (`follow-center.tsx:77-143,221-297`).
+- **DIR-079**: `/predictions` is two static links and `/me` is three separate
+  vertical tools; neither projects the canonical current-round state
+  (`predictions/page.tsx:65-112`, `me/page.tsx:33-51`,
+  `ewcPredictions.js:378-402`).
+- **DIR-080**: successful live Club Championship fetches are not persisted, and
+  the web fallback reuses prediction scoring snapshots
+  (`clubChampionship.js:58-89`, `ewc-clubs.ts:341-365,583-675`).
+- **PERF/DIR-081**: public MCP news search is latest-51 in the global case,
+  returns relative site links, and club reads can wait on live Liquipedia
+  (`public-mcp-tools.ts:85-109,312-335,396-427`).
+
+Considered and rejected in this pass:
+
+- Trusting `x-forwarded-for` when `cf-connecting-ip` is absent: rejected. The
+  current shared fallback bucket is intentional and tested against spoofed
+  forwarding headers.
+- Reusing `/leaderboard` for club points: rejected. It is a community prediction
+  ranking with different entities, privacy rules, and scoring semantics.
+- Web prediction submission in this batch: deferred. It writes to the scoring
+  path and needs a separate authorization/lock/idempotency plan after the
+  read-only profile hub is proven.
+- WebSockets/push for notifications: not worth the infrastructure. Conservative
+  focus/interval refetch is sufficient for a single-guild community site.
 
 ## MCP + admin experience audit (2026-07-09 @ `5091ff1`)
 

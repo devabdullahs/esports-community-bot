@@ -514,7 +514,7 @@ export async function getEwcClubTrackerFromDatabase(season?: string): Promise<Ew
     ? await getEwcClubChampionshipSnapshot(season)
     : await getLatestEwcClubChampionshipSnapshot()) as StoredClubChampionshipSnapshot | null;
   const trackerSeason = snapshot?.season ?? season ?? DEFAULT_EWC_CLUB_SEASON;
-  const stale = isEwcClubSnapshotStale(snapshot?.fetchedAt);
+  const stale = !snapshot || isEwcClubSnapshotStale(snapshot.fetchedAt);
   return buildEwcClubTracker({
     season: trackerSeason,
     standings: snapshot?.standings ?? [],
@@ -529,6 +529,14 @@ export async function getEwcClubTrackerFromDatabase(season?: string): Promise<Ew
       : "No stored Club Championship snapshot is available yet.",
   });
 }
+
+// Request handlers that promise stored-only reads (notably MCP) use this
+// projection so they never trigger or wait on an external Liquipedia request.
+export const getStoredEwcClubTrackerCached = unstable_cache(
+  async (season = "") => getEwcClubTrackerFromDatabase(season || undefined),
+  ["ewc-club-tracker-stored-only-v1"],
+  { revalidate: 60 },
+);
 
 function timeout<T>(promise: Promise<T>, timeoutMs: number, message: string) {
   let timer: ReturnType<typeof setTimeout> | undefined;

@@ -16,18 +16,18 @@ const COPY = {
   en: {
     title: "Public MCP Server",
     description:
-      "Read-only MCP documentation for public Esports Community website data. No key or dashboard login required.",
+      "Read-only MCP documentation for public Esports Community website data. No key required.",
     badge: "Read-only public data",
     security:
-      "This endpoint is read-only and returns public website data intended for visitors. It does not require an admin key and cannot perform dashboard actions.",
+      "This endpoint is read-only and returns public website data intended for visitors.",
   },
   ar: {
     title: "خادم MCP العام",
     description:
-      "شرح MCP للقراءة فقط من بيانات موقع Esports Community العامة. لا يحتاج إلى مفتاح أو تسجيل دخول للوحة التحكم.",
+      "شرح MCP للقراءة فقط من بيانات موقع Esports Community العامة. لا يحتاج إلى مفتاح.",
     badge: "بيانات عامة للقراءة فقط",
     security:
-      "هذه النقطة للقراءة فقط وتعرض بيانات عامة مخصصة لزوار الموقع. لا تحتاج إلى مفتاح إداري ولا يمكنها تنفيذ إجراءات لوحة التحكم.",
+      "هذه النقطة للقراءة فقط وتعرض بيانات عامة مخصصة لزوار الموقع.",
   },
 } satisfies Record<Locale, { title: string; description: string; badge: string; security: string }>;
 

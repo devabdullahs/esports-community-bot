@@ -300,7 +300,11 @@ export function ProfileDashboard({
                   ) : null}
                   {currentRound.closesAt ? (
                     <Badge variant="outline">
-                      {text.closes} <LocalDateTime value={currentRound.closesAt} locale={locale} />
+                      {text.closes}{" "}
+                      <LocalDateTime
+                        value={new Date(currentRound.closesAt * 1000).toISOString()}
+                        locale={locale}
+                      />
                     </Badge>
                   ) : null}
                 </div>

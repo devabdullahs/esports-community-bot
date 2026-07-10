@@ -109,12 +109,13 @@ async function currentRoundForViewer(guildId: string, season: string, discordUse
     totalGames: number;
   };
   const prediction = (await getWeeklyPrediction(guildId, round.id, discordUserId)) as WeeklyPrediction;
+  const games = Array.isArray(round.games) ? round.games : [];
+  const gameKeys = new Set(games.map((game) => String(game.key || "")).filter(Boolean));
   const pickedGameKeys = new Set(
     (prediction?.picks ?? [])
       .map((pick) => (pick && typeof pick === "object" ? String(pick.gameKey || "") : ""))
-      .filter(Boolean),
+      .filter((key) => key && gameKeys.has(key)),
   );
-  const games = Array.isArray(round.games) ? round.games : [];
   const openGames = games.filter((game) => !game.lockAt || now < game.lockAt);
   const remainingGameKeys = openGames
     .map((game) => String(game.key || ""))
