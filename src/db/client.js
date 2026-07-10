@@ -150,6 +150,14 @@ export async function run(sql, params = []) {
   return (await dbClient()).run(sql, params);
 }
 
+// SQLite shares ONE connection per process, and BEGIN is not reentrant: two
+// async transaction() calls interleaving their awaits would throw "cannot start
+// a transaction within a transaction" — and the loser's ROLLBACK would abort
+// the winner's work. Serialize same-process sqlite transactions through a
+// promise chain (Postgres checks out a pooled connection per call, so it does
+// not need this).
+let sqliteTxTail = Promise.resolve();
+
 export async function transaction(fn) {
   if (usePostgres) {
     const client = await postgresPool().connect();
@@ -166,17 +174,21 @@ export async function transaction(fn) {
     }
   }
 
-  const database = await sqliteDb();
-  const client = sqliteClient(database);
-  database.exec('BEGIN IMMEDIATE');
-  try {
-    const result = await fn(client);
-    database.exec('COMMIT');
-    return result;
-  } catch (error) {
-    database.exec('ROLLBACK');
-    throw error;
-  }
+  const job = sqliteTxTail.catch(() => {}).then(async () => {
+    const database = await sqliteDb();
+    const client = sqliteClient(database);
+    database.exec('BEGIN IMMEDIATE');
+    try {
+      const result = await fn(client);
+      database.exec('COMMIT');
+      return result;
+    } catch (error) {
+      database.exec('ROLLBACK');
+      throw error;
+    }
+  });
+  sqliteTxTail = job;
+  return job;
 }
 
 export async function closeDbClient() {

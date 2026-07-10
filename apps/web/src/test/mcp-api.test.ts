@@ -33,12 +33,13 @@ beforeAll(async () => {
   await admins.upsertEwcAdmin({ discordId: SCOPED_ID, displayName: "Scoped Admin" });
   await admins.setEwcAdminGameScopes(SCOPED_ID, [GAME_ALLOWED]);
   await admins.setEwcAdminMediaScopes(SCOPED_ID, [MEDIA_ALLOWED]);
-  await Promise.all([
-    seedGame(GAME_ALLOWED),
-    seedGame(GAME_OUTSIDE_SCOPE),
-    seedMedia(MEDIA_ALLOWED),
-    seedMedia(MEDIA_OUTSIDE_SCOPE),
-  ]);
+  // Sequential on purpose: each seed opens its own DB transaction, and a
+  // swallowed "cannot start a transaction within a transaction" here left
+  // later tests without their seeded rows (flaky only on slow CI runners).
+  await seedGame(GAME_ALLOWED);
+  await seedGame(GAME_OUTSIDE_SCOPE);
+  await seedMedia(MEDIA_ALLOWED);
+  await seedMedia(MEDIA_OUTSIDE_SCOPE);
 
   ({ POST: mcpPOST } = await import("@/app/api/mcp/route"));
 });
