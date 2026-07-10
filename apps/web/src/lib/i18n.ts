@@ -506,6 +506,8 @@ const baseCopy = {
       closes: "Closes",
       nextLock: "Next lock",
       openDiscord: "Make picks in Discord",
+      openMyPicks: "Open my picks",
+      picksComplete: "All picks complete",
       noCurrentRound: "No prediction round is open",
       noCurrentRoundDescription: "Your next available round will appear here automatically.",
       roundStatus: {
@@ -1061,6 +1063,8 @@ const baseCopy = {
       closes: "\u064a\u0646\u062a\u0647\u064a",
       nextLock: "\u0627\u0644\u0625\u063a\u0644\u0627\u0642 \u0627\u0644\u0642\u0627\u062f\u0645",
       openDiscord: "\u0642\u062f\u0651\u0645 \u062a\u0648\u0642\u0639\u0627\u062a\u0643 \u0641\u064a \u062f\u064a\u0633\u0643\u0648\u0631\u062f",
+      openMyPicks: "\u0627\u0641\u062a\u062d \u062a\u0648\u0642\u0639\u0627\u062a\u064a",
+      picksComplete: "\u0627\u0643\u062a\u0645\u0644\u062a \u062c\u0645\u064a\u0639 \u0627\u0644\u062a\u0648\u0642\u0639\u0627\u062a",
       noCurrentRound: "\u0644\u0627 \u062a\u0648\u062c\u062f \u062c\u0648\u0644\u0629 \u062a\u0648\u0642\u0639\u0627\u062a \u0645\u0641\u062a\u0648\u062d\u0629",
       noCurrentRoundDescription: "\u0633\u062a\u0638\u0647\u0631 \u0627\u0644\u062c\u0648\u0644\u0629 \u0627\u0644\u0642\u0627\u062f\u0645\u0629 \u0647\u0646\u0627 \u062a\u0644\u0642\u0627\u0626\u064a\u064b\u0627.",
       roundStatus: {

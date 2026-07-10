@@ -1,3 +1,5 @@
+import { randomUUID } from 'node:crypto';
+
 import { all, dbDriver, get, run, transaction } from './client.js';
 
 const parseJson = (value, fallback) => {
@@ -154,6 +156,75 @@ export async function listEwcWeeksToAnnounceOpen(nowSec) {
 
 export async function markEwcWeekOpenAnnounced(weekId, client = null) {
   await runWith(client, 'UPDATE ewc_prediction_weeks SET open_announced_at = $1 WHERE id = $2', [nowText(), weekId]);
+}
+
+export async function listOpenEwcWeeksForReminders() {
+  return (
+    await all(
+      `SELECT *
+       FROM ewc_prediction_weeks
+       WHERE status = 'open' AND games_json IS NOT NULL
+       ORDER BY season, COALESCE(open_at, id), id`,
+    )
+  ).map(hydrateWeek);
+}
+
+function reminderParams({ guildId, weekId, gameKey, kind }) {
+  return [guildId, weekId, gameKey, kind];
+}
+
+export async function claimEwcPredictionReminder({ guildId, weekId, gameKey, kind, nowSec, leaseSeconds = 300 }) {
+  const claimedAt = Math.floor(Number(nowSec));
+  if (!Number.isSafeInteger(claimedAt)) throw new Error('A valid reminder claim time is required.');
+  const token = randomUUID();
+  return transaction(async (client) => {
+    await client.run(
+      `INSERT INTO ewc_prediction_reminders
+         (guild_id, week_id, game_key, kind, claim_token, claim_expires_at, attempts)
+       VALUES ($1, $2, $3, $4, NULL, NULL, 0)
+       ON CONFLICT (guild_id, week_id, game_key, kind) DO NOTHING`,
+      reminderParams({ guildId, weekId, gameKey, kind }),
+    );
+    const result = await client.run(
+      `UPDATE ewc_prediction_reminders
+       SET claim_token = $1, claim_expires_at = $2, attempts = attempts + 1
+       WHERE guild_id = $3 AND week_id = $4 AND game_key = $5 AND kind = $6
+         AND sent_at IS NULL
+         AND (claim_expires_at IS NULL OR claim_expires_at <= $7)`,
+      [token, claimedAt + Math.max(1, Math.floor(Number(leaseSeconds)) || 300), ...reminderParams({ guildId, weekId, gameKey, kind }), claimedAt],
+    );
+    return changes(result) ? token : null;
+  });
+}
+
+export async function markEwcPredictionReminderSent({ guildId, weekId, gameKey, kind, claimToken }) {
+  const result = await run(
+    `UPDATE ewc_prediction_reminders
+     SET sent_at = $1, claim_token = NULL, claim_expires_at = NULL
+     WHERE guild_id = $2 AND week_id = $3 AND game_key = $4 AND kind = $5
+       AND sent_at IS NULL AND claim_token = $6`,
+    [nowText(), ...reminderParams({ guildId, weekId, gameKey, kind }), claimToken],
+  );
+  return Boolean(changes(result));
+}
+
+export async function releaseEwcPredictionReminderClaim({ guildId, weekId, gameKey, kind, claimToken }) {
+  const result = await run(
+    `UPDATE ewc_prediction_reminders
+     SET claim_token = NULL, claim_expires_at = NULL
+     WHERE guild_id = $1 AND week_id = $2 AND game_key = $3 AND kind = $4
+       AND sent_at IS NULL AND claim_token = $5`,
+    [...reminderParams({ guildId, weekId, gameKey, kind }), claimToken],
+  );
+  return Boolean(changes(result));
+}
+
+export async function getEwcPredictionReminder({ guildId, weekId, gameKey, kind }) {
+  return get(
+    `SELECT * FROM ewc_prediction_reminders
+     WHERE guild_id = $1 AND week_id = $2 AND game_key = $3 AND kind = $4`,
+    reminderParams({ guildId, weekId, gameKey, kind }),
+  );
 }
 
 export async function setEwcWeekStatus(weekId, status, client = null) {

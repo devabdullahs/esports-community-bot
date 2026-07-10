@@ -200,6 +200,7 @@ describe("EWC profile routes", () => {
       lockedGames: 1,
       totalGames: 3,
       pickedGames: 1,
+      isComplete: false,
       remainingGameKeys: ["open-remaining"],
       discordUrl: `https://discord.com/channels/${user.guildId}`,
     });
@@ -247,9 +248,42 @@ describe("EWC profile routes", () => {
     const body = await (await meGET(new Request("http://localhost/api/me/ewc"))).json();
     expect(body.actionableRounds).toHaveLength(2);
     expect(body.actionableRounds.map((round: { weekKey: string }) => round.weekKey)).toEqual(["overlap-first", "overlap-second"]);
-    expect(body.actionableRounds[0]).toMatchObject({ pickedGames: 1, openUnpickedGameKeys: [] });
+    expect(body.actionableRounds[0]).toMatchObject({ pickedGames: 1, isComplete: true, openUnpickedGameKeys: [] });
     expect(body.actionableRounds[1]).toMatchObject({ pickedGames: 0, openUnpickedGameKeys: ["second-open"] });
     expect(JSON.stringify(body.actionableRounds)).not.toContain("Team Falcons");
+  });
+
+  test("GET /api/me/ewc deep-links the private progress action to the persistent picker when configured", async () => {
+    const user = {
+      authUserId: "dev-ewc-picker-link-user",
+      discordUserId: "200000000000048108",
+      guildId: "920000000000000108",
+    };
+    useDevSession(user.authUserId, user.discordUserId);
+    await seedProfileLink(user);
+    const now = Math.floor(Date.now() / 1000);
+    const { upsertEwcWeek } = await import("@bot/db/ewcPredictions.js");
+    const { setEwcPredictionsLeaderboard, setEwcPredictionsLeaderboardMessage } = await import("@bot/db/settings.js");
+    await upsertEwcWeek({
+      guildId: user.guildId,
+      season: SEASON,
+      weekKey: "picker-link",
+      label: "Picker link",
+      openAt: now - 60,
+      closeAt: now + 3_600,
+      games: [{ key: "open", game: "Valorant", lockAt: now + 1_800 }],
+      createdBy: "web-test",
+    });
+    await setEwcPredictionsLeaderboard(user.guildId, { channelId: "930000000000000108", season: SEASON });
+    await setEwcPredictionsLeaderboardMessage(user.guildId, "940000000000000108");
+
+    const body = await (await meGET(new Request("http://localhost/api/me/ewc"))).json();
+    expect(body.currentRound).toMatchObject({
+      weekKey: "picker-link",
+      isComplete: false,
+      discordUrl: "https://discord.com/channels/920000000000000108/930000000000000108/940000000000000108",
+    });
+    expect(JSON.stringify(body.currentRound)).not.toContain("pick:");
   });
 
   test("POST /api/me/ewc creates the profile link with a same-origin request", async () => {

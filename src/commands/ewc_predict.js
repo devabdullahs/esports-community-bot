@@ -34,7 +34,7 @@ import {
 } from '../db/ewcPredictions.js';
 import { getEwcProfileLinkByDiscordUser } from '../db/ewcProfileLinks.js';
 import { effectiveEwcWeekStatus, formatShortDate, formatTimestamp, normalizeClubName } from '../lib/ewcPredictions.js';
-import { selectCurrentOpenEwcWeek } from '../lib/ewcPredictionRounds.js';
+import { predictionRoundCompletion, selectCurrentOpenEwcWeek } from '../lib/ewcPredictionRounds.js';
 import { searchEwcClubChoices } from '../lib/ewcClubCache.js';
 import { ewcGameParticipantTeams } from '../lib/ewcGameTeams.js';
 import { submitSeasonSlot, submitWeeklyGamePick } from '../lib/ewcPredictionWrites.js';
@@ -297,6 +297,13 @@ export async function weeklyPickPayload(guildId, seasonYear, weekKey, userId, pa
   const saved = await getWeeklyPrediction(guildId, round.id, userId);
   const picks = saved?.picks || [];
   const pageModel = weeklyPickerPage(round.games, picks, page);
+  const completion = predictionRoundCompletion(round, picks);
+  const deadline = completion.nextLockAt ? `Next lock ${formatTimestamp(completion.nextLockAt)}` : 'No upcoming lock';
+  const completionState = completion.isComplete
+    ? '✅ All picks complete'
+    : completion.missedGames.length
+      ? `⚠ ${completion.missedGames.length} missed`
+      : `${completion.openUnpickedGames.length} remaining`;
 
   // Components V2: one Section per game so its button sits in line with the game,
   // and the message edits in place to show each pick. (V2 messages can't carry an embed.)
@@ -308,7 +315,7 @@ export async function weeklyPickPayload(guildId, seasonYear, weekKey, userId, pa
   );
   container.addTextDisplayComponents(
     new TextDisplayBuilder().setContent(
-      `-# Status: ${weeklySelectStatus(round)} · ${pageModel.pickedGames}/${pageModel.totalGames} picked · Page ${pageModel.page + 1}/${pageModel.totalPages}`,
+      `-# Status: ${weeklySelectStatus(round)} · ${pageModel.pickedGames}/${pageModel.totalGames} picked · ${completionState} · ${deadline} · Page ${pageModel.page + 1}/${pageModel.totalPages}`,
     ),
   );
   pageModel.games.forEach((game) => {
@@ -905,7 +912,7 @@ function announceWeeklyParticipation(interaction, round) {
   return announceEwcParticipation(
     interaction.client,
     interaction.guildId,
-    `🎯 <@${interaction.user.id}> is in for **${round.label || round.week_key}** — predictions are open! Picks stay secret until lock. 🔒`,
+    `🎯 <@${interaction.user.id}> started picks for **${round.label || round.week_key}**. Picks stay secret until each game locks. 🔒`,
     { channelId: interaction.channelId },
   );
 }

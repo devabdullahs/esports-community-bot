@@ -16,9 +16,10 @@ import {
   getEwcRoleConnectionPayload,
   getEwcUserProfileStats,
 } from "@bot/lib/ewcProfileStats.js";
+import { getSettings } from "@bot/db/settings.js";
 import { getWeeklyPrediction, listEwcWeeks } from "@bot/db/ewcPredictions.js";
 import { effectiveEwcWeekStatus } from "@bot/lib/ewcPredictions.js";
-import { categorizeEwcPredictionRounds } from "@bot/lib/ewcPredictionRounds.js";
+import { categorizeEwcPredictionRounds, predictionRoundCompletion } from "@bot/lib/ewcPredictionRounds.js";
 import {
   deleteDiscordRoleConnection,
   updateDiscordRoleConnection,
@@ -101,7 +102,13 @@ type HydratedWeek = {
 
 type WeeklyPrediction = { picks?: Array<string | { gameKey?: string; pick?: string }> } | null;
 
-async function projectRoundForViewer(round: HydratedWeek, guildId: string, discordUserId: string, now: number) {
+async function projectRoundForViewer(
+  round: HydratedWeek,
+  guildId: string,
+  discordUserId: string,
+  now: number,
+  discordUrl: string,
+) {
 
   const state = effectiveEwcWeekStatus(round, now) as {
     label: string;
@@ -111,23 +118,7 @@ async function projectRoundForViewer(round: HydratedWeek, guildId: string, disco
   };
   const prediction = (await getWeeklyPrediction(guildId, round.id, discordUserId)) as WeeklyPrediction;
   const games = Array.isArray(round.games) ? round.games : [];
-  const gameKeys = new Set(games.map((game) => String(game.key || "")).filter(Boolean));
-  const pickedGameKeys = new Set(
-    (prediction?.picks ?? [])
-      .map((pick) => (pick && typeof pick === "object" ? String(pick.gameKey || "") : ""))
-      .filter((key) => key && gameKeys.has(key)),
-  );
-  const openGames = games.filter((game) => !game.lockAt || now < game.lockAt);
-  const lockedGames = games.filter((game) => game.lockAt && now >= game.lockAt);
-  const openUnpickedGameKeys = openGames
-    .map((game) => String(game.key || ""))
-    .filter((key) => key && !pickedGameKeys.has(key));
-  const lockedUnpickedGameKeys = lockedGames
-    .map((game) => String(game.key || ""))
-    .filter((key) => key && !pickedGameKeys.has(key));
-  const openLocks = openGames
-    .map((game) => Number(game.lockAt))
-    .filter((lockAt) => Number.isFinite(lockAt));
+  const completion = predictionRoundCompletion(round, prediction?.picks ?? [], now);
 
   return {
     id: round.id,
@@ -135,18 +126,19 @@ async function projectRoundForViewer(round: HydratedWeek, guildId: string, disco
     label: round.label || round.week_key,
     status: state.label,
     closesAt: round.close_at ?? null,
-    nextLockAt: openLocks.length ? Math.min(...openLocks) : round.close_at ?? null,
+    nextLockAt: completion.nextLockAt,
+    finalLockAt: completion.finalLockAt,
     openGames: state.openGames,
     lockedGames: state.lockedGames,
     totalGames: state.totalGames,
-    pickedGames: pickedGameKeys.size,
-    pickedGameKeys: [...pickedGameKeys],
-    openUnpickedGames: openUnpickedGameKeys.length,
-    openUnpickedGameKeys,
-    lockedUnpickedGames: lockedUnpickedGameKeys.length,
-    lockedUnpickedGameKeys,
+    pickedGames: completion.pickedGames,
+    isComplete: completion.isComplete,
+    openUnpickedGames: completion.openUnpickedGames.length,
+    openUnpickedGameKeys: completion.openUnpickedGames.map((game) => game.key),
+    lockedUnpickedGames: completion.missedGames.length,
+    lockedUnpickedGameKeys: completion.missedGames.map((game) => game.key),
     // Compatibility for callers that used the one-round projection before plan 083.
-    remainingGameKeys: openUnpickedGameKeys,
+    remainingGameKeys: completion.openUnpickedGames.map((game) => game.key),
     games: games
       .filter((game) => game.key)
       .map((game) => ({
@@ -156,15 +148,28 @@ async function projectRoundForViewer(round: HydratedWeek, guildId: string, disco
         lockAt: game.lockAt ?? null,
         state: !game.lockAt || now < game.lockAt ? "open" : "locked",
       })),
-    discordUrl: `https://discord.com/channels/${guildId}`,
+    discordUrl,
   };
+}
+
+function predictionPickerUrl(guildId: string, settings: Record<string, unknown>) {
+  const channelId = String(settings.ewc_predictions_leaderboard_channel_id || "");
+  const messageId = String(settings.ewc_predictions_leaderboard_message_id || "");
+  if (/^\d{16,20}$/.test(guildId) && /^\d{16,20}$/.test(channelId) && /^\d{16,20}$/.test(messageId)) {
+    return `https://discord.com/channels/${guildId}/${channelId}/${messageId}`;
+  }
+  return `https://discord.com/channels/${guildId}`;
 }
 
 export async function actionableRoundsForViewer(guildId: string, season: string, discordUserId: string) {
   const now = Math.floor(Date.now() / 1000);
-  const weeks = (await listEwcWeeks(guildId, season)) as HydratedWeek[];
+  const [weeks, settings] = await Promise.all([
+    listEwcWeeks(guildId, season) as Promise<HydratedWeek[]>,
+    getSettings(guildId),
+  ]);
   const { actionable } = categorizeEwcPredictionRounds(weeks, now) as { actionable: HydratedWeek[] };
-  return Promise.all(actionable.map((round) => projectRoundForViewer(round, guildId, discordUserId, now)));
+  const discordUrl = predictionPickerUrl(guildId, settings);
+  return Promise.all(actionable.map((round) => projectRoundForViewer(round, guildId, discordUserId, now, discordUrl)));
 }
 
 export async function syncEwcProfileForAuthUser({

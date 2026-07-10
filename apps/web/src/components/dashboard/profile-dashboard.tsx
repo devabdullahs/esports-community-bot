@@ -81,6 +81,7 @@ type MePayload = {
     label: string;
     status: string;
     closesAt: number | null;
+    finalLockAt: number | null;
     openGames: number;
     lockedGames: number;
     totalGames: number;
@@ -91,6 +92,7 @@ type MePayload = {
     lockedUnpickedGames: number;
     lockedUnpickedGameKeys: string[];
     nextLockAt: number | null;
+    isComplete: boolean;
     discordUrl: string;
   } | null;
   actionableRounds: Array<{
@@ -100,10 +102,12 @@ type MePayload = {
     status: string;
     closesAt: number | null;
     nextLockAt: number | null;
+    finalLockAt: number | null;
     openGames: number;
     lockedGames: number;
     totalGames: number;
     pickedGames: number;
+    isComplete: boolean;
     remainingGameKeys: string[];
     openUnpickedGames: number;
     openUnpickedGameKeys: string[];
@@ -324,7 +328,7 @@ export function ProfileDashboard({
                     <div className="flex flex-wrap gap-2">
                       <Badge variant="secondary">
                         <ListChecksIcon data-icon="inline-start" />
-                        {text.remainingPicks(round.openUnpickedGames)}
+                        {round.isComplete ? text.picksComplete : text.remainingPicks(round.openUnpickedGames)}
                       </Badge>
                       {round.lockedUnpickedGames ? <Badge variant="outline">{text.missedPicks(round.lockedUnpickedGames)}</Badge> : null}
                       {round.nextLockAt ? (
@@ -337,7 +341,7 @@ export function ProfileDashboard({
                     <div className="flex flex-wrap gap-2">
                       <Button render={<a href={round.discordUrl} target="_blank" rel="noreferrer" />} nativeButton={false}>
                         <MessageCircleIcon data-icon="inline-start" />
-                        {text.openDiscord}
+                        {text.openMyPicks}
                       </Button>
                       <Button
                         render={<Link href={localizedPath(`/leaderboard/${stats.guildId}/${stats.season}`, locale)} />}

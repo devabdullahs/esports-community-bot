@@ -106,7 +106,7 @@ or optimize for guild counts.
 | 081  | Make the public MCP fast, complete, and directly linkable | P2 | M-L | 080 | DONE |
 | 082  | Make prediction writes atomic and deadline-safe | P1 | M | - | DONE (this commit) |
 | 083  | Surface every actionable prediction round | P1 | M | - | DONE (this commit) |
-| 084  | Make prediction deadlines and completion truthful | P1 | M | 083 | TODO |
+| 084  | Make prediction deadlines and completion truthful | P1 | M | 083 | DONE (this commit) |
 | 085  | Remove Discord prediction picker component ceilings | P2 | M | 082 | DONE (this commit) |
 | 086  | Make prediction ranks tie-aware on every surface | P2 | M | - | TODO |
 | 087  | Add explainable prediction score breakdowns | P2 | M | 082 | TODO |

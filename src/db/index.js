@@ -333,6 +333,18 @@ db.exec(`
     PRIMARY KEY (guild_id, week_id, user_id)
   );
 
+  CREATE TABLE IF NOT EXISTS ewc_prediction_reminders (
+    guild_id          TEXT NOT NULL,
+    week_id           INTEGER NOT NULL REFERENCES ewc_prediction_weeks(id) ON DELETE CASCADE,
+    game_key          TEXT NOT NULL,
+    kind              TEXT NOT NULL,
+    sent_at           TEXT,
+    claim_token       TEXT,
+    claim_expires_at  INTEGER,
+    attempts          INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (guild_id, week_id, game_key, kind)
+  );
+
   CREATE TABLE IF NOT EXISTS ewc_prediction_seasons (
     guild_id       TEXT NOT NULL,
     season         TEXT NOT NULL DEFAULT '2026',
@@ -373,6 +385,8 @@ db.exec(`
 
   CREATE INDEX IF NOT EXISTS idx_ewc_weekly_predictions_week
     ON ewc_weekly_predictions(week_id, score DESC);
+  CREATE INDEX IF NOT EXISTS idx_ewc_prediction_reminders_claim
+    ON ewc_prediction_reminders(sent_at, claim_expires_at);
   CREATE INDEX IF NOT EXISTS idx_ewc_season_predictions_season
     ON ewc_season_predictions(guild_id, season, score DESC);
   CREATE INDEX IF NOT EXISTS idx_ewc_club_championship_snapshots_fetched

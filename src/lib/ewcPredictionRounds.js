@@ -7,6 +7,53 @@ function nextLockAt(week, now) {
   return locks.length ? Math.min(...locks) : week?.close_at || null;
 }
 
+function displayGame(game) {
+  return {
+    key: String(game?.key || ''),
+    label: [game?.game, game?.event].filter(Boolean).join(' — ') || String(game?.key || 'Game'),
+    lockAt: Number.isFinite(Number(game?.lockAt)) ? Number(game.lockAt) : null,
+  };
+}
+
+// This is deliberately a progress-only projection. It tells a member which
+// configured games still need attention without returning any pick values.
+export function predictionRoundCompletion(round, picks, now = Math.floor(Date.now() / 1000)) {
+  const games = (Array.isArray(round?.games) ? round.games : []).filter((game) => game?.key);
+  const gameKeys = new Set(games.map((game) => String(game.key)));
+  const pickedGameKeys = new Set(
+    (Array.isArray(picks) ? picks : [])
+      .map((pick) => (pick && typeof pick === 'object' ? String(pick.gameKey || '') : ''))
+      .filter((key) => key && gameKeys.has(key)),
+  );
+  const openUnpickedGames = [];
+  const missedGames = [];
+  const locks = [];
+
+  for (const game of games) {
+    const item = displayGame(game);
+    if (item.lockAt && item.lockAt > now) locks.push(item.lockAt);
+    if (pickedGameKeys.has(item.key)) continue;
+    if (!item.lockAt || item.lockAt > now) openUnpickedGames.push(item);
+    else missedGames.push(item);
+  }
+
+  openUnpickedGames.sort((a, b) => (a.lockAt || Infinity) - (b.lockAt || Infinity) || a.label.localeCompare(b.label));
+  missedGames.sort((a, b) => (a.lockAt || 0) - (b.lockAt || 0) || a.label.localeCompare(b.label));
+  const finalLockAt = locks.length
+    ? Math.max(...locks)
+    : games.map((game) => Number(game.lockAt)).filter(Number.isFinite).reduce((latest, lockAt) => Math.max(latest, lockAt), null);
+
+  return {
+    pickedGames: pickedGameKeys.size,
+    totalGames: games.length,
+    isComplete: games.length > 0 && pickedGameKeys.size === games.length,
+    openUnpickedGames,
+    missedGames,
+    nextLockAt: locks.length ? Math.min(...locks) : null,
+    finalLockAt,
+  };
+}
+
 // Official events can overlap because rounds are grouped by their finish week
 // while individual games lock before they begin. Keep the full set so each
 // surface can expose every actionable pick rather than only its default entry.

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { categorizeEwcPredictionRounds, selectCurrentOpenEwcWeek } from '../src/lib/ewcPredictionRounds.js';
+import { categorizeEwcPredictionRounds, predictionRoundCompletion, selectCurrentOpenEwcWeek } from '../src/lib/ewcPredictionRounds.js';
 
 const NOW = 2_000;
 
@@ -59,4 +59,51 @@ test('categorizeEwcPredictionRounds orders upcoming and awaiting-scoring rounds 
 
   assert.deepEqual(categorized.upcoming.map((round) => round.week_key), ['future-first', 'future-later']);
   assert.deepEqual(categorized.awaitingScoring.map((round) => round.week_key), ['awaiting-new', 'awaiting-old']);
+});
+
+test('predictionRoundCompletion ignores stale picks and orders independent open locks', () => {
+  const completion = predictionRoundCompletion(
+    week({
+      games: [
+        { key: 'picked', game: 'Valorant', event: 'EWC', lockAt: 2_400 },
+        { key: 'later', game: 'Dota 2', lockAt: 3_000 },
+        { key: 'next', game: 'Chess', lockAt: 2_100 },
+        { key: 'missed', game: 'StarCraft', lockAt: 1_900 },
+      ],
+    }),
+    [{ gameKey: 'picked', pick: 'Team Falcons' }, { gameKey: 'removed-game', pick: 'Legacy' }],
+    NOW,
+  );
+
+  assert.equal(completion.pickedGames, 1);
+  assert.equal(completion.totalGames, 4);
+  assert.equal(completion.isComplete, false);
+  assert.equal(completion.nextLockAt, 2_100);
+  assert.equal(completion.finalLockAt, 3_000);
+  assert.deepEqual(completion.openUnpickedGames.map((game) => game.key), ['next', 'later']);
+  assert.deepEqual(completion.missedGames.map((game) => game.key), ['missed']);
+  assert.doesNotMatch(JSON.stringify(completion), /Team Falcons|Legacy/);
+});
+
+test('predictionRoundCompletion distinguishes empty and complete rounds without leaking values', () => {
+  assert.deepEqual(predictionRoundCompletion(week({ games: [] }), [], NOW), {
+    pickedGames: 0,
+    totalGames: 0,
+    isComplete: false,
+    openUnpickedGames: [],
+    missedGames: [],
+    nextLockAt: null,
+    finalLockAt: null,
+  });
+
+  const completion = predictionRoundCompletion(
+    week({ games: [{ key: 'a', game: 'A', lockAt: 2_400 }, { key: 'b', game: 'B', lockAt: 2_600 }] }),
+    [{ gameKey: 'a', pick: 'One' }, { gameKey: 'b', pick: 'Two' }],
+    NOW,
+  );
+  assert.equal(completion.isComplete, true);
+  assert.equal(completion.pickedGames, 2);
+  assert.deepEqual(completion.openUnpickedGames, []);
+  assert.deepEqual(completion.missedGames, []);
+  assert.doesNotMatch(JSON.stringify(completion), /One|Two/);
 });
