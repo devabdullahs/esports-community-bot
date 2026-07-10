@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  BellIcon,
   ChevronDownIcon,
   CrownIcon,
   Gamepad2Icon,
@@ -22,6 +23,10 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useState } from "react";
 import { DiscordIcon } from "@/components/discord-icon";
+import {
+  NotificationUnreadBadge,
+  useUnreadNotifications,
+} from "@/components/follows/notification-badge";
 import { ModeToggle } from "@/components/mode-toggle";
 import { SignOutButton } from "@/components/dashboard/sign-out-button";
 import { signOut } from "@/lib/auth-client";
@@ -111,6 +116,7 @@ export function SiteHeaderClient({
   const [signingOut, setSigningOut] = useState(false);
   const text = copy[locale];
   const nextLocale = locale === "ar" ? "en" : "ar";
+  const unreadNotifications = useUnreadNotifications(hasSession);
 
   async function handleSignOut() {
     setSigningOut(true);
@@ -135,6 +141,11 @@ export function SiteHeaderClient({
   // Co-streams stays top-level because it spans every tracked event and carries
   // a live indicator when any co-streamer is on air.
   const coStreamsLink: Destination = { href: "/co-streams", label: text.common.coStreams, icon: RadioIcon };
+  const notificationsLink: Destination = {
+    href: "/me?tab=notifications",
+    label: text.follows.notificationsTitle,
+    icon: BellIcon,
+  };
   const primary: Destination[] = [...contentLinks, ...competitionLinks, coStreamsLink];
   const desktopGroups = [
     { label: text.common.content, icon: NewspaperIcon, links: contentLinks },
@@ -291,13 +302,16 @@ export function SiteHeaderClient({
                 <Button
                   variant="outline"
                   size="sm"
-                  className="hidden gap-1.5 px-2.5 lg:inline-flex"
+                  className="hidden w-36 gap-1.5 px-2.5 lg:inline-flex"
                   aria-label={text.common.account}
                 />
               }
             >
               <UserRoundIcon />
               <span>{text.common.account}</span>
+              <span className="ms-auto flex size-5 shrink-0 items-center justify-center">
+                <NotificationUnreadBadge count={unreadNotifications} locale={locale} />
+              </span>
               <ChevronDownIcon className="size-3.5 text-muted-foreground" />
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-52">
@@ -308,6 +322,19 @@ export function SiteHeaderClient({
                 <UserRoundIcon />
                 {text.common.myProfile}
               </DropdownMenuItem>
+              {hasSession ? (
+                <DropdownMenuItem
+                  render={<Link href={localizedPath(notificationsLink.href, locale)} />}
+                >
+                  <BellIcon />
+                  {notificationsLink.label}
+                  <NotificationUnreadBadge
+                    count={unreadNotifications}
+                    locale={locale}
+                    className="ms-auto"
+                  />
+                </DropdownMenuItem>
+              ) : null}
               {isAdmin ? (
                 <DropdownMenuItem
                   render={<Link href={localizedPath("/admin", locale)} />}
@@ -436,6 +463,20 @@ export function SiteHeaderClient({
                     <ShieldCheckIcon className="size-4 text-muted-foreground" />
                     <span className="min-w-0 truncate">{text.common.admin}</span>
                   </SheetClose>
+                ) : null}
+                {hasSession ? (
+                  <MobileNavLink
+                    destination={notificationsLink}
+                    locale={locale}
+                    active={false}
+                    badge={
+                      <NotificationUnreadBadge
+                        count={unreadNotifications}
+                        locale={locale}
+                        className="ms-auto"
+                      />
+                    }
+                  />
                 ) : null}
                 <SheetClose
                   render={

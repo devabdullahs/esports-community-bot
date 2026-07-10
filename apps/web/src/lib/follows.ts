@@ -9,6 +9,7 @@ import {
 import {
   countUnreadNotifications as _countUnread,
   getNotificationPrefs as _getPrefs,
+  listNotificationPageForUser as _listNotificationPage,
   listNotificationsForUser as _listNotifications,
   markAllNotificationsRead as _markAllRead,
   markNotificationRead as _markRead,
@@ -74,6 +75,10 @@ const listNotifications = _listNotifications as unknown as (
   discordUserId: string,
   opts?: { limit?: number; offset?: number },
 ) => Promise<NotificationRow[]>;
+const listNotificationPage = _listNotificationPage as unknown as (
+  discordUserId: string,
+  opts?: { limit?: number; offset?: number },
+) => Promise<{ notifications: NotificationRow[]; nextOffset: number | null }>;
 const countUnread = _countUnread as unknown as (discordUserId: string) => Promise<number>;
 const markRead = _markRead as unknown as (discordUserId: string, id: number) => Promise<number>;
 const markAllRead = _markAllRead as unknown as (discordUserId: string) => Promise<number>;
@@ -88,6 +93,7 @@ export {
   getFollow,
   listFollows,
   upsertFollow,
+  listNotificationPage,
   listNotifications,
   countUnread,
   markRead,
