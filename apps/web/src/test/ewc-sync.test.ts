@@ -93,10 +93,12 @@ async function seedScoredWeek({
   guildId,
   userId,
   score,
+  details = { total: score },
 }: {
   guildId: string;
   userId: string;
   score: number;
+  details?: Record<string, unknown>;
 }): Promise<void> {
   const {
     saveWeeklyPredictionScore,
@@ -117,7 +119,7 @@ async function seedScoredWeek({
     userId,
     picks: ["Team Falcons", "T1", "Gen.G"],
   });
-  await saveWeeklyPredictionScore(guildId, week.id, userId, score, { total: score });
+  await saveWeeklyPredictionScore(guildId, week.id, userId, score, details);
 }
 
 beforeEach(() => {
@@ -205,6 +207,35 @@ describe("EWC profile routes", () => {
       discordUrl: `https://discord.com/channels/${user.guildId}`,
     });
     expect(JSON.stringify(body.currentRound)).not.toContain("Team Falcons");
+  });
+
+  test("GET /api/me/ewc returns bounded score breakdowns only for stored scores", async () => {
+    const user = {
+      authUserId: "dev-ewc-breakdown-user",
+      discordUserId: "200000000000048109",
+      guildId: "920000000000000109",
+    };
+    useDevSession(user.authUserId, user.discordUserId);
+    await seedProfileLink(user);
+    await seedScoredWeek({
+      guildId: user.guildId,
+      userId: user.discordUserId,
+      score: 1000,
+      details: {
+        mode: "per-game",
+        bonus: 0,
+        picks: [{ gameKey: "valorant", game: "Valorant", pick: "Team Falcons", matchedClub: "Team Falcons", place: "1st", points: 1000, winner: "Team Falcons" }],
+      },
+    });
+
+    const body = await (await meGET(new Request("http://localhost/api/me/ewc"))).json();
+    expect(body.stats.recentWeekly[0].breakdown).toMatchObject({
+      available: true,
+      kind: "weekly-per-game",
+      total: 1000,
+      integrity: "ok",
+      rows: [{ game: "Valorant", pick: "Team Falcons", points: 1000, status: "scored" }],
+    });
   });
 
   test("GET /api/me/ewc projects progress for every overlapping actionable round without pick values", async () => {

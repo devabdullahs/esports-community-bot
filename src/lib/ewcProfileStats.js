@@ -7,12 +7,12 @@ import {
   userPredictionProfile,
 } from '../db/ewcPredictions.js';
 import { WEEKLY_TOP_THREE_SWEEP_BONUS } from './ewcPredictions.js';
+import { projectSeasonScoreBreakdown, projectWeeklyScoreBreakdown } from './ewcPredictionBreakdown.js';
+import { scoreBreakdownVisible, seasonPicksVisible } from './ewcPredictionVisibility.js';
 
 export const DEFAULT_EWC_PROFILE_SEASON = '2026';
 const MAX_SHOWCASE_USERNAME = 100;
 const UNRANKED_VALUE = 999999;
-
-const nowSec = () => Math.floor(Date.now() / 1000);
 
 export const EWC_ROLE_CONNECTION_METADATA = [
   {
@@ -177,16 +177,6 @@ function seasonPickTeams(profile) {
   return profile?.season?.picks?.length ? profile.season.picks.slice(0, 3) : [];
 }
 
-function seasonPicksVisible(round, score = null, now = nowSec()) {
-  return Boolean(
-    score != null ||
-      !round ||
-      round.status === 'closed' ||
-      round.status === 'scored' ||
-      (round.close_at && now >= round.close_at)
-  );
-}
-
 async function seasonPickTeamsForUsers(guildId, season, userIds, { includeHiddenPicks = false } = {}) {
   const uniqueIds = [...new Set(userIds.filter(Boolean))];
   const teams = new Map(uniqueIds.map((userId) => [userId, []]));
@@ -235,6 +225,7 @@ function recentWeekly(profile) {
       score: row.score == null ? null : Number(row.score),
       picks: (row.picks || []).map(formatWeeklyPickLabel).filter(Boolean),
       bonus: Number(row.details?.bonus || 0),
+      breakdown: scoreBreakdownVisible(row) ? projectWeeklyScoreBreakdown(row) : null,
     }));
 }
 
@@ -273,6 +264,7 @@ export async function getEwcUserProfileStats(guildId, season = DEFAULT_EWC_PROFI
     seasonPicks: canShowSeasonPicks ? profile.season?.picks || [] : [],
     seasonPicksHidden: hasSeasonPicks && !canShowSeasonPicks,
     seasonScore: profile.season?.score == null ? null : Number(profile.season.score),
+    seasonBreakdown: scoreBreakdownVisible(profile.season) ? projectSeasonScoreBreakdown(profile.season) : null,
     recentWeekly: recentWeekly(profile),
   };
   return {

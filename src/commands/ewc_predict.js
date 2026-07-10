@@ -43,6 +43,8 @@ import { announceEwcParticipation } from '../lib/ewcParticipation.js';
 import { updateEwcPredictionLeaderboard } from '../jobs/ewcPredictions.js';
 import { renderEwcShareCard } from '../lib/ewcShareCard.js';
 import { logger } from '../lib/logger.js';
+import { projectSeasonScoreBreakdown, projectWeeklyScoreBreakdown } from '../lib/ewcPredictionBreakdown.js';
+import { seasonPicksVisible, weeklyPickVisible } from '../lib/ewcPredictionVisibility.js';
 import QRCode from 'qrcode';
 
 const DEFAULT_SEASON = '2026';
@@ -446,25 +448,6 @@ async function getExistingGamePick(guildId, round, userId, gameKey) {
 const HIDDEN_PICK_SUMMARY = 'Participated - picks hidden until lock.';
 const HIDDEN_SEASON_SUMMARY = 'Participated - picks hidden until the season locks.';
 
-function seasonPicksVisible(round, score = null, now = Math.floor(Date.now() / 1000)) {
-  return Boolean(
-    score != null ||
-      !round ||
-      round.status === 'closed' ||
-      round.status === 'scored' ||
-      (round.close_at && now >= round.close_at)
-  );
-}
-
-function weeklyPickVisible(row, pick, now = Math.floor(Date.now() / 1000)) {
-  if (row.score != null || row.status === 'scored') return true;
-  if (pick && typeof pick === 'object') {
-    const game = (row.games || []).find((roundGame) => roundGame.key === pick.gameKey);
-    return Boolean(game?.lockAt && now >= game.lockAt);
-  }
-  return Boolean(row.close_at && now >= row.close_at);
-}
-
 function summarizeWeeklyPicks(row, { isOwner = false } = {}) {
   const picks = row.picks || [];
   if (!picks.length) return 'No picks';
@@ -480,6 +463,79 @@ function summarizeWeeklyPicks(row, { isOwner = false } = {}) {
       return `${pick.game || pick.gameKey}: ${pick.pick}`;
     })
     .join(' | ') || 'No picks';
+}
+
+function limitDiscordText(value, limit = 1024) {
+  const normalized = String(value || '').trim();
+  return normalized.length <= limit ? normalized || '-' : `${normalized.slice(0, limit - 3)}...`;
+}
+
+function scoreBreakdownField(row, index, kind) {
+  if (kind === 'weekly-per-game') {
+    return {
+      name: limitDiscordText(row.game || `Game ${index + 1}`, 256),
+      value: limitDiscordText(
+        `Pick: ${row.pick || '—'}\nResult: ${row.matchedClub || 'No matching result'}${row.placement ? ` (${row.placement})` : ''}\nPoints: ${row.points}${row.winner ? `\nWinner: ${row.winner}` : ''}\nStatus: ${row.status}`,
+      ),
+    };
+  }
+  if (kind === 'weekly-aggregate') {
+    return {
+      name: limitDiscordText(`Pick ${index + 1}: ${row.pick || '—'}`, 256),
+      value: limitDiscordText(
+        `Matched team: ${row.matchedTeam || 'No matching team'}\nWeekly rank: ${row.weeklyRank || '—'}\nPoints: ${row.points}\nStatus: ${row.status}`,
+      ),
+    };
+  }
+  return {
+    name: limitDiscordText(`Predicted #${row.predictedRank || index + 1}: ${row.pick || '—'}`, 256),
+    value: limitDiscordText(
+      `Matched team: ${row.matchedTeam || 'No matching team'}\nActual rank: ${row.actualRank || '—'}\nHit points: ${row.hitPoints}\nExact-rank bonus: ${row.exactBonus}\nTotal: ${row.points}\nStatus: ${row.status}`,
+    ),
+  };
+}
+
+export function buildScoreBreakdownEmbed(title, breakdown) {
+  const embed = new EmbedBuilder()
+    .setColor(breakdown?.integrity === 'mismatch' ? 0xed4245 : 0x5865f2)
+    .setTitle(limitDiscordText(`Score details — ${title}`, 256));
+  if (!breakdown?.available) {
+    return embed.setDescription('The stored score details are unavailable for this historical result.');
+  }
+  const integrity = breakdown.integrity === 'mismatch' ? '\n⚠️ Stored total does not match its detail rows. Contact an admin.' : '';
+  embed.setDescription(limitDiscordText(`Total: **${breakdown.total}**\nBonus: **${breakdown.bonus}**${integrity}`, 4096));
+  const fields = breakdown.rows.slice(0, 20).map((row, index) => scoreBreakdownField(row, index, breakdown.kind));
+  if (fields.length) embed.addFields(fields);
+  return embed;
+}
+
+export function buildProfileDetailsComponents(profile, seasonYear, targetUserId, ownerId) {
+  const options = [];
+  if (profile.season?.score != null) {
+    options.push(
+      new StringSelectMenuOptionBuilder()
+        .setLabel('Season result')
+        .setDescription(`Score: ${Number(profile.season.score).toLocaleString()}`)
+        .setValue('season'),
+    );
+  }
+  for (const week of profile.weekly.filter((row) => row.score != null).slice(-5).reverse()) {
+    options.push(
+      new StringSelectMenuOptionBuilder()
+        .setLabel(limitDiscordText(week.label || week.week_key, 100))
+        .setDescription(limitDiscordText(`Score: ${Number(week.score).toLocaleString()}`, 100))
+        .setValue(`week:${week.week_key}`),
+    );
+  }
+  if (!options.length) return [];
+  return [
+    new ActionRowBuilder().addComponents(
+      new StringSelectMenuBuilder()
+        .setCustomId(`ewc_predict:pd:${seasonYear}:${targetUserId}:${ownerId}`)
+        .setPlaceholder('View scored result details')
+        .addOptions(options.slice(0, 25)),
+    ),
+  ];
 }
 
 function leaderboardLines(rows) {
@@ -1008,6 +1064,7 @@ export async function execute(interaction) {
             { name: 'Recent weekly picks', value: (weekly.length ? weekly.join('\n') : 'No weekly picks yet.').slice(0, 1024) },
           ),
       ],
+      components: buildProfileDetailsComponents(profile, seasonYear, user.id, interaction.user.id),
       flags: MessageFlags.Ephemeral,
     });
     return;
@@ -1255,6 +1312,32 @@ export async function handleComponent(interaction) {
       return;
     }
     await interaction.update({ components: payload.components });
+    return;
+  }
+  if (action === 'pd') {
+    const [, , seasonYear, targetUserId, ownerId] = parts;
+    if (!ownerId || interaction.user.id !== ownerId) {
+      await interaction.reply({
+        content: 'These score details belong to whoever opened the prediction profile.',
+        flags: MessageFlags.Ephemeral,
+      });
+      return;
+    }
+    const selected = interaction.values?.[0];
+    const profile = await userPredictionProfile(interaction.guildId, seasonYear, targetUserId);
+    const seasonDetails = selected === 'season' ? projectSeasonScoreBreakdown(profile.season) : null;
+    const weekKey = typeof selected === 'string' && selected.startsWith('week:') ? selected.slice(5) : null;
+    const week = weekKey ? profile.weekly.find((row) => row.week_key === weekKey) : null;
+    const weeklyDetails = week ? projectWeeklyScoreBreakdown(week) : null;
+    const breakdown = seasonDetails || weeklyDetails;
+    if (!breakdown) {
+      await interaction.reply({ content: 'That scored result is no longer available.', flags: MessageFlags.Ephemeral });
+      return;
+    }
+    await interaction.reply({
+      embeds: [buildScoreBreakdownEmbed(week?.label || (selected === 'season' ? `EWC ${seasonYear} season` : 'Prediction result'), breakdown)],
+      flags: MessageFlags.Ephemeral,
+    });
     return;
   }
 
