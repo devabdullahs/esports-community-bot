@@ -40,6 +40,21 @@ function eventNameTokens(value) {
   return new Set(String(value || '').toLowerCase().split(/[^a-z0-9]+/).filter((token) => token.length > 2 && !ignored.has(token)));
 }
 
+function resultPageUrl(slug, url) {
+  if (normalizeGameSlug(slug) !== 'apexlegends' || !url) return url;
+  try {
+    const parsed = new URL(url);
+    if (!/liquipedia\.net$/i.test(parsed.hostname)) return url;
+    if (/\/Playoffs\/?$/i.test(parsed.pathname)) {
+      parsed.pathname = `${parsed.pathname.replace(/\/$/, '')}/Finals`;
+      return parsed.toString();
+    }
+  } catch {
+    return url;
+  }
+  return url;
+}
+
 export async function resolveEwcGameEventUrl(gameName, { guildId, eventUrl = null, eventName = null } = {}) {
   const slug = slugForGameName(gameName);
   if (!slug || !guildId) return eventUrl;
@@ -51,21 +66,21 @@ export async function resolveEwcGameEventUrl(gameName, { guildId, eventUrl = nul
   const exact = requestedPath
     ? liquipediaRows.find((row) => eventPathFromUrl(row.url) === requestedPath)
     : null;
-  if (exact) return exact.url;
+  if (exact) return resultPageUrl(slug, exact.url);
 
   if (normalizeGameSlug(slug) === 'fighters') {
     const wanted = fightersTag(gameName);
     const tagged = liquipediaRows.find((row) => fightersTag(row.name) === wanted);
-    if (tagged) return tagged.url;
+    if (tagged) return resultPageUrl(slug, tagged.url);
   }
   const wantedTokens = eventNameTokens(eventName);
   if (wantedTokens.size) {
     const ranked = liquipediaRows
       .map((row) => ({ row, score: [...eventNameTokens(row.name)].filter((token) => wantedTokens.has(token)).length }))
       .sort((a, b) => b.score - a.score);
-    if (ranked[0]?.score > 0) return ranked[0].row.url;
+    if (ranked[0]?.score > 0) return resultPageUrl(slug, ranked[0].row.url);
   }
-  return liquipediaRows[0].url;
+  return resultPageUrl(slug, liquipediaRows[0].url);
 }
 
 // Narrow EWC team rows to the week game's OWN event. Fallback chain, most to
