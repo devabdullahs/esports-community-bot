@@ -10,6 +10,7 @@ import {
   UsersIcon,
 } from "lucide-react";
 import { EwcClubViewSwitcher } from "@/components/clubs/ewc-club-view-switcher";
+import { LocalDateTime } from "@/components/local-date-time";
 import { PageBreadcrumb } from "@/components/page-breadcrumb";
 import { ProfileAvatar } from "@/components/profiles/profile-avatar";
 import { LiquipediaAttribution } from "@/components/tournaments/liquipedia-attribution";
@@ -32,7 +33,7 @@ import {
   type EwcClubTrackerClub,
 } from "@/lib/ewc-clubs";
 import { CLUB_REGION_IDS, cleanClubRegion, type ClubRegionId } from "@/lib/ewc-club-regions";
-import { copy, formatDateTime, formatNumber, localizedPath, type Locale } from "@/lib/i18n";
+import { copy, formatNumber, localizedPath, type Locale } from "@/lib/i18n";
 import { buildPageMetadata } from "@/lib/metadata";
 import { getRequestLocale } from "@/lib/request-locale";
 
@@ -271,9 +272,11 @@ export default async function EwcClubsPage({
             <p className="text-sm leading-6 text-muted-foreground sm:text-base">{text.description}</p>
             <p className="text-xs leading-5 text-muted-foreground">
               {text.sourceNote}{" "}
-              {data.updatedAt
-                ? text.updated(formatDateTime(data.updatedAt, locale))
-                : text.awaitingSnapshot}
+              {data.updatedAt ? (
+                <>
+                  {text.updated("")} <LocalDateTime value={data.updatedAt} locale={locale} />
+                </>
+              ) : text.awaitingSnapshot}
             </p>
             {data.stale ? (
               <p className="text-xs leading-5 text-muted-foreground">{text.staleNotice}</p>
