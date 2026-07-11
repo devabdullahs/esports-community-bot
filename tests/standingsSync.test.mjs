@@ -11,9 +11,10 @@ process.env.DISCORD_TOKEN = 'test-token';
 process.env.DISCORD_CLIENT_ID = 'test-client-id';
 
 const { closeDb } = await import('../src/db/index.js');
-const { addTournament } = await import('../src/db/tournaments.js');
+const { addTournament, archiveTournament } = await import('../src/db/tournaments.js');
+const { upsertMatch } = await import('../src/db/matches.js');
 const { listStandingsForTournament, replaceTournamentStandings } = await import('../src/db/tournamentStandings.js');
-const { isStandingsGame, runStandingsSync } = await import('../src/jobs/standingsSync.js');
+const { isStandingsGame, refreshLiveBattleRoyaleStandings, runStandingsSync } = await import('../src/jobs/standingsSync.js');
 
 const GUILD = 'guild-standings';
 let pubgEvent;
@@ -128,4 +129,35 @@ test('a fetch failure on one event never blocks the others', async () => {
   });
   assert.equal(summary.failed, 1);
   assert.equal((await listStandingsForTournament(tft.id)).length, 1);
+});
+
+test('boot refresh prioritizes only standings tournaments with a running BR lobby', async () => {
+  const apex = await addTournament({
+    source: 'liquipedia', external_id: 'apexlegends/Test/Finals', game: 'apexlegends',
+    name: 'Apex Finals', url: 'https://liquipedia.net/apexlegends/Test/Finals', guild_id: GUILD,
+  });
+  await upsertMatch({
+    tournament_id: apex.id,
+    source: 'liquipedia',
+    external_id: 'apexlegends:br-schedule:test:grand-final-game-1',
+    team_a: 'Grand Final - Game 1',
+    team_b: 'Lobby',
+    status: 'running',
+  });
+  const fetched = [];
+  const summary = await refreshLiveBattleRoyaleStandings({
+    liquipedia: {
+      fetchEventStandings: async (tournament) => {
+        fetched.push(tournament.id);
+        return {
+          hadRows: true,
+          sections: [{ title: 'Grand Final', entries: [{ rank: 1, team: 'Wolves Esports', points: '38' }] }],
+        };
+      },
+    },
+  });
+  assert.deepEqual(fetched, [apex.id]);
+  assert.equal(summary.rows, 1);
+  assert.equal((await listStandingsForTournament(apex.id))[0].points, '38');
+  await archiveTournament(apex.id, GUILD);
 });

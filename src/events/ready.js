@@ -14,7 +14,7 @@ import { startPandaScoreProfileCache } from '../jobs/pandascoreProfiles.js';
 import { startLogoWarmup } from '../jobs/logoWarmup.js';
 import { notifyMatchEvent, startNotifier } from '../jobs/notifier.js';
 import { startLiquipediaEnrichment } from '../jobs/liquipediaEnrichment.js';
-import { startStandingsSync } from '../jobs/standingsSync.js';
+import { refreshLiveBattleRoyaleStandings, startStandingsSync } from '../jobs/standingsSync.js';
 import { primeEwcClubCache } from '../lib/ewcClubCache.js';
 
 // NOTE: in discord.js 14.26 this event's string is "clientReady" — always use the enum.
@@ -54,6 +54,7 @@ export function execute(client) {
   });
 
   startMorningSync(client);
+  refreshLiveBattleRoyaleStandings().catch((e) => logger.warn(`[standings] live boot refresh failed: ${e.message}`));
   resumePolling().catch((e) => logger.error(`[poll] resume failed: ${e.message}`)); // re-arm matches still pending/running from before a restart
   refreshAllGuilds(client).catch((e) => logger.error(`[refresh] boot repaint failed: ${e.message}`)); // repaint leaderboards/voice on boot
   startClubChampionship(client); // EWC Club Championship standings refresh loop
