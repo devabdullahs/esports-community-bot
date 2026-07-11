@@ -365,6 +365,27 @@ test('standings merge keeps different participant fields with similar titles', (
   assert.equal(merged.length, 2);
 });
 
+test('standings merge unions overlapping responsive fragments without duplicate teams', () => {
+  const entry = (rank, team, points) => ({ rank, team, points: String(points), extra: '' });
+  const merged = mergeStandingsSectionAliases([
+    { title: 'Survivor Stage: Survivor Stage', entries: [entry(1, 'RRQ', 0), entry(2, 'Ninjas in Pyjamas', 0)] },
+    { title: 'Survivor Stage: Survivor Stage', entries: [entry(1, 'RRQ', 89), entry(2, 'Ninjas in Pyjamas', 82), entry(3, 'ENTER FORCE.36', 79)] },
+    { title: 'Survivor Stage: Survivor Stage', entries: [entry(2, 'Ninjas in Pyjamas', 82), entry(3, 'ENTER FORCE.36', 79), entry(4, 'Wolves Esports', 78)] },
+  ]);
+
+  assert.equal(merged.length, 1);
+  assert.equal(merged[0].title, 'Survivor Stage');
+  assert.deepEqual(
+    merged[0].entries.map(({ rank, team, points }) => ({ rank, team, points })),
+    [
+      { rank: 1, team: 'RRQ', points: '89' },
+      { rank: 2, team: 'Ninjas in Pyjamas', points: '82' },
+      { rank: 3, team: 'ENTER FORCE.36', points: '79' },
+      { rank: 4, team: 'Wolves Esports', points: '78' },
+    ],
+  );
+});
+
 test('group-table parses group title, aria-label team, match + game scores', () => {
   const sections = parseGroupTableStandings(group$);
   assert.equal(sections.length, 1);

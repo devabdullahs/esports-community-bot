@@ -298,12 +298,35 @@ function canonicalStandingsTitle(title) {
   return leaf.replace(/\bfinals\b/gi, 'Final').toLowerCase();
 }
 
-function standingsTeamKey(section) {
-  return (section.entries || [])
-    .map((entry) => cleanText(entry.team).toLowerCase())
+function fullStandingsTitle(title) {
+  const parts = cleanText(title)
+    .split(/\s*:\s*/)
     .filter(Boolean)
-    .sort()
-    .join('|');
+    .map((part) => part.replace(/\bfinals\b/gi, 'Final').toLowerCase());
+  if (parts.length > 1 && parts.every((part) => part === parts[0])) return parts[0];
+  return parts.join(':');
+}
+
+function displayStandingsTitle(title) {
+  const parts = cleanText(title).split(/\s*:\s*/).filter(Boolean);
+  if (parts.length > 1 && parts.every((part) => canonicalStandingsTitle(part) === canonicalStandingsTitle(parts[0]))) {
+    return parts.at(-1);
+  }
+  return cleanText(title);
+}
+
+function standingsTeamSet(section) {
+  return new Set(
+    (section.entries || [])
+      .map((entry) => cleanText(entry.team).toLowerCase())
+      .filter(Boolean),
+  );
+}
+
+function standingsEntryWeight(entry) {
+  const points = Number(entry?.points);
+  const extra = Number(entry?.extra);
+  return (Number.isFinite(points) ? Math.abs(points) : 0) + (Number.isFinite(extra) ? Math.abs(extra) : 0);
 }
 
 function standingsResultWeight(section) {
@@ -314,28 +337,65 @@ function standingsResultWeight(section) {
   }, 0);
 }
 
-// Overview pages often transclude a stale zero-point table while a dedicated
-// child page exposes the same field under a generic prefix such as
-// "Finals: Grand Final". Treat those as aliases only when their participant
-// fields also match, and retain the copy with actual results.
+// API HTML can expose one field as overlapping responsive/overflow fragments.
+// Overview pages can also transclude a stale zero-point table while a child
+// page exposes the same complete field under a prefix such as
+// "Finals: Grand Final". Union same-title fragments team-by-team, but require
+// an exact participant set before merging differently prefixed aliases.
 export function mergeStandingsSectionAliases(sections) {
   const kept = [];
-  const byIdentity = new Map();
   for (const section of sections) {
     const title = canonicalStandingsTitle(section.title);
-    const teams = standingsTeamKey(section);
-    if (!title || !teams) {
+    const fullTitle = fullStandingsTitle(section.title);
+    const teams = standingsTeamSet(section);
+    if (!title || !teams.size) {
       kept.push(section);
       continue;
     }
-    const key = `${title}|${teams}`;
-    const index = byIdentity.get(key);
-    if (index == null) {
-      byIdentity.set(key, kept.length);
-      kept.push(section);
+
+    const index = kept.findIndex((candidate) => {
+      const candidateTeams = standingsTeamSet(candidate);
+      if (!candidateTeams.size) return false;
+      const overlap = [...teams].filter((team) => candidateTeams.has(team)).length;
+      if (!overlap) return false;
+
+      // The API HTML can contain desktop/mobile/overflow fragments for one
+      // field. Those fragments share the full title but only partially overlap.
+      if (fullStandingsTitle(candidate.title) === fullTitle) return true;
+
+      // Overview and child pages can prefix the same complete field differently
+      // (for example "Grand Final" and "Finals: Grand Final"). Keep this alias
+      // rule strict so different groups with similar leaf titles stay separate.
+      return canonicalStandingsTitle(candidate.title) === title &&
+        overlap === teams.size && overlap === candidateTeams.size;
+    });
+
+    if (index < 0) {
+      kept.push({ ...section, title: displayStandingsTitle(section.title), entries: [...(section.entries || [])] });
       continue;
     }
-    if (standingsResultWeight(section) >= standingsResultWeight(kept[index])) kept[index] = section;
+
+    const existing = kept[index];
+    const incomingIsRicher = standingsResultWeight(section) >= standingsResultWeight(existing);
+    const entries = [...(existing.entries || [])];
+    const byTeam = new Map(entries.map((entry, entryIndex) => [cleanText(entry.team).toLowerCase(), entryIndex]));
+    for (const entry of section.entries || []) {
+      const team = cleanText(entry.team).toLowerCase();
+      if (!team) continue;
+      const entryIndex = byTeam.get(team);
+      if (entryIndex == null) {
+        byTeam.set(team, entries.length);
+        entries.push(entry);
+      } else if (standingsEntryWeight(entry) >= standingsEntryWeight(entries[entryIndex])) {
+        entries[entryIndex] = entry;
+      }
+    }
+    entries.sort((a, b) => (Number(a.rank) || Number.MAX_SAFE_INTEGER) - (Number(b.rank) || Number.MAX_SAFE_INTEGER));
+    kept[index] = {
+      ...existing,
+      title: incomingIsRicher ? displayStandingsTitle(section.title) : displayStandingsTitle(existing.title),
+      entries,
+    };
   }
   return kept;
 }
