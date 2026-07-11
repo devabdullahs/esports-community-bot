@@ -8,6 +8,7 @@ import * as cheerio from 'cheerio';
 import {
   parseBattleRoyaleParticipantGroups,
   parseBattleRoyaleSchedules,
+  mergeBattleRoyaleSchedules,
   parseParticipantTables,
   hasStandingsRows,
   parseBattleRoyaleStandings,
@@ -280,6 +281,49 @@ test('battle-royale schedule rows trust Liquipedia game state icons', () => {
 
   const matches = parseBattleRoyaleSchedules($, 'apexlegends', 'Apex/Page/Group_Stage', 'Group Stage');
   assert.deepEqual(matches.map((match) => match.status), ['finished', 'running', 'scheduled']);
+});
+
+test('battle-royale schedules collapse parent/child stage twins and repair shifted game labels', () => {
+  const schedule = (name, scheduledAt, status = 'scheduled', page = 'overview') => ({
+    source: 'liquipedia',
+    externalId: `apexlegends:br-schedule:${page}:${name.toLowerCase().replace(/\W+/g, '-')}`,
+    name,
+    teamA: name,
+    teamB: 'Lobby',
+    scheduledAt,
+    status,
+  });
+  const merged = mergeBattleRoyaleSchedules([
+    schedule('Grand Final - Game 1', 1000, 'running'),
+    schedule('Grand Final - Game 2', 2000),
+    schedule('Grand Final - Game 3', 3000),
+    schedule('Finals - Grand Final - Game 1', 2000, 'running', 'finals'),
+    schedule('Finals - Grand Final - Game 2', 3000, 'finished', 'finals'),
+    schedule('Finals - Grand Final - Game 3', 4000, 'scheduled', 'finals'),
+  ]);
+
+  assert.deepEqual(merged.map((match) => match.name), [
+    'Grand Final - Game 1',
+    'Grand Final - Game 2',
+    'Grand Final - Game 3',
+    'Grand Final - Game 4',
+  ]);
+  assert.deepEqual(merged.map((match) => match.status), ['running', 'running', 'finished', 'scheduled']);
+  assert.deepEqual(merged.map((match) => match.teamA), merged.map((match) => match.name));
+});
+
+test('battle-royale schedule merge keeps distinct simultaneous lobby sections', () => {
+  const base = {
+    source: 'liquipedia',
+    teamB: 'Lobby',
+    scheduledAt: 1000,
+    status: 'scheduled',
+  };
+  const merged = mergeBattleRoyaleSchedules([
+    { ...base, externalId: 'a', name: 'Group Stage - A vs B - Game 1', teamA: 'A vs B' },
+    { ...base, externalId: 'b', name: 'Group Stage - C vs D - Game 1', teamA: 'C vs D' },
+  ]);
+  assert.equal(merged.length, 2);
 });
 
 test('group-table parses group title, aria-label team, match + game scores', () => {

@@ -25,7 +25,12 @@ import {
   mergeLiveWidgetMatch,
 } from './parsers.js';
 import { alignMatchDetailsSides, parseMatchDetails } from './matchDetailsParsers.js';
-import { hasStandingsRows, parseBattleRoyaleSchedules, parseEventStandings } from './standingsParsers.js';
+import {
+  hasStandingsRows,
+  mergeBattleRoyaleSchedules,
+  parseBattleRoyaleSchedules,
+  parseEventStandings,
+} from './standingsParsers.js';
 
 const MATCH_DETAIL_GAMES = new Set(['valorant', 'dota2']);
 
@@ -163,6 +168,7 @@ export async function fetchSchedule(tournament) {
   const { $ } = loaded;
 
   const out = [];
+  const scheduleMatches = [];
   const seenIds = new Set();
   const pairIndex = new Map(); // pairKey -> kept authoritative matches
   const pairOf = (m) => [normalizeTeamName(m.teamA), normalizeTeamName(m.teamB)].sort().join('|');
@@ -274,7 +280,7 @@ export async function fetchSchedule(tournament) {
       out.push(m);
     }
 
-    addScheduleMatches(parseBattleRoyaleSchedules($page, game, pagePath, stageTitle));
+    scheduleMatches.push(...parseBattleRoyaleSchedules($page, game, pagePath, stageTitle));
   };
 
   const addLiveWidgetsPage = ({ $: $page }) => {
@@ -298,6 +304,7 @@ export async function fetchSchedule(tournament) {
   };
 
   for (const loadedPage of pages) addAuthoritativePage(loadedPage);
+  addScheduleMatches(mergeBattleRoyaleSchedules(scheduleMatches));
   for (const loadedPage of pages) addLiveWidgetsPage(loadedPage);
 
   return out;
