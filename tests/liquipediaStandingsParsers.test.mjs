@@ -9,6 +9,7 @@ import {
   parseBattleRoyaleParticipantGroups,
   parseBattleRoyaleSchedules,
   mergeBattleRoyaleSchedules,
+  mergeStandingsSectionAliases,
   parseParticipantTables,
   hasStandingsRows,
   parseBattleRoyaleStandings,
@@ -322,6 +323,29 @@ test('battle-royale schedule merge keeps distinct simultaneous lobby sections', 
   const merged = mergeBattleRoyaleSchedules([
     { ...base, externalId: 'a', name: 'Group Stage - A vs B - Game 1', teamA: 'A vs B' },
     { ...base, externalId: 'b', name: 'Group Stage - C vs D - Game 1', teamA: 'C vs D' },
+  ]);
+  assert.equal(merged.length, 2);
+});
+
+test('standings merge treats Grand Final and Finals-prefixed Grand Final as one field', () => {
+  const teams = ['Wolves Esports', 'RRQ', 'Team Vision'];
+  const section = (title, points) => ({
+    title,
+    entries: teams.map((team, index) => ({ rank: index + 1, team, points: String(points[index]), extra: '' })),
+  });
+  const merged = mergeStandingsSectionAliases([
+    section('Grand Final', [0, 0, 0]),
+    section('Finals: Grand Final', [38, 37, 35]),
+  ]);
+  assert.equal(merged.length, 1);
+  assert.equal(merged[0].title, 'Finals: Grand Final');
+  assert.deepEqual(merged[0].entries.map((entry) => entry.points), ['38', '37', '35']);
+});
+
+test('standings merge keeps different participant fields with similar titles', () => {
+  const merged = mergeStandingsSectionAliases([
+    { title: 'Grand Final', entries: [{ rank: 1, team: 'Alpha', points: '10', extra: '' }] },
+    { title: 'Finals: Grand Final', entries: [{ rank: 1, team: 'Bravo', points: '12', extra: '' }] },
   ]);
   assert.equal(merged.length, 2);
 });

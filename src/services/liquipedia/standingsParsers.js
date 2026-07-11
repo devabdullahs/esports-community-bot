@@ -275,6 +275,54 @@ export function parseBattleRoyaleSchedules($, game, page, stageTitle = '') {
   return matches;
 }
 
+function canonicalStandingsTitle(title) {
+  const parts = cleanText(title).split(/\s*:\s*/).filter(Boolean);
+  const leaf = parts.at(-1) || '';
+  return leaf.replace(/\bfinals\b/gi, 'Final').toLowerCase();
+}
+
+function standingsTeamKey(section) {
+  return (section.entries || [])
+    .map((entry) => cleanText(entry.team).toLowerCase())
+    .filter(Boolean)
+    .sort()
+    .join('|');
+}
+
+function standingsResultWeight(section) {
+  return (section.entries || []).reduce((total, entry) => {
+    const points = Number(entry.points);
+    const extra = Number(entry.extra);
+    return total + (Number.isFinite(points) ? Math.abs(points) : 0) + (Number.isFinite(extra) ? Math.abs(extra) : 0);
+  }, 0);
+}
+
+// Overview pages often transclude a stale zero-point table while a dedicated
+// child page exposes the same field under a generic prefix such as
+// "Finals: Grand Final". Treat those as aliases only when their participant
+// fields also match, and retain the copy with actual results.
+export function mergeStandingsSectionAliases(sections) {
+  const kept = [];
+  const byIdentity = new Map();
+  for (const section of sections) {
+    const title = canonicalStandingsTitle(section.title);
+    const teams = standingsTeamKey(section);
+    if (!title || !teams) {
+      kept.push(section);
+      continue;
+    }
+    const key = `${title}|${teams}`;
+    const index = byIdentity.get(key);
+    if (index == null) {
+      byIdentity.set(key, kept.length);
+      kept.push(section);
+      continue;
+    }
+    if (standingsResultWeight(section) >= standingsResultWeight(kept[index])) kept[index] = section;
+  }
+  return kept;
+}
+
 function scheduleStageParts(name) {
   const parts = cleanText(name).split(/\s+-\s+/).filter(Boolean);
   if (parts.length >= 3 && /^(?:group|survivor|survival|swiss) stage$|^(?:finals|playoffs|last chance)$/i.test(parts[0])) {
