@@ -65,9 +65,27 @@ test('parseEwcEventPlacements: ignores an earlier qualifier table', () => {
     <h2>Prize Pool</h2>
     <table class="table2__table prizepooltable"><tr><th>Place</th><th>Participant</th><th>$ USD</th><th>Club Points</th></tr>
       <tr><td class="prizepooltable-place">1</td><td class="prizepooltable-col-team"><span data-highlightingclass="Champion">Champion</span></td><td>$250,000</td><td>1,000</td></tr>
+      <tr><td class="prizepooltable-place">5-8</td><td class="prizepooltable-col-team"><span data-highlightingclass="FifthA">FifthA</span></td><td>$37,500</td><td>200</td></tr>
+      <tr><td></td><td class="prizepooltable-col-team"><span data-highlightingclass="FifthB">FifthB</span></td><td></td><td></td></tr>
     </table>`);
   assert.deepEqual(parseEwcEventPlacements($, { game: 'Fighter Games' }), [
     { club: 'Champion', place: '1', points: 1000, participant: null },
+    { club: 'FifthA', place: '5-8', points: 200, participant: null },
+    { club: 'FifthB', place: '5-8', points: 200, participant: null },
+  ]);
+});
+
+test('parseEwcEventPlacements: maps an Apex finals panel table to EWC points', () => {
+  const $ = load(`
+    <div class="panel-table">
+      <div class="panel-table__row row--header"><div class="cell--rank">Rank</div><div class="cell--team">Team</div></div>
+      <div class="panel-table__row"><div class="cell--rank" data-sort-val="1">1st</div><div class="cell--team" data-sort-val="UNLIMIT"><span class="block-team"><span class="name">UNLIMIT</span></span></div></div>
+      <div class="panel-table__row"><div class="cell--rank" data-sort-val="2">2nd</div><div class="cell--team" data-sort-val="Team Vision"><span class="block-team"><span class="name">Team Vision</span></span></div></div>
+      <div class="panel-table__row"><div class="cell--rank" data-sort-val="9">9th</div><div class="cell--team" data-sort-val="Outside Points">Outside Points</div></div>
+    </div>`);
+  assert.deepEqual(parseEwcEventPlacements($, { game: 'Apex Legends' }), [
+    { club: 'UNLIMIT', place: '1', points: 1000, participant: null },
+    { club: 'Team Vision', place: '2', points: 750, participant: null },
   ]);
 });
 

@@ -7,7 +7,7 @@
 //    team in the entry cell's aria-label, match score + game score columns.
 // No client imports; callers pass a cheerio $.
 
-import { deriveStatus, ewcPrizePoolTable, imageSrc, normalizeImageUrl, teamName } from './parsers.js';
+import { deriveStatus, ewcPrizePoolTable, imageSrc, normalizeImageUrl, playerName, teamName } from './parsers.js';
 
 function cleanText(value) {
   return String(value ?? '').replace(/\s+/g, ' ').trim();
@@ -233,15 +233,18 @@ export function parsePrizePoolFinalStandings($) {
   const table = ewcPrizePoolTable($);
   if (!table.length || !/club\s*points?/i.test(cleanText(table.find('tr').first().text()))) return null;
   const entries = [];
+  let carriedPlace = '';
   table.find('tr').each((_, row) => {
-    const placeText = cleanText($(row).find('.prizepooltable-place').first().text());
+    const explicitPlace = cleanText($(row).find('.prizepooltable-place').first().text());
+    if (explicitPlace) carriedPlace = explicitPlace;
+    const placeText = explicitPlace || carriedPlace;
     const rank = Number.parseInt(placeText.match(/\d+/)?.[0] || '', 10);
-    if (!Number.isFinite(rank) || rank < 1 || rank > 8) return;
+    if (!Number.isFinite(rank) || rank < 1) return;
     const participantCell = $(row).find('.prizepooltable-col-team').first();
     const participantBlocks = participantCell.find('.block-player, .block-team').toArray();
     const blocks = participantBlocks.length ? participantBlocks : [participantCell.get(0)].filter(Boolean);
     for (const block of blocks) {
-      const team = teamName($, block);
+      const team = $(block).hasClass('block-player') ? playerName($, block) : teamName($, block);
       if (!isRealTeam(team)) continue;
       entries.push({
         rank,

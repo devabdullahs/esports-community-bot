@@ -479,15 +479,23 @@ test('fighter prize pool is the final standings, not the earlier qualifier field
     </div>
     <h2>Prize Pool</h2>
     <table class="table2__table prizepooltable"><tr><th>Place</th><th>Participant</th><th>$ USD</th><th>Club Points</th></tr>
-      <tr><td class="prizepooltable-place">1</td><td class="prizepooltable-col-team"><span class="block-player"><span data-highlightingclass="DarkAngel">DarkAngel</span></span></td><td>$250,000</td><td>1,000</td></tr>
-      <tr><td class="prizepooltable-place">2</td><td class="prizepooltable-col-team"><span class="block-player"><span data-highlightingclass="mi2ha4">mi2ha4</span></span></td><td>$130,000</td><td>750</td></tr>
+      <tr><td class="prizepooltable-place">1</td><td class="prizepooltable-col-team"><span class="block-player"><span class="name">DarkAngel</span><a title="Natus Vincere">NAVI</a></span></td><td>$250,000</td><td>1,000</td></tr>
+      <tr><td class="prizepooltable-place">2</td><td class="prizepooltable-col-team"><span class="block-player"><span class="name">mi2ha4</span><a title="Virtus.pro">VP</a></span></td><td>$130,000</td><td>750</td></tr>
+      <tr><td class="prizepooltable-place">5-8</td><td class="prizepooltable-col-team"><span class="block-player"><span class="name">ZJZ</span><a title="T1">T1</a></span></td><td>$37,500</td><td>200</td></tr>
+      <tr><td></td><td class="prizepooltable-col-team"><span class="block-player"><span class="name">NaiWang</span><a title="Weibo Gaming">WBG</a></span></td><td></td><td></td></tr>
+      <tr><td class="prizepooltable-place">9-12</td><td class="prizepooltable-col-team"><span class="block-player"><span class="name">Kindevu</span></span></td><td>$27,500</td><td>-</td></tr>
     </table>`);
   assert.deepEqual(parsePrizePoolFinalStandings($)?.entries.map(({ rank, team }) => ({ rank, team })), [
     { rank: 1, team: 'DarkAngel' },
     { rank: 2, team: 'mi2ha4' },
+    { rank: 5, team: 'ZJZ' },
+    { rank: 5, team: 'NaiWang' },
+    { rank: 9, team: 'Kindevu' },
   ]);
   assert.equal(parseEventStandings($)[0].title, 'Final standings');
-  assert.deepEqual(parseEventStandings($)[0].entries.map((entry) => entry.team), ['DarkAngel', 'mi2ha4']);
+  assert.deepEqual(parseEventStandings($)[0].entries.map((entry) => entry.team), [
+    'DarkAngel', 'mi2ha4', 'ZJZ', 'NaiWang', 'Kindevu',
+  ]);
 });
 
 test('an all-TBD table (unseeded event) yields no section', () => {
