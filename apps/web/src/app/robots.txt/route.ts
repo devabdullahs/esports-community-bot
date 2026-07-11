@@ -17,8 +17,16 @@ export function GET() {
     // Admin surface, API routes, and per-user/auth pages are not for crawlers.
     "Disallow: /admin",
     "Disallow: /api/",
-    "Disallow: /me",
-    "Disallow: /login",
+    // `$` prevents the private `/me` route from prefix-matching public
+    // `/media` pages in Google robots syntax.
+    "Disallow: /me$",
+    "Disallow: /me?",
+    "Disallow: /ar/me$",
+    "Disallow: /ar/me?",
+    "Disallow: /login$",
+    "Disallow: /login?",
+    "Disallow: /ar/login$",
+    "Disallow: /ar/login?",
     "",
     `Sitemap: ${absoluteUrl("/sitemap.xml")}`,
     "",
