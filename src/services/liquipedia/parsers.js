@@ -103,6 +103,25 @@ export function teamName($, cell) {
   return raw.replace(/\(page does not exist\)/i, '').replace(/\s+/g, ' ').trim();
 }
 
+// EWC event pages can contain qualification tables before the actual prize
+// pool. Prefer the table whose columns explicitly carry Club Points so callers
+// never treat qualifier seeding as the final event result.
+export function ewcPrizePoolTable($) {
+  const candidates = $('.prizepooltable').toArray();
+  if (!candidates.length) return $();
+  const ranked = candidates
+    .map((table, index) => {
+      const header = $(table).find('tr').first().text().replace(/\s+/g, ' ').trim();
+      const heading = $(table).prevAll('h2, h3, h4').first().text().replace(/\s+/g, ' ').trim();
+      const score = (/club\s*points?/i.test(header) ? 8 : 0) +
+        (/\b(?:usd|prize)\b|\$/i.test(header) ? 4 : 0) +
+        (/\bprize\s*pool\b/i.test(heading) ? 2 : 0);
+      return { table, index, score };
+    })
+    .sort((a, b) => b.score - a.score || a.index - b.index);
+  return $(ranked[0].table);
+}
+
 // Extract a single integer score from a bracket/matchlist score cell, tolerating
 // surrounding whitespace/markup (a stray <sup>, a non-breaking space, etc.).
 // Returns null for an empty or non-numeric cell — e.g. an unplayed slot, or a
@@ -1068,7 +1087,7 @@ function clubsFromPrizepoolRow($, row, game, playerLookup) {
 // Parse a Liquipedia event prizepool table into normalized per-club placements.
 // `event` carries the game label so solo games can be mapped via the player list.
 export function parseEwcEventPlacements($, event, players = []) {
-  const table = $('.prizepooltable').first();
+  const table = ewcPrizePoolTable($);
   if (!table.length) return [];
   const playerLookup = buildEwcPlayerClubLookup(players);
   const byClub = new Map();

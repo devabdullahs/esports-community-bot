@@ -57,6 +57,20 @@ test('parseEwcEventPlacements: maps current table2 solo participants back to clu
   ]);
 });
 
+test('parseEwcEventPlacements: ignores an earlier qualifier table', () => {
+  const $ = load(`
+    <table class="prizepooltable"><tr><th>Place</th><th>Participant</th></tr>
+      <tr><td class="prizepooltable-place">1</td><td class="prizepooltable-col-team"><span data-highlightingclass="QualifierOne">QualifierOne</span></td></tr>
+    </table>
+    <h2>Prize Pool</h2>
+    <table class="table2__table prizepooltable"><tr><th>Place</th><th>Participant</th><th>$ USD</th><th>Club Points</th></tr>
+      <tr><td class="prizepooltable-place">1</td><td class="prizepooltable-col-team"><span data-highlightingclass="Champion">Champion</span></td><td>$250,000</td><td>1,000</td></tr>
+    </table>`);
+  assert.deepEqual(parseEwcEventPlacements($, { game: 'Fighter Games' }), [
+    { club: 'Champion', place: '1', points: 1000, participant: null },
+  ]);
+});
+
 // ---------------------------------------------------------------------------
 // parseClubStandings
 // ---------------------------------------------------------------------------
