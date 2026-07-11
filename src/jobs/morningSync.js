@@ -27,6 +27,15 @@ import * as pandascore from '../services/pandascore.js';
 // Liquipedia is primary (free, broad coverage); start.gg secondary; pandascore optional.
 const services = { liquipedia, startgg, pandascore };
 
+async function cleanupDuplicateTournamentUrls() {
+  try {
+    const duplicates = await archiveDuplicateTournamentUrls();
+    if (duplicates) logger.info(`[morning-sync] archived ${duplicates} duplicate tournament URL alias(es).`);
+  } catch (err) {
+    logger.error(`[morning-sync] tournament duplicate cleanup failed: ${err.message}`);
+  }
+}
+
 // Fetch one tournament's current matches, persist them, and arm live-polling. Returns count.
 export async function syncTournament(client, t) {
   const service = services[t.source];
@@ -93,12 +102,7 @@ export async function runMorningSync(client) {
   // Archive tournaments that fully ended (every match finished) more than
   // TOURNAMENT_UNTRACK_AFTER_HOURS ago (default 72h). Archived events stay
   // browseable on the site but leave live/polling surfaces.
-  try {
-    const duplicates = await archiveDuplicateTournamentUrls();
-    if (duplicates) logger.info(`[morning-sync] archived ${duplicates} duplicate tournament URL alias(es).`);
-  } catch (err) {
-    logger.error(`[morning-sync] tournament duplicate cleanup failed: ${err.message}`);
-  }
+  await cleanupDuplicateTournamentUrls();
 
   const staleHours = Number(process.env.TOURNAMENT_UNTRACK_AFTER_HOURS) || 72;
   try {
@@ -153,7 +157,11 @@ export function startMorningSync(client) {
   );
   logger.info(`[morning-sync] Scheduled "${morningCron}" (${timezone}).`);
 
+  // This is database-only and cheap. Run it on every boot even when a full
+  // source sync is disabled, so stale aliases never remain visible until 08:00.
   if (syncOnBoot) {
     runMorningSync(client).catch((e) => logger.error('[morning-sync] boot run failed:', e));
+  } else {
+    cleanupDuplicateTournamentUrls();
   }
 }
