@@ -233,10 +233,13 @@ export function parsePrizePoolFinalStandings($) {
   const table = ewcPrizePoolTable($);
   if (!table.length || !/club\s*points?/i.test(cleanText(table.find('tr').first().text()))) return null;
   const entries = [];
+  let carriedPlace = '';
   table.find('tr').each((_, row) => {
-    const placeText = cleanText($(row).find('.prizepooltable-place').first().text());
+    const explicitPlace = cleanText($(row).find('.prizepooltable-place').first().text());
+    if (explicitPlace) carriedPlace = explicitPlace;
+    const placeText = explicitPlace || carriedPlace;
     const rank = Number.parseInt(placeText.match(/\d+/)?.[0] || '', 10);
-    if (!Number.isFinite(rank) || rank < 1 || rank > 8) return;
+    if (!Number.isFinite(rank) || rank < 1) return;
     const participantCell = $(row).find('.prizepooltable-col-team').first();
     const participantBlocks = participantCell.find('.block-player, .block-team').toArray();
     const blocks = participantBlocks.length ? participantBlocks : [participantCell.get(0)].filter(Boolean);

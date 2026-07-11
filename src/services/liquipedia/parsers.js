@@ -1091,10 +1091,13 @@ export function parseEwcEventPlacements($, event, players = []) {
   const playerLookup = buildEwcPlayerClubLookup(players);
   const byClub = new Map();
 
+  let carriedPlace = '';
   table.find('.csstable-widget-row, tr').each((_i, row) => {
     const $row = $(row);
     if ($row.hasClass('prizepooltable-header')) return;
-    const place = $row.find('.prizepooltable-place').first().text().replace(/\s+/g, ' ').trim();
+    const explicitPlace = $row.find('.prizepooltable-place').first().text().replace(/\s+/g, ' ').trim();
+    if (explicitPlace) carriedPlace = explicitPlace;
+    const place = explicitPlace || carriedPlace;
     const points = ewcPlacementPoints(place);
     if (!place || !points) return;
 
