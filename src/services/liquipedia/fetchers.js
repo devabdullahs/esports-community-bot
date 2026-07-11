@@ -387,15 +387,16 @@ function liquipediaEventPage(event) {
   }
 }
 
-export async function fetchEwcEventPlacements(event, players = []) {
-  const page = liquipediaEventPage(event);
-  if (!page) return { ...event, placements: [], error: 'Missing Liquipedia event URL' };
-  const data = await parsePage(page.wiki, page.page);
+export async function fetchEwcEventPlacements(event, players = [], { parse = parsePage } = {}) {
+  const normalizedEvent = { ...event, gameKey: event?.gameKey || event?.key };
+  const page = liquipediaEventPage(normalizedEvent);
+  if (!page) return { ...normalizedEvent, placements: [], error: 'Missing Liquipedia event URL' };
+  const data = await parse(page.wiki, page.page);
   const html = data?.parse?.text?.['*'];
-  if (!html) return { ...event, placements: [], error: 'Empty event page' };
+  if (!html) return { ...normalizedEvent, placements: [], error: 'Empty event page' };
   return {
-    ...event,
-    placements: parseEwcEventPlacements(cheerio.load(html), event, players),
+    ...normalizedEvent,
+    placements: parseEwcEventPlacements(cheerio.load(html), normalizedEvent, players),
   };
 }
 
