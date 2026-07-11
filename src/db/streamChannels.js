@@ -422,15 +422,20 @@ export async function updateStreamChannel(id, patch = {}) {
 export async function repairDuplicateStreamDefaults() {
   return transaction(async (client) => {
     const rows = await client.all(
-      `SELECT id, creator_key, scope
+      `SELECT id, creator_key, label, handle, scope, is_default
        FROM stream_channels
-       WHERE is_default = 1 AND creator_key <> ''
-       ORDER BY creator_key, scope, sort_order, id`,
+       ORDER BY sort_order, id`,
     );
     const seen = new Set();
     const duplicateIds = [];
     for (const row of rows) {
-      const key = `${row.creator_key}|${row.scope}`;
+      const creatorKey = normalizeCreatorKey(row.creator_key || row.label || row.handle);
+      if (!creatorKey) continue;
+      if (row.creator_key !== creatorKey) {
+        await client.run('UPDATE stream_channels SET creator_key = $1 WHERE id = $2', [creatorKey, row.id]);
+      }
+      if (!row.is_default) continue;
+      const key = `${creatorKey}|${row.scope}`;
       if (seen.has(key)) duplicateIds.push(row.id);
       else seen.add(key);
     }
