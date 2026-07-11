@@ -275,6 +275,72 @@ export function parseBattleRoyaleSchedules($, game, page, stageTitle = '') {
   return matches;
 }
 
+function scheduleStageParts(name) {
+  const parts = cleanText(name).split(/\s+-\s+/).filter(Boolean);
+  if (parts.length >= 3 && /^(?:group|survivor|survival|swiss) stage$|^(?:finals|playoffs|last chance)$/i.test(parts[0])) {
+    parts.shift();
+  }
+  const last = parts.at(-1) || '';
+  const gameNumber = Number(last.match(/^Game\s+(\d+)$/i)?.[1] || 0) || null;
+  if (gameNumber) parts.pop();
+  const stage = parts.join(' - ').replace(/\bfinals\b/gi, 'Final').trim();
+  return { stage, gameNumber };
+}
+
+function scheduleStatusRank(status) {
+  if (status === 'finished') return 3;
+  if (status === 'running') return 2;
+  return 1;
+}
+
+// Parent tournament pages and dedicated stage subpages can repeat the same BR
+// lobby schedule under different structural ids, and the child page can lag a
+// game number behind the overview. Collapse only exact stage+timestamp slots,
+// then use the complete chronological sequence when it starts at Game 1.
+export function mergeBattleRoyaleSchedules(matches) {
+  const kept = [];
+  const bySlot = new Map();
+  for (const match of matches) {
+    const { stage } = scheduleStageParts(match?.name);
+    const timestamp = Number(match?.scheduledAt) || null;
+    if (!stage || !timestamp) {
+      kept.push(match);
+      continue;
+    }
+    const key = `${stage.toLowerCase()}|${timestamp}`;
+    const existing = bySlot.get(key);
+    if (existing) {
+      if (scheduleStatusRank(match.status) > scheduleStatusRank(existing.status)) {
+        existing.status = match.status;
+      }
+      continue;
+    }
+    bySlot.set(key, match);
+    kept.push(match);
+  }
+
+  const byStage = new Map();
+  for (const match of kept) {
+    const parts = scheduleStageParts(match?.name);
+    if (!parts.stage || !parts.gameNumber || !match?.scheduledAt) continue;
+    const key = parts.stage.toLowerCase();
+    const group = byStage.get(key);
+    if (group) group.push({ match, ...parts });
+    else byStage.set(key, [{ match, ...parts }]);
+  }
+  for (const group of byStage.values()) {
+    group.sort((a, b) => a.match.scheduledAt - b.match.scheduledAt);
+    if (group.length < 2 || group[0].gameNumber !== 1) continue;
+    const title = group[0].stage;
+    group.forEach(({ match }, index) => {
+      const name = `${title} - Game ${index + 1}`;
+      match.name = name;
+      match.teamA = name;
+    });
+  }
+  return kept;
+}
+
 // Round-robin group tables. Returns one section per group:
 // { title: "Group A", entries: [{ rank, team, points: matchScore, extra: gameScore, logo }] }.
 export function parseGroupTableStandings($) {
