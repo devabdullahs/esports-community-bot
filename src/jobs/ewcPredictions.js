@@ -470,6 +470,7 @@ async function syncLinkedProfileShowcases(guildId = null, season = null) {
     try {
       const response = await fetch(`${base}/api/internal/ewc-profile/sync`, {
         method: 'POST',
+        signal: AbortSignal.timeout(10_000),
         headers: {
           'Content-Type': 'application/json',
           'x-ewc-internal-secret': config.dashboard.internalSecret,
@@ -684,10 +685,8 @@ export async function runEwcPredictionAutomation(client = null) {
   const now = nowSec();
   await announceOpenWeeks(client);
   await sendDueEwcPredictionReminders(client, { now });
-  if (!initialProfileShowcaseSyncComplete) {
-    initialProfileShowcaseSyncComplete = true;
-    await syncLinkedProfileShowcases();
-  }
+  const needsInitialProfileSync = !initialProfileShowcaseSyncComplete;
+  initialProfileShowcaseSyncComplete = true;
   const weeks = await listEwcWeeksForAutomation(now);
   const seasons = await listEwcSeasonsForAutomation(now);
 
@@ -726,6 +725,10 @@ export async function runEwcPredictionAutomation(client = null) {
       logger.error(`[ewc-predictions] leaderboard ${guildId}: ${error.message}`);
     }
   }
+
+  // Profile repair is maintenance work. Run it after scoring so a slow internal
+  // dashboard request can never delay official results or leaderboard points.
+  if (needsInitialProfileSync) await syncLinkedProfileShowcases();
 }
 
 let timer = null;
