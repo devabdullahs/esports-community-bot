@@ -10,6 +10,7 @@ const USERS = {
   tieA: "300000000000000201",
   tieB: "300000000000000202",
   low: "300000000000000401",
+  zero: "300000000000000501",
 };
 
 import { GET } from "@/app/api/ewc/[guildId]/[season]/leaderboard/route";
@@ -42,6 +43,7 @@ async function seedLeaderboard(): Promise<void> {
     [USERS.tieA, 700],
     [USERS.tieB, 700],
     [USERS.low, 100],
+    [USERS.zero, 0],
   ] as const;
 
   for (const [userId, score] of scores) {
@@ -67,25 +69,27 @@ describe("GET /api/ewc/[guildId]/[season]/leaderboard", () => {
     const body = await res.json();
     expect(body.guildId).toBe(GUILD_ID);
     expect(body.season).toBe(SEASON);
-    expect(body.total).toBe(4);
+    expect(body.total).toBe(5);
     expect(body.topScore).toBe(900);
     expect(body.rows.map((row: { displayName: string }) => row.displayName)).toEqual([
       "Member 0301",
       "Member 0201",
       "Member 0202",
       "Member 0401",
+      "Member 0501",
     ]);
     expect(body.rows.map((row: { rank: number; overallPoints: number }) => [row.rank, row.overallPoints])).toEqual([
       [1, 900],
       [2, 700],
       [2, 700],
       [4, 100],
+      [5, 0],
     ]);
   });
 
   test("paginates rows while keeping the total count", async () => {
     const firstPage = await (await GET(req("?limit=2&offset=0"), ctx())).json();
-    expect(firstPage.total).toBe(4);
+    expect(firstPage.total).toBe(5);
     expect(firstPage.topScore).toBe(900);
     expect(firstPage.rows.map((row: { displayName: string }) => row.displayName)).toEqual([
       "Member 0301",
@@ -93,7 +97,7 @@ describe("GET /api/ewc/[guildId]/[season]/leaderboard", () => {
     ]);
 
     const secondPage = await (await GET(req("?limit=2&offset=2"), ctx())).json();
-    expect(secondPage.total).toBe(4);
+    expect(secondPage.total).toBe(5);
     expect(secondPage.topScore).toBe(900);
     expect(secondPage.rows.map((row: { rank: number; displayName: string }) => [row.rank, row.displayName])).toEqual([
       [2, "Member 0202"],
@@ -101,7 +105,7 @@ describe("GET /api/ewc/[guildId]/[season]/leaderboard", () => {
     ]);
 
     const pastEnd = await (await GET(req("?limit=2&offset=99"), ctx())).json();
-    expect(pastEnd.total).toBe(4);
+    expect(pastEnd.total).toBe(5);
     expect(pastEnd.topScore).toBe(900);
     expect(pastEnd.rows).toEqual([]);
   });
@@ -113,7 +117,7 @@ describe("GET /api/ewc/[guildId]/[season]/leaderboard", () => {
 
     const fallbackPage = await (await GET(req("?limit=invalid&offset=invalid"), ctx())).json();
     expect(fallbackPage.topScore).toBe(900);
-    expect(fallbackPage.rows.map((row: { rank: number }) => row.rank)).toEqual([1, 2, 2, 4]);
+    expect(fallbackPage.rows.map((row: { rank: number }) => row.rank)).toEqual([1, 2, 2, 4, 5]);
   });
 
   test("a namespace with no prediction rounds at all is not served (hardened)", async () => {

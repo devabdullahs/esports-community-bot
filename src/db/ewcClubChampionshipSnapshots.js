@@ -53,11 +53,18 @@ function cleanStandings(value) {
     if (eligibility && !VALID_ELIGIBILITY.has(eligibility)) {
       throw new TypeError('Club Championship standing eligibility is invalid.');
     }
+    const wins = nullableNumber(row.wins, 'wins', { integer: true });
+    const topEightFinishes = nullableNumber(row.topEightFinishes, 'topEightFinishes', { integer: true });
+    if ((wins != null && wins < 0) || (topEightFinishes != null && topEightFinishes < 0)) {
+      throw new TypeError('Club Championship standing metrics cannot be negative.');
+    }
     return {
       rank: nullableNumber(row.rank, 'rank', { integer: true, positive: true }),
       team,
       points: nullableNumber(row.points, 'points'),
       eligibility,
+      wins,
+      topEightFinishes,
     };
   });
 }
