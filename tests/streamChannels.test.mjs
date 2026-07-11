@@ -133,11 +133,12 @@ test('duplicate default repair keeps one platform and defaults can be cleared', 
     platform: 'kick', handle: 'repair_default', label: 'Repair Default', creatorKey: 'repair-default', scope: 'ewc',
   });
   await transaction(async (client) => {
-    await client.run('UPDATE stream_channels SET is_default = 1 WHERE id IN ($1, $2)', [twitch.id, kick.id]);
+    await client.run("UPDATE stream_channels SET creator_key = '', is_default = 1 WHERE id IN ($1, $2)", [twitch.id, kick.id]);
   });
   assert.equal(await repairDuplicateStreamDefaults(), 1);
   const repaired = [await getStreamChannel(twitch.id), await getStreamChannel(kick.id)];
   assert.equal(repaired.filter((channel) => channel.isDefault).length, 1);
+  assert.ok(repaired.every((channel) => channel.creatorKey === 'repair-default'));
 
   const selected = repaired.find((channel) => channel.isDefault);
   await updateStreamChannel(selected.id, { isDefault: false });
