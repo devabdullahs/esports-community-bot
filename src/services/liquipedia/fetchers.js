@@ -28,6 +28,7 @@ import { alignMatchDetailsSides, parseMatchDetails } from './matchDetailsParsers
 import {
   hasStandingsRows,
   mergeBattleRoyaleSchedules,
+  mergeStandingsSectionAliases,
   parseBattleRoyaleSchedules,
   parseEventStandings,
 } from './standingsParsers.js';
@@ -315,7 +316,7 @@ export async function fetchSchedule(tournament) {
     standingsHadRows = hasStandingsRows(loadedPage.$) || standingsHadRows;
   }
   Object.defineProperty(out, 'standings', {
-    value: { sections: standingsSections, hadRows: standingsHadRows },
+    value: { sections: mergeStandingsSectionAliases(standingsSections), hadRows: standingsHadRows },
     enumerable: false,
   });
 
@@ -501,5 +502,5 @@ export async function fetchEventStandings(tournament) {
     hadRows = hasStandingsRows(childLoaded.$) || hadRows;
   }
 
-  return { sections, hadRows };
+  return { sections: mergeStandingsSectionAliases(sections), hadRows };
 }
