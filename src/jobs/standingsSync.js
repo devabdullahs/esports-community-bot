@@ -2,6 +2,7 @@ import cron from 'node-cron';
 import { config } from '../config.js';
 import { logger } from '../lib/logger.js';
 import { listActiveTournaments } from '../db/tournaments.js';
+import { getActiveMatches } from '../db/matches.js';
 import { replaceTournamentStandings } from '../db/tournamentStandings.js';
 import * as defaultLiquipedia from '../services/liquipedia.js';
 
@@ -71,6 +72,40 @@ export async function runStandingsSync({ liquipedia = defaultLiquipedia } = {}) 
   } finally {
     running = false;
   }
+}
+
+// Give currently-running BR events the first Liquipedia queue slots after a
+// restart. Otherwise resumed match watchers can delay a multi-page standings
+// refresh long after play has started.
+export async function refreshLiveBattleRoyaleStandings({ liquipedia = defaultLiquipedia } = {}) {
+  const runningTournamentIds = new Set(
+    (await getActiveMatches())
+      .filter((match) => match.status === 'running' && /:br-schedule:/i.test(String(match.external_id || '')))
+      .map((match) => match.tournament_id),
+  );
+  if (!runningTournamentIds.size) return { tournaments: 0, rows: 0, failed: 0 };
+
+  const tournaments = (await listActiveTournaments()).filter(
+    (tournament) =>
+      tournament.source === 'liquipedia' &&
+      isStandingsGame(tournament.game) &&
+      runningTournamentIds.has(tournament.id),
+  );
+  const summary = { tournaments: 0, rows: 0, failed: 0 };
+  for (const tournament of tournaments) {
+    try {
+      const { sections, hadRows } = await liquipedia.fetchEventStandings(tournament);
+      summary.tournaments += 1;
+      if (sections.length || hadRows) summary.rows += await replaceTournamentStandings(tournament.id, sections);
+    } catch (error) {
+      summary.failed += 1;
+      logger.warn(`[standings] live boot refresh ${tournament.external_id}: ${error.message}`);
+    }
+  }
+  if (summary.tournaments) {
+    logger.info(`[standings] live boot refresh stored ${summary.rows} row(s) across ${summary.tournaments} event(s).`);
+  }
+  return summary;
 }
 
 export function startStandingsSync() {
