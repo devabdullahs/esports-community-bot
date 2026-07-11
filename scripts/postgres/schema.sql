@@ -653,11 +653,16 @@ CREATE TABLE IF NOT EXISTS ewc_mcp_write_receipts (
   key_id          BIGINT NOT NULL,
   tool_name       TEXT NOT NULL,
   idempotency_key TEXT NOT NULL,
+  -- Canonical digest of the request arguments: reusing an idempotency key
+  -- with a DIFFERENT payload is rejected instead of replayed.
+  request_digest  TEXT,
   result_json     TEXT,
   created_at      TEXT NOT NULL DEFAULT (to_char(now() AT TIME ZONE 'UTC', 'YYYY-MM-DD HH24:MI:SS')),
   completed_at    TEXT,
   PRIMARY KEY (key_id, tool_name, idempotency_key)
 );
+
+ALTER TABLE ewc_mcp_write_receipts ADD COLUMN IF NOT EXISTS request_digest TEXT;
 
 -- Admin-curated live-stream / co-stream channels (Twitch, Kick, YouTube, SOOP).
 -- A channel is attached at one SCOPE: 'game' (every match of game_slug),

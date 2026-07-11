@@ -99,3 +99,19 @@ test('lists active keys before revoked keys', async () => {
     assert.ok(keys.slice(firstRevoked).every((key) => key.revokedAt));
   }
 });
+
+test('malformed or empty stored tools_json fails closed to zero tools', async () => {
+  const { run } = await import('../src/db/client.js');
+  const created = await createMcpKey({
+    ownerDiscordId: '123456789012345690',
+    tools: ['get_site_overview'],
+  });
+  await run("UPDATE ewc_mcp_keys SET tools_json = '{malformed' WHERE id = $1", [created.key.id]);
+  const malformed = await getMcpKey(created.key.id);
+  assert.deepEqual(malformed.tools, []);
+  await run("UPDATE ewc_mcp_keys SET tools_json = '' WHERE id = $1", [created.key.id]);
+  const empty = await getMcpKey(created.key.id);
+  assert.deepEqual(empty.tools, []);
+  const verified = await verifyMcpKeySecret(created.secret);
+  assert.deepEqual(verified.tools, []);
+});

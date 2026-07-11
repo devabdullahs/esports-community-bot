@@ -15,7 +15,7 @@ import {
   canUseMcpTool,
   type McpAccess,
 } from "@/lib/mcp-auth";
-import { runIdempotentMcpWrite } from "@/lib/mcp-write";
+import { canonicalRequestDigest, runIdempotentMcpWrite } from "@/lib/mcp-write";
 import { ADMIN_PUBLIC_OVERLAP_TOOL_NAMES, MCP_TOOL_MANIFEST } from "@/lib/mcp-tool-manifest";
 import { createNewsPostInTx, getNewsPost, listAdminNewsPosts } from "@/lib/news";
 import { getMediaChannel, listMediaChannels, type MediaChannelRecord } from "@/lib/media";
@@ -458,6 +458,15 @@ export function createAdminMcpServer(access: McpAccess) {
         access,
         toolName: "create_news_draft",
         idempotencyKey,
+        requestDigest: canonicalRequestDigest("create_news_draft", {
+          title,
+          summary,
+          body,
+          locale,
+          gameSlug: cleanGame,
+          mediaSlug: cleanMedia,
+          ewc,
+        }),
         auditAction: "mcp.news.create_draft",
         mutate: async (tx) => {
           const postId = await createNewsPostInTx(tx, {
@@ -480,6 +489,14 @@ export function createAdminMcpServer(access: McpAccess) {
           if (!post) throw new Error("Created news post was not found after commit.");
           return post;
         },
+        // Final-object authorization on replay: the hydrated draft's OWNER
+        // decides, checked against the key's CURRENT scopes.
+        reauthorizeReplay: (post) =>
+          post.mediaSlug
+            ? canMcpManageMedia(access, post.mediaSlug)
+            : post.gameSlug
+              ? canMcpManageGame(access, post.gameSlug)
+              : false,
       });
       return jsonResult({ post: write.value, replayed: write.replayed });
     },
@@ -513,6 +530,7 @@ export function createAdminMcpServer(access: McpAccess) {
         access,
         toolName: "update_stream_channel",
         idempotencyKey,
+        requestDigest: canonicalRequestDigest("update_stream_channel", { id, ...patch }),
         auditAction: "mcp.stream.update",
         mutate: async (tx) => {
           const current = await getStreamChannelInTx(tx, id);
@@ -541,6 +559,8 @@ export function createAdminMcpServer(access: McpAccess) {
           if (!channel) throw new Error("Updated stream channel was not found after commit.");
           return channel;
         },
+        // Final-object authorization on replay against CURRENT scopes.
+        reauthorizeReplay: (channel) => streamAllowed(access, channel),
       });
       return jsonResult({ channel: write.value, replayed: write.replayed });
     },
