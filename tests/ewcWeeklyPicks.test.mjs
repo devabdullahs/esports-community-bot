@@ -59,7 +59,7 @@ test('resolveEwcGameEventUrl replaces generic calendar links with tracked game-s
       guildId: 'g-ewc',
       eventUrl: 'https://liquipedia.net/esports/Apex_Legends_Global_Series',
     }),
-    apex.url,
+    `${apex.url}/Finals`,
   );
 
   const fatalFury = await addTournament({
