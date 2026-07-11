@@ -55,13 +55,21 @@ describe("public prediction identity route", () => {
     expect(mockGate).not.toHaveBeenCalled();
   });
 
-  test("preserves anonymous default and rejects browser-supplied identity fields", async () => {
+  test("ignores browser-supplied identity fields: the body is never read", async () => {
+    // Hardened route (ECB-SEC-007): the request body is not parsed at all, so
+    // spoofed fields cannot influence the stored identity — it always derives
+    // from the authenticated account.
     const response = await POST(request("POST", { displayName: "Spoofed", discordUserId: "200000000000000699" }));
-    expect(response.status).toBe(400);
+    expect(response.status).toBe(200);
+    const body = await response.json();
+    expect(body.displayName).toBe(member.displayName);
+    expect(JSON.stringify(body)).not.toContain("Spoofed");
     const { getEwcProfileLinkByDiscordUser } = await import("@bot/db/ewcProfileLinks.js");
     const link = await getEwcProfileLinkByDiscordUser(member.discordUserId);
-    expect(link?.publicIdentityEnabled).toBe(false);
-    expect(link?.publicDisplayName).toBeNull();
+    expect(link?.publicDisplayName).toBe(member.displayName);
+    // Reset for the following tests, which assume the anonymous default.
+    const { DELETE } = await import("@/app/api/me/ewc/public-identity/route");
+    await DELETE(request("DELETE"));
   });
 
   test("enables only the server-derived current name/avatar, returns no raw IDs, and invalidates public caches", async () => {
