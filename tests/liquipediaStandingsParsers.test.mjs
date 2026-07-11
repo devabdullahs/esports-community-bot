@@ -284,6 +284,21 @@ test('battle-royale schedule rows trust Liquipedia game state icons', () => {
   assert.deepEqual(matches.map((match) => match.status), ['finished', 'running', 'scheduled']);
 });
 
+test('battle-royale standings collapse responsive row clones by team', () => {
+  const $ = cheerio.load(`
+    <div class="panel-table">
+      ${[38, 38, 38].map((points) => `
+        <div class="panel-table__row">
+          <div class="cell--rank" data-sort-val="1"></div>
+          <div class="cell--team" data-sort-val="Wolves Esports"></div>
+          <div class="cell--total-points" data-sort-val="${points}"></div>
+        </div>`).join('')}
+    </div>`);
+  const sections = parseBattleRoyaleStandings($);
+  assert.equal(sections.length, 1);
+  assert.deepEqual(sections[0].entries.map((entry) => [entry.team, entry.points]), [['Wolves Esports', '38']]);
+});
+
 test('battle-royale schedules collapse parent/child stage twins and repair shifted game labels', () => {
   const schedule = (name, scheduledAt, status = 'scheduled', page = 'overview') => ({
     source: 'liquipedia',
