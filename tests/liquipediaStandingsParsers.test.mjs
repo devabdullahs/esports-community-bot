@@ -11,6 +11,7 @@ import {
   mergeBattleRoyaleSchedules,
   mergeStandingsSectionAliases,
   parseParticipantTables,
+  parsePrizePoolFinalStandings,
   hasStandingsRows,
   parseBattleRoyaleStandings,
   parseEventStandings,
@@ -465,6 +466,28 @@ test('parseEventStandings combines both formats and empty pages yield []', () =>
   assert.equal(parseEventStandings(group$).length, 1);
   const empty$ = cheerio.load('<div class="mw-parser-output"><p>Nothing here.</p></div>');
   assert.deepEqual(parseEventStandings(empty$), []);
+});
+
+test('fighter prize pool is the final standings, not the earlier qualifier field', () => {
+  const $ = cheerio.load(`
+    <div class="participantTable"><div class="participantTable-title">Qualified</div>
+      <div class="participantTable-row"><div class="participantTable-title">Last Chance Qualifier (2)</div></div>
+      <div class="participantTable-row">
+        <div class="participantTable-entry"><span class="name">QualifierOne</span></div>
+        <div class="participantTable-entry"><span class="name">QualifierTwo</span></div>
+      </div>
+    </div>
+    <h2>Prize Pool</h2>
+    <table class="table2__table prizepooltable"><tr><th>Place</th><th>Participant</th><th>$ USD</th><th>Club Points</th></tr>
+      <tr><td class="prizepooltable-place">1</td><td class="prizepooltable-col-team"><span class="block-player"><span data-highlightingclass="DarkAngel">DarkAngel</span></span></td><td>$250,000</td><td>1,000</td></tr>
+      <tr><td class="prizepooltable-place">2</td><td class="prizepooltable-col-team"><span class="block-player"><span data-highlightingclass="mi2ha4">mi2ha4</span></span></td><td>$130,000</td><td>750</td></tr>
+    </table>`);
+  assert.deepEqual(parsePrizePoolFinalStandings($)?.entries.map(({ rank, team }) => ({ rank, team })), [
+    { rank: 1, team: 'DarkAngel' },
+    { rank: 2, team: 'mi2ha4' },
+  ]);
+  assert.equal(parseEventStandings($)[0].title, 'Final standings');
+  assert.deepEqual(parseEventStandings($)[0].entries.map((entry) => entry.team), ['DarkAngel', 'mi2ha4']);
 });
 
 test('an all-TBD table (unseeded event) yields no section', () => {

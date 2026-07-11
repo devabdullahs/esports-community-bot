@@ -7,7 +7,7 @@
 //    team in the entry cell's aria-label, match score + game score columns.
 // No client imports; callers pass a cheerio $.
 
-import { deriveStatus, imageSrc, normalizeImageUrl, teamName } from './parsers.js';
+import { deriveStatus, ewcPrizePoolTable, imageSrc, normalizeImageUrl, teamName } from './parsers.js';
 
 function cleanText(value) {
   return String(value ?? '').replace(/\s+/g, ' ').trim();
@@ -225,6 +225,34 @@ export function parseBattleRoyaleStandings($) {
     if (hasRealTeam(uniqueEntries)) sections.push({ title: battleRoyalePanelTitle($, table), entries: uniqueEntries });
   });
   return sections;
+}
+
+// Individual-player EWC events expose their authoritative finishing order in
+// the prize pool, while participant tables only describe qualification paths.
+export function parsePrizePoolFinalStandings($) {
+  const table = ewcPrizePoolTable($);
+  if (!table.length || !/club\s*points?/i.test(cleanText(table.find('tr').first().text()))) return null;
+  const entries = [];
+  table.find('tr').each((_, row) => {
+    const placeText = cleanText($(row).find('.prizepooltable-place').first().text());
+    const rank = Number.parseInt(placeText.match(/\d+/)?.[0] || '', 10);
+    if (!Number.isFinite(rank) || rank < 1 || rank > 8) return;
+    const participantCell = $(row).find('.prizepooltable-col-team').first();
+    const participantBlocks = participantCell.find('.block-player, .block-team').toArray();
+    const blocks = participantBlocks.length ? participantBlocks : [participantCell.get(0)].filter(Boolean);
+    for (const block of blocks) {
+      const team = teamName($, block);
+      if (!isRealTeam(team)) continue;
+      entries.push({
+        rank,
+        team,
+        points: '',
+        extra: '',
+        logo: normalizeImageUrl(imageSrc($(block).find('img').first())),
+      });
+    }
+  });
+  return hasRealTeam(entries) ? { title: 'Final standings', entries } : null;
 }
 
 function scheduleExternalId(game, page, section, label) {
@@ -503,7 +531,10 @@ export function parseEventStandings($) {
       ? participantGroups
       : battleRoyale;
   const structured = [...battleRoyaleSections, ...parseGroupTableStandings($)];
-  return structured.length ? structured : parseParticipantTables($);
+  if (structured.length) return structured;
+  const participants = parseParticipantTables($);
+  const final = parsePrizePoolFinalStandings($);
+  return final ? [final, ...participants] : participants;
 }
 
 // Whether the page yields at least one PARSEABLE standings row (a team cell we
