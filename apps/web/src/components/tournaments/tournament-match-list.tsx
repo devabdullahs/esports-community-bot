@@ -8,6 +8,13 @@ import {
   Card,
   CardContent,
 } from "@/components/ui/card";
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion";
+import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import {
   Table,
@@ -369,6 +376,7 @@ export function TournamentMatchList({
       {standings.length ? (
         <StandingsSection
           standings={standings}
+          running={running}
           locale={locale}
           text={text}
           returnContext={returnContext}
@@ -602,38 +610,64 @@ function hasNumericResult(value: string | null | undefined): boolean {
 // only switch to the full standings table once real results land.
 function StandingsSection({
   standings,
+  running,
   locale,
   text,
   returnContext,
 }: {
   standings: StandingRow[];
+  running: MatchRow[];
   locale: Locale;
   text: TournamentCopy;
   returnContext: ProfileReturnContext;
 }) {
-  const sections = new Map<string, StandingRow[]>();
+  const sectionRows = new Map<string, Map<string, StandingRow>>();
   for (const row of standings) {
     const key = row.section ?? "";
-    const current = sections.get(key);
-    if (current) current.push(row);
-    else sections.set(key, [row]);
+    const teams = sectionRows.get(key) ?? new Map<string, StandingRow>();
+    const teamKey = row.team.trim().toLocaleLowerCase();
+    const current = teams.get(teamKey);
+    if (!current || standingRowWeight(row) >= standingRowWeight(current)) teams.set(teamKey, row);
+    sectionRows.set(key, teams);
   }
-  const hasResults = standings.some(
+  const sections = [...sectionRows.entries()].map(([section, teams], index) => ({
+    section,
+    rows: [...teams.values()].sort((a, b) => a.rank - b.rank || a.id - b.id),
+    value: `standings-${index}`,
+  }));
+  const uniqueStandings = sections.flatMap(({ rows }) => rows);
+  const hasResults = uniqueStandings.some(
     (row) => hasNumericResult(row.points) || hasNumericResult(row.extra),
   );
-  const hasExtra = hasResults && standings.some((row) => row.extra);
+  const hasExtra = hasResults && uniqueStandings.some((row) => row.extra);
+  const activeValues = sections
+    .filter(({ section }) => running.some((match) => standingsSectionMatches(section, match.name)))
+    .map(({ value }) => value);
 
   return (
     <section className="flex flex-col gap-4">
       <h2 className="text-lg font-semibold">{hasResults ? text.standings : text.participants}</h2>
-      {[...sections.entries()].map(([section, rows]) => (
-        <div key={section || "main"} className="flex flex-col gap-1">
-          {section ? (
-            <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-              {section}
-            </span>
-          ) : null}
-          <Table>
+      <Accordion
+        key={activeValues.join("|")}
+        multiple
+        defaultValue={activeValues}
+        className="rounded-lg border"
+      >
+        {sections.map(({ section, rows, value }) => {
+          const active = activeValues.includes(value);
+          return (
+            <AccordionItem key={value} value={value} className="px-3 last:border-b-0">
+              <AccordionTrigger className="no-underline hover:no-underline">
+                <span className="flex min-w-0 items-center gap-2">
+                  <span className="truncate">
+                    {section || (hasResults ? text.standings : text.participants)}
+                  </span>
+                  <Badge variant="secondary">{rows.length}</Badge>
+                  {active ? <Badge>{text.liveNow}</Badge> : null}
+                </span>
+              </AccordionTrigger>
+              <AccordionContent className="pb-3">
+                <Table className="border-t">
             <TableHeader>
               <TableRow>
                 <TableHead className="w-14">{hasResults ? text.rank : text.seed}</TableHead>
@@ -673,9 +707,34 @@ function StandingsSection({
                 </TableRow>
               ))}
             </TableBody>
-          </Table>
-        </div>
-      ))}
+                </Table>
+              </AccordionContent>
+            </AccordionItem>
+          );
+        })}
+      </Accordion>
     </section>
   );
+}
+
+function standingRowWeight(row: StandingRow): number {
+  const points = Number(row.points);
+  const extra = Number(row.extra);
+  return (Number.isFinite(points) ? Math.abs(points) : 0) + (Number.isFinite(extra) ? Math.abs(extra) : 0);
+}
+
+function normalizedStandingsStage(value: string | null | undefined): string {
+  const parts = String(value ?? "").trim().split(/\s*:\s*/).filter(Boolean);
+  return (parts.at(-1) ?? "")
+    .replace(/\s+-\s+game\s+\d+$/i, "")
+    .replace(/\bfinals\b/gi, "Final")
+    .trim()
+    .toLocaleLowerCase();
+}
+
+function standingsSectionMatches(section: string, matchName: string | null): boolean {
+  const sectionStage = normalizedStandingsStage(section);
+  const matchStage = normalizedStandingsStage(matchName);
+  if (!sectionStage || !matchStage) return false;
+  return matchStage === sectionStage || matchStage.startsWith(`${sectionStage} -`);
 }

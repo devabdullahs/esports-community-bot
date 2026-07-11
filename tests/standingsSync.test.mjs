@@ -82,6 +82,20 @@ test('refresh replaces wholesale (no stale rows)', async () => {
   assert.equal(rows[0].team, 'New Leader');
 });
 
+test('standings replacement rejects duplicate section and team rows', async () => {
+  await replaceTournamentStandings(pubgEvent.id, [
+    { title: 'Survivor Stage', entries: [
+      { rank: 1, team: 'RRQ', points: '89' },
+      { rank: 1, team: 'RRQ', points: '89' },
+    ] },
+    { title: 'Survivor Stage', entries: [{ rank: 1, team: 'RRQ', points: '89' }] },
+  ]);
+
+  const rows = await listStandingsForTournament(pubgEvent.id);
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].team, 'RRQ');
+});
+
 test('an all-TBD page (rows parsed, no real teams) clears stale rows', async () => {
   // pubgEvent has rows from the previous test. An all-TBD page yields parseable
   // rows but no confirmed teams, so sections is empty AND hadRows is true — the

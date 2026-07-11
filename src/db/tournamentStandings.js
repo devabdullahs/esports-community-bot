@@ -12,10 +12,14 @@ export async function replaceTournamentStandings(tournamentId, sections) {
     await tx.run('DELETE FROM tournament_standings WHERE tournament_id = $1', [tournamentId]);
     let inserted = 0;
     let sectionOrder = 0;
+    const seenRows = new Set();
     for (const section of sections ?? []) {
       sectionOrder += 1;
       for (const entry of section.entries ?? []) {
         if (!entry?.team) continue;
+        const rowKey = `${String(section.title ?? '').trim().toLowerCase()}\u0000${String(entry.team).trim().toLowerCase()}`;
+        if (seenRows.has(rowKey)) continue;
+        seenRows.add(rowKey);
         await tx.run(
           `INSERT INTO tournament_standings (tournament_id, section, section_order, rank, team, logo, points, extra, updated_at)
            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
