@@ -47,7 +47,6 @@ function groupKey(channel: StreamChannel): string {
     channel.creatorKey || channel.label.toLowerCase(),
     channel.teamKey ?? "",
     channel.matchExternalId ?? "",
-    channel.language ?? "",
   ].join(":");
 }
 

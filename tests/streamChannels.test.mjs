@@ -22,6 +22,7 @@ const {
   channelsForTournament,
   updateStreamChannel,
   updateStreamChannelInTx,
+  repairDuplicateStreamDefaults,
   setStreamChannelActive,
   deleteStreamChannel,
   listDistinctActiveHandles,
@@ -122,6 +123,25 @@ test('only one platform is default within a creator group', async () => {
   });
   assert.equal((await getStreamChannel(second.id)).isDefault, true);
   assert.equal((await getStreamChannel(first.id)).isDefault, false);
+});
+
+test('duplicate default repair keeps one platform and defaults can be cleared', async () => {
+  const twitch = await createStreamChannel({
+    platform: 'twitch', handle: 'repair_default', label: 'Repair Default', creatorKey: 'repair-default', scope: 'ewc',
+  });
+  const kick = await createStreamChannel({
+    platform: 'kick', handle: 'repair_default', label: 'Repair Default', creatorKey: 'repair-default', scope: 'ewc',
+  });
+  await transaction(async (client) => {
+    await client.run('UPDATE stream_channels SET is_default = 1 WHERE id IN ($1, $2)', [twitch.id, kick.id]);
+  });
+  assert.equal(await repairDuplicateStreamDefaults(), 1);
+  const repaired = [await getStreamChannel(twitch.id), await getStreamChannel(kick.id)];
+  assert.equal(repaired.filter((channel) => channel.isDefault).length, 1);
+
+  const selected = repaired.find((channel) => channel.isDefault);
+  await updateStreamChannel(selected.id, { isDefault: false });
+  assert.equal((await getStreamChannel(selected.id)).isDefault, false);
 });
 
 test('creator-level edits propagate to a creator\'s sibling platforms', async () => {
