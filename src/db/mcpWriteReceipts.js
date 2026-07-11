@@ -47,6 +47,11 @@ function parseResult(row) {
   }
 }
 
+/**
+ * @param {any} tx
+ * @param {{ keyId: number, toolName: string, idempotencyKey: string }} claim
+ * @param {{ requestDigest?: string | null }} [options]
+ */
 export async function claimMcpWriteReceipt(tx, claim, { requestDigest = null } = {}) {
   const value = cleanClaim(claim);
   const row = await tx.get(

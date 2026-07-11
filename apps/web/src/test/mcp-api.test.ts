@@ -245,6 +245,25 @@ describe("/api/mcp auth", () => {
     );
     expect(response.status).toBe(403);
   });
+
+  test("malformed stored tool scopes fail closed instead of granting every admin tool", async () => {
+    const key = await createKey({ tools: ["create_news_draft"], games: [GAME_ALLOWED] });
+    const { run } = await import("@bot/db/client.js");
+    await run("UPDATE ewc_mcp_keys SET tools_json = $1 WHERE id = $2", ["{malformed", key.key.id]);
+
+    const response = await mcpPOST(
+      mcpRequest(key.secret, toolCall("create_news_draft", {
+        idempotencyKey: nextIdempotencyKey("corrupt-scope"),
+        title: "Must not be created",
+        body: "Denied because stored tool scope is corrupt.",
+        gameSlug: GAME_ALLOWED,
+      })),
+    );
+    expect(response.status).toBe(200);
+    const body = await parseMcpResponse(response);
+    expect(body.result?.isError).toBe(true);
+    expect(String(body.result?.content?.[0]?.text ?? "")).toMatch(/cannot use/i);
+  });
 });
 
 describe("/api/mcp tools", () => {

@@ -337,8 +337,10 @@ export async function fetchLogoBytes(url, channel = 'bot', { download = true } =
   // when download=false) and refill the local hot cache. This is what stops the
   // whole site from falling back to initials for hours after every deploy.
   let fromR2 = null;
+  let checkedR2 = false;
   if (activeR2Reads < MAX_CONCURRENT_R2_READS) {
     activeR2Reads += 1;
+    checkedR2 = true;
     try {
       fromR2 = await r2GetLogo(hash);
     } finally {
@@ -352,7 +354,9 @@ export async function fetchLogoBytes(url, channel = 'bot', { download = true } =
   }
 
   if (!download) {
-    rememberLogoMiss(hash);
+    // Saturation is not evidence of a miss. Only cache an actual completed R2
+    // lookup, otherwise a brief traffic spike hides valid logos for five minutes.
+    if (checkedR2) rememberLogoMiss(hash);
     return null;
   }
 

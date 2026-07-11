@@ -142,7 +142,7 @@ export async function requireVerifiedMember(): Promise<RequireMemberResult> {
 // Trusted client identity for IP-aware rate-limit keys (ECB-SEC-008/009/015/017).
 //
 // The proxy header is honored ONLY under an explicit deployment mode
-// (EWC_TRUSTED_PROXY=cloudflare, the production default: cf-connecting-ip is
+// (EWC_TRUSTED_PROXY=cloudflare: cf-connecting-ip is
 // written by the Cloudflare/CranL ingress and stripped from client input).
 // x-forwarded-for / x-real-ip are never consulted — they are client-supplied.
 // The header value must parse as a real IP: arbitrary strings previously
@@ -187,7 +187,7 @@ function canonicalClientIp(raw: string): string | null {
 }
 
 export function clientIp(request: Request): string {
-  const mode = (process.env.EWC_TRUSTED_PROXY || "cloudflare").trim().toLowerCase();
+  const mode = (process.env.EWC_TRUSTED_PROXY || "none").trim().toLowerCase();
   if (mode !== "cloudflare") return "direct";
   const raw = request.headers.get("cf-connecting-ip");
   if (!raw) return "direct";

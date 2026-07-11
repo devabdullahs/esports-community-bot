@@ -1,5 +1,4 @@
 import { Events, MessageFlags } from 'discord.js';
-import { config } from '../config.js';
 import { logger } from '../lib/logger.js';
 
 export const name = Events.InteractionCreate;
@@ -9,7 +8,7 @@ export const name = Events.InteractionCreate;
 // guild is refused BEFORE any dispatch — otherwise foreign-guild members
 // could seed persistent scheduled workloads (tracked tournaments, watchers,
 // boards) that the shared poller then services forever.
-export function isForeignGuildInteraction(interaction, configuredGuildId = config.discord.guildId) {
+export function isForeignGuildInteraction(interaction, configuredGuildId = process.env.DISCORD_GUILD_ID || null) {
   if (!configuredGuildId) return false;
   return Boolean(interaction.guildId && interaction.guildId !== configuredGuildId);
 }

@@ -318,3 +318,16 @@ test('follow quota: creation stops at the cap but re-follow stays idempotent', a
   const rows = await listFollowsForUser(userId);
   assert.equal(rows.length, MAX_FOLLOWS_PER_USER);
 });
+
+test('concurrent follow writes cannot race past the per-user quota', async () => {
+  const { upsertFollow, listFollowsForUser, MAX_FOLLOWS_PER_USER } = await import('../src/db/userFollows.js');
+  const userId = '900000000000000778';
+  const attempts = Array.from({ length: MAX_FOLLOWS_PER_USER + 25 }, (_, i) =>
+    upsertFollow({ discordUserId: userId, entityType: 'team', entityKey: `Concurrent Team ${i}` }),
+  );
+
+  const results = await Promise.all(attempts);
+  const rows = await listFollowsForUser(userId);
+  assert.equal(rows.length, MAX_FOLLOWS_PER_USER);
+  assert.equal(results.filter((result) => result?.limited).length, 25);
+});

@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, test } from "vitest";
+import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import { clientIp } from "@/lib/community";
 
 function req(headers: Record<string, string> = {}) {
@@ -6,6 +6,10 @@ function req(headers: Record<string, string> = {}) {
 }
 
 const ORIGINAL_MODE = process.env.EWC_TRUSTED_PROXY;
+
+beforeEach(() => {
+  process.env.EWC_TRUSTED_PROXY = "cloudflare";
+});
 
 afterEach(() => {
   if (ORIGINAL_MODE === undefined) delete process.env.EWC_TRUSTED_PROXY;

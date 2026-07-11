@@ -3,8 +3,13 @@
 // single shared bot/web container, so member-triggered renders need both a
 // global concurrency ceiling and a per-user cooldown — otherwise one member
 // mashing a share/card command degrades match polling and the dashboard.
-const MAX_CONCURRENT_RENDERS = Math.max(1, Number(process.env.RENDER_MAX_CONCURRENT || 2));
-const PER_USER_COOLDOWN_MS = Math.max(0, Number(process.env.RENDER_USER_COOLDOWN_MS || 5_000));
+function finiteEnvNumber(name, fallback, minimum) {
+  const parsed = Number(process.env[name]);
+  return Number.isFinite(parsed) ? Math.max(minimum, parsed) : fallback;
+}
+
+const MAX_CONCURRENT_RENDERS = finiteEnvNumber('RENDER_MAX_CONCURRENT', 2, 1);
+const PER_USER_COOLDOWN_MS = finiteEnvNumber('RENDER_USER_COOLDOWN_MS', 5_000, 0);
 const USER_STATE_MAX = 5_000;
 
 let activeRenders = 0;
