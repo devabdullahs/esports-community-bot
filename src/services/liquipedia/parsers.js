@@ -1053,6 +1053,15 @@ function clubsFromPrizepoolRow($, row, game, playerLookup) {
     if (club) addUniqueClub(clubs, club, player);
   });
 
+  if (!clubs.length) {
+    const participantCell = $row.find('.prizepooltable-col-team').first();
+    const participant = participantCell.length ? teamName($, participantCell) : '';
+    if (participant) {
+      const mappedClub = playerClubFor(playerLookup, game, participant);
+      addUniqueClub(clubs, mappedClub || participant, mappedClub ? participant : null);
+    }
+  }
+
   return clubs;
 }
 
@@ -1064,7 +1073,7 @@ export function parseEwcEventPlacements($, event, players = []) {
   const playerLookup = buildEwcPlayerClubLookup(players);
   const byClub = new Map();
 
-  table.find('.csstable-widget-row').each((_i, row) => {
+  table.find('.csstable-widget-row, tr').each((_i, row) => {
     const $row = $(row);
     if ($row.hasClass('prizepooltable-header')) return;
     const place = $row.find('.prizepooltable-place').first().text().replace(/\s+/g, ' ').trim();

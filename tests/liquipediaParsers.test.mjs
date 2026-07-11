@@ -28,7 +28,34 @@ const {
   parseMatchStream,
   mergeLiveWidgetMatch,
   parseTournamentEwcAffiliation,
+  parseEwcEventPlacements,
 } = await import('../src/services/liquipedia.js');
+
+test('parseEwcEventPlacements: parses current table2 prize rows for team events', () => {
+  const $ = load(`
+    <table class="table2__table prizepooltable prizepooltable-placement">
+      <tr class="prizepooltable-header"><th>Place</th><th>Participant</th><th>Club Points</th></tr>
+      <tr class="table2__row--body"><td class="prizepooltable-place">1</td><td class="prizepooltable-col-team"><span data-highlightingclass="UNLIMIT">UNLIMIT</span></td><td>1,000</td></tr>
+      <tr class="table2__row--body"><td class="prizepooltable-place">2</td><td class="prizepooltable-col-team"><span data-highlightingclass="Team Vision">Team Vision</span></td><td>750</td></tr>
+    </table>`);
+  assert.deepEqual(parseEwcEventPlacements($, { game: 'Apex Legends' }), [
+    { club: 'UNLIMIT', place: '1', points: 1000, participant: null },
+    { club: 'Team Vision', place: '2', points: 750, participant: null },
+  ]);
+});
+
+test('parseEwcEventPlacements: maps current table2 solo participants back to clubs', () => {
+  const $ = load(`
+    <table class="table2__table prizepooltable prizepooltable-placement">
+      <tr class="prizepooltable-header"><th>Place</th><th>Participant</th><th>Club Points</th></tr>
+      <tr class="table2__row--body"><td class="prizepooltable-place">1</td><td class="prizepooltable-col-team"><span data-highlightingclass="ChampionPlayer">ChampionPlayer</span></td><td>1,000</td></tr>
+    </table>`);
+  assert.deepEqual(parseEwcEventPlacements($, { game: 'Fatal Fury: City of the Wolves' }, [
+    { id: 'ChampionPlayer', game: 'Fatal Fury: City of the Wolves', team: 'Natus Vincere' },
+  ]), [
+    { club: 'Natus Vincere', place: '1', points: 1000, participant: 'ChampionPlayer' },
+  ]);
+});
 
 // ---------------------------------------------------------------------------
 // parseClubStandings
