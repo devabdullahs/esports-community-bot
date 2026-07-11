@@ -1022,7 +1022,7 @@ export function parseValveRankingTable($, table, region) {
 // EWC per-game weekly results parsers
 // ---------------------------------------------------------------------------
 
-function playerName($, el) {
+export function playerName($, el) {
   const $el = $(el);
   return cleanName(
     $el.find('.name').first().text() ||
@@ -1088,7 +1088,6 @@ function clubsFromPrizepoolRow($, row, game, playerLookup) {
 // `event` carries the game label so solo games can be mapped via the player list.
 export function parseEwcEventPlacements($, event, players = []) {
   const table = ewcPrizePoolTable($);
-  if (!table.length) return [];
   const playerLookup = buildEwcPlayerClubLookup(players);
   const byClub = new Map();
 
@@ -1111,6 +1110,30 @@ export function parseEwcEventPlacements($, event, players = []) {
       });
     }
   });
+
+  // Battle-royale finals (including ALGS) publish the authoritative order as
+  // a panel standings table rather than a prizepooltable. Use it only when no
+  // Club Points prize rows were found, and map its final rank to EWC points.
+  if (!byClub.size) {
+    $('.panel-table').each((_tableIndex, panel) => {
+      $(panel).find('.panel-table__row').not('.row--header').each((_rowIndex, row) => {
+        const rankCell = $(row).find('.cell--rank').first();
+        const teamCell = $(row).find('.cell--team').first();
+        const place = cleanName(rankCell.attr('data-sort-val') || rankCell.text());
+        const points = ewcPlacementPoints(place);
+        const club = cleanName(
+          teamCell.attr('data-sort-val') ||
+          teamCell.find('.block-team .name').first().text() ||
+          teamName($, teamCell),
+        );
+        if (!club || !points) return;
+        const key = normalizeClubName(club);
+        const existing = byClub.get(key);
+        if (existing && existing.points >= points) return;
+        byClub.set(key, { club, place, points, participant: null });
+      });
+    });
+  }
 
   return [...byClub.values()].sort((a, b) => b.points - a.points || a.club.localeCompare(b.club));
 }

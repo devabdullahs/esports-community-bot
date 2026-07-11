@@ -71,6 +71,20 @@ test('parseEwcEventPlacements: ignores an earlier qualifier table', () => {
   ]);
 });
 
+test('parseEwcEventPlacements: maps an Apex finals panel table to EWC points', () => {
+  const $ = load(`
+    <div class="panel-table">
+      <div class="panel-table__row row--header"><div class="cell--rank">Rank</div><div class="cell--team">Team</div></div>
+      <div class="panel-table__row"><div class="cell--rank" data-sort-val="1">1st</div><div class="cell--team" data-sort-val="UNLIMIT"><span class="block-team"><span class="name">UNLIMIT</span></span></div></div>
+      <div class="panel-table__row"><div class="cell--rank" data-sort-val="2">2nd</div><div class="cell--team" data-sort-val="Team Vision"><span class="block-team"><span class="name">Team Vision</span></span></div></div>
+      <div class="panel-table__row"><div class="cell--rank" data-sort-val="9">9th</div><div class="cell--team" data-sort-val="Outside Points">Outside Points</div></div>
+    </div>`);
+  assert.deepEqual(parseEwcEventPlacements($, { game: 'Apex Legends' }), [
+    { club: 'UNLIMIT', place: '1', points: 1000, participant: null },
+    { club: 'Team Vision', place: '2', points: 750, participant: null },
+  ]);
+});
+
 // ---------------------------------------------------------------------------
 // parseClubStandings
 // ---------------------------------------------------------------------------
