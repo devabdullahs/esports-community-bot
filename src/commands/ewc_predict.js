@@ -42,6 +42,7 @@ import { weeklyModalSelection, weeklyPickerPage, weeklyPickerPageForGame } from 
 import { announceEwcParticipation } from '../lib/ewcParticipation.js';
 import { updateEwcPredictionLeaderboard } from '../jobs/ewcPredictions.js';
 import { renderEwcShareCard } from '../lib/ewcShareCard.js';
+import { tryAcquireRenderSlot } from '../lib/renderGate.js';
 import { logger } from '../lib/logger.js';
 import { projectSeasonScoreBreakdown, projectWeeklyScoreBreakdown } from '../lib/ewcPredictionBreakdown.js';
 import { seasonPicksVisible, weeklyPickVisible } from '../lib/ewcPredictionVisibility.js';
@@ -1103,17 +1104,34 @@ export async function execute(interaction) {
     } catch {
       /* QR placeholder drawn instead */
     }
-    const png = await renderEwcShareCard({
-      displayName: interaction.user.globalName || interaction.user.username,
-      avatar,
-      qr,
-      seasonPicks,
-      weeklyCount,
-      season: seasonYear,
-      communityName: interaction.guild?.name || 'Esports Community',
-      discordUrl: SHARE_DISCORD_URL,
-      locale: lang,
-    });
+    // Canvas admission (shared gate): bounded global concurrency + per-user
+    // cooldown so mashed share requests can't stack CPU-bound renders.
+    const slot = tryAcquireRenderSlot(interaction.user.id);
+    if (!slot.ok) {
+      await interaction.editReply({
+        content:
+          lang === 'ar'
+            ? '⏳ يتم إنشاء بطاقة الآن — حاول مجددا بعد ثوان.'
+            : '⏳ A card is already being rendered — try again in a few seconds.',
+      });
+      return;
+    }
+    let png;
+    try {
+      png = await renderEwcShareCard({
+        displayName: interaction.user.globalName || interaction.user.username,
+        avatar,
+        qr,
+        seasonPicks,
+        weeklyCount,
+        season: seasonYear,
+        communityName: interaction.guild?.name || 'Esports Community',
+        discordUrl: SHARE_DISCORD_URL,
+        locale: lang,
+      });
+    } finally {
+      slot.release();
+    }
     const file = new AttachmentBuilder(png, { name: `ewc-${seasonYear}-predictions.png` });
     const tweet =
       lang === 'ar'
