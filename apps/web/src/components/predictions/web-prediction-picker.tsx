@@ -7,8 +7,15 @@ import { LocalDateTime } from "@/components/local-date-time";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import {
+  Combobox,
+  ComboboxContent,
+  ComboboxEmpty,
+  ComboboxInput,
+  ComboboxItem,
+  ComboboxList,
+} from "@/components/ui/combobox";
 import { Field, FieldDescription, FieldGroup, FieldLabel } from "@/components/ui/field";
-import { Input } from "@/components/ui/input";
 import { Progress, ProgressLabel, ProgressValue } from "@/components/ui/progress";
 import { actionablePickerGames, knownPickerClubs, seasonPickerSlots, type PickerRound } from "@/lib/ewc-web-picker-model";
 import { copy, formatNumber, type Locale } from "@/lib/i18n";
@@ -24,6 +31,44 @@ async function jsonOrThrow(response: Response): Promise<MutationResult> {
   const data = await response.json().catch(() => ({}));
   if (!response.ok) throw new Error(data.error || "Unable to save your prediction.");
   return data;
+}
+
+function ClubCombobox({
+  id,
+  value,
+  choices,
+  placeholder,
+  emptyLabel,
+  disabled,
+  onChange,
+}: {
+  id: string;
+  value: string;
+  choices: string[];
+  placeholder: string;
+  emptyLabel: string;
+  disabled: boolean;
+  onChange: (value: string) => void;
+}) {
+  const selected = choices.includes(value) ? value : null;
+  return (
+    <Combobox
+      items={choices}
+      value={selected}
+      inputValue={value}
+      onInputValueChange={onChange}
+      onValueChange={(next) => onChange(next ?? "")}
+      autoHighlight
+    >
+      <ComboboxInput id={id} className="w-full" placeholder={placeholder} disabled={disabled} showClear />
+      <ComboboxContent>
+        <ComboboxEmpty>{emptyLabel}</ComboboxEmpty>
+        <ComboboxList>
+          {(club) => <ComboboxItem key={club} value={club}>{club}</ComboboxItem>}
+        </ComboboxList>
+      </ComboboxContent>
+    </Combobox>
+  );
 }
 
 export function WebPredictionPicker({
@@ -65,12 +110,10 @@ export function WebPredictionPicker({
   });
 
   if (!picker) return null;
-  const datalistId = "ewc-known-clubs";
   const seasonSlots = picker.season ? seasonPickerSlots(picker.season.picks, picker.season.topSize) : [];
 
   return (
     <div className="flex flex-col gap-4">
-      <datalist id={datalistId}>{clubs.map((club) => <option key={club} value={club} />)}</datalist>
       {weekly.error ? <Alert variant="destructive"><AlertTitle>{text.pickSaveFailed}</AlertTitle><AlertDescription>{weekly.error.message}</AlertDescription></Alert> : null}
       {season.error ? <Alert variant="destructive"><AlertTitle>{text.pickSaveFailed}</AlertTitle><AlertDescription>{season.error.message}</AlertDescription></Alert> : null}
       {games.length ? (
@@ -79,21 +122,27 @@ export function WebPredictionPicker({
             <h2 className="text-lg font-semibold">{text.webWeeklyTitle}</h2>
             <p className="text-sm text-muted-foreground">{text.webWeeklyDescription}</p>
           </div>
-          {games.map((game, gameIndex) => {
+          {games.map((game) => {
             const key = `${game.weekKey}:${game.key}`;
-            const gameListId = `ewc-game-clubs-${gameIndex}`;
             const value = drafts[key] ?? game.pick ?? "";
             const saving = weekly.isPending && weekly.variables?.weekKey === game.weekKey && weekly.variables?.gameKey === game.key;
             return (
               <FieldGroup key={key} className="rounded-lg border p-4">
-                <datalist id={gameListId}>{(game.choices || []).map((club) => <option key={club} value={club} />)}</datalist>
                 <div className="flex flex-wrap items-start justify-between gap-2">
                   <div className="min-w-0"><p className="font-medium">{game.game}</p><p className="text-sm text-muted-foreground">{game.event || game.label}</p></div>
                   {game.lockAt ? <Badge variant="outline"><LockIcon data-icon="inline-start" />{text.nextLock} <LocalDateTime value={new Date(game.lockAt * 1000).toISOString()} locale={locale} /></Badge> : null}
                 </div>
                 <Field>
                   <FieldLabel htmlFor={`pick-${key}`}>{text.clubPick}</FieldLabel>
-                  <Input id={`pick-${key}`} list={gameListId} value={value} onChange={(event) => setDrafts((current) => ({ ...current, [key]: event.target.value }))} placeholder={text.clubPickPlaceholder} disabled={saving} />
+                  <ClubCombobox
+                    id={`pick-${key}`}
+                    value={value}
+                    choices={game.choices || []}
+                    onChange={(next) => setDrafts((current) => ({ ...current, [key]: next }))}
+                    placeholder={text.clubPickPlaceholder}
+                    emptyLabel={text.clubPickHelp}
+                    disabled={saving}
+                  />
                   <FieldDescription>{text.clubPickHelp}</FieldDescription>
                 </Field>
                 <div className="flex flex-wrap gap-2">
@@ -123,7 +172,15 @@ export function WebPredictionPicker({
               <FieldGroup key={slot.index} className="rounded-lg border p-4">
                 <Field data-disabled={slot.locked || undefined}>
                   <FieldLabel htmlFor={`season-pick-${slot.index}`}>{text.seasonRank(formatNumber(slot.index + 1, locale))}</FieldLabel>
-                  <Input id={`season-pick-${slot.index}`} list={datalistId} value={value} onChange={(event) => setSeasonDrafts((current) => ({ ...current, [slot.index]: event.target.value }))} disabled={slot.locked || saving || picker.season?.status !== "open"} placeholder={text.clubPickPlaceholder} />
+                  <ClubCombobox
+                    id={`season-pick-${slot.index}`}
+                    value={value}
+                    choices={clubs}
+                    onChange={(next) => setSeasonDrafts((current) => ({ ...current, [slot.index]: next }))}
+                    disabled={slot.locked || saving || picker.season?.status !== "open"}
+                    placeholder={text.clubPickPlaceholder}
+                    emptyLabel={text.clubPickHelp}
+                  />
                   {slot.locked ? <FieldDescription>{text.seasonFillOrder}</FieldDescription> : null}
                 </Field>
                 <div className="flex flex-wrap gap-2">

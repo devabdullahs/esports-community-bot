@@ -132,7 +132,7 @@ export const config = {
   ewcPredictions: {
     // Checks for due prediction snapshots/scoring. Actual Liquipedia requests still go through
     // the global MediaWiki parse limiter, and only happen when a configured round is due.
-    refreshMinutes: Number(get('EWC_PREDICTIONS_REFRESH_MINUTES', 60)),
+    refreshMinutes: Number(get('EWC_PREDICTIONS_REFRESH_MINUTES', 15)),
     scoreDelayHours: Number(get('EWC_PREDICTIONS_SCORE_DELAY_HOURS', 24)),
     remindersEnabled: get('EWC_PREDICTIONS_REMINDERS_ENABLED', 'true') !== 'false',
     reminderHours: Math.min(24, Math.max(1, Number(get('EWC_PREDICTIONS_REMINDER_HOURS', 6)) || 6)),

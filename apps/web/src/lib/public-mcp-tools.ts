@@ -190,6 +190,7 @@ function publicClub(club: EwcClubTrackerClub) {
       status: game.status,
     })),
     wins: club.wins,
+    winCount: club.winCount,
   };
 }
 

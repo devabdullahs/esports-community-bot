@@ -182,7 +182,7 @@ function ClubCard({ club, locale }: { club: EwcClubTrackerClub; locale: Locale }
         <section className="flex flex-col gap-2">
           <div className="flex items-center justify-between gap-3">
             <h2 className="text-sm font-semibold">{text.eventWins}</h2>
-            <Badge variant="outline">{text.winsCount(club.wins.length)}</Badge>
+            <Badge variant="outline">{text.winsCount(club.winCount)}</Badge>
           </div>
           {club.wins.length ? (
             <div className="flex flex-wrap gap-1.5">
@@ -349,7 +349,7 @@ export default async function EwcClubsPage({
         />
         <StatCard
           label={text.stats.confirmedWins}
-          value={text.winsCount(clubs.reduce((sum, club) => sum + club.wins.length, 0))}
+          value={text.winsCount(clubs.reduce((sum, club) => sum + club.winCount, 0))}
           icon={TrophyIcon}
         />
       </div>

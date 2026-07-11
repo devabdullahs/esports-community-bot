@@ -33,6 +33,8 @@ type RawStanding = {
   team?: string | null;
   points?: number | string | null;
   eligibility?: string | null;
+  wins?: number | string | null;
+  topEightFinishes?: number | string | null;
 };
 
 type TeamProfileRow = {
@@ -80,6 +82,7 @@ export type EwcClubTrackerClub = {
   qualifiedGames: EwcClubGame[];
   possibleGames: EwcClubGame[];
   wins: EwcClubWin[];
+  winCount: number;
 };
 
 export type EwcClubTracker = {
@@ -422,13 +425,14 @@ async function buildEwcClubTracker(input: TrackerBuildInput): Promise<EwcClubTra
     storedGamesByClubKey(),
     winsByClubKey(input.season),
   ]);
-  const standingsMap = new Map<string, { rank: number | null; points: number | null; eligibility: string | null }>();
+  const standingsMap = new Map<string, { rank: number | null; points: number | null; eligibility: string | null; wins: number | null }>();
   for (const row of input.standings) {
     if (!row.team) continue;
     addLookup(standingsMap, row.team, {
       rank: numberValue(row.rank),
       points: numberValue(row.points),
       eligibility: stringValue(row.eligibility),
+      wins: numberValue(row.wins),
     });
   }
   const gamesByClubKey = storedGames.byKey;
@@ -461,6 +465,7 @@ async function buildEwcClubTracker(input: TrackerBuildInput): Promise<EwcClubTra
         qualifiedGames,
         possibleGames: [],
         wins: clubWins,
+        winCount: Math.max(clubWins.length, standing?.wins ?? 0),
       };
     })
     .filter((club): club is EwcClubTrackerClub => Boolean(club))
@@ -494,7 +499,7 @@ async function buildEwcClubTracker(input: TrackerBuildInput): Promise<EwcClubTra
       total: clubs.length,
       featured: clubs.filter((club) => club.featured).length,
       qualifiedGames: countUniqueQualifiedGames(clubs),
-      confirmedWins: clubs.reduce((sum, club) => sum + club.wins.length, 0),
+      confirmedWins: clubs.reduce((sum, club) => sum + club.winCount, 0),
       pointsLeader: pointsLeader
         ? { name: pointsLeader.name, points: pointsLeader.points ?? 0, rank: pointsLeader.rank }
         : null,

@@ -19,6 +19,7 @@ export type EwcClubStandingCandidate = {
   hasStanding?: boolean;
   qualifiedGames?: readonly unknown[];
   wins?: readonly unknown[];
+  winCount?: number | null;
   region: Exclude<ClubRegionId, "all">;
   locationLabel?: string | null;
   featured?: boolean;
@@ -69,7 +70,7 @@ export function projectEwcClubStandings(
       points: finiteNumber(club.points),
       eligibility: eligibility(club.eligibility),
       qualifiedGameCount: club.qualifiedGames?.length ?? 0,
-      wins: club.wins?.length ?? 0,
+      wins: finiteNumber(club.winCount) ?? club.wins?.length ?? 0,
       region: club.region,
       locationLabel: club.locationLabel?.trim() || null,
     }))
