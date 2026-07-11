@@ -139,13 +139,59 @@ export async function requireVerifiedMember(): Promise<RequireMemberResult> {
   return { member };
 }
 
-// Client IP for IP-aware rate-limit keys. Trust ONLY cf-connecting-ip (set by
-// Cloudflare, not forgeable by the client). x-forwarded-for / x-real-ip are
-// client-supplied and must not seed rate-limit keys, or the per-IP backstop is
-// trivially evaded. When absent (non-Cloudflare access) all such requests share
-// one bucket — fine, because the primary limit is per authenticated user.
+// Trusted client identity for IP-aware rate-limit keys (ECB-SEC-008/009/015/017).
+//
+// The proxy header is honored ONLY under an explicit deployment mode
+// (EWC_TRUSTED_PROXY=cloudflare, the production default: cf-connecting-ip is
+// written by the Cloudflare/CranL ingress and stripped from client input).
+// x-forwarded-for / x-real-ip are never consulted — they are client-supplied.
+// The header value must parse as a real IP: arbitrary strings previously
+// became persistent rate-limit rows, handing attackers unlimited key
+// cardinality AND a way to dodge the shared bucket. Invalid values now fail
+// closed into one shared "invalid" bucket, and direct deployments
+// (EWC_TRUSTED_PROXY=none) share one conservative "direct" bucket because the
+// fetch Request API exposes no server-derived peer address.
+// IPv6 keys are bucketed to the /64 prefix — one subscriber allocation — so a
+// rotating interface identifier cannot mint fresh buckets.
+
+function expandIpv6(value: string): string[] | null {
+  const doubleColon = value.split("::");
+  if (doubleColon.length > 2) return null;
+  const head = doubleColon[0] ? doubleColon[0].split(":") : [];
+  const tail = doubleColon.length === 2 && doubleColon[1] ? doubleColon[1].split(":") : [];
+  const missing = 8 - head.length - tail.length;
+  if (doubleColon.length === 2 && missing < 0) return null;
+  if (doubleColon.length === 1 && head.length !== 8) return null;
+  const groups =
+    doubleColon.length === 2 ? [...head, ...Array(missing).fill("0"), ...tail] : head;
+  if (groups.length !== 8 || groups.some((g) => !/^[0-9a-fA-F]{1,4}$/.test(g))) return null;
+  return groups.map((g) => g.toLowerCase().padStart(4, "0"));
+}
+
+function canonicalClientIp(raw: string): string | null {
+  let value = raw.trim();
+  if (!value || value.length > 64) return null;
+  // IPv4-mapped IPv6 (::ffff:203.0.113.9) canonicalizes to the IPv4 form.
+  const mapped = value.toLowerCase().startsWith("::ffff:") ? value.slice(7) : null;
+  if (mapped && /^\d{1,3}(\.\d{1,3}){3}$/.test(mapped)) value = mapped;
+  if (/^\d{1,3}(\.\d{1,3}){3}$/.test(value)) {
+    const octets = value.split(".").map(Number);
+    return octets.every((o) => o >= 0 && o <= 255) ? octets.join(".") : null;
+  }
+  if (value.includes(":")) {
+    const groups = expandIpv6(value);
+    if (!groups) return null;
+    return groups.slice(0, 4).join(":") + "::/64";
+  }
+  return null;
+}
+
 export function clientIp(request: Request): string {
-  return request.headers.get("cf-connecting-ip")?.trim() || "unknown";
+  const mode = (process.env.EWC_TRUSTED_PROXY || "cloudflare").trim().toLowerCase();
+  if (mode !== "cloudflare") return "direct";
+  const raw = request.headers.get("cf-connecting-ip");
+  if (!raw) return "direct";
+  return canonicalClientIp(raw) ?? "invalid";
 }
 
 // Same-origin guard for state-changing requests: a browser sends Origin on

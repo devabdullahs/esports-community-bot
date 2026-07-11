@@ -2,6 +2,7 @@ import "server-only";
 
 import { NextResponse } from "next/server";
 import { consumeRateLimit } from "@bot/db/ewcRateLimits.js";
+import { clientIp } from "@/lib/community";
 
 export function isPublicMcpEnabled() {
   return process.env.EWC_PUBLIC_MCP_ENABLED !== "false";
@@ -42,9 +43,9 @@ export function publicMcpOriginOr403(request: Request): NextResponse | null {
 }
 
 export function publicMcpClientKey(request: Request) {
-  const trustedIp = request.headers.get("cf-connecting-ip")?.trim();
-  const value = trustedIp ? trustedIp.toLowerCase().slice(0, 120) : "unknown";
-  return `public-mcp:${value}`;
+  // Shared validated resolver: proxy header honored only under the explicit
+  // deployment mode, value must canonicalize to a real IP (ECB-SEC-015).
+  return `public-mcp:${clientIp(request)}`;
 }
 
 export async function resolvePublicMcpAccess(request: Request): Promise<NextResponse | null> {
