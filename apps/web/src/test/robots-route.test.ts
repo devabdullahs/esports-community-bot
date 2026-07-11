@@ -7,6 +7,9 @@ describe("robots.txt", () => {
     const body = await response.text();
 
     expect(response.status).toBe(200);
+    expect(response.headers.get("cache-control")).toBe(
+      "public, max-age=0, s-maxage=300, must-revalidate",
+    );
     expect(body).toContain("Disallow: /me$");
     expect(body).toContain("Disallow: /ar/me$");
     expect(body).not.toContain("Disallow: /me\n");
