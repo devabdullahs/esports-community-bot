@@ -410,7 +410,12 @@ export async function fetchEwcWeekGameResults(games) {
   });
   const results = [];
   for (const game of games || []) {
-    results.push(await fetchEwcEventPlacements(game, playerData.players || []));
+    try {
+      results.push(await fetchEwcEventPlacements(game, playerData.players || []));
+    } catch (error) {
+      logger.warn(`[ewc] placements unavailable for ${game?.gameKey || game?.key || game?.game || 'event'}: ${error.message}`);
+      results.push({ ...game, gameKey: game?.gameKey || game?.key, placements: [], error: error.message });
+    }
   }
   return results;
 }

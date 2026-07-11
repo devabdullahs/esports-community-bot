@@ -16,13 +16,13 @@ process.env.DISCORD_TOKEN = 'test-token';
 process.env.DISCORD_CLIENT_ID = 'test-client-id';
 
 const { closeDb } = await import('../src/db/index.js');
-const { addTournament } = await import('../src/db/tournaments.js');
+const { addTournament, updateTournamentEwc } = await import('../src/db/tournaments.js');
 const { replaceTournamentStandings } = await import('../src/db/tournamentStandings.js');
 const { upsertMatch } = await import('../src/db/matches.js');
 const { upsertEwcWeek, listEwcWeeksToAnnounceOpen, markEwcWeekOpenAnnounced, setEwcWeekStatus } = await import(
   '../src/db/ewcPredictions.js'
 );
-const { ewcGameParticipantTeams, matchParticipant } = await import('../src/lib/ewcGameTeams.js');
+const { ewcGameParticipantTeams, matchParticipant, resolveEwcGameEventUrl } = await import('../src/lib/ewcGameTeams.js');
 const { formatWeeklyPickLabel } = await import('../src/lib/ewcProfileStats.js');
 
 test.after(() => {
@@ -41,6 +41,56 @@ async function tournament(game, externalId, { name = externalId, source = 'liqui
     added_by: 'admin',
   });
 }
+
+test('resolveEwcGameEventUrl replaces generic calendar links with tracked game-specific pages', async () => {
+  const apex = await addTournament({
+    source: 'liquipedia',
+    external_id: 'apex/EWC/2026',
+    game: 'apexlegends',
+    name: 'Apex Legends Global Series: 2026 Split 1 Playoffs at the Esports World Cup',
+    url: 'https://liquipedia.net/apexlegends/Apex_Legends_Global_Series/2026/Split_1/Playoffs',
+    guild_id: 'g-ewc',
+    added_by: 'admin',
+  });
+  await updateTournamentEwc(apex.id, true);
+
+  assert.equal(
+    await resolveEwcGameEventUrl('Apex Legends', {
+      guildId: 'g-ewc',
+      eventUrl: 'https://liquipedia.net/esports/Apex_Legends_Global_Series',
+    }),
+    apex.url,
+  );
+
+  const fatalFury = await addTournament({
+    source: 'liquipedia',
+    external_id: 'fighters/EWC/2026/CotW',
+    game: 'fighters',
+    name: 'Fatal Fury: City of the Wolves - Esports World Cup 2026',
+    url: 'https://liquipedia.net/fighters/Esports_World_Cup/2026/CotW',
+    guild_id: 'g-ewc',
+    added_by: 'admin',
+  });
+  await updateTournamentEwc(fatalFury.id, true);
+  const streetFighter = await addTournament({
+    source: 'liquipedia',
+    external_id: 'fighters/EWC/2026/SF6',
+    game: 'fighters',
+    name: 'Street Fighter 6 - Esports World Cup 2026',
+    url: 'https://liquipedia.net/fighters/Esports_World_Cup/2026/SF6',
+    guild_id: 'g-ewc',
+    added_by: 'admin',
+  });
+  await updateTournamentEwc(streetFighter.id, true);
+
+  assert.equal(
+    await resolveEwcGameEventUrl('Fatal Fury: City of the Wolves', {
+      guildId: 'g-ewc',
+      eventUrl: 'https://liquipedia.net/esports/Esports_World_Cup',
+    }),
+    fatalFury.url,
+  );
+});
 
 // ---------------------------------------------------------------------------
 // formatWeeklyPickLabel
