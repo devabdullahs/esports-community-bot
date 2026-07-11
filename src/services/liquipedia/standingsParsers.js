@@ -205,7 +205,24 @@ export function parseBattleRoyaleStandings($) {
           logo: normalizeImageUrl(teamCell.find('img').first().attr('src')),
         });
       });
-    if (hasRealTeam(entries)) sections.push({ title: battleRoyalePanelTitle($, table), entries });
+    const uniqueEntries = [];
+    const byTeam = new Map();
+    for (const entry of entries) {
+      const key = cleanText(entry.team).toLowerCase();
+      const existingIndex = byTeam.get(key);
+      if (existingIndex == null) {
+        byTeam.set(key, uniqueEntries.length);
+        uniqueEntries.push(entry);
+        continue;
+      }
+      const existing = uniqueEntries[existingIndex];
+      const nextPoints = Number(entry.points);
+      const existingPoints = Number(existing.points);
+      if (Number.isFinite(nextPoints) && (!Number.isFinite(existingPoints) || nextPoints > existingPoints)) {
+        uniqueEntries[existingIndex] = entry;
+      }
+    }
+    if (hasRealTeam(uniqueEntries)) sections.push({ title: battleRoyalePanelTitle($, table), entries: uniqueEntries });
   });
   return sections;
 }
