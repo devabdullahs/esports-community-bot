@@ -83,7 +83,7 @@ async function rankForUser(guildId, season, userId) {
 
 async function weeklyAggregateStats(guildId, season, userId) {
   const weeklyRows = await all(
-    `SELECT wp.score, wp.details_json
+    `SELECT wp.score, wp.details_json, w.status AS week_status
      FROM ewc_weekly_predictions wp
      JOIN ewc_prediction_weeks w ON w.id = wp.week_id
      WHERE wp.guild_id = $1
@@ -91,7 +91,7 @@ async function weeklyAggregateStats(guildId, season, userId) {
        AND wp.user_id = $3`,
     [guildId, season, userId],
   );
-  const scoredRows = weeklyRows.filter((row) => row.score != null);
+  const scoredRows = weeklyRows.filter((row) => row.score != null && row.week_status === 'scored');
 
   const weeklyWins = (
     await get(
@@ -99,7 +99,7 @@ async function weeklyAggregateStats(guildId, season, userId) {
          SELECT wp.week_id, MAX(wp.score) AS max_score
          FROM ewc_weekly_predictions wp
          JOIN ewc_prediction_weeks w2 ON w2.id = wp.week_id
-         WHERE wp.guild_id = $1 AND w2.season = $2 AND wp.score IS NOT NULL
+         WHERE wp.guild_id = $1 AND w2.season = $2 AND w2.status = 'scored' AND wp.score IS NOT NULL
          GROUP BY wp.week_id
        )
        SELECT COUNT(*) AS c
@@ -108,6 +108,7 @@ async function weeklyAggregateStats(guildId, season, userId) {
        JOIN winners win ON win.week_id = wp.week_id AND win.max_score = wp.score
        WHERE wp.guild_id = $3
           AND w.season = $4
+          AND w.status = 'scored'
           AND wp.user_id = $5
           AND wp.score IS NOT NULL
           AND win.max_score > 0`,
@@ -134,7 +135,7 @@ async function weeklyAggregateStatsForUsers(guildId, season, userIds) {
   if (!uniqueIds.length) return stats;
 
   const weeklyRows = await all(
-    `SELECT wp.user_id, wp.week_id, wp.score, wp.details_json
+    `SELECT wp.user_id, wp.week_id, wp.score, wp.details_json, w.status AS week_status
      FROM ewc_weekly_predictions wp
      JOIN ewc_prediction_weeks w ON w.id = wp.week_id
      WHERE wp.guild_id = $1
@@ -149,6 +150,7 @@ async function weeklyAggregateStatsForUsers(guildId, season, userIds) {
      JOIN ewc_prediction_weeks w ON w.id = wp.week_id
      WHERE wp.guild_id = $1
        AND w.season = $2
+       AND w.status = 'scored'
        AND wp.score IS NOT NULL
      GROUP BY wp.week_id`,
     [guildId, season],
@@ -158,7 +160,7 @@ async function weeklyAggregateStatsForUsers(guildId, season, userIds) {
   for (const row of weeklyRows) {
     const current = stats.get(row.user_id) || emptyWeeklyAggregate();
     current.weeksPredicted += 1;
-    if (row.score == null) {
+    if (row.score == null || row.week_status !== 'scored') {
       stats.set(row.user_id, current);
       continue;
     }

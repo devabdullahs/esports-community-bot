@@ -282,8 +282,8 @@ export async function markEwcWeekScoredWithResults(weekId, finalStandings, resul
   );
 }
 
-export async function setEwcWeekResults(weekId, results) {
-  await run('UPDATE ewc_prediction_weeks SET results_json = $1 WHERE id = $2', [stringify(results), weekId]);
+export async function setEwcWeekResults(weekId, results, client = null) {
+  await runWith(client, 'UPDATE ewc_prediction_weeks SET results_json = $1 WHERE id = $2', [stringify(results), weekId]);
 }
 
 export async function upsertWeeklyPrediction({ guildId, weekId, userId, picks, client = null }) {

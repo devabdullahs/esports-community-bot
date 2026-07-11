@@ -102,6 +102,7 @@ async function seedScoredWeek({
 }): Promise<void> {
   const {
     saveWeeklyPredictionScore,
+    setEwcWeekStatus,
     upsertEwcWeek,
     upsertWeeklyPrediction,
   } = await import("@bot/db/ewcPredictions.js");
@@ -120,6 +121,7 @@ async function seedScoredWeek({
     picks: ["Team Falcons", "T1", "Gen.G"],
   });
   await saveWeeklyPredictionScore(guildId, week.id, userId, score, details);
+  await setEwcWeekStatus(week.id, "scored");
 }
 
 beforeEach(() => {
