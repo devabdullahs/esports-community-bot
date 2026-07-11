@@ -23,7 +23,7 @@ function snapshot(season, team, points, fetchedAt = `${season}-07-10T12:00:00.00
   return {
     season,
     sourceUrl: `https://liquipedia.net/esports/Esports_World_Cup/${season}/Club_Championship_Standings`,
-    standings: [{ rank: 1, team, points, eligibility: 'champion' }],
+    standings: [{ rank: 1, team, points, eligibility: 'champion', wins: 1, topEightFinishes: 2 }],
     prizepool: [{ place: '1st', prize: '$1,000,000', teams: [team] }],
     fetchedAt,
   };
@@ -59,9 +59,21 @@ test('inserts, atomically replaces, and keeps seasons independent', async () => 
   const previous = await getEwcClubChampionshipSnapshot('2025');
   assert.equal(current.standings[0].team, 'New Leader');
   assert.equal(current.standings[0].points, 125);
+  assert.equal(current.standings[0].wins, 1);
+  assert.equal(current.standings[0].topEightFinishes, 2);
   assert.equal(current.fetchedAt, '2026-07-10T13:00:00.000Z');
   assert.equal(previous.standings[0].team, 'Old Guard');
   assert.equal((await getLatestEwcClubChampionshipSnapshot()).season, '2026');
+});
+
+test('rejects invalid derived standing metrics', async () => {
+  await assert.rejects(
+    upsertEwcClubChampionshipSnapshot({
+      ...snapshot('2030', 'Invalid Club', 100),
+      standings: [{ rank: 1, team: 'Invalid Club', points: 100, wins: -1, topEightFinishes: 1 }],
+    }),
+    /cannot be negative/i,
+  );
 });
 
 test('an empty or unserializable payload cannot replace the last good snapshot', async () => {
