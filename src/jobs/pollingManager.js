@@ -15,6 +15,7 @@ import {
 } from '../db/matches.js';
 import { getMatchDetailsFetchedAt, upsertMatchDetails } from '../db/matchDetails.js';
 import { getTournamentById } from '../db/tournaments.js';
+import { replaceTournamentStandings } from '../db/tournamentStandings.js';
 
 // Targeted backoff polling: a match is polled (every livePollIntervalMs) only while it is
 // actually running, and polling stops the moment it finishes / leaves the ticker. Matches
@@ -36,6 +37,12 @@ const watchers = new Map(); // external_id -> { armTimer?, pollTimer? }
 const tournamentPolls = new Map(); // tournament.id -> Promise<parsed matches>
 const detailRefreshes = new Map(); // match.id -> { promise, finalRequested }
 const MATCH_DETAIL_GAMES = new Set(['valorant', 'dota2']);
+
+export async function persistFetchedStandings(matches, tournamentId, { replace = replaceTournamentStandings } = {}) {
+  const standings = matches?.standings;
+  if (!standings || (!standings.sections?.length && !standings.hadRows)) return 0;
+  return replace(tournamentId, standings.sections || []);
+}
 
 // The refresh handler ignores the type; the notifier keys on 'started'/'finished'.
 // A row first seen already running still counts as started (mid-match discovery),
@@ -220,6 +227,7 @@ async function pollOnce(match, tournament) {
 
   const all = await fetchTournamentSchedule(service, tournament);
   const currentIds = all.map((m) => m.externalId);
+  await persistFetchedStandings(all, match.tournament_id);
 
   // Refresh EVERY match in this tournament so live scores, final results, winners, and any
   // later corrections all propagate — not just the one match this watcher is tied to.
