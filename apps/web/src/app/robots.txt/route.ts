@@ -35,7 +35,9 @@ export function GET() {
   return new Response(body, {
     headers: {
       "Content-Type": "text/plain; charset=utf-8",
-      "Cache-Control": "public, max-age=3600",
+      // Browsers revalidate; shared CDNs may cache briefly. A short edge TTL
+      // keeps crawler directives responsive across deployments and two CDN layers.
+      "Cache-Control": "public, max-age=0, s-maxage=300, must-revalidate",
     },
   });
 }
