@@ -3,6 +3,7 @@ import { config } from '../config.js';
 import { logger } from '../lib/logger.js';
 import {
   archiveTournament,
+  archiveDuplicateTournamentUrls,
   listActiveTournaments,
   listEndedTournaments,
   updateTournamentEwc,
@@ -92,6 +93,13 @@ export async function runMorningSync(client) {
   // Archive tournaments that fully ended (every match finished) more than
   // TOURNAMENT_UNTRACK_AFTER_HOURS ago (default 72h). Archived events stay
   // browseable on the site but leave live/polling surfaces.
+  try {
+    const duplicates = await archiveDuplicateTournamentUrls();
+    if (duplicates) logger.info(`[morning-sync] archived ${duplicates} duplicate tournament URL alias(es).`);
+  } catch (err) {
+    logger.error(`[morning-sync] tournament duplicate cleanup failed: ${err.message}`);
+  }
+
   const staleHours = Number(process.env.TOURNAMENT_UNTRACK_AFTER_HOURS) || 72;
   try {
     const ended = await listEndedTournaments(staleHours * 3600);

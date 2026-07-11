@@ -1,4 +1,17 @@
-import { get, all, run } from './client.js';
+import { get, all, run, transaction } from './client.js';
+
+function canonicalTournamentUrl(value) {
+  try {
+    const url = new URL(String(value || '').trim());
+    url.hash = '';
+    url.search = '';
+    url.hostname = url.hostname.toLowerCase().replace(/^www\./, '');
+    url.pathname = url.pathname.replace(/\/+$/, '');
+    return url.toString().replace(/\/$/, '');
+  } catch {
+    return '';
+  }
+}
 
 // Insert (or re-activate) a tracked tournament. Returns the stored row.
 export async function addTournament(row) {
@@ -27,6 +40,51 @@ export async function listActiveTournaments(guildId) {
   return guildId
     ? all('SELECT * FROM tournaments WHERE active = 1 AND archived_at IS NULL AND guild_id = $1 ORDER BY created_at DESC', [guildId])
     : all('SELECT * FROM tournaments WHERE active = 1 AND archived_at IS NULL ORDER BY created_at DESC');
+}
+
+// A broad Start.gg id can coexist with a later event-scoped id even though
+// both resolve to the same event URL. Keep the copy with current activity and
+// archive aliases so historical results remain available without duplicate cards.
+export async function archiveDuplicateTournamentUrls(archivedAt = Math.floor(Date.now() / 1000)) {
+  return transaction(async (tx) => {
+    const rows = await tx.all(
+      `SELECT t.id, t.source, t.guild_id, t.url,
+              SUM(CASE WHEN m.status IN ('running', 'scheduled') THEN 1 ELSE 0 END) AS current_matches,
+              COUNT(m.id) AS total_matches
+       FROM tournaments t
+       LEFT JOIN matches m ON m.tournament_id = t.id
+       WHERE t.active = 1 AND t.archived_at IS NULL AND t.url IS NOT NULL AND t.url <> ''
+       GROUP BY t.id, t.source, t.guild_id, t.url`,
+    );
+    const groups = new Map();
+    for (const row of rows) {
+      const url = canonicalTournamentUrl(row.url);
+      if (!url) continue;
+      const key = `${row.guild_id}|${row.source}|${url}`;
+      const group = groups.get(key);
+      if (group) group.push(row);
+      else groups.set(key, [row]);
+    }
+
+    let archived = 0;
+    for (const group of groups.values()) {
+      if (group.length < 2) continue;
+      group.sort((a, b) =>
+        Number(b.current_matches || 0) - Number(a.current_matches || 0) ||
+        Number(b.total_matches || 0) - Number(a.total_matches || 0) ||
+        Number(b.id) - Number(a.id),
+      );
+      for (const duplicate of group.slice(1)) {
+        const result = await tx.run(
+          `UPDATE tournaments SET archived_at = $1
+           WHERE id = $2 AND active = 1 AND archived_at IS NULL`,
+          [archivedAt, duplicate.id],
+        );
+        archived += result.changes || result.rowCount || 0;
+      }
+    }
+    return archived;
+  });
 }
 
 export async function getTournamentById(id) {
