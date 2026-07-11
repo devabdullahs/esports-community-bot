@@ -13,7 +13,7 @@ process.env.DISCORD_CLIENT_ID = 'test-client-id';
 const { closeDb } = await import('../src/db/index.js');
 const { createEwcGame } = await import('../src/db/ewcGames.js');
 const { createEwcNewsPost } = await import('../src/db/ewcNewsPosts.js');
-const { createComment, setCommentStatus } = await import('../src/db/postComments.js');
+const { createComment, editComment, getComment, holdVisibleCommentForReports, setCommentStatus } = await import('../src/db/postComments.js');
 const {
   createCommentReport,
   countOpenReportsForComment,
@@ -99,4 +99,47 @@ test('deleted comments are excluded from the reported queue and count', async ()
   await setCommentStatus(commentId, 'deleted', { deletedBy: 'mod-1' });
   assert.equal(await countCommentsWithOpenReports(), 0); // deleted -> not counted
   assert.equal((await listReportedComments({})).length, 0);
+});
+
+// Security hardening (ECB-SEC-002): moderation/report-hold state is enforced
+// atomically inside editComment's single UPDATE.
+let holdPostId;
+
+async function freshVisibleComment(name) {
+  if (!holdPostId) {
+    const post = await createEwcNewsPost({
+      gameSlug: 'g1', contentMode: 'shared', defaultLocale: 'en',
+      translations: { en: { title: 'Hold post', summary: 'S', body: 'B' } },
+      status: 'published', authorDiscordId: null, authorName: null, coverImageUrl: null,
+    });
+    holdPostId = post.id;
+  }
+  const res = await createComment({
+    postId: holdPostId, authUserId: `auth-${name}`, discordUserId: `user-${name}`, authorName: name, body: `hello ${name}`,
+  });
+  await setCommentStatus(res.comment.id, 'visible');
+  return res.comment.id;
+}
+
+test('author edit cannot clear a report hold: the edit lands but stays pending', async () => {
+  const id = await freshVisibleComment('edit-hold');
+  await createCommentReport({ commentId: id, reporterDiscordId: '300000000000000401', reason: 'spam' });
+  assert.equal(await holdVisibleCommentForReports(id), true);
+
+  const edited = await editComment(id, { body: 'edited while held', status: 'visible' });
+  assert.equal(edited.status, 'pending');
+  assert.equal(edited.body, 'edited while held');
+  assert.equal(edited.autoApproveAt ?? null, null);
+});
+
+test('author edit of a hidden or rejected comment is a no-op at the database layer', async () => {
+  for (const status of ['hidden', 'rejected']) {
+    const id = await freshVisibleComment(`edit-${status}`);
+    await setCommentStatus(id, status);
+    const edited = await editComment(id, { body: 'sneaky edit', status: 'visible' });
+    assert.equal(edited, null);
+    const still = await getComment(id);
+    assert.equal(still.status, status);
+    assert.notEqual(still.body, 'sneaky edit');
+  }
 });

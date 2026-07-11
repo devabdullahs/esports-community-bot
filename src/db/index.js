@@ -734,6 +734,9 @@ db.exec(`
     key_id          INTEGER NOT NULL,
     tool_name       TEXT    NOT NULL,
     idempotency_key TEXT    NOT NULL,
+    -- Canonical digest of the request arguments: reusing an idempotency key
+    -- with a DIFFERENT payload is rejected instead of replayed.
+    request_digest  TEXT,
     result_json     TEXT,
     created_at      TEXT    NOT NULL DEFAULT (datetime('now')),
     completed_at    TEXT,
@@ -900,6 +903,8 @@ db.exec(`
 `);
 
 ensureColumns('tournament_standings', [['section_order', 'INTEGER NOT NULL DEFAULT 0']]);
+// Replay-safety digest for MCP write receipts (security hardening).
+ensureColumns('ewc_mcp_write_receipts', [['request_digest', 'TEXT']]);
 
 // Follows + notifications. A member (by Discord id) follows games / tournaments /
 // teams / players; match transitions fan out one notification row per follower.

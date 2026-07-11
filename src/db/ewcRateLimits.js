@@ -1,8 +1,20 @@
-import { isPostgres, transaction } from './client.js';
+import { isPostgres, run, transaction } from './client.js';
+
+// Bounded key retention: windows expire logically but their rows used to live
+// forever, so high-cardinality keys accumulated without limit. No live window
+// is ever a day old — anything older is garbage.
+const PURGE_AGE_SEC = 24 * 60 * 60;
+
+export async function purgeExpiredRateLimits(nowSec = Math.floor(Date.now() / 1000)) {
+  await run('DELETE FROM ewc_rate_limits WHERE window_start < $1', [nowSec - PURGE_AGE_SEC]);
+}
 
 // Fixed-window limiter. Returns { allowed, remaining, retryAfterSec }.
 // `amount` lets callers meter bytes as well as counts.
 export async function consumeRateLimit({ key, limit, windowSec, amount = 1, nowSec = Math.floor(Date.now() / 1000) }) {
+  // Opportunistic sweep (~1% of calls) keeps the table bounded without a
+  // dedicated job; a failed sweep never affects the limit decision.
+  if (Math.random() < 0.01) purgeExpiredRateLimits(nowSec).catch(() => {});
   return transaction(async (tx) => {
     if (isPostgres()) {
       await tx.get('SELECT pg_advisory_xact_lock(hashtext($1)) AS locked', [key]);

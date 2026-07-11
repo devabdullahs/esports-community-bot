@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { isInternalRequestAuthorized } from "@/lib/internal-auth";
 import { syncEwcProfileForDiscordUser } from "@/lib/ewc-profile-sync";
+import { resolveDefaultGuildId } from "@/lib/guild";
 import { rateLimitOr429 } from "@/lib/rate-limit";
 import { isSnowflake, isSeason } from "@/lib/validate";
 
@@ -29,10 +30,22 @@ export async function POST(request: Request) {
   const limited = await rateLimitOr429({ key: `ewc-internal-sync:${body.discordUserId}`, limit: 20, windowSec: 60 });
   if (limited) return limited;
 
+  // Linked-role namespaces are server-approved (ECB-SEC-011): the guild is
+  // pinned to the configured deployment guild, never a caller-selected
+  // format-valid snowflake, so no persistent alternate-namespace link rows
+  // or role metadata can be created.
+  const configuredGuildId = await resolveDefaultGuildId();
+  if (!configuredGuildId) {
+    return NextResponse.json({ error: "EWC guild is not configured." }, { status: 503 });
+  }
+  if (body.guildId != null && body.guildId !== configuredGuildId) {
+    return NextResponse.json({ error: "Guild is not allowed." }, { status: 403 });
+  }
+
   return NextResponse.json(
     await syncEwcProfileForDiscordUser({
       discordUserId: body.discordUserId,
-      guildId: body.guildId,
+      guildId: configuredGuildId,
       season: body.season,
     }),
   );

@@ -245,6 +245,25 @@ describe("/api/mcp auth", () => {
     );
     expect(response.status).toBe(403);
   });
+
+  test("malformed stored tool scopes fail closed instead of granting every admin tool", async () => {
+    const key = await createKey({ tools: ["create_news_draft"], games: [GAME_ALLOWED] });
+    const { run } = await import("@bot/db/client.js");
+    await run("UPDATE ewc_mcp_keys SET tools_json = $1 WHERE id = $2", ["{malformed", key.key.id]);
+
+    const response = await mcpPOST(
+      mcpRequest(key.secret, toolCall("create_news_draft", {
+        idempotencyKey: nextIdempotencyKey("corrupt-scope"),
+        title: "Must not be created",
+        body: "Denied because stored tool scope is corrupt.",
+        gameSlug: GAME_ALLOWED,
+      })),
+    );
+    expect(response.status).toBe(200);
+    const body = await parseMcpResponse(response);
+    expect(body.result?.isError).toBe(true);
+    expect(String(body.result?.content?.[0]?.text ?? "")).toMatch(/cannot use/i);
+  });
 });
 
 describe("/api/mcp tools", () => {
@@ -842,6 +861,71 @@ describe("/api/mcp tools", () => {
 
     await expect(snapshot()).resolves.toEqual(beforeRows);
     await expect(writeCounts()).resolves.toEqual(beforeCounts);
+  });
+
+
+  test("rejects idempotency-key reuse with a different payload", async () => {
+    const key = await createKey({ tools: ["create_news_draft"], games: [GAME_ALLOWED] });
+    const idempotencyKey = nextIdempotencyKey("digest-bind");
+    const first = await mcpPOST(
+      mcpRequest(key.secret, toolCall("create_news_draft", {
+        idempotencyKey,
+        title: "Digest bound draft",
+        gameSlug: GAME_ALLOWED,
+      })),
+    );
+    expect((await parseMcpResponse(first)).result.isError).not.toBe(true);
+
+    const before = await writeCounts();
+    const changed = await mcpPOST(
+      mcpRequest(key.secret, toolCall("create_news_draft", {
+        idempotencyKey,
+        title: "DIFFERENT payload for the same key",
+        gameSlug: GAME_ALLOWED,
+      })),
+    );
+    const body = await parseMcpResponse(changed);
+    expect(body.result?.isError === true || Boolean(body.error)).toBe(true);
+    const text = String(body.result?.content?.[0]?.text ?? body.error?.message ?? "");
+    expect(text).toMatch(/different request payload/i);
+    await expect(writeCounts()).resolves.toEqual(before);
+  });
+
+  test("denies idempotent replay after the key's scope was reduced", async () => {
+    const admins = await import("@bot/db/ewcAdmins.js");
+    const key = await createKey({
+      ownerDiscordId: SCOPED_ID,
+      tools: ["create_news_draft"],
+      games: [GAME_ALLOWED],
+    });
+    const idempotencyKey = nextIdempotencyKey("replay-scope");
+    const args = { idempotencyKey, title: "Scope reduction replay", gameSlug: GAME_ALLOWED };
+    const first = await mcpPOST(mcpRequest(key.secret, toolCall("create_news_draft", args)));
+    expect((await parseMcpResponse(first)).result.isError).not.toBe(true);
+
+    try {
+      // Owner loses the game scope: the stored draft must not be replayable.
+      await admins.setEwcAdminGameScopes(SCOPED_ID, []);
+      const replay = await mcpPOST(mcpRequest(key.secret, toolCall("create_news_draft", args)));
+      const body = await parseMcpResponse(replay);
+      expect(body.result?.isError === true || Boolean(body.error)).toBe(true);
+      const text = String(body.result?.content?.[0]?.text ?? body.error?.message ?? "");
+      expect(text).toMatch(/no longer authorized|cannot draft/i);
+    } finally {
+      await admins.setEwcAdminGameScopes(SCOPED_ID, [GAME_ALLOWED]);
+    }
+  });
+
+  test("identical replay with the same payload still succeeds after hardening", async () => {
+    const key = await createKey({ tools: ["create_news_draft"], games: [GAME_ALLOWED] });
+    const idempotencyKey = nextIdempotencyKey("replay-same");
+    const args = { idempotencyKey, title: "Same payload replay", gameSlug: GAME_ALLOWED };
+    const first = await parseMcpResponse(await mcpPOST(mcpRequest(key.secret, toolCall("create_news_draft", args))));
+    const second = await parseMcpResponse(await mcpPOST(mcpRequest(key.secret, toolCall("create_news_draft", args))));
+    expect(first.result.isError).not.toBe(true);
+    expect(second.result.isError).not.toBe(true);
+    expect(second.result.structuredContent.replayed).toBe(true);
+    expect(second.result.structuredContent.post.id).toBe(first.result.structuredContent.post.id);
   });
 
   test("scoped stream updates do not propagate to sibling channels outside the key scope", async () => {

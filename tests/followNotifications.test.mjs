@@ -302,3 +302,32 @@ test('partial pref patches never clobber the other fields', async () => {
   assert.equal(after.notify_match_start, 0);
   assert.equal(after.notify_match_result, 1);
 });
+
+test('follow quota: creation stops at the cap but re-follow stays idempotent', async () => {
+  const { upsertFollow, listFollowsForUser, MAX_FOLLOWS_PER_USER } = await import('../src/db/userFollows.js');
+  const userId = '900000000000000777';
+  for (let i = 0; i < MAX_FOLLOWS_PER_USER; i += 1) {
+    const created = await upsertFollow({ discordUserId: userId, entityType: 'team', entityKey: `Quota Team ${i}` });
+    assert.equal(created.limited ?? undefined, undefined);
+  }
+  const over = await upsertFollow({ discordUserId: userId, entityType: 'team', entityKey: 'One Team Too Many' });
+  assert.deepEqual(over, { limited: true });
+  // Re-following an existing target at the cap remains an idempotent update.
+  const again = await upsertFollow({ discordUserId: userId, entityType: 'team', entityKey: 'Quota Team 0', entityLabel: 'renamed' });
+  assert.equal(again.limited ?? undefined, undefined);
+  const rows = await listFollowsForUser(userId);
+  assert.equal(rows.length, MAX_FOLLOWS_PER_USER);
+});
+
+test('concurrent follow writes cannot race past the per-user quota', async () => {
+  const { upsertFollow, listFollowsForUser, MAX_FOLLOWS_PER_USER } = await import('../src/db/userFollows.js');
+  const userId = '900000000000000778';
+  const attempts = Array.from({ length: MAX_FOLLOWS_PER_USER + 25 }, (_, i) =>
+    upsertFollow({ discordUserId: userId, entityType: 'team', entityKey: `Concurrent Team ${i}` }),
+  );
+
+  const results = await Promise.all(attempts);
+  const rows = await listFollowsForUser(userId);
+  assert.equal(rows.length, MAX_FOLLOWS_PER_USER);
+  assert.equal(results.filter((result) => result?.limited).length, 25);
+});

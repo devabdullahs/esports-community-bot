@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { ensureAnalyticsSchema, recordAnalyticsEvent } from "@/lib/web-analytics";
 import { clientIp } from "@/lib/community";
 import { rateLimitOr429 } from "@/lib/rate-limit";
+import { readBoundedJson } from "@/lib/request-body";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -75,13 +76,13 @@ function normalizeReferrer(value: unknown, request: Request) {
 }
 
 async function readPayload(request: Request) {
-  const length = Number(request.headers.get("content-length") || 0);
-  if (length > JSON_LIMIT_BYTES) return null;
-  try {
-    return (await request.json()) as Record<string, unknown>;
-  } catch {
+  // Streaming byte cap: Content-Length alone is client-controlled and can be
+  // absent under chunked encoding, so enforce the limit on the stream itself.
+  const result = await readBoundedJson(request, JSON_LIMIT_BYTES);
+  if (!result.ok || !result.value || typeof result.value !== "object" || Array.isArray(result.value)) {
     return null;
   }
+  return result.value as Record<string, unknown>;
 }
 
 export async function POST(request: Request) {

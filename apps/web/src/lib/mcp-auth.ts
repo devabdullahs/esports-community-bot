@@ -3,7 +3,6 @@ import "server-only";
 import { NextResponse } from "next/server";
 import { consumeRateLimit } from "@bot/db/ewcRateLimits.js";
 import {
-  MCP_TOOL_NAMES,
   touchMcpKey,
   verifyMcpKeySecret,
 } from "@bot/db/mcpKeys.js";
@@ -120,7 +119,10 @@ export async function resolveMcpAccess(request: Request): Promise<
 
   const ownerGames: string[] | "ALL" = isSuper ? "ALL" : roster!.games;
   const ownerMedia: string[] | "ALL" = isSuper ? "ALL" : roster!.media;
-  const tools = new Set(key.tools.length ? key.tools : MCP_TOOL_NAMES);
+  // createMcpKey persists its default tool set explicitly. An empty list here
+  // therefore means corrupt/legacy scope data and must remain empty; expanding
+  // it would turn a fail-closed parser result into full admin-tool access.
+  const tools = new Set(key.tools);
   await touchMcpKey(key.id);
 
   return {

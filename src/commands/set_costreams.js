@@ -67,10 +67,22 @@ export async function execute(interaction) {
     return;
   }
 
-  if (role && !role.mentionable && !interaction.appPermissions?.has?.(PermissionFlagsBits.MentionEveryone)) {
+  if (role?.managed) {
+    await interaction.reply({
+      content: `${role} is managed by an integration and cannot be used as a mention role.`,
+      flags: MessageFlags.Ephemeral,
+    });
+    return;
+  }
+
+  // Security hardening (ECB-SEC-016): the announce role must be mentionable on
+  // its own. The bot's Mention Everyone permission is never delegated here —
+  // otherwise a moderator could point announcements at a protected,
+  // unmentionable role (e.g. staff) and have the bot ping it for them.
+  if (role && !role.mentionable) {
     await interaction.reply({
       content:
-        `${role} is not mentionable. Make the role mentionable, or give the bot **Mention Everyone** so it can mention that role.`,
+        `${role} is not mentionable. Make the role mentionable in the server's role settings, then run this command again.`,
       flags: MessageFlags.Ephemeral,
     });
     return;

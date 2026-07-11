@@ -59,7 +59,7 @@ const upsertFollow = _upsertFollow as unknown as (input: {
   entityKey: string;
   entityLabel?: string;
   entityRef?: string;
-}) => Promise<FollowRow>;
+}) => Promise<FollowRow | { limited: true }>;
 const deleteFollow = _deleteFollow as unknown as (input: {
   discordUserId: string;
   entityType: FollowEntityType;

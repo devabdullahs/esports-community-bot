@@ -116,16 +116,15 @@ describe("GET /api/ewc/[guildId]/[season]/leaderboard", () => {
     expect(fallbackPage.rows.map((row: { rank: number }) => row.rank)).toEqual([1, 2, 2, 4]);
   });
 
-  test("returns an empty leaderboard for a fresh guild and season", async () => {
+  test("a namespace with no prediction rounds at all is not served (hardened)", async () => {
+    // Pre-hardening this returned an empty 200 and minted a cache entry per
+    // arbitrary guild/season pair; unknown namespaces are now rejected
+    // before the cache (ECB-SEC-003).
     const res = await GET(
       new Request(`http://localhost/api/ewc/${EMPTY_GUILD_ID}/${EMPTY_SEASON}/leaderboard`),
       ctx(EMPTY_GUILD_ID, EMPTY_SEASON),
     );
-    expect(res.status).toBe(200);
-    const body = await res.json();
-    expect(body.rows).toEqual([]);
-    expect(body.total).toBe(0);
-    expect(body.topScore).toBe(0);
+    expect(res.status).toBe(404);
   });
 
   test("rejects an invalid guild or season", async () => {
@@ -134,5 +133,19 @@ describe("GET /api/ewc/[guildId]/[season]/leaderboard", () => {
 
     const invalidSeason = await GET(req(), ctx(GUILD_ID, "season-2048"));
     expect(invalidSeason.status).toBe(400);
+  });
+});
+
+describe("leaderboard namespace admission", () => {
+  test("format-valid but unknown guild/season returns 404 before caching", async () => {
+    const unknownGuild = await GET(new Request("http://localhost/x"), ctx("999999999999999999", SEASON));
+    expect(unknownGuild.status).toBe(404);
+    const unknownSeason = await GET(new Request("http://localhost/x"), ctx(GUILD_ID, "1999"));
+    expect(unknownSeason.status).toBe(404);
+  });
+
+  test("the known configured namespace still serves", async () => {
+    const response = await GET(new Request("http://localhost/x"), ctx());
+    expect(response.status).toBe(200);
   });
 });

@@ -292,22 +292,73 @@ async function waitForLogoSlot(state, globalState) {
   await markLiquipediaRequestAt(now);
 }
 
+// Bounded admission in front of the R2 layer (security hardening
+// ECB-SEC-004): anonymous /api/logo requests with arbitrary allowed-host
+// paths used to translate 1:1 into R2 reads. Two caps bound that work:
+//   - a small negative cache remembers recent misses so repeated unknown
+//     URLs stop at memory, not storage;
+//   - a concurrency ceiling on simultaneous R2 reads makes saturation
+//     degrade to a cacheable 404 instead of unbounded backend fan-out.
+const NEGATIVE_MISS_TTL_MS = 5 * 60 * 1000;
+const NEGATIVE_MISS_MAX = 5000;
+const negativeMisses = new Map(); // logoHash -> expiresAtMs
+const MAX_CONCURRENT_R2_READS = 8;
+let activeR2Reads = 0;
+
+function isNegativelyCached(hash) {
+  const expires = negativeMisses.get(hash);
+  if (!expires) return false;
+  if (Date.now() > expires) {
+    negativeMisses.delete(hash);
+    return false;
+  }
+  return true;
+}
+
+function rememberLogoMiss(hash) {
+  if (negativeMisses.size >= NEGATIVE_MISS_MAX) {
+    const oldest = negativeMisses.keys().next().value;
+    if (oldest !== undefined) negativeMisses.delete(oldest);
+  }
+  negativeMisses.set(hash, Date.now() + NEGATIVE_MISS_TTL_MS);
+}
+
 export async function fetchLogoBytes(url, channel = 'bot', { download = true } = {}) {
   const file = logoPath(url);
   const cached = await readCached(file);
   if (cached) return { bytes: cached, file, cached: true };
 
+  const hash = logoHash(url);
+  // Non-downloading (public web) readers stop at the negative cache.
+  if (!download && isNegativelyCached(hash)) return null;
+
   // Persistent R2 layer: after a deploy wipes the local disk cache, serve from
   // R2 (our own storage/CDN — not Liquipedia, so no rate limit and allowed even
   // when download=false) and refill the local hot cache. This is what stops the
   // whole site from falling back to initials for hours after every deploy.
-  const fromR2 = await r2GetLogo(logoHash(url));
+  let fromR2 = null;
+  let checkedR2 = false;
+  if (activeR2Reads < MAX_CONCURRENT_R2_READS) {
+    activeR2Reads += 1;
+    checkedR2 = true;
+    try {
+      fromR2 = await r2GetLogo(hash);
+    } finally {
+      activeR2Reads -= 1;
+    }
+  }
   if (fromR2 && rasterLogoContentType(fromR2)) {
+    negativeMisses.delete(hash);
     await writeFile(file, fromR2).catch(() => {});
     return { bytes: fromR2, file, cached: true };
   }
 
-  if (!download) return null;
+  if (!download) {
+    // Saturation is not evidence of a miss. Only cache an actual completed R2
+    // lookup, otherwise a brief traffic spike hides valid logos for five minutes.
+    if (checkedR2) rememberLogoMiss(hash);
+    return null;
+  }
 
   const bytes = await runLimited(async () => {
     const afterQueue = await readCached(file);
@@ -337,6 +388,8 @@ export function logoSourceStats() {
   return {
     queuedDownloads: queue.length,
     activeDownloads,
+    activeR2Reads,
+    negativeMissEntries: negativeMisses.size,
     cacheDir: CACHE_DIR,
   };
 }

@@ -1,4 +1,4 @@
-import { all, get, run } from './client.js';
+import { all, get, isPostgres, run, transaction } from './client.js';
 import { normalizeTeamName } from '../lib/render.js';
 
 export const FOLLOW_ENTITY_TYPES = ['game', 'tournament', 'team', 'player'];
@@ -19,19 +19,39 @@ export function normalizeFollowKey(entityType, entityKey) {
   return key;
 }
 
+// Hard per-user quota (ECB-SEC-019): follows are persistent rows fanned out
+// on every match transition, so one member must not grow them without bound.
+// Re-following an already-followed target stays idempotent at the cap.
+export const MAX_FOLLOWS_PER_USER = 200;
+
 export async function upsertFollow({ discordUserId, entityType, entityKey, entityLabel = '', entityRef = '' }) {
   if (!FOLLOW_ENTITY_TYPES.includes(entityType)) throw new Error(`Invalid follow entity type: ${entityType}`);
   const key = normalizeFollowKey(entityType, entityKey);
   if (!discordUserId || !key) throw new Error('upsertFollow requires discordUserId and entityKey.');
-  return get(
-    `INSERT INTO user_follows (discord_user_id, entity_type, entity_key, entity_label, entity_ref)
-     VALUES ($1, $2, $3, $4, $5)
-     ON CONFLICT (discord_user_id, entity_type, entity_key) DO UPDATE SET
-       entity_label = excluded.entity_label,
-       entity_ref   = excluded.entity_ref
-     RETURNING *`,
-    [discordUserId, entityType, key, textOrEmpty(entityLabel), textOrEmpty(entityRef)],
-  );
+  return transaction(async (tx) => {
+    if (isPostgres()) {
+      await tx.get('SELECT pg_advisory_xact_lock(hashtext($1)) AS locked', [`user-follow:${discordUserId}`]);
+    }
+    const existing = await tx.get(
+      'SELECT 1 AS present FROM user_follows WHERE discord_user_id = $1 AND entity_type = $2 AND entity_key = $3',
+      [String(discordUserId), entityType, key],
+    );
+    if (!existing) {
+      const count = await tx.get('SELECT COUNT(*) AS c FROM user_follows WHERE discord_user_id = $1', [
+        String(discordUserId),
+      ]);
+      if (Number(count?.c ?? 0) >= MAX_FOLLOWS_PER_USER) return { limited: true };
+    }
+    return tx.get(
+      `INSERT INTO user_follows (discord_user_id, entity_type, entity_key, entity_label, entity_ref)
+       VALUES ($1, $2, $3, $4, $5)
+       ON CONFLICT (discord_user_id, entity_type, entity_key) DO UPDATE SET
+         entity_label = excluded.entity_label,
+         entity_ref   = excluded.entity_ref
+       RETURNING *`,
+      [discordUserId, entityType, key, textOrEmpty(entityLabel), textOrEmpty(entityRef)],
+    );
+  });
 }
 
 export async function deleteFollow({ discordUserId, entityType, entityKey }) {
@@ -44,8 +64,12 @@ export async function deleteFollow({ discordUserId, entityType, entityKey }) {
 }
 
 export async function listFollowsForUser(discordUserId) {
+  // Bounded read: the quota keeps live users at <= MAX_FOLLOWS_PER_USER, and
+  // the LIMIT protects against legacy rows that predate the cap.
   return all(
-    'SELECT * FROM user_follows WHERE discord_user_id = $1 ORDER BY entity_type ASC, entity_label ASC, entity_key ASC',
+    `SELECT * FROM user_follows WHERE discord_user_id = $1
+     ORDER BY entity_type ASC, entity_label ASC, entity_key ASC
+     LIMIT ${MAX_FOLLOWS_PER_USER + 50}`,
     [discordUserId],
   );
 }

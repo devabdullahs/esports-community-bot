@@ -7,6 +7,19 @@ import {
   listFollows,
   upsertFollow,
 } from "@/lib/follows";
+import { rateLimitOr429 } from "@/lib/rate-limit";
+import { readBoundedJson } from "@/lib/request-body";
+
+// Follow bodies are a handful of short strings.
+const FOLLOW_MAX_BODY_BYTES = 4 * 1024;
+
+async function boundedBody(request: Request) {
+  const result = await readBoundedJson(request, FOLLOW_MAX_BODY_BYTES);
+  if (!result.ok || !result.value || typeof result.value !== "object" || Array.isArray(result.value)) {
+    return null;
+  }
+  return result.value as Record<string, unknown>;
+}
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -39,8 +52,11 @@ export async function POST(request: Request) {
   if (origin) return origin;
   const { discordUserId, error } = await requireViewer();
   if (error) return error;
+  const limited = await rateLimitOr429({ key: `follows:${discordUserId}`, limit: 30, windowSec: 60 });
+  if (limited) return limited;
 
-  const body = await request.json().catch(() => ({}));
+  const body = await boundedBody(request);
+  if (!body) return NextResponse.json({ error: "Invalid follow request." }, { status: 400 });
   const entityType = body.entityType;
   const entityKey = cleanText(body.entityKey, MAX_KEY);
   if (!isFollowEntityType(entityType) || !entityKey) {
@@ -65,6 +81,9 @@ export async function POST(request: Request) {
     entityLabel: cleanText(body.entityLabel, MAX_LABEL),
     entityRef,
   });
+  if (follow && "limited" in follow) {
+    return NextResponse.json({ error: "Follow limit reached." }, { status: 409 });
+  }
   return NextResponse.json({ follow });
 }
 
@@ -73,8 +92,11 @@ export async function DELETE(request: Request) {
   if (origin) return origin;
   const { discordUserId, error } = await requireViewer();
   if (error) return error;
+  const limited = await rateLimitOr429({ key: `follows:${discordUserId}`, limit: 30, windowSec: 60 });
+  if (limited) return limited;
 
-  const body = await request.json().catch(() => ({}));
+  const body = await boundedBody(request);
+  if (!body) return NextResponse.json({ error: "Invalid follow request." }, { status: 400 });
   const entityType = body.entityType;
   const entityKey = cleanText(body.entityKey, MAX_KEY);
   if (!isFollowEntityType(entityType) || !entityKey) {

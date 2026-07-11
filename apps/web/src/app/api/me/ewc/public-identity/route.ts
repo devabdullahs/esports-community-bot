@@ -11,11 +11,6 @@ import { rateLimitOr429 } from "@/lib/rate-limit";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-async function noBrowserSuppliedIdentity(request: Request) {
-  const body = await request.json().catch(() => null);
-  return body === null || (typeof body === "object" && !Array.isArray(body) && Object.keys(body).length === 0);
-}
-
 function invalidatePublicIdentityCaches() {
   revalidateTag("ewc-public-leaderboard", "default");
   revalidateTag("ewc-predictions", "default");
@@ -35,10 +30,10 @@ async function memberGate(request: Request) {
   return { member: gate.member, link };
 }
 
+// These toggles are intentionally bodyless: every accepted identity value is
+// derived from the authenticated account, so the request body is never read —
+// pre-auth JSON parsing was the ECB-SEC-007 resource-consumption vector.
 export async function POST(request: Request) {
-  const origin = sameOriginOr403(request);
-  if (origin) return origin;
-  if (!(await noBrowserSuppliedIdentity(request))) return NextResponse.json({ error: "Identity values are derived from your signed-in account." }, { status: 400 });
   const gate = await memberGate(request);
   if ("response" in gate) return gate.response;
   const displayName = normalizePublicDisplayName(gate.member.displayName);
@@ -55,9 +50,6 @@ export async function POST(request: Request) {
 }
 
 export async function DELETE(request: Request) {
-  const origin = sameOriginOr403(request);
-  if (origin) return origin;
-  if (!(await noBrowserSuppliedIdentity(request))) return NextResponse.json({ error: "Identity values are derived from your signed-in account." }, { status: 400 });
   const gate = await memberGate(request);
   if ("response" in gate) return gate.response;
   const link = await setEwcProfileLinkPublicIdentity({

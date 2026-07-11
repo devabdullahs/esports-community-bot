@@ -161,13 +161,28 @@ export async function listCommentsForPost(postId, limit = 100, { includeAllStatu
 
 // Edit an author's own comment. The caller re-runs moderation and passes the
 // resulting status/flags so an edited comment can drop back to pending.
+// Moderation state is enforced HERE, atomically, in one statement — the
+// route's pre-checks are UX only:
+//   - hidden/rejected/deleted rows never match, so a concurrent moderator
+//     hide/reject between the caller's read and this write wins;
+//   - a comment held by unresolved reports stays 'pending' with no
+//     auto-approve timer, whatever status the caller computed.
 export async function editComment(id, { body, status, flagReason = null, autoApproveAt = null }) {
   const now = nowText();
   const info = await run(
     `UPDATE post_comments
-     SET body = $1, status = $2, flag_reason_json = $3, auto_approve_at = $4,
+     SET body = $1,
+         status = CASE WHEN EXISTS (
+             SELECT 1 FROM comment_reports r
+             WHERE r.comment_id = post_comments.id AND r.status = 'open'
+           ) THEN 'pending' ELSE $2 END,
+         flag_reason_json = $3,
+         auto_approve_at = CASE WHEN EXISTS (
+             SELECT 1 FROM comment_reports r
+             WHERE r.comment_id = post_comments.id AND r.status = 'open'
+           ) THEN NULL ELSE $4 END,
          updated_at = $5, edited_at = $5
-     WHERE id = $6 AND status <> 'deleted'`,
+     WHERE id = $6 AND status NOT IN ('deleted', 'hidden', 'rejected')`,
     [body, status, flagReason ? JSON.stringify(flagReason) : null, autoApproveAt, now, id],
   );
   if (info.changes === 0) return null;

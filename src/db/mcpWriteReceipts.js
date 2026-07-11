@@ -29,6 +29,7 @@ function parseResult(row) {
     return {
       completed: false,
       result: null,
+      requestDigest: row.request_digest || null,
       createdAt: row.created_at,
       completedAt: row.completed_at,
     };
@@ -37,6 +38,7 @@ function parseResult(row) {
     return {
       completed: true,
       result: JSON.parse(row.result_json),
+      requestDigest: row.request_digest || null,
       createdAt: row.created_at,
       completedAt: row.completed_at,
     };
@@ -45,15 +47,20 @@ function parseResult(row) {
   }
 }
 
-export async function claimMcpWriteReceipt(tx, claim) {
+/**
+ * @param {any} tx
+ * @param {{ keyId: number, toolName: string, idempotencyKey: string }} claim
+ * @param {{ requestDigest?: string | null }} [options]
+ */
+export async function claimMcpWriteReceipt(tx, claim, { requestDigest = null } = {}) {
   const value = cleanClaim(claim);
   const row = await tx.get(
     `INSERT INTO ewc_mcp_write_receipts
-       (key_id, tool_name, idempotency_key, created_at)
-     VALUES ($1, $2, $3, $4)
+       (key_id, tool_name, idempotency_key, request_digest, created_at)
+     VALUES ($1, $2, $3, $4, $5)
      ON CONFLICT (key_id, tool_name, idempotency_key) DO NOTHING
-     RETURNING key_id, tool_name, idempotency_key, result_json, created_at, completed_at`,
-    [value.keyId, value.toolName, value.idempotencyKey, nowText()],
+     RETURNING key_id, tool_name, idempotency_key, request_digest, result_json, created_at, completed_at`,
+    [value.keyId, value.toolName, value.idempotencyKey, requestDigest, nowText()],
   );
   return { claimed: Boolean(row), receipt: parseResult(row) };
 }
@@ -66,7 +73,7 @@ export async function completeMcpWriteReceipt(tx, claim, result) {
     `UPDATE ewc_mcp_write_receipts
      SET result_json = $4, completed_at = $5
      WHERE key_id = $1 AND tool_name = $2 AND idempotency_key = $3
-     RETURNING key_id, tool_name, idempotency_key, result_json, created_at, completed_at`,
+     RETURNING key_id, tool_name, idempotency_key, request_digest, result_json, created_at, completed_at`,
     [value.keyId, value.toolName, value.idempotencyKey, resultJson, nowText()],
   );
   if (!row) throw new Error('MCP write receipt was not claimed.');
@@ -76,7 +83,7 @@ export async function completeMcpWriteReceipt(tx, claim, result) {
 export async function getMcpWriteReceipt(tx, claim) {
   const value = cleanClaim(claim);
   const row = await tx.get(
-    `SELECT key_id, tool_name, idempotency_key, result_json, created_at, completed_at
+    `SELECT key_id, tool_name, idempotency_key, request_digest, result_json, created_at, completed_at
      FROM ewc_mcp_write_receipts
      WHERE key_id = $1 AND tool_name = $2 AND idempotency_key = $3`,
     [value.keyId, value.toolName, value.idempotencyKey],

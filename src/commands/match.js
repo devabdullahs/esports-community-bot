@@ -1,6 +1,7 @@
 import { SlashCommandBuilder, InteractionContextType, MessageFlags } from 'discord.js';
 import { getMatchesForGuild } from '../db/matches.js';
 import { buildMatchCardPayload, MATCH_STATUS } from '../lib/matchMessage.js';
+import { tryAcquireRenderSlot } from '../lib/renderGate.js';
 
 export const data = new SlashCommandBuilder()
   .setName('match')
@@ -37,6 +38,20 @@ export async function execute(interaction) {
     return;
   }
 
-  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-  await interaction.editReply(await buildMatchCardPayload(m));
+  // Canvas admission: one card at a time per member, bounded globally, so a
+  // mashed command can't stack CPU-bound renders in the shared container.
+  const slot = tryAcquireRenderSlot(interaction.user.id);
+  if (!slot.ok) {
+    await interaction.reply({
+      content: 'A card is already being rendered — try again in a few seconds.',
+      flags: MessageFlags.Ephemeral,
+    });
+    return;
+  }
+  try {
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+    await interaction.editReply(await buildMatchCardPayload(m));
+  } finally {
+    slot.release();
+  }
 }

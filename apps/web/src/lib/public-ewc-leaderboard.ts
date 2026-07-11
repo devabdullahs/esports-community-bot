@@ -28,6 +28,25 @@ const cached = unstable_cache(
   { tags: ["ewc-public-leaderboard"], revalidate: 60 },
 );
 
+// Namespace admission BEFORE the cache (ECB-SEC-003): unstable_cache mints a
+// persistent entry per distinct key, so format-valid but arbitrary
+// guild/season values must never reach it. A namespace is known only when a
+// prediction season row actually exists for it — one cheap indexed read.
+export async function isKnownEwcLeaderboardNamespace(guildId: string, season: string): Promise<boolean> {
+  const { get } = await import("@bot/db/client.js");
+  const query = get as (sql: string, params: unknown[]) => Promise<unknown>;
+  const week = await query(
+    "SELECT 1 AS x FROM ewc_prediction_weeks WHERE guild_id = $1 AND season = $2 LIMIT 1",
+    [guildId, season],
+  );
+  if (week) return true;
+  const seasonRow = await query(
+    "SELECT 1 AS x FROM ewc_prediction_seasons WHERE guild_id = $1 AND season = $2 LIMIT 1",
+    [guildId, season],
+  );
+  return Boolean(seasonRow);
+}
+
 // Same bounds as the API route so page + API normalize to identical cache keys.
 export function getPublicEwcLeaderboardCached(args: PublicLeaderboardArgs) {
   const limit = clamp(args.limit, 1, 100, 50);

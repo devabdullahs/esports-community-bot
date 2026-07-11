@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { notFound } from "next/navigation";
 import { ArrowLeftIcon, ArrowRightIcon, CrownIcon, TrophyIcon, UsersRoundIcon } from "lucide-react";
 import { LeaderboardTable } from "@/components/dashboard/leaderboard-table";
 import { PartnerPlacement } from "@/components/partners/partner-placement";
@@ -23,7 +24,7 @@ import {
   getLeaderboardPageRequest,
 } from "@/lib/leaderboard-page-model";
 import { getRequestLocale } from "@/lib/request-locale";
-import { getPublicEwcLeaderboardCached } from "@/lib/public-ewc-leaderboard";
+import { getPublicEwcLeaderboardCached, isKnownEwcLeaderboardNamespace } from "@/lib/public-ewc-leaderboard";
 import { buildPageMetadata } from "@/lib/metadata";
 
 export const runtime = "nodejs";
@@ -57,6 +58,7 @@ export default async function LeaderboardPage({
   const text = copy[locale];
 
   const initialRequest = getLeaderboardPageRequest(requestedPage);
+  if (!(await isKnownEwcLeaderboardNamespace(guildId, season))) notFound();
   let leaderboard = await getPublicEwcLeaderboardCached({
     guildId,
     season,
