@@ -307,6 +307,18 @@ export async function fetchSchedule(tournament) {
   addScheduleMatches(mergeBattleRoyaleSchedules(scheduleMatches));
   for (const loadedPage of pages) addLiveWidgetsPage(loadedPage);
 
+  const standingsSections = [];
+  let standingsHadRows = false;
+  for (const loadedPage of pages) {
+    const parsed = parseEventStandings(loadedPage.$);
+    standingsSections.push(...prefixSections(parsed, loadedPage.stageTitle));
+    standingsHadRows = hasStandingsRows(loadedPage.$) || standingsHadRows;
+  }
+  Object.defineProperty(out, 'standings', {
+    value: { sections: standingsSections, hadRows: standingsHadRows },
+    enumerable: false,
+  });
+
   return out;
 }
 
