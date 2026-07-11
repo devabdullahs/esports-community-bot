@@ -9,6 +9,7 @@ import {
 } from "lucide-react";
 import { EwcClubStandingsTable } from "@/components/clubs/ewc-club-standings-table";
 import { EwcClubViewSwitcher } from "@/components/clubs/ewc-club-view-switcher";
+import { LocalDateTime } from "@/components/local-date-time";
 import { PageBreadcrumb } from "@/components/page-breadcrumb";
 import { LiquipediaAttribution } from "@/components/tournaments/liquipedia-attribution";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -30,7 +31,7 @@ import {
   CLUB_REGION_IDS,
   type ClubRegionId,
 } from "@/lib/ewc-club-regions";
-import { copy, formatDateTime, formatNumber, localizedPath, type Locale } from "@/lib/i18n";
+import { copy, formatNumber, localizedPath, type Locale } from "@/lib/i18n";
 import { buildPageMetadata } from "@/lib/metadata";
 import { getRequestLocale } from "@/lib/request-locale";
 
@@ -115,7 +116,11 @@ export default async function EwcClubStandingsPage({
         <div className="flex flex-wrap items-center gap-x-3 gap-y-2 text-xs text-muted-foreground">
           <Badge variant="secondary">{text.season(data.season)}</Badge>
           <span>{text.sourceStates[data.dataSource]}</span>
-          {data.updatedAt ? <span>{text.updated(formatDateTime(data.updatedAt, locale))}</span> : null}
+          {data.updatedAt ? (
+            <span>
+              {text.updated("")} <LocalDateTime value={data.updatedAt} locale={locale} />
+            </span>
+          ) : null}
           <a
             href={data.sourceUrl}
             target="_blank"
