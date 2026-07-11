@@ -90,6 +90,40 @@ test('parseClubStandings: uses latest week snapshot when data-toggle-area-conten
   assert.equal(rows[1].points, 180, 'week-2 Gen.G points');
 });
 
+test('parseClubStandings: reads current eligibility tooltip descriptions', () => {
+  const html = `
+    <table class="wikitable">
+      <tr><th>#</th><th>Club</th><th>Points</th></tr>
+      <tr><td>1</td><td><span title="Eligible to win the Club Championship (two Top 8 finishes and a tournament win)" data-highlightingclass="UNLIMIT">UNLIMIT</span></td><td>1000</td></tr>
+      <tr><td>2</td><td><span title="Eligible for the Club Championship (two Top 8 finishes)" data-highlightingclass="Team Vitality">Team Vitality</span></td><td>400</td></tr>
+      <tr><td>3</td><td><span title="Not yet eligible for the Club Championship" data-highlightingclass="Team A">Team A</span></td><td>300</td></tr>
+      <tr><td>4</td><td><span data-highlightingclass="Team B">Team B</span></td><td>200</td></tr>
+      <tr><td>5</td><td><span data-highlightingclass="Team C">Team C</span></td><td>100</td></tr>
+    </table>`;
+  const rows = parseClubStandings(load(html));
+  assert.equal(rows[0].eligibility, 'champion');
+  assert.equal(rows[1].eligibility, 'prize');
+  assert.equal(rows[2].eligibility, null);
+});
+
+test('parseClubStandings: counts wins and derives eligibility from event point columns', () => {
+  const html = `
+    <table class="wikitable">
+      <tr><th>#</th><th>Club</th><th>Total Points</th><th>Event 1</th><th>Event 2</th></tr>
+      <tr><td>1</td><td><span data-highlightingclass="Natus Vincere">Natus Vincere</span></td><td>1000</td><td>1000</td><td>-</td></tr>
+      <tr><td>2</td><td><span data-highlightingclass="Team Vitality">Team Vitality</span></td><td>400</td><td>200</td><td>200</td></tr>
+      <tr><td>3</td><td><span data-highlightingclass="Team Falcons">Team Falcons</span></td><td>250</td><td>50</td><td>200</td></tr>
+      <tr><td>4</td><td><span data-highlightingclass="Team A">Team A</span></td><td>200</td><td>200</td><td>-</td></tr>
+      <tr><td>5</td><td><span data-highlightingclass="Team B">Team B</span></td><td>100</td><td>100</td><td>-</td></tr>
+    </table>`;
+  const rows = parseClubStandings(load(html));
+  assert.deepEqual(rows.slice(0, 3).map(({ wins, eligibility }) => ({ wins, eligibility })), [
+    { wins: 1, eligibility: null },
+    { wins: 0, eligibility: 'prize' },
+    { wins: 0, eligibility: 'prize' },
+  ]);
+});
+
 test('parseClubStandings: empty document returns []', () => {
   const $ = load('<html></html>');
   assert.deepEqual(parseClubStandings($), []);

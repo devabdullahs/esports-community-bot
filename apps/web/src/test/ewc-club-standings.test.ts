@@ -28,6 +28,7 @@ function candidate(
     region: "other",
     qualifiedGames: [],
     wins: [],
+    winCount: null,
     ...overrides,
   };
 }
@@ -69,6 +70,13 @@ describe("EWC Club Championship standings", () => {
 
     expect(filterEwcClubStandings(rows, { region: "gulf" }).map((row) => row.rank)).toEqual([1, 3]);
     expect(filterEwcClubStandings(rows, { q: "team liquid" }).map((row) => row.rank)).toEqual([2]);
+  });
+
+  test("prefers the official standings win count over delayed result details", () => {
+    const [row] = projectEwcClubStandings([
+      candidate("UNLIMIT", 1, 1000, { winCount: 1, wins: [] }),
+    ]);
+    expect(row.wins).toBe(1);
   });
 
   test("a stored snapshot returns without touching a hanging Liquipedia fallback", async () => {

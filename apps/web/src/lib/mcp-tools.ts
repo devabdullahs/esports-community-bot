@@ -365,6 +365,7 @@ export function createAdminMcpServer(access: McpAccess) {
             status: game.status,
           })),
           wins: club.wins,
+          winCount: club.winCount,
         }));
       return jsonResult({
         sourceUrl: tracker.sourceUrl,

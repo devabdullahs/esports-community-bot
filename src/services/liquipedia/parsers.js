@@ -515,7 +515,18 @@ export function parseSwissMatches($, game) {
 
 // Liquipedia marks Club Championship eligibility with colored backgrounds.
 function detectEligibility($, teamCell, row) {
-  const blob = `${$(teamCell).attr('class') || ''} ${$(teamCell).attr('style') || ''} ${$(row).attr('class') || ''} ${$(row).attr('style') || ''}`.toLowerCase();
+  const $team = $(teamCell);
+  const $row = $(row);
+  const described = $row
+    .find('[title], [data-bs-title], [aria-label]')
+    .toArray()
+    .flatMap((element) => [$(element).attr('title'), $(element).attr('data-bs-title'), $(element).attr('aria-label')])
+    .filter(Boolean)
+    .join(' ');
+  const blob = `${$team.attr('class') || ''} ${$team.attr('style') || ''} ${$row.attr('class') || ''} ${$row.attr('style') || ''} ${described}`.toLowerCase();
+  if (/not (?:yet )?eligible|has not qualified/.test(blob)) return null;
+  if (/eligible to win (?:the )?(?:club )?championship|two top\s*8[^.]*tournament win/.test(blob)) return 'champion';
+  if (/eligible for (?:the )?(?:club championship|prize pool)|two top\s*8/.test(blob)) return 'prize';
   if (/yellow|gold/.test(blob)) return 'champion';
   if (/green/.test(blob)) return 'prize';
   return null;
@@ -562,7 +573,16 @@ export function parseClubStandings($) {
     const points = Number($(cells[idxPoints]).text().replace(/[^0-9]/g, ''));
     if (!team || Number.isNaN(points)) continue;
     const rank = Number($(cells[0]).text().replace(/[^0-9]/g, '')) || out.length + 1;
-    out.push({ rank, team, points, eligibility: detectEligibility($, cells[idxTeam], row) });
+    const eventPoints = cells
+      .toArray()
+      .map((cell, index) => ({ index, value: Number($(cell).text().replace(/[^0-9]/g, '')) }))
+      .filter(({ index, value }) => index > idxPoints && Number.isFinite(value) && value > 0)
+      .map(({ value }) => value);
+    const wins = eventPoints.filter((value) => value === 1000).length;
+    const topEightFinishes = eventPoints.length;
+    const markedEligibility = detectEligibility($, cells[idxTeam], row);
+    const derivedEligibility = topEightFinishes >= 2 ? (wins > 0 ? 'champion' : 'prize') : null;
+    out.push({ rank, team, points, wins, topEightFinishes, eligibility: markedEligibility || derivedEligibility });
   }
   return out;
 }

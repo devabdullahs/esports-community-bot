@@ -475,9 +475,9 @@ const baseCopy = {
       emptyDescription: "The official table will appear after the bot saves its first valid Club Championship refresh.",
       noResults: "No clubs match these filters.",
       eligibility: {
-        champion: "Championship eligible",
-        prize: "Prize-pool eligible",
-        unknown: "Not marked",
+        champion: "Eligible to win championship",
+        prize: "Eligible for Club Championship",
+        unknown: "Not eligible",
       },
       columns: {
         rank: "Rank",
@@ -1097,9 +1097,9 @@ const baseCopy = {
       emptyDescription: "سيظهر الجدول الرسمي بعد أن يحفظ البوت أول تحديث صالح لبطولة الأندية.",
       noResults: "لا توجد أندية تطابق عوامل التصفية.",
       eligibility: {
-        champion: "مؤهل للفوز بالبطولة",
-        prize: "مؤهل للجوائز",
-        unknown: "غير محدد",
+        champion: "مؤهل للفوز ببطولة الأندية",
+        prize: "مؤهل لبطولة الأندية",
+        unknown: "غير مؤهل",
       },
       columns: {
         rank: "المركز",
