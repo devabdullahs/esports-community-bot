@@ -122,6 +122,26 @@ test('builds ranked profile stats and Discord role connection payload', async ()
   assert.equal(activityMetadata?.name, 'Weeks Predicted');
 });
 
+test('rolling event points count overall without granting finalized-week achievements', async () => {
+  const rollingSeason = 'rolling-2026';
+  await upsertEwcSeason({ guildId, season: rollingSeason, label: 'Rolling', createdBy: 'admin' });
+  const week = await upsertEwcWeek({
+    guildId,
+    season: rollingSeason,
+    weekKey: 'week-1',
+    label: 'Week 1',
+    createdBy: 'admin',
+  });
+  await upsertWeeklyPrediction({ guildId, weekId: week.id, userId: userA, picks: ['Team Falcons'] });
+  await saveWeeklyPredictionScore(guildId, week.id, userA, 750, { provisional: true, bonus: 0 });
+
+  const stats = await getEwcUserProfileStats(guildId, rollingSeason, userA);
+  assert.equal(stats.overallPoints, 750);
+  assert.equal(stats.weeksPredicted, 1);
+  assert.equal(stats.weeksScored, 0);
+  assert.equal(stats.weeklyWins, 0);
+});
+
 test('shapes public leaderboard rows', async () => {
   const leaderboard = await getPublicEwcLeaderboard({ guildId, season, limit: 10 });
   assert.equal(leaderboard.total, 2);

@@ -26,7 +26,7 @@ import {
 } from "@/components/ui/table";
 import { LocalDateTime } from "@/components/local-date-time";
 import { PlatformIcon } from "@/components/platform-icon";
-import { copy, directionForLocale, localizedPath, type Locale } from "@/lib/i18n";
+import { copy, directionForLocale, formatNumber, localizedPath, type Locale } from "@/lib/i18n";
 import { logoProxyUrl } from "@/lib/logo-url";
 import { withProfileReturn, type ProfileReturnContext } from "@/lib/profile-navigation";
 import { safeUrlOrUndefined } from "@/lib/safe-url";
@@ -63,6 +63,7 @@ type StandingRow = {
   logo: string | null;
   points: string;
   extra: string;
+  ewc_points?: number;
 };
 
 export type TournamentMatchesPayload = {
@@ -72,6 +73,9 @@ export type TournamentMatchesPayload = {
     game: string | null;
     source: string;
     url: string | null;
+    ewc: boolean;
+    completed: boolean;
+    final_standings_section: string | null;
   };
   matches: { running: MatchRow[]; scheduled: MatchRow[]; finished: MatchRow[] };
   standings?: StandingRow[];
@@ -377,6 +381,7 @@ export function TournamentMatchList({
         <StandingsSection
           standings={standings}
           running={running}
+          finalSection={query.data.tournament.final_standings_section}
           locale={locale}
           text={text}
           returnContext={returnContext}
@@ -611,12 +616,14 @@ function hasNumericResult(value: string | null | undefined): boolean {
 function StandingsSection({
   standings,
   running,
+  finalSection,
   locale,
   text,
   returnContext,
 }: {
   standings: StandingRow[];
   running: MatchRow[];
+  finalSection: string | null;
   locale: Locale;
   text: TournamentCopy;
   returnContext: ProfileReturnContext;
@@ -636,16 +643,17 @@ function StandingsSection({
       rows: [...teams.values()].sort((a, b) => a.rank - b.rank || a.id - b.id),
       value: `standings-${index}`,
       active: running.some((match) => standingsSectionMatches(section, match.name)),
+      final: section === finalSection,
       sourceOrder: index,
     }))
-    .sort((a, b) => Number(b.active) - Number(a.active) || a.sourceOrder - b.sourceOrder);
+    .sort((a, b) => Number(b.active) - Number(a.active) || Number(b.final) - Number(a.final) || a.sourceOrder - b.sourceOrder);
   const uniqueStandings = sections.flatMap(({ rows }) => rows);
   const hasResults = uniqueStandings.some(
     (row) => hasNumericResult(row.points) || hasNumericResult(row.extra),
   );
   const hasExtra = hasResults && uniqueStandings.some((row) => row.extra);
   const activeValues = sections
-    .filter(({ active }) => active)
+    .filter(({ active, final }) => active || final)
     .map(({ value }) => value);
 
   return (
@@ -658,9 +666,14 @@ function StandingsSection({
         defaultValue={activeValues}
         className="rounded-lg border"
       >
-        {sections.map(({ section, rows, value, active }) => {
+        {sections.map(({ section, rows, value, active, final }) => {
+          const hasEwcPoints = final && rows.some((row) => row.ewc_points != null);
           return (
-            <AccordionItem key={value} value={value} className="px-3 last:border-b-0">
+            <AccordionItem
+              key={value}
+              value={value}
+              className={final ? "bg-primary/5 px-3 last:border-b-0" : "px-3 last:border-b-0"}
+            >
               <AccordionTrigger className="no-underline hover:no-underline">
                 <span className="flex min-w-0 items-center gap-2">
                   <span className="truncate">
@@ -668,6 +681,7 @@ function StandingsSection({
                   </span>
                   <Badge variant="secondary">{rows.length}</Badge>
                   {active ? <Badge>{text.liveNow}</Badge> : null}
+                  {final ? <Badge variant="outline">{text.finalStandings}</Badge> : null}
                 </span>
               </AccordionTrigger>
               <AccordionContent className="pb-3">
@@ -678,6 +692,7 @@ function StandingsSection({
                 <TableHead>{text.team}</TableHead>
                 {hasResults ? <TableHead className="text-end">{text.points}</TableHead> : null}
                 {hasExtra ? <TableHead className="text-end">{text.score}</TableHead> : null}
+                {hasEwcPoints ? <TableHead className="text-end">{text.ewcPoints}</TableHead> : null}
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -706,6 +721,11 @@ function StandingsSection({
                   {hasExtra ? (
                     <TableCell className="text-end tabular-nums text-muted-foreground">
                       {row.extra || "-"}
+                    </TableCell>
+                  ) : null}
+                  {hasEwcPoints ? (
+                    <TableCell className="text-end tabular-nums font-semibold text-primary">
+                      {formatNumber(row.ewc_points ?? 0, locale)}
                     </TableCell>
                   ) : null}
                 </TableRow>

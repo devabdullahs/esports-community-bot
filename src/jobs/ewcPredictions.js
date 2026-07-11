@@ -22,6 +22,7 @@ import {
   saveWeeklyPredictionScore,
   setEwcSeasonStatus,
   setEwcWeekSnapshot,
+  setEwcWeekResults,
   setEwcWeekStatus,
   weeklyLeaderboard,
 } from '../db/ewcPredictions.js';
@@ -37,6 +38,9 @@ import { transaction } from '../db/client.js';
 import { logger } from '../lib/logger.js';
 import {
   effectiveEwcWeekStatus,
+  dueEwcGamesForResults,
+  ewcGameResultPending,
+  mergeEwcGameResults,
   pendingEwcGameResults,
   scorePerGameWeeklyPrediction,
   scoreSeasonPrediction,
@@ -513,7 +517,7 @@ async function processWeek(client, round) {
   }
 
   const readyAt = scoreAfter(round);
-  if (readyAt && now < readyAt) {
+  if (!perGame && readyAt && now < readyAt) {
     logger.debug(`[ewc-predictions] scoring waits until ${readyAt} for ${round.guild_id}/${round.season}/${round.week_key}`);
     return;
   }
@@ -523,9 +527,57 @@ async function processWeek(client, round) {
     return;
   }
 
-  // Network fetch + pending-results check happen OUTSIDE the transaction below.
-  const results = perGame ? (round.results?.length ? round.results : await fetchEwcWeekGameResults(round.games)) : [];
+  // Per-game rounds publish rolling points as each event's official prize table
+  // lands. Poll only events near their scheduled finish, and keep completed
+  // snapshots so later runs never spend another Liquipedia request on them.
+  let results = perGame ? round.results || [] : [];
+  let resultsChanged = false;
+  if (perGame) {
+    const candidates = readyAt && now >= readyAt
+      ? dueEwcGamesForResults(round.games, results, now, Number.MAX_SAFE_INTEGER)
+      : dueEwcGamesForResults(round.games, results, now);
+    if (candidates.length) {
+      const fetched = await fetchEwcWeekGameResults(candidates);
+      const merged = mergeEwcGameResults(results, fetched);
+      resultsChanged = JSON.stringify(merged) !== JSON.stringify(results);
+      results = merged;
+      round.results = results;
+    }
+  }
+
   const missingResults = perGame ? pendingEwcGameResults(results, round.games) : [];
+  const predictions = await listWeeklyPredictions(round.id);
+
+  const hasCompletedResult = results.some((result) => !ewcGameResultPending(result));
+  const finalReady = perGame && (!readyAt || now >= readyAt) && missingResults.length === 0;
+  if (perGame && !finalReady && hasCompletedResult && (resultsChanged || predictions.some((prediction) => prediction.score == null))) {
+    await transaction(async (tx) => {
+      for (const prediction of predictions) {
+        try {
+          const provisional = scorePerGameWeeklyPrediction(prediction.picks, round.games, results);
+          await saveWeeklyPredictionScore(round.guild_id, round.id, prediction.user_id, provisional.score, {
+            ...provisional.details,
+            provisional: true,
+          }, tx);
+        } catch (error) {
+          logger.warn(`[ewc-predictions] skipped malformed provisional pick ${prediction.user_id}/${round.week_key}: ${error.message}`);
+          await saveWeeklyPredictionScore(round.guild_id, round.id, prediction.user_id, 0, {
+            error: error.message,
+            picks: prediction.picks,
+            provisional: true,
+          }, tx);
+        }
+      }
+      await setEwcWeekResults(round.id, results, tx);
+    });
+    await updateEwcPredictionLeaderboard(client, round.guild_id);
+    await syncLinkedProfileShowcases(round.guild_id, round.season);
+  }
+
+  if (perGame && readyAt && now < readyAt) {
+    logger.debug(`[ewc-predictions] final weekly scoring waits until ${readyAt} for ${round.guild_id}/${round.season}/${round.week_key}`);
+    return;
+  }
   if (missingResults.length) {
     logger.warn(
       `[ewc-predictions] results pending for ${round.guild_id}/${round.season}/${round.week_key}: ${missingResults
@@ -541,7 +593,6 @@ async function processWeek(client, round) {
     return;
   }
 
-  const predictions = await listWeeklyPredictions(round.id);
   // Wrap all writes in a transaction so a mid-loop crash leaves scores consistent.
   await transaction(async (tx) => {
     for (const prediction of predictions) {

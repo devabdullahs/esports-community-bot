@@ -14,6 +14,8 @@ const {
   scorePerGameWeeklyPrediction,
   ewcPlacementPoints,
   pendingEwcGameResults,
+  dueEwcGamesForResults,
+  mergeEwcGameResults,
   effectiveEwcWeekStatus,
   generateEwcWeekWindows,
   WEEKLY_TOP_THREE_SWEEP_BONUS,
@@ -524,6 +526,26 @@ test('pendingEwcGameResults: flags games whose results are absent or have no 1st
   assert.equal(pending[0].gameKey, 'apex-2');
   // Both resolved → none pending.
   assert.equal(pendingEwcGameResults(resultsFor(), GAMES).length, 0);
+});
+
+test('dueEwcGamesForResults polls only unresolved events near their scheduled finish', () => {
+  const games = [
+    { ...GAMES[0], endAt: 10_000 },
+    { ...GAMES[1], endAt: 30_000 },
+  ];
+  const due = dueEwcGamesForResults(games, [resultsFor()[0]], 20_000, 5_000);
+  assert.deepEqual(due.map((game) => game.key), []);
+  assert.deepEqual(dueEwcGamesForResults(games, [], 20_000, 15_000).map((game) => game.key), ['valorant-1', 'apex-2']);
+});
+
+test('mergeEwcGameResults preserves completed snapshots and upgrades pending ones', () => {
+  const complete = resultsFor()[0];
+  const pending = { gameKey: 'apex-2', placements: [], error: 'not final' };
+  const merged = mergeEwcGameResults([complete, pending], [
+    { gameKey: 'valorant-1', placements: [], error: 'transient' },
+    resultsFor()[1],
+  ]);
+  assert.deepEqual(merged, resultsFor());
 });
 
 // ─── effectiveEwcWeekStatus (per-game lock-window state machine) ──────────────

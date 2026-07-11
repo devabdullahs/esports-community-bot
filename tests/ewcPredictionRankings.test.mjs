@@ -14,6 +14,7 @@ const {
   overallRankForUser,
   saveSeasonPredictionScore,
   saveWeeklyPredictionScore,
+  setEwcWeekStatus,
   seasonLeaderboard,
   upsertEwcSeason,
   upsertEwcWeek,
@@ -37,6 +38,7 @@ async function seedRankedRound({ guildId, season, weekKey, scoreValues = scores 
     await upsertWeeklyPrediction({ guildId, weekId: week.id, userId: users[index], picks: [`Pick ${index}`] });
     await saveWeeklyPredictionScore(guildId, week.id, users[index], score, { total: score });
   }
+  await setEwcWeekStatus(week.id, 'scored');
   return week;
 }
 

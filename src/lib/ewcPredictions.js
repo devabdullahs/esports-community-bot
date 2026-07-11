@@ -109,6 +109,36 @@ export function pendingEwcGameResults(results, games = []) {
   return expected.filter(ewcGameResultPending);
 }
 
+export function dueEwcGamesForResults(games = [], results = [], now = Math.floor(Date.now() / 1000), earlyWindowSec = 12 * 3600) {
+  const completed = new Set(
+    (results || [])
+      .filter((result) => !ewcGameResultPending(result))
+      .map((result) => String(result.gameKey || ''))
+      .filter(Boolean),
+  );
+  return (games || []).filter((game) => {
+    const key = String(game?.key || '');
+    if (!key || completed.has(key)) return false;
+    const endAt = Number(game?.endAt);
+    return Number.isFinite(endAt) && now >= endAt - Math.max(0, Number(earlyWindowSec) || 0);
+  });
+}
+
+export function mergeEwcGameResults(existing = [], incoming = []) {
+  const merged = new Map();
+  for (const result of existing || []) {
+    const key = String(result?.gameKey || '');
+    if (key) merged.set(key, result);
+  }
+  for (const result of incoming || []) {
+    const key = String(result?.gameKey || '');
+    if (!key) continue;
+    const current = merged.get(key);
+    if (!current || !ewcGameResultPending(result) || ewcGameResultPending(current)) merged.set(key, result);
+  }
+  return [...merged.values()];
+}
+
 export function parsePredictionDate(input) {
   const value = String(input ?? '').trim();
   if (!value) return null;

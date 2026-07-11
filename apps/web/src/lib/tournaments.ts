@@ -16,6 +16,7 @@ import {
 import { unstable_cache } from "next/cache";
 import { resolveDefaultGuildId } from "@/lib/guild";
 import { liveCoStreamsByMatch, type MatchCoStream } from "@/lib/match-co-streams";
+import { ewcPlacementPointsForRank, finalTournamentStandingSection } from "@/lib/tournament-standings";
 
 // ---------------------------------------------------------------------------
 // Typed boundary over the bot's tournament/match read helpers (see games.ts).
@@ -104,6 +105,8 @@ export type StandingRow = {
   logo: string | null;
   points: string;
   extra: string;
+  section_order?: number;
+  ewc_points?: number;
   updated_at: string;
 };
 
@@ -114,6 +117,9 @@ export type TournamentMatches = {
     game: string | null;
     source: string;
     url: string | null;
+    ewc: boolean;
+    completed: boolean;
+    final_standings_section: string | null;
   };
   matches: { running: MatchRow[]; scheduled: MatchRow[]; finished: MatchRow[] };
   standings: StandingRow[];
@@ -337,7 +343,8 @@ export async function getTournamentMatches(
 
   const rows = await dedupedTournamentMatches(tournament);
   const resolveTeamId = await teamIdResolver(tournament.game);
-  const standings = (await listStandingsForTournament(tournament.id)).map((row) => ({
+  const rawStandings = await listStandingsForTournament(tournament.id);
+  let standings = rawStandings.map((row) => ({
     ...row,
     team_id: resolveTeamId(row.team),
   }));
@@ -357,6 +364,20 @@ export async function getTournamentMatches(
     .filter((m) => m.status === "finished")
     .map((m) => withTeamIds(publicMatch(m), resolveTeamId));
   const finished = finishedAll.slice(offset, offset + limit);
+  const ewc = isEwcTournament(tournament);
+  const standingsHaveResults = rawStandings.some(
+    (row) => /[1-9]/.test(String(row.points ?? "")) || /[1-9]/.test(String(row.extra ?? "")),
+  );
+  const completed = tournament.archived_at != null || (
+    running.length === 0 && scheduled.length === 0 && (finishedAll.length > 0 || standingsHaveResults)
+  );
+  const finalStandingsSection = ewc && completed ? finalTournamentStandingSection(rawStandings) : null;
+  if (finalStandingsSection) {
+    standings = standings.map((row) => ({
+      ...row,
+      ...(row.section === finalStandingsSection ? { ewc_points: ewcPlacementPointsForRank(row.rank) } : {}),
+    }));
+  }
 
   return {
     tournament: {
@@ -365,6 +386,9 @@ export async function getTournamentMatches(
       game: tournament.game,
       source: tournament.source,
       url: tournament.url,
+      ewc,
+      completed,
+      final_standings_section: finalStandingsSection,
     },
     matches: { running, scheduled, finished },
     standings,
