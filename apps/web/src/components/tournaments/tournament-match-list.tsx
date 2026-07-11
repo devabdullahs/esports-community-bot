@@ -630,18 +630,22 @@ function StandingsSection({
     if (!current || standingRowWeight(row) >= standingRowWeight(current)) teams.set(teamKey, row);
     sectionRows.set(key, teams);
   }
-  const sections = [...sectionRows.entries()].map(([section, teams], index) => ({
-    section,
-    rows: [...teams.values()].sort((a, b) => a.rank - b.rank || a.id - b.id),
-    value: `standings-${index}`,
-  }));
+  const sections = [...sectionRows.entries()]
+    .map(([section, teams], index) => ({
+      section,
+      rows: [...teams.values()].sort((a, b) => a.rank - b.rank || a.id - b.id),
+      value: `standings-${index}`,
+      active: running.some((match) => standingsSectionMatches(section, match.name)),
+      sourceOrder: index,
+    }))
+    .sort((a, b) => Number(b.active) - Number(a.active) || a.sourceOrder - b.sourceOrder);
   const uniqueStandings = sections.flatMap(({ rows }) => rows);
   const hasResults = uniqueStandings.some(
     (row) => hasNumericResult(row.points) || hasNumericResult(row.extra),
   );
   const hasExtra = hasResults && uniqueStandings.some((row) => row.extra);
   const activeValues = sections
-    .filter(({ section }) => running.some((match) => standingsSectionMatches(section, match.name)))
+    .filter(({ active }) => active)
     .map(({ value }) => value);
 
   return (
@@ -653,14 +657,13 @@ function StandingsSection({
         defaultValue={activeValues}
         className="rounded-lg border"
       >
-        {sections.map(({ section, rows, value }) => {
-          const active = activeValues.includes(value);
+        {sections.map(({ section, rows, value, active }) => {
           return (
             <AccordionItem key={value} value={value} className="px-3 last:border-b-0">
               <AccordionTrigger className="no-underline hover:no-underline">
                 <span className="flex min-w-0 items-center gap-2">
                   <span className="truncate">
-                    {section || (hasResults ? text.standings : text.participants)}
+                    {displayStandingsSection(section) || (hasResults ? text.standings : text.participants)}
                   </span>
                   <Badge variant="secondary">{rows.length}</Badge>
                   {active ? <Badge>{text.liveNow}</Badge> : null}
@@ -730,6 +733,13 @@ function normalizedStandingsStage(value: string | null | undefined): string {
     .replace(/\bfinals\b/gi, "Final")
     .trim()
     .toLocaleLowerCase();
+}
+
+function displayStandingsSection(value: string): string {
+  const parts = value.trim().split(/\s*:\s*/).filter(Boolean);
+  const normalized = parts.map((part) => part.replace(/\bfinals\b/gi, "Final").toLocaleLowerCase());
+  if (normalized.length > 1 && normalized.every((part) => part === normalized[0])) return parts.at(-1) ?? "";
+  return value;
 }
 
 function standingsSectionMatches(section: string, matchName: string | null): boolean {
