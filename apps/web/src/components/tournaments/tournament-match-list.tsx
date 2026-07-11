@@ -649,10 +649,11 @@ function StandingsSection({
     .map(({ value }) => value);
 
   return (
-    <section className="flex flex-col gap-4">
+    <section className="flex flex-col gap-4" dir={directionForLocale(locale)}>
       <h2 className="text-lg font-semibold">{hasResults ? text.standings : text.participants}</h2>
       <Accordion
         key={activeValues.join("|")}
+        dir={directionForLocale(locale)}
         multiple
         defaultValue={activeValues}
         className="rounded-lg border"
@@ -670,7 +671,7 @@ function StandingsSection({
                 </span>
               </AccordionTrigger>
               <AccordionContent className="pb-3">
-                <Table className="border-t">
+                <Table className="border-t" dir={directionForLocale(locale)}>
             <TableHeader>
               <TableRow>
                 <TableHead className="w-14">{hasResults ? text.rank : text.seed}</TableHead>
