@@ -2,6 +2,7 @@ import { categoryToGameSlug, fightersTag, gameSlugFromName, isLobbyGame, isKnown
 import { normalizeClubName } from './ewcPredictions.js';
 import { listStandingsTeamRowsForGame } from '../db/tournamentStandings.js';
 import { listTrackedTeamRowsForGame } from '../db/matches.js';
+import { listEwcTournamentsForGame } from '../db/tournaments.js';
 
 // Junk rows the BR/lobby schedule parser stores in `matches` (team_a = "Group A -
 // Game 3", team_b = "Lobby", "… - Match"). These are never real teams, so keep them
@@ -32,6 +33,39 @@ function eventPathFromUrl(eventUrl) {
   } catch {
     return null;
   }
+}
+
+function eventNameTokens(value) {
+  const ignored = new Set(['2026', 'esports', 'world', 'cup', 'the', 'and', 'for']);
+  return new Set(String(value || '').toLowerCase().split(/[^a-z0-9]+/).filter((token) => token.length > 2 && !ignored.has(token)));
+}
+
+export async function resolveEwcGameEventUrl(gameName, { guildId, eventUrl = null, eventName = null } = {}) {
+  const slug = slugForGameName(gameName);
+  if (!slug || !guildId) return eventUrl;
+  const rows = await listEwcTournamentsForGame(guildId, slug).catch(() => []);
+  const liquipediaRows = rows.filter((row) => row.source === 'liquipedia' && eventPathFromUrl(row.url));
+  if (!liquipediaRows.length) return eventUrl;
+
+  const requestedPath = eventPathFromUrl(eventUrl);
+  const exact = requestedPath
+    ? liquipediaRows.find((row) => eventPathFromUrl(row.url) === requestedPath)
+    : null;
+  if (exact) return exact.url;
+
+  if (normalizeGameSlug(slug) === 'fighters') {
+    const wanted = fightersTag(gameName);
+    const tagged = liquipediaRows.find((row) => fightersTag(row.name) === wanted);
+    if (tagged) return tagged.url;
+  }
+  const wantedTokens = eventNameTokens(eventName);
+  if (wantedTokens.size) {
+    const ranked = liquipediaRows
+      .map((row) => ({ row, score: [...eventNameTokens(row.name)].filter((token) => wantedTokens.has(token)).length }))
+      .sort((a, b) => b.score - a.score);
+    if (ranked[0]?.score > 0) return ranked[0].row.url;
+  }
+  return liquipediaRows[0].url;
 }
 
 // Narrow EWC team rows to the week game's OWN event. Fallback chain, most to

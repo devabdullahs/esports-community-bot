@@ -46,6 +46,7 @@ import {
   scoreSeasonPrediction,
   scoreWeeklyPrediction,
 } from '../lib/ewcPredictions.js';
+import { resolveEwcGameEventUrl } from '../lib/ewcGameTeams.js';
 import { renderEwcPredictionLeaderboardCard } from '../lib/ewcPredictionLeaderboardCard.js';
 import { fetchEwcClubStandings, fetchEwcWeekGameResults } from '../services/liquipedia.js';
 
@@ -537,7 +538,15 @@ async function processWeek(client, round) {
       ? dueEwcGamesForResults(round.games, results, now, Number.MAX_SAFE_INTEGER)
       : dueEwcGamesForResults(round.games, results, now);
     if (candidates.length) {
-      const fetched = await fetchEwcWeekGameResults(candidates);
+      const resolvedCandidates = await Promise.all(candidates.map(async (game) => ({
+        ...game,
+        eventUrl: await resolveEwcGameEventUrl(game.game, {
+          guildId: round.guild_id,
+          eventUrl: game.eventUrl,
+          eventName: game.event,
+        }),
+      })));
+      const fetched = await fetchEwcWeekGameResults(resolvedCandidates);
       const merged = mergeEwcGameResults(results, fetched);
       resultsChanged = JSON.stringify(merged) !== JSON.stringify(results);
       results = merged;

@@ -42,6 +42,21 @@ export async function listActiveTournaments(guildId) {
     : all('SELECT * FROM tournaments WHERE active = 1 AND archived_at IS NULL ORDER BY created_at DESC');
 }
 
+export async function listEwcTournamentsForGame(guildId, game) {
+  return all(
+    `SELECT id, source, game, name, url, archived_at
+     FROM tournaments
+     WHERE guild_id = $1
+       AND game = $2
+       AND active = 1
+       AND ewc = 1
+       AND url IS NOT NULL
+       AND url <> ''
+     ORDER BY CASE WHEN archived_at IS NULL THEN 0 ELSE 1 END, id DESC`,
+    [guildId, game],
+  );
+}
+
 // A broad Start.gg id can coexist with a later event-scoped id even though
 // both resolve to the same event URL. Keep the copy with current activity and
 // archive aliases so historical results remain available without duplicate cards.
