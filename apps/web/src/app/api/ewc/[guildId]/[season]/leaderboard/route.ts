@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getPublicEwcLeaderboardCached } from "@/lib/public-ewc-leaderboard";
+import { getPublicEwcLeaderboardCached, isKnownEwcLeaderboardNamespace } from "@/lib/public-ewc-leaderboard";
 import { isSnowflake, isSeason, clampInt } from "@/lib/validate";
 
 export const runtime = "nodejs";
@@ -12,6 +12,11 @@ export async function GET(
   const { guildId, season } = await context.params;
   if (!isSnowflake(guildId) || !isSeason(season)) {
     return NextResponse.json({ error: "Invalid guild or season." }, { status: 400 });
+  }
+  // Only namespaces with an existing prediction season may mint cache keys
+  // or run the aggregate queries (ECB-SEC-003).
+  if (!(await isKnownEwcLeaderboardNamespace(guildId, season))) {
+    return NextResponse.json({ error: "Unknown guild or season." }, { status: 404 });
   }
   const url = new URL(request.url);
   const limit = clampInt(url.searchParams.get("limit"), { min: 1, max: 100, fallback: 50 });
