@@ -9,6 +9,7 @@ import {
 } from 'discord.js';
 import { searchGames, gameName, getGame } from '../lib/games.js';
 import { LIQUIPEDIA_ATTRIBUTION } from '../lib/render.js';
+import { escapeMaskedLinkLabel } from '../lib/markdownTools.js';
 import * as liquipedia from '../services/liquipedia.js';
 
 export const data = new SlashCommandBuilder()
@@ -77,7 +78,7 @@ export async function execute(interaction) {
     const embed = new EmbedBuilder()
       .setColor(0x5865f2)
       .setTitle(`No ${gameName(slug)} player or team for “${name}”`)
-      .setDescription(`Couldn't find a matching player or team. [Search Liquipedia for “${name}”](${url})`)
+      .setDescription(`Couldn't find a matching player or team. [Search Liquipedia for “${escapeMaskedLinkLabel(name)}”](${url})`)
       .setFooter({ text: LIQUIPEDIA_ATTRIBUTION });
     await interaction.editReply({ embeds: [embed] });
     return;
@@ -85,11 +86,11 @@ export async function execute(interaction) {
 
   const top = list[0];
   const more = list.slice(1, 5);
-  const lines = [`**[${top.title}](${top.url})**`];
+  const lines = [`**[${escapeMaskedLinkLabel(top.title)}](${top.url})**`];
   if (top.description) lines.push(top.description);
   if (more.length) {
     lines.push('', '**Other matches**');
-    for (const r of more) lines.push(`• [${r.title}](${r.url})`);
+    for (const r of more) lines.push(`• [${escapeMaskedLinkLabel(r.title)}](${r.url})`);
   }
 
   const embed = new EmbedBuilder()

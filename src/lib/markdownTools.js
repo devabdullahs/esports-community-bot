@@ -221,3 +221,11 @@ export function getMarkdownActiveState(value, start, end) {
     quote: selectedLinesHavePrefix(value, start, end, { prefix: '> ' }),
   };
 }
+
+// Escape user/remote-controlled text used as a Discord masked-link LABEL
+// (security hardening ECB-SEC-012): brackets/parens/backticks/backslashes in
+// the label would otherwise terminate the [label](url) form and let the text
+// smuggle its own attacker-chosen link into bot output.
+export function escapeMaskedLinkLabel(value) {
+  return String(value ?? '').replace(/([\\\[\]()`])/g, '\\$1');
+}

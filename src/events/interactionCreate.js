@@ -1,9 +1,31 @@
 import { Events, MessageFlags } from 'discord.js';
+import { config } from '../config.js';
 import { logger } from '../lib/logger.js';
 
 export const name = Events.InteractionCreate;
 
+// Single-guild trust boundary (security hardening ECB-SEC-010): the bot may
+// be INVITED to other guilds, but every interaction outside the configured
+// guild is refused BEFORE any dispatch — otherwise foreign-guild members
+// could seed persistent scheduled workloads (tracked tournaments, watchers,
+// boards) that the shared poller then services forever.
+export function isForeignGuildInteraction(interaction, configuredGuildId = config.discord.guildId) {
+  if (!configuredGuildId) return false;
+  return Boolean(interaction.guildId && interaction.guildId !== configuredGuildId);
+}
+
 export async function execute(interaction) {
+  if (isForeignGuildInteraction(interaction)) {
+    if (interaction.isAutocomplete()) {
+      await interaction.respond([]).catch(() => {});
+    } else if (interaction.isRepliable?.()) {
+      await interaction
+        .reply({ content: 'This bot only serves its home community server.', flags: MessageFlags.Ephemeral })
+        .catch(() => {});
+    }
+    return;
+  }
+
   // Autocomplete (e.g. /remove_tournament).
   if (interaction.isAutocomplete()) {
     const command = interaction.client.commands.get(interaction.commandName);
