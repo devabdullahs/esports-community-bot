@@ -21,6 +21,7 @@ export async function SiteFooter() {
   ];
   const about = [
     { href: "/partners", label: text.common.partners },
+    { href: "/docs/mcp", label: t.mcpDocs },
     { href: "/terms", label: text.common.termsOfService },
     { href: "/privacy", label: text.common.privacyPolicy },
   ];

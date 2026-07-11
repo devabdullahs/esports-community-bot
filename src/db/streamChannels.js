@@ -1,4 +1,4 @@
-import { all, get, run } from './client.js';
+import { all, get, run, transaction } from './client.js';
 import { normalizeGameSlug } from '../lib/games.js';
 import { normalizeTeamName } from '../lib/render.js';
 
@@ -416,7 +416,32 @@ export async function updateStreamChannelInTx(client, id, {
 }
 
 export async function updateStreamChannel(id, patch = {}) {
-  return updateStreamChannelInTx({ all, get, run }, id, patch);
+  return transaction((client) => updateStreamChannelInTx(client, id, patch));
+}
+
+export async function repairDuplicateStreamDefaults() {
+  return transaction(async (client) => {
+    const rows = await client.all(
+      `SELECT id, creator_key, scope
+       FROM stream_channels
+       WHERE is_default = 1 AND creator_key <> ''
+       ORDER BY creator_key, scope, sort_order, id`,
+    );
+    const seen = new Set();
+    const duplicateIds = [];
+    for (const row of rows) {
+      const key = `${row.creator_key}|${row.scope}`;
+      if (seen.has(key)) duplicateIds.push(row.id);
+      else seen.add(key);
+    }
+    if (!duplicateIds.length) return 0;
+    const placeholders = duplicateIds.map((_id, index) => `$${index + 1}`);
+    const result = await client.run(
+      `UPDATE stream_channels SET is_default = 0 WHERE id IN (${placeholders.join(',')})`,
+      duplicateIds,
+    );
+    return result.changes || result.rowCount || 0;
+  });
 }
 
 export async function setStreamChannelActive(id, active) {

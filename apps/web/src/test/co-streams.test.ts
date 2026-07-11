@@ -49,6 +49,17 @@ describe("buildCoStreamGroups — grouping", () => {
     expect(groups[0].channels).toHaveLength(2);
   });
 
+  test("creator-level language drift does not split platforms into duplicate cards", () => {
+    const groups = buildCoStreamGroups([
+      channel({ platform: "twitch", creatorKey: "w1llyv", scope: "ewc", language: "ar" }),
+      channel({ platform: "kick", creatorKey: "w1llyv", scope: "ewc", language: null }),
+      channel({ platform: "youtube", creatorKey: "w1llyv", scope: "ewc", language: null }),
+    ]);
+    expect(groups).toHaveLength(1);
+    expect(groups[0].channels).toHaveLength(3);
+    expect(groups[0].language).toBe("ar");
+  });
+
   test("two different creators stay as two groups", () => {
     const groups = buildCoStreamGroups([
       channel({ platform: "twitch", creatorKey: "alpha", scope: "ewc" }),

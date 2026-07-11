@@ -1,7 +1,12 @@
 import { config } from '../config.js';
 import { logger } from '../lib/logger.js';
 import { EmbedBuilder } from 'discord.js';
-import { channelUrl, getActiveChannelMeta, listDistinctActiveHandles } from '../db/streamChannels.js';
+import {
+  channelUrl,
+  getActiveChannelMeta,
+  listDistinctActiveHandles,
+  repairDuplicateStreamDefaults,
+} from '../db/streamChannels.js';
 import { listLiveStreamStatuses, markStaleStatusesOffline, upsertStreamStatus } from '../db/streamChannelStatus.js';
 import { getStreamCreatorAnnouncement, recordStreamCreatorAnnouncement } from '../db/streamAnnouncements.js';
 import { getGuildsWithCostreamAnnounce, getSettings } from '../db/settings.js';
@@ -223,6 +228,9 @@ let announceClient = null;
 
 export function startStreamStatusJob(client = null) {
   announceClient = client;
+  repairDuplicateStreamDefaults()
+    .then((count) => count && logger.info(`[stream-status] cleared ${count} duplicate default channel(s).`))
+    .catch((error) => logger.warn(`[stream-status] default-channel cleanup failed: ${error.message}`));
   if (!twitch.isConfigured() && !kick.isConfigured() && !youtube.isConfigured()) {
     logger.info('[stream-status] no stream platform enabled — live co-stream status disabled.');
     return;

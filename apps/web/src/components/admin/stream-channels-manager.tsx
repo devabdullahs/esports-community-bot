@@ -618,10 +618,18 @@ export function StreamChannelsManager({
                                   </span>
                                 )}
                                 {channel.isDefault ? (
-                                  <Badge>
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="h-6 shrink-0 px-2 text-xs"
+                                    disabled={busy}
+                                    onClick={() => patchChannel(channel, { isDefault: false } as Partial<StreamChannel>)}
+                                    title={copy.removeDefault}
+                                    aria-label={`${copy.removeDefault}: ${PLATFORM_LABELS[channel.platform]}`}
+                                  >
                                     <StarIcon data-icon="inline-start" />
                                     {copy.defaultBadge}
-                                  </Badge>
+                                  </Button>
                                 ) : null}
                                 {!channel.active ? <Badge variant="outline">{copy.inactive}</Badge> : null}
                               </div>
