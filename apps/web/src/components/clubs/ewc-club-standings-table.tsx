@@ -9,7 +9,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import type { EwcClubStandingRow } from "@/lib/ewc-club-standings";
-import { copy, formatNumber, type Locale } from "@/lib/i18n";
+import { copy, directionForLocale, formatNumber, type Locale } from "@/lib/i18n";
 
 function EligibilityBadge({ row, locale }: { row: EwcClubStandingRow; locale: Locale }) {
   const text = copy[locale].ewcClubStandings.eligibility;
@@ -33,35 +33,38 @@ export function EwcClubStandingsTable({
   const clubsText = copy[locale].ewcClubs;
 
   return (
-    <div className="w-full min-w-0 max-w-full overflow-hidden rounded-lg border bg-card">
-      <Table className="min-w-[820px] table-fixed">
+    <div
+      className="w-full min-w-0 max-w-full overflow-hidden rounded-lg border bg-card"
+      dir={directionForLocale(locale)}
+    >
+      <Table className="min-w-[960px] table-fixed" dir={directionForLocale(locale)}>
         <colgroup>
-          <col className="w-14" />
-          <col className="w-[180px]" />
-          <col className="w-[88px]" />
-          <col className="w-40" />
-          <col className="w-[104px]" />
           <col className="w-[72px]" />
-          <col className="w-40" />
+          <col className="w-[220px]" />
+          <col className="w-[100px]" />
+          <col className="w-[170px]" />
+          <col className="w-[130px]" />
+          <col className="w-[96px]" />
+          <col className="w-[172px]" />
         </colgroup>
         <TableHeader className="bg-muted/60">
           <TableRow className="hover:bg-muted/60">
-            <TableHead className="text-center">{text.columns.rank}</TableHead>
-            <TableHead>{text.columns.club}</TableHead>
-            <TableHead className="text-end">{text.columns.points}</TableHead>
-            <TableHead>{text.columns.eligibility}</TableHead>
-            <TableHead className="text-end whitespace-normal">{text.columns.qualifiedGames}</TableHead>
-            <TableHead className="text-end">{text.columns.wins}</TableHead>
-            <TableHead>{text.columns.region}</TableHead>
+            <TableHead className="px-4 text-center">{text.columns.rank}</TableHead>
+            <TableHead className="px-4">{text.columns.club}</TableHead>
+            <TableHead className="px-4 text-center">{text.columns.points}</TableHead>
+            <TableHead className="px-4">{text.columns.eligibility}</TableHead>
+            <TableHead className="px-4 text-center whitespace-normal">{text.columns.qualifiedGames}</TableHead>
+            <TableHead className="px-4 text-center">{text.columns.wins}</TableHead>
+            <TableHead className="px-4">{text.columns.region}</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
           {rows.map((row) => (
             <TableRow key={`${row.rank ?? "unranked"}-${row.name}`}>
-              <TableCell className="text-center font-semibold tabular-nums">
+              <TableCell className="px-4 text-center font-semibold tabular-nums">
                 {row.rank == null ? "-" : formatNumber(row.rank, locale)}
               </TableCell>
-              <TableCell className="overflow-hidden">
+              <TableCell className="overflow-hidden px-4">
                 <div className="flex min-w-0 items-center gap-2">
                   <ProfileAvatar
                     src={row.logo}
@@ -75,25 +78,20 @@ export function EwcClubStandingsTable({
                   </span>
                 </div>
               </TableCell>
-              <TableCell className="text-end font-semibold tabular-nums">
+              <TableCell className="px-4 text-center font-semibold tabular-nums">
                 {row.points == null ? "-" : formatNumber(row.points, locale)}
               </TableCell>
-              <TableCell>
+              <TableCell className="px-4">
                 <EligibilityBadge row={row} locale={locale} />
               </TableCell>
-              <TableCell className="text-end tabular-nums">
+              <TableCell className="px-4 text-center tabular-nums">
                 {formatNumber(row.qualifiedGameCount, locale)}
               </TableCell>
-              <TableCell className="text-end tabular-nums">
+              <TableCell className="px-4 text-center tabular-nums">
                 {formatNumber(row.wins, locale)}
               </TableCell>
-              <TableCell className="overflow-hidden">
+              <TableCell className="overflow-hidden px-4">
                 <p className="truncate text-sm">{clubsText.regions[row.region]}</p>
-                {row.locationLabel ? (
-                  <p className="truncate text-xs text-muted-foreground" dir="auto">
-                    {row.locationLabel}
-                  </p>
-                ) : null}
               </TableCell>
             </TableRow>
           ))}
