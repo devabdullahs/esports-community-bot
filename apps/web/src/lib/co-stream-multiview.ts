@@ -52,6 +52,25 @@ export function reconcileLoadedStreamIds(loaded: string[], selected: string[]): 
   return sanitizeRequestedStreamIds(loaded).filter((id) => selectedIds.has(id));
 }
 
+export function loadedIdsAfterStreamAdded(
+  loaded: string[],
+  selected: string[],
+  addedId: string,
+  singlePlayer: boolean,
+): string[] {
+  if (singlePlayer) return reconcileLoadedStreamIds(loaded, selected);
+  return reconcileLoadedStreamIds([...loaded, addedId], selected);
+}
+
+export function loadedIdsAfterStreamLoad(
+  loaded: string[],
+  selected: string[],
+  id: string,
+  singlePlayer: boolean,
+): string[] {
+  return reconcileLoadedStreamIds(singlePlayer ? [id] : [...loaded, id], selected);
+}
+
 export function toggleSelectedStreamId(
   selected: string[],
   id: string,

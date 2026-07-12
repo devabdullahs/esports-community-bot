@@ -37,6 +37,8 @@ import {
   MAX_MULTI_STREAMS,
   initialLoadedStreamIds,
   initialSelectedStreamIds,
+  loadedIdsAfterStreamAdded,
+  loadedIdsAfterStreamLoad,
   reconcileLoadedStreamIds,
   reconcileSelectedStreamIds,
   streamSelectionSearchParams,
@@ -79,6 +81,7 @@ const STR = {
     loadStream: "Load stream",
     streamEnded: "Stream ended",
     fullscreenFailed: "Fullscreen could not be opened.",
+    mobilePlaybackHint: "Mobile browsers allow one active player at a time. Load a stream to switch, then press play in the player.",
   },
   ar: {
     eyebrow: "البث المصاحب",
@@ -107,6 +110,7 @@ const STR = {
     loadStream: "تحميل البث",
     streamEnded: "انتهى البث",
     fullscreenFailed: "تعذر فتح وضع ملء الشاشة.",
+    mobilePlaybackHint: "تسمح متصفحات الجوال بمشغّل نشط واحد في كل مرة. حمّل البث للتبديل، ثم اضغط تشغيل داخل المشغّل.",
   },
 } as const;
 
@@ -123,6 +127,10 @@ function selectionUrl(ids: string[]) {
   url.searchParams.delete("stream");
   for (const [key, value] of streamSelectionSearchParams(ids)) url.searchParams.append(key, value);
   return url;
+}
+
+function usesSingleMobilePlayer() {
+  return window.matchMedia("(max-width: 767px)").matches;
 }
 
 export function CoStreamsView({
@@ -243,7 +251,7 @@ export function CoStreamsView({
     setLoadedIds((current) =>
       wasSelected
         ? reconcileLoadedStreamIds(current, result.ids)
-        : reconcileLoadedStreamIds([...current, id], result.ids),
+        : loadedIdsAfterStreamAdded(current, result.ids, id, usesSingleMobilePlayer()),
     );
   };
 
@@ -376,9 +384,15 @@ export function CoStreamsView({
           exitFullscreen: t.exitFullscreen,
           fullscreenFailed: t.fullscreenFailed,
         }}
-        onLoad={(id) => setLoadedIds((current) => reconcileLoadedStreamIds([...current, id], selectedIds))}
+        onLoad={(id) =>
+          setLoadedIds((current) => loadedIdsAfterStreamLoad(current, selectedIds, id, usesSingleMobilePlayer()))
+        }
         onRemove={removeStream}
       />
+
+      {selectedIds.length > 1 ? (
+        <p className="text-xs text-muted-foreground md:hidden">{t.mobilePlaybackHint}</p>
+      ) : null}
 
       <div className="flex flex-wrap items-center gap-2">
         {platforms.length > 1 ? (
