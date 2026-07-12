@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useEffectEvent, useMemo, useRef, useState } from "react";
+import { useEffect, useEffectEvent, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { ListPlus, Plus, RadioIcon, Share2, UsersIcon, X } from "lucide-react";
 import { PlatformIcon } from "@/components/platform-icon";
 import { MultiStreamGrid } from "@/components/streams/multi-stream-grid";
@@ -129,8 +129,20 @@ function selectionUrl(ids: string[]) {
   return url;
 }
 
-function usesSingleMobilePlayer() {
-  return window.matchMedia("(max-width: 767px)").matches;
+const MOBILE_PLAYER_QUERY = "(max-width: 767px)";
+
+function subscribeMobilePlayer(callback: () => void) {
+  const media = window.matchMedia(MOBILE_PLAYER_QUERY);
+  if (typeof media.addEventListener === "function") {
+    media.addEventListener("change", callback);
+    return () => media.removeEventListener("change", callback);
+  }
+  media.addListener(callback);
+  return () => media.removeListener(callback);
+}
+
+function mobilePlayerSnapshot() {
+  return window.matchMedia(MOBILE_PLAYER_QUERY).matches;
 }
 
 export function CoStreamsView({
@@ -156,6 +168,7 @@ export function CoStreamsView({
   );
   const [loadedIds, setLoadedIds] = useState(() => initialLoadedStreamIds(selectedIds, initialStreams));
   const [shareStatus, setShareStatus] = useState("");
+  const singleMobilePlayer = useSyncExternalStore(subscribeMobilePlayer, mobilePlayerSnapshot, () => false);
   const shareStatusTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const didMountSelection = useRef(false);
 
@@ -251,7 +264,7 @@ export function CoStreamsView({
     setLoadedIds((current) =>
       wasSelected
         ? reconcileLoadedStreamIds(current, result.ids)
-        : loadedIdsAfterStreamAdded(current, result.ids, id, usesSingleMobilePlayer()),
+        : loadedIdsAfterStreamAdded(current, result.ids, id, singleMobilePlayer),
     );
   };
 
@@ -373,6 +386,7 @@ export function CoStreamsView({
         selected={selectedStreams}
         loadedIds={loadedIds}
         parent={parent}
+        autoplay={!singleMobilePlayer}
         strings={{
           multiView: t.multiView,
           watching: t.watching,
@@ -385,7 +399,7 @@ export function CoStreamsView({
           fullscreenFailed: t.fullscreenFailed,
         }}
         onLoad={(id) =>
-          setLoadedIds((current) => loadedIdsAfterStreamLoad(current, selectedIds, id, usesSingleMobilePlayer()))
+          setLoadedIds((current) => loadedIdsAfterStreamLoad(current, selectedIds, id, singleMobilePlayer))
         }
         onRemove={removeStream}
       />

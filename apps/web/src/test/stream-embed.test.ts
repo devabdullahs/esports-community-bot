@@ -22,6 +22,15 @@ describe("embedUrl", () => {
     expect(embedUrl({ platform: "twitch", handle: "creator", parent: "" })).toBeNull();
   });
 
+  test("disables Twitch and Kick autoplay when mobile playback requires a user gesture", () => {
+    const twitch = new URL(embedUrl({ platform: "twitch", handle: "creator", parent: "localhost", autoplay: false })!);
+    const kick = new URL(embedUrl({ platform: "kick", handle: "creator", parent: "localhost", autoplay: false })!);
+    expect(twitch.searchParams.get("autoplay")).toBe("false");
+    expect(kick.searchParams.get("autoplay")).toBe("false");
+    expect(twitch.searchParams.get("muted")).toBe("true");
+    expect(kick.searchParams.get("muted")).toBe("true");
+  });
+
   test("builds an encoded muted autoplay Kick URL", () => {
     const value = embedUrl({ platform: "kick", handle: "creator name/&", parent: "localhost" });
     const url = new URL(value!);
