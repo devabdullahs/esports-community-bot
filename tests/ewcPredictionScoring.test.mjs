@@ -14,6 +14,7 @@ const {
   scorePerGameWeeklyPrediction,
   ewcPlacementPoints,
   pendingEwcGameResults,
+  perGamePredictionRoundLocked,
   dueEwcGamesForResults,
   mergeEwcGameResults,
   effectiveEwcWeekStatus,
@@ -526,6 +527,14 @@ test('pendingEwcGameResults: flags games whose results are absent or have no 1st
   assert.equal(pending[0].gameKey, 'apex-2');
   // Both resolved → none pending.
   assert.equal(pendingEwcGameResults(resultsFor(), GAMES).length, 0);
+});
+
+test('perGamePredictionRoundLocked: closes only after every independent game lock', () => {
+  const games = [{ lockAt: 1_000 }, { lockAt: 2_000 }];
+  assert.equal(perGamePredictionRoundLocked(games, 1_999), false);
+  assert.equal(perGamePredictionRoundLocked(games, 2_000), true);
+  assert.equal(perGamePredictionRoundLocked([{ lockAt: 1_000 }, {}], 2_000), false);
+  assert.equal(perGamePredictionRoundLocked([], 2_000), false);
 });
 
 test('dueEwcGamesForResults polls only unresolved events near their scheduled finish', () => {

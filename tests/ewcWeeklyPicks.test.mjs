@@ -90,6 +90,25 @@ test('resolveEwcGameEventUrl replaces generic calendar links with tracked game-s
     }),
     fatalFury.url,
   );
+
+  const valorant = await addTournament({
+    source: 'liquipedia',
+    external_id: 'valorant/Esports_World_Cup/2026',
+    game: 'valorant',
+    name: 'VALORANT at Esports World Cup 2026',
+    url: 'https://liquipedia.net/valorant/Esports_World_Cup/2026',
+    guild_id: 'g-ewc',
+    added_by: 'admin',
+  });
+  assert.equal(
+    await resolveEwcGameEventUrl('VALORANT', {
+      guildId: 'g-ewc',
+      eventUrl: 'https://liquipedia.net/esports/Esports_World_Cup',
+      eventName: 'Esports World Cup 2026',
+    }),
+    valorant.url,
+    'an obvious tracked EWC URL remains usable while its asynchronously detected ewc flag is stale',
+  );
 });
 
 // ---------------------------------------------------------------------------

@@ -70,7 +70,11 @@ export async function listEwcTournamentsForGame(guildId, game) {
      WHERE guild_id = $1
        AND game = $2
        AND active = 1
-       AND ewc = 1
+       AND (
+         ewc = 1
+         OR LOWER(COALESCE(name, '')) LIKE '%esports world cup%'
+         OR LOWER(COALESCE(url, '')) LIKE '%esports_world_cup%'
+       )
        AND url IS NOT NULL
        AND url <> ''
      ORDER BY CASE WHEN archived_at IS NULL THEN 0 ELSE 1 END, id DESC`,

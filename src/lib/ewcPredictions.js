@@ -109,6 +109,14 @@ export function pendingEwcGameResults(results, games = []) {
   return expected.filter(ewcGameResultPending);
 }
 
+export function perGamePredictionRoundLocked(games = [], now = Math.floor(Date.now() / 1000)) {
+  if (!games.length) return false;
+  return games.every((game) => {
+    const lockAt = Number(game?.lockAt);
+    return Number.isFinite(lockAt) && now >= lockAt;
+  });
+}
+
 export function dueEwcGamesForResults(games = [], results = [], now = Math.floor(Date.now() / 1000), earlyWindowSec = 12 * 3600) {
   const completed = new Set(
     (results || [])
