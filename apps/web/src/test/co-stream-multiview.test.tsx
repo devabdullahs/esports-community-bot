@@ -8,8 +8,10 @@ import {
   loadedIdsAfterStreamAdded,
   loadedIdsAfterStreamLoad,
   multiviewGridClass,
+  multiviewTileClass,
   reconcileLoadedStreamIds,
   reconcileSelectedStreamIds,
+  reorderSelectedStreamIds,
   sanitizeRequestedStreamIds,
   streamSelectionSearchParams,
   toggleSelectedStreamId,
@@ -64,8 +66,10 @@ function stream(id: string, overrides: Partial<CoStream> = {}): CoStream {
 
 describe("co-stream multiview state", () => {
   test("sanitizes duplicate, blank, control-character, and overlong query IDs", () => {
-    expect(sanitizeRequestedStreamIds([" alpha ", "", "alpha", "bad\nvalue", "x".repeat(241), "beta"]))
-      .toEqual(["alpha", "beta"]);
+    expect(sanitizeRequestedStreamIds([" alpha ", "", "alpha", "bad\nvalue", "x".repeat(241), "beta"])).toEqual([
+      "alpha",
+      "beta",
+    ]);
   });
 
   test("caps requested IDs and search pairs at nine", () => {
@@ -100,11 +104,18 @@ describe("co-stream multiview state", () => {
     expect(reconcileSelectedStreamIds(ids, polledStreams)).toEqual(ids.slice(0, MAX_MULTI_STREAMS));
   });
 
+  test("reorders selected streams without losing or duplicating IDs", () => {
+    expect(reorderSelectedStreamIds(["tollmos", "shelby", "hovji"], "tollmos", "hovji")).toEqual([
+      "shelby",
+      "hovji",
+      "tollmos",
+    ]);
+    expect(reorderSelectedStreamIds(["one", "two"], "missing", "two")).toEqual(["one", "two"]);
+  });
+
   test("initial loaded state contains at most the first eligible selected stream", () => {
     const offline = stream("one", { isLive: false });
-    expect(initialLoadedStreamIds(["one", "two", "three"], [offline, stream("two"), stream("three")])).toEqual([
-      "two",
-    ]);
+    expect(initialLoadedStreamIds(["one", "two", "three"], [offline, stream("two"), stream("three")])).toEqual(["two"]);
   });
 
   test("loaded state remains an ordered subset of selection even when status changes", () => {
@@ -125,7 +136,10 @@ describe("co-stream multiview state", () => {
   });
 
   test("duplicate add is idempotent and an existing selection toggles off", () => {
-    expect(toggleSelectedStreamId(["one"], "one", ["one"])).toEqual({ ids: [], limitReached: false });
+    expect(toggleSelectedStreamId(["one"], "one", ["one"])).toEqual({
+      ids: [],
+      limitReached: false,
+    });
   });
 
   test("a tenth add is blocked with limit feedback", () => {
@@ -136,14 +150,21 @@ describe("co-stream multiview state", () => {
     });
   });
 
-  test.each(Array.from({ length: 10 }, (_, count) => count))("returns a literal grid class for count %i", (count) => {
-    const expected =
-      count < 2
-        ? "grid grid-cols-1 gap-4"
-        : count === 2
-          ? "grid grid-cols-1 gap-4 xl:grid-cols-2"
-          : "grid grid-cols-1 gap-4 xl:grid-cols-2 min-[112rem]:grid-cols-3";
-    expect(multiviewGridClass(count)).toBe(expected);
+  test.each(Array.from({ length: 10 }, (_, count) => count))("returns a bounded grid class for count %i", (count) => {
+    expect(multiviewGridClass(count)).toContain("grid");
+    expect(multiviewGridClass(count)).toContain("fullscreen:place-content-center");
+  });
+
+  test("uses the requested asymmetric centered desktop layouts", () => {
+    expect(multiviewGridClass(3)).toContain("xl:grid-cols-4");
+    expect(multiviewTileClass(3, 0)).toContain("xl:col-start-2");
+    expect(multiviewGridClass(4)).toContain("xl:grid-cols-2");
+    expect(multiviewGridClass(5)).toContain("xl:grid-cols-6");
+    expect(multiviewTileClass(5, 0)).toContain("xl:col-start-2");
+    expect(multiviewTileClass(7, 0)).toContain("xl:col-start-3");
+    expect(multiviewTileClass(7, 1)).toContain("xl:row-start-2");
+    expect(multiviewTileClass(8, 0)).toContain("xl:col-start-2");
+    expect(multiviewGridClass(9)).toContain("xl:grid-cols-3");
   });
 });
 
@@ -157,9 +178,18 @@ const GRID_STRINGS = {
   enterFullscreen: "Enter fullscreen",
   exitFullscreen: "Exit fullscreen",
   fullscreenFailed: "Fullscreen failed",
+  reorderStream: (name: string) => `Reorder ${name}`,
+  streamMoved: (name: string) => `${name} moved`,
+  mobileTwitchUnavailable: "Open Twitch on mobile",
 };
 
-function renderGrid(selected: CoStream[], loadedIds: string[], autoplay = true) {
+function renderGrid(
+  selected: CoStream[],
+  loadedIds: string[],
+  autoplay = true,
+  twitchEmbedsSupported = true,
+  compactViewport = false,
+) {
   return renderToStaticMarkup(
     <MultiStreamGrid
       selected={selected}
@@ -167,8 +197,11 @@ function renderGrid(selected: CoStream[], loadedIds: string[], autoplay = true) 
       parent="localhost"
       strings={GRID_STRINGS}
       autoplay={autoplay}
+      twitchEmbedsSupported={twitchEmbedsSupported}
+      compactViewport={compactViewport}
       onLoad={() => undefined}
       onRemove={() => undefined}
+      onReorder={() => undefined}
     />,
   );
 }
@@ -180,15 +213,22 @@ function count(markup: string, pattern: RegExp) {
 describe("MultiStreamGrid static rendering", () => {
   test.each([1, 3, 9])("renders exactly %i loaded iframes", (streamCount) => {
     const streams = Array.from({ length: streamCount }, (_, index) => stream(`loaded-${index + 1}`));
-    const markup = renderGrid(streams, streams.map((item) => item.id));
+    const markup = renderGrid(
+      streams,
+      streams.map((item) => item.id),
+    );
     expect(count(markup, /<iframe/g)).toBe(streamCount);
   });
 
   test("defensively renders at most nine items and iframes", () => {
     const streams = Array.from({ length: 10 }, (_, index) => stream(`bounded-${index + 1}`));
-    const markup = renderGrid(streams, streams.map((item) => item.id));
+    const markup = renderGrid(
+      streams,
+      streams.map((item) => item.id),
+    );
     expect(count(markup, /data-stream-tile=/g)).toBe(9);
     expect(count(markup, /<iframe/g)).toBe(9);
+    expect(markup).toContain("fullscreen:hidden");
   });
 
   test("iframe titles identify the creator and platform", () => {
@@ -202,8 +242,35 @@ describe("MultiStreamGrid static rendering", () => {
     expect(markup).not.toContain("autoplay=true");
   });
 
+  test("does not mount an unsupported narrow-screen Twitch iframe", () => {
+    const markup = renderGrid([stream("narrow")], ["narrow"], false, false);
+    expect(count(markup, /<iframe/g)).toBe(0);
+    expect(markup).toContain("Open Twitch on mobile");
+    expect(markup).toContain('href="https://twitch.tv/handle-narrow"');
+  });
+
+  test("keeps supported mobile providers embeddable and gives Twitch its minimum height", () => {
+    const twitchMarkup = renderGrid([stream("wide-mobile")], ["wide-mobile"], false, true, true);
+    expect(twitchMarkup).toContain("min-h-[300px]");
+
+    const kickChannel = {
+      ...stream("kick").embedChannel!,
+      platform: "kick" as const,
+      url: "https://kick.com/kick",
+    };
+    const kick = stream("kick", {
+      embedChannel: kickChannel,
+      channels: [kickChannel],
+    });
+    const kickMarkup = renderGrid([kick], ["kick"], false, false, true);
+    expect(kickMarkup).toContain("https://player.kick.com/handle-kick");
+  });
+
   test("offline selections retain a fixed tile without an iframe", () => {
-    const offline = stream("offline-tile", { isLive: false, embedChannel: null });
+    const offline = stream("offline-tile", {
+      isLive: false,
+      embedChannel: null,
+    });
     const markup = renderGrid([offline], [offline.id]);
     expect(count(markup, /data-stream-tile=/g)).toBe(1);
     expect(count(markup, /<iframe/g)).toBe(0);
