@@ -267,7 +267,7 @@ export function MultiStreamGrid({
                           ) : null}
                         </div>
                         <div className="flex shrink-0 items-center gap-1">
-                          {dragHandle}
+                          {visibleStreams.length > 1 ? dragHandle : null}
                           {externalChannel?.url ? (
                             <Tooltip>
                               <TooltipTrigger
@@ -288,22 +288,24 @@ export function MultiStreamGrid({
                               </TooltipContent>
                             </Tooltip>
                           ) : null}
-                          <Tooltip>
-                            <TooltipTrigger
-                              render={
-                                <Button
-                                  type="button"
-                                  variant="ghost"
-                                  size="icon-sm"
-                                  aria-label={`${strings.removeStream}: ${stream.label}`}
-                                  onClick={() => onRemove(stream.id)}
-                                />
-                              }
-                            >
-                              <X />
-                            </TooltipTrigger>
-                            <TooltipContent>{strings.removeStream}</TooltipContent>
-                          </Tooltip>
+                          {visibleStreams.length > 1 ? (
+                            <Tooltip>
+                              <TooltipTrigger
+                                render={
+                                  <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="icon-sm"
+                                    aria-label={`${strings.removeStream}: ${stream.label}`}
+                                    onClick={() => onRemove(stream.id)}
+                                  />
+                                }
+                              >
+                                <X />
+                              </TooltipTrigger>
+                              <TooltipContent>{strings.removeStream}</TooltipContent>
+                            </Tooltip>
+                          ) : null}
                         </div>
                       </div>
                     </>
