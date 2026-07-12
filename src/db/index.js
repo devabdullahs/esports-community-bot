@@ -440,7 +440,7 @@ db.exec(`
     discord_user_id  TEXT PRIMARY KEY,
     guild_id         TEXT NOT NULL,
     season           TEXT NOT NULL DEFAULT '2026',
-    public_identity_enabled    INTEGER NOT NULL DEFAULT 0,
+    public_identity_enabled    INTEGER NOT NULL DEFAULT 1,
     public_display_name        TEXT,
     public_avatar_url          TEXT,
     public_avatar_token        TEXT UNIQUE,
@@ -816,13 +816,23 @@ ensureColumns('ewc_prediction_weeks', [
 ]);
 ensureColumns('ewc_prediction_seasons', [['score_after', 'INTEGER'], ['best_weeks', 'INTEGER']]);
 ensureColumns('ewc_profile_links', [
-  ['public_identity_enabled', 'INTEGER NOT NULL DEFAULT 0'],
+  ['public_identity_enabled', 'INTEGER NOT NULL DEFAULT 1'],
   ['public_display_name', 'TEXT'],
   ['public_avatar_url', 'TEXT'],
   ['public_avatar_token', 'TEXT'],
   ['public_identity_updated_at', 'TEXT'],
 ]);
 db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_ewc_profile_links_public_avatar_token ON ewc_profile_links(public_avatar_token)');
+
+db.exec(`
+  CREATE TABLE IF NOT EXISTS ewc_public_predictor_identities (
+    discord_user_id TEXT PRIMARY KEY,
+    display_name    TEXT NOT NULL,
+    avatar_url      TEXT,
+    avatar_token    TEXT UNIQUE,
+    updated_at      TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+`);
 ensureColumns('post_comments', [['author_avatar_url', 'TEXT']]);
 ensureColumns('stream_channels', [
   ['creator_key', "TEXT NOT NULL DEFAULT ''"],
