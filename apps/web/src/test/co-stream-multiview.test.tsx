@@ -5,6 +5,8 @@ import {
   MAX_MULTI_STREAMS,
   initialLoadedStreamIds,
   initialSelectedStreamIds,
+  loadedIdsAfterStreamAdded,
+  loadedIdsAfterStreamLoad,
   multiviewGridClass,
   reconcileLoadedStreamIds,
   reconcileSelectedStreamIds,
@@ -107,6 +109,19 @@ describe("co-stream multiview state", () => {
 
   test("loaded state remains an ordered subset of selection even when status changes", () => {
     expect(reconcileLoadedStreamIds(["two", "one", "two", "missing"], ["one", "two"])).toEqual(["two", "one"]);
+  });
+
+  test("adding another mobile stream keeps the current player and leaves the new selection as a poster", () => {
+    expect(loadedIdsAfterStreamAdded(["one"], ["one", "two"], "two", true)).toEqual(["one"]);
+  });
+
+  test("loading a mobile poster replaces the active player", () => {
+    expect(loadedIdsAfterStreamLoad(["one"], ["one", "two"], "two", true)).toEqual(["two"]);
+  });
+
+  test("desktop additions and poster loads preserve simultaneous playback", () => {
+    expect(loadedIdsAfterStreamAdded(["one"], ["one", "two"], "two", false)).toEqual(["one", "two"]);
+    expect(loadedIdsAfterStreamLoad(["one"], ["one", "two"], "two", false)).toEqual(["one", "two"]);
   });
 
   test("duplicate add is idempotent and an existing selection toggles off", () => {
