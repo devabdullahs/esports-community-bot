@@ -1,6 +1,6 @@
 import type { CoStream } from "@/lib/stream-types";
 
-export const MAX_MULTI_STREAMS = 9;
+export const MAX_MULTI_STREAMS = 6;
 
 const CONTROL_CHARACTERS = /[\u0000-\u001f\u007f]/;
 
@@ -10,27 +10,6 @@ const FIVE_TILE_POSITIONS = [
   "xl:col-start-1 xl:row-start-2 fullscreen:col-start-1 fullscreen:row-start-2",
   "xl:col-start-3 xl:row-start-2 fullscreen:col-start-3 fullscreen:row-start-2",
   "xl:col-start-5 xl:row-start-2 fullscreen:col-start-5 fullscreen:row-start-2",
-] as const;
-
-const SEVEN_TILE_POSITIONS = [
-  "xl:col-start-3 xl:row-start-1 fullscreen:col-start-3 fullscreen:row-start-1",
-  "xl:col-start-1 xl:row-start-2 fullscreen:col-start-1 fullscreen:row-start-2",
-  "xl:col-start-3 xl:row-start-2 fullscreen:col-start-3 fullscreen:row-start-2",
-  "xl:col-start-5 xl:row-start-2 fullscreen:col-start-5 fullscreen:row-start-2",
-  "xl:col-start-1 xl:row-start-3 fullscreen:col-start-1 fullscreen:row-start-3",
-  "xl:col-start-3 xl:row-start-3 fullscreen:col-start-3 fullscreen:row-start-3",
-  "xl:col-start-5 xl:row-start-3 fullscreen:col-start-5 fullscreen:row-start-3",
-] as const;
-
-const EIGHT_TILE_POSITIONS = [
-  "xl:col-start-2 xl:row-start-1 fullscreen:col-start-2 fullscreen:row-start-1",
-  "xl:col-start-4 xl:row-start-1 fullscreen:col-start-4 fullscreen:row-start-1",
-  "xl:col-start-1 xl:row-start-2 fullscreen:col-start-1 fullscreen:row-start-2",
-  "xl:col-start-3 xl:row-start-2 fullscreen:col-start-3 fullscreen:row-start-2",
-  "xl:col-start-5 xl:row-start-2 fullscreen:col-start-5 fullscreen:row-start-2",
-  "xl:col-start-1 xl:row-start-3 fullscreen:col-start-1 fullscreen:row-start-3",
-  "xl:col-start-3 xl:row-start-3 fullscreen:col-start-3 fullscreen:row-start-3",
-  "xl:col-start-5 xl:row-start-3 fullscreen:col-start-5 fullscreen:row-start-3",
 ] as const;
 
 export function sanitizeRequestedStreamIds(value: string | string[] | undefined): string[] {
@@ -136,19 +115,16 @@ export function reorderSelectedStreamIds(selected: string[], activeId: string, o
 
 export function multiviewGridClass(count: number): string {
   const boundedCount = Math.max(0, Math.min(MAX_MULTI_STREAMS, Math.trunc(count)));
-  const base = "grid w-full grid-cols-1 gap-4 fullscreen:mx-auto fullscreen:flex-1 fullscreen:place-content-center";
+  const base =
+    "grid w-full grid-cols-1 gap-4 fullscreen:self-center fullscreen:flex-1 fullscreen:place-content-center";
   if (boundedCount < 2) return `${base} multiview-fit-one`;
   if (boundedCount === 2) return `${base} xl:grid-cols-2 fullscreen:grid-cols-2`;
   if (boundedCount === 3) return `${base} multiview-fit-two-rows xl:grid-cols-4 fullscreen:grid-cols-4`;
   if (boundedCount === 4) return `${base} multiview-fit-two-rows xl:grid-cols-2 fullscreen:grid-cols-2`;
   if (boundedCount === 5) {
-    return `${base} multiview-fit-two-rows xl:grid-cols-6 fullscreen:grid-cols-6`;
+    return `${base} multiview-fit-wide-two-rows xl:grid-cols-6 fullscreen:grid-cols-6`;
   }
-  if (boundedCount === 7 || boundedCount === 8) {
-    return `${base} multiview-fit-three-rows xl:grid-cols-6 fullscreen:grid-cols-6`;
-  }
-  const fullscreenHeight = boundedCount === 9 ? "multiview-fit-three-rows" : "multiview-fit-two-rows";
-  return `${base} xl:grid-cols-3 ${fullscreenHeight} fullscreen:grid-cols-3`;
+  return `${base} multiview-fit-wide-two-rows xl:grid-cols-3 fullscreen:grid-cols-3`;
 }
 
 export function multiviewTileClass(count: number, index: number): string {
@@ -160,14 +136,6 @@ export function multiviewTileClass(count: number, index: number): string {
 
   if (boundedCount === 5) {
     return `xl:col-span-2 fullscreen:col-span-2 ${FIVE_TILE_POSITIONS[index] ?? ""}`.trim();
-  }
-
-  if (boundedCount === 7) {
-    return `xl:col-span-2 fullscreen:col-span-2 ${SEVEN_TILE_POSITIONS[index] ?? ""}`.trim();
-  }
-
-  if (boundedCount === 8) {
-    return `xl:col-span-2 fullscreen:col-span-2 ${EIGHT_TILE_POSITIONS[index] ?? ""}`.trim();
   }
 
   return "";
