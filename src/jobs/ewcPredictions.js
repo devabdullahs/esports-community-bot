@@ -26,7 +26,7 @@ import {
   setEwcWeekStatus,
   weeklyLeaderboard,
 } from '../db/ewcPredictions.js';
-import { listEwcProfileLinks } from '../db/ewcProfileLinks.js';
+import { listEwcProfileLinks, upsertPublicEwcPredictorIdentity } from '../db/ewcProfileLinks.js';
 import { recordEwcPredictionAutomationHealth } from '../db/ewcPredictionOperations.js';
 import {
   getGuildsWithEwcPredictionLeaderboard,
@@ -90,6 +90,12 @@ async function leaderboardRowsForImage(client, guildId, rows) {
       const member = cachedMember || (guild ? await guild.members.fetch(row.user_id).catch(() => null) : null);
       const user = member?.user || (await client.users.fetch(row.user_id).catch(() => null));
       label = member?.displayName || user?.globalName || user?.username || null;
+      if (label) {
+        const avatarUrl = member?.displayAvatarURL?.({ extension: 'png', size: 128 }) || user?.displayAvatarURL?.({ extension: 'png', size: 128 }) || null;
+        await upsertPublicEwcPredictorIdentity({ discordUserId: row.user_id, displayName: label, avatarUrl }).catch((error) =>
+          logger.warn(`[ewc-predictions] public identity ${row.user_id}: ${error.message}`),
+        );
+      }
       return { ...row, label: label || `Member ${String(row.user_id).slice(-4)}` };
     }),
   );
@@ -102,7 +108,14 @@ async function participantLabelsForImage(client, guildId, ids) {
       const cachedMember = guild?.members?.cache?.get(id);
       const member = cachedMember || (guild ? await guild.members.fetch(id).catch(() => null) : null);
       const user = member?.user || (await client.users.fetch(id).catch(() => null));
-      return member?.displayName || user?.globalName || user?.username || `Member ${String(id).slice(-4)}`;
+      const label = member?.displayName || user?.globalName || user?.username || null;
+      if (label) {
+        const avatarUrl = member?.displayAvatarURL?.({ extension: 'png', size: 128 }) || user?.displayAvatarURL?.({ extension: 'png', size: 128 }) || null;
+        await upsertPublicEwcPredictorIdentity({ discordUserId: id, displayName: label, avatarUrl }).catch((error) =>
+          logger.warn(`[ewc-predictions] public identity ${id}: ${error.message}`),
+        );
+      }
+      return label || `Member ${String(id).slice(-4)}`;
     }),
   );
 }

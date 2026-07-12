@@ -29,12 +29,13 @@ export async function upsertEwcProfileLink({ authUserId, discordUserId, guildId,
   const now = nowText();
   await run(
     `INSERT INTO ewc_profile_links
-       (auth_user_id, discord_user_id, guild_id, season, last_sync_error, created_at, updated_at)
-     VALUES ($1, $2, $3, $4, NULL, $5, $5)
+       (auth_user_id, discord_user_id, guild_id, season, public_identity_enabled, last_sync_error, created_at, updated_at)
+     VALUES ($1, $2, $3, $4, 1, NULL, $5, $5)
      ON CONFLICT (discord_user_id) DO UPDATE SET
        auth_user_id = excluded.auth_user_id,
        guild_id = excluded.guild_id,
        season = excluded.season,
+       public_identity_enabled = 1,
        last_sync_error = NULL,
        updated_at = excluded.updated_at`,
     [authUserId, discordUserId, guildId, season, now],
@@ -89,23 +90,49 @@ export async function deleteEwcProfileLink(discordUserId) {
   return run('DELETE FROM ewc_profile_links WHERE discord_user_id = $1', [discordUserId]);
 }
 
-export async function setEwcProfileLinkPublicIdentity({ authUserId, discordUserId, displayName, avatarUrl }) {
-  const enabled = Boolean(displayName);
-  const now = nowText();
-  const avatarToken = enabled && avatarUrl ? randomUUID() : null;
-  const result = await run(
-    `UPDATE ewc_profile_links
-     SET public_identity_enabled = $1,
-         public_display_name = $2,
-         public_avatar_url = $3,
-         public_avatar_token = $4,
-         public_identity_updated_at = $5,
-         updated_at = $5
-     WHERE auth_user_id = $6 AND discord_user_id = $7`,
-    [enabled ? 1 : 0, enabled ? displayName : null, enabled ? avatarUrl ?? null : null, avatarToken, now, authUserId, discordUserId],
+function publicDisplayName(value) {
+  return String(value ?? '')
+    .replace(/[\u0000-\u001f\u007f]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 80) || null;
+}
+
+function publicDiscordAvatarUrl(value) {
+  const raw = String(value ?? '');
+  if (!raw || raw.length > 2048) return null;
+  try {
+    const url = new URL(raw);
+    return url.protocol === 'https:' && ['cdn.discordapp.com', 'media.discordapp.net'].includes(url.hostname.toLowerCase())
+      ? url.toString()
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+export async function upsertPublicEwcPredictorIdentity({ discordUserId, displayName, avatarUrl = null }) {
+  const safeName = publicDisplayName(displayName);
+  if (!discordUserId || !safeName) return null;
+  const safeAvatar = publicDiscordAvatarUrl(avatarUrl);
+  const existing = await get(
+    'SELECT avatar_token FROM ewc_public_predictor_identities WHERE discord_user_id = $1',
+    [discordUserId],
   );
-  const changed = Number(result?.changes ?? result?.rowCount ?? 0);
-  return changed ? getEwcProfileLinkByDiscordUser(discordUserId) : null;
+  const avatarToken = safeAvatar ? String(existing?.avatar_token || randomUUID()) : null;
+  const now = nowText();
+  await run(
+    `INSERT INTO ewc_public_predictor_identities
+       (discord_user_id, display_name, avatar_url, avatar_token, updated_at)
+     VALUES ($1, $2, $3, $4, $5)
+     ON CONFLICT (discord_user_id) DO UPDATE SET
+       display_name = excluded.display_name,
+       avatar_url = excluded.avatar_url,
+       avatar_token = excluded.avatar_token,
+       updated_at = excluded.updated_at`,
+    [discordUserId, safeName, safeAvatar, avatarToken, now],
+  );
+  return { displayName: safeName, avatarToken };
 }
 
 // Internal-only batch lookup for a leaderboard page. Callers must never pass
@@ -114,28 +141,80 @@ export async function publicEwcProfileIdentitiesByDiscordUserIds(discordUserIds)
   const ids = [...new Set((Array.isArray(discordUserIds) ? discordUserIds : []).filter((id) => typeof id === 'string' && id))].slice(0, 100);
   if (!ids.length) return new Map();
   const placeholders = ids.map((_id, index) => `$${index + 1}`).join(', ');
-  const rows = await all(
-    `SELECT discord_user_id, public_display_name, public_avatar_token
-     FROM ewc_profile_links
-     WHERE public_identity_enabled = 1
-       AND public_display_name IS NOT NULL
-       AND discord_user_id IN (${placeholders})`,
+  const publicRows = await all(
+    `SELECT discord_user_id, display_name, avatar_token
+     FROM ewc_public_predictor_identities
+     WHERE discord_user_id IN (${placeholders})`,
     ids,
   );
-  return new Map(
-    rows.map((row) => [
+  let rows;
+  try {
+    rows = await all(
+      `SELECT l.discord_user_id, l.public_identity_enabled, l.public_display_name,
+              l.public_avatar_url, l.public_avatar_token,
+              u.name AS auth_display_name, u.image AS auth_avatar_url
+       FROM ewc_profile_links l
+       LEFT JOIN "user" u ON u.id = l.auth_user_id
+       WHERE l.discord_user_id IN (${placeholders})`,
+      ids,
+    );
+  } catch (error) {
+    if (!/(?:no such table|relation .* does not exist).*user/i.test(String(error?.message || error))) throw error;
+    rows = await all(
+      `SELECT discord_user_id, public_identity_enabled, public_display_name,
+              public_avatar_url, public_avatar_token,
+              NULL AS auth_display_name, NULL AS auth_avatar_url
+       FROM ewc_profile_links
+       WHERE discord_user_id IN (${placeholders})`,
+      ids,
+    );
+  }
+
+  const identities = new Map(
+    publicRows.map((row) => [
       row.discord_user_id,
-      { displayName: String(row.public_display_name || '').slice(0, 80), avatarToken: row.public_avatar_token ? String(row.public_avatar_token) : null },
+      { displayName: publicDisplayName(row.display_name), avatarToken: row.avatar_token ? String(row.avatar_token) : null },
     ]),
   );
+  for (const row of rows) {
+    const displayName = publicDisplayName(row.auth_display_name) || publicDisplayName(row.public_display_name);
+    if (!displayName) continue;
+    const avatarUrl = publicDiscordAvatarUrl(row.auth_avatar_url) || publicDiscordAvatarUrl(row.public_avatar_url);
+    const avatarToken = avatarUrl ? String(row.public_avatar_token || randomUUID()) : null;
+    if (!row.public_identity_enabled || row.public_display_name !== displayName || row.public_avatar_url !== avatarUrl || row.public_avatar_token !== avatarToken) {
+      const now = nowText();
+      await run(
+        `UPDATE ewc_profile_links
+         SET public_identity_enabled = 1,
+             public_display_name = $1,
+             public_avatar_url = $2,
+             public_avatar_token = $3,
+             public_identity_updated_at = $4,
+             updated_at = $4
+         WHERE discord_user_id = $5`,
+        [displayName, avatarUrl, avatarToken, now, row.discord_user_id],
+      );
+    }
+    identities.set(row.discord_user_id, { displayName, avatarToken });
+  }
+  return identities;
 }
 
 export async function getPublicEwcProfileAvatarByToken(token) {
   const row = await get(
-    `SELECT public_avatar_url
-     FROM ewc_profile_links
-     WHERE public_identity_enabled = 1 AND public_avatar_token = $1`,
-    [token],
+    `SELECT avatar_url
+     FROM (
+       SELECT public_avatar_url AS avatar_url, 1 AS priority
+       FROM ewc_profile_links
+       WHERE public_avatar_token = $1
+       UNION ALL
+       SELECT avatar_url, 2 AS priority
+       FROM ewc_public_predictor_identities
+       WHERE avatar_token = $2
+     ) identities
+     ORDER BY priority
+     LIMIT 1`,
+    [token, token],
   );
-  return row?.public_avatar_url ? String(row.public_avatar_url).slice(0, 2048) : null;
+  return row?.avatar_url ? String(row.avatar_url).slice(0, 2048) : null;
 }
