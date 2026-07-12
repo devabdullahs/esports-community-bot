@@ -29,7 +29,7 @@ export async function generateMetadata(): Promise<Metadata> {
   });
 }
 
-const LAST_UPDATED = "2026-07-08";
+const LAST_UPDATED = "2026-07-12";
 
 const CONTENT = {
   en: {
@@ -115,7 +115,8 @@ const CONTENT = {
         body: [
           "All persistent data is stored in a managed PostgreSQL database hosted on cloud infrastructure in the MENA (Saudi Arabia) region. No third-party analytics or advertising service holds your data.",
           "Public web traffic is routed through Cloudflare, which provides TLS termination and DDoS protection. Cloudflare may process request metadata (IP addresses, headers) in accordance with its own privacy policy.",
-          "The service does not share your personal data with any other third party beyond the processors listed here (Discord, the managed database host, Cloudflare, and GitHub Sponsors only if you choose to sponsor through GitHub).",
+          "When a co-stream player is displayed, your browser sends standard request metadata, such as your IP address, browser headers, and referring origin, to Twitch, Kick, or YouTube. Those providers apply their own privacy and cookie policies to the embedded player.",
+          "The service does not intentionally share your personal data with third parties beyond the processors described here (Discord, the managed database host, Cloudflare, Twitch, Kick, YouTube, and GitHub Sponsors only if you choose to sponsor through GitHub).",
         ],
       },
       {
@@ -235,7 +236,8 @@ const CONTENT = {
         body: [
           "تُخزَّن جميع البيانات الدائمة في قاعدة بيانات PostgreSQL مُدارة على بنية تحتية سحابية في منطقة الشرق الأوسط وشمال أفريقيا (المملكة العربية السعودية). لا تحتفظ أي خدمة تحليلات أو إعلانات خارجية ببياناتك.",
           "تمر حركة مرور الويب العامة عبر Cloudflare الذي يوفّر إنهاء TLS والحماية من هجمات DDoS. قد تعالج Cloudflare بيانات تعريف الطلبات (عناوين IP والرؤوس) وفق سياسة خصوصيتها.",
-          "لا تشارك الخدمة بياناتك الشخصية مع أي طرف ثالث آخر غير المعالجين المذكورين هنا (ديسكورد، ومضيف قاعدة البيانات المُدارة، وCloudflare، وGitHub Sponsors فقط إذا اخترت الرعاية عبر GitHub).",
+          "عند عرض مشغّل بث مصاحب، يرسل متصفحك بيانات تعريف الطلبات المعتادة، مثل عنوان IP وترويسات المتصفح والمصدر المُحيل، إلى Twitch أو Kick أو YouTube. وتطبّق هذه الجهات سياسات الخصوصية وملفات تعريف الارتباط الخاصة بها على المشغّل المضمّن.",
+          "لا تشارك الخدمة بياناتك الشخصية عمداً مع أطراف ثالثة خارج المعالجين الموضحين هنا (ديسكورد، ومضيف قاعدة البيانات المُدارة، وCloudflare، وTwitch، وKick، وYouTube، وGitHub Sponsors فقط إذا اخترت الرعاية عبر GitHub).",
         ],
       },
       {
