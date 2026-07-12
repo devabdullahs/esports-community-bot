@@ -42,6 +42,7 @@ import {
   ewcGameResultPending,
   mergeEwcGameResults,
   pendingEwcGameResults,
+  perGamePredictionRoundLocked,
   scorePerGameWeeklyPrediction,
   scoreSeasonPrediction,
   scoreWeeklyPrediction,
@@ -523,7 +524,12 @@ async function processWeek(client, round) {
     logger.info(`[ewc-predictions] saved baseline for ${round.guild_id}/${round.season}/${round.week_key}`);
   }
 
-  if (!round.close_at || now < round.close_at) return;
+  // Per-game picks lock independently. Once every lock has passed, start
+  // collecting official placements even if the calendar-day close is later.
+  const lockedForScoring = perGame
+    ? perGamePredictionRoundLocked(round.games, now)
+    : Boolean(round.close_at && now >= round.close_at);
+  if (!lockedForScoring) return;
 
   if (round.status === 'open') {
     await setEwcWeekStatus(round.id, 'closed');
@@ -572,7 +578,9 @@ async function processWeek(client, round) {
   const predictions = await listWeeklyPredictions(round.id);
 
   const hasCompletedResult = results.some((result) => !ewcGameResultPending(result));
-  const finalReady = perGame && (!readyAt || now >= readyAt) && missingResults.length === 0;
+  // A complete placement table is authoritative enough to finalize early;
+  // score_after remains the aggressive polling fallback for missing tables.
+  const finalReady = perGame && missingResults.length === 0;
   if (perGame && !finalReady && hasCompletedResult && (resultsChanged || predictions.some((prediction) => prediction.score == null))) {
     await transaction(async (tx) => {
       for (const prediction of predictions) {
@@ -597,10 +605,6 @@ async function processWeek(client, round) {
     await syncLinkedProfileShowcases(round.guild_id, round.season);
   }
 
-  if (perGame && readyAt && now < readyAt) {
-    logger.debug(`[ewc-predictions] final weekly scoring waits until ${readyAt} for ${round.guild_id}/${round.season}/${round.week_key}`);
-    return;
-  }
   if (missingResults.length) {
     logger.warn(
       `[ewc-predictions] results pending for ${round.guild_id}/${round.season}/${round.week_key}: ${missingResults
