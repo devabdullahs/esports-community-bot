@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { notFound } from "next/navigation";
+import { notFound, permanentRedirect } from "next/navigation";
 import { ArrowLeftIcon, ExternalLinkIcon, RadioIcon } from "lucide-react";
 import { FollowButton } from "@/components/follows/follow-button";
 import { TournamentMark } from "@/components/tournaments/tournament-directory";
@@ -38,7 +38,7 @@ export async function generateMetadata({
   return buildPageMetadata({
     title: data.tournament.name || `#${id}`,
     description: copy[locale].tournaments.description,
-    path: localizedPath(`/tournaments/${id}`, locale),
+    path: localizedPath(`/tournaments/${data.tournament.id}`, locale),
   });
 }
 
@@ -61,6 +61,9 @@ export default async function TournamentDetailPage({
   if (!data) notFound();
 
   const { tournament } = data;
+  if (tournament.id !== tournamentId) {
+    permanentRedirect(localizedPath(`/tournaments/${tournament.id}`, locale));
+  }
   const followState = await getViewerFollowState("tournament", String(tournament.id));
   const sourceUrl = safeUrlOrUndefined(tournament.url);
   const isLive = data.matches.running.length > 0;

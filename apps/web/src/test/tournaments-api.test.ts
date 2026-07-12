@@ -36,6 +36,8 @@ let tournamentId: number;
 let organizerTaggedTournamentId: number;
 let archivedTournamentId: number;
 let newestArchivedTournamentId: number;
+let legacyPlayInsTournamentId: number;
+let canonicalPlayInsTournamentId: number;
 
 async function seed(): Promise<void> {
   // Bootstrap the SQLite schema on the shared connection. The tournaments/matches
@@ -66,6 +68,26 @@ async function seed(): Promise<void> {
   })) as { id: number };
   organizerTaggedTournamentId = organizerTagged.id;
   await updateTournamentEwc(organizerTaggedTournamentId, true);
+
+  const legacyPlayIns = (await addTournament({
+    source: "liquipedia",
+    external_id: "FC_Pro_26/Play-Ins",
+    game: "easportsfc",
+    name: "FC Pro 26 Play-Ins",
+    url: "https://liquipedia.net/easportsfc/FC_Pro_26/Play-Ins",
+    guild_id: GUILD_ID,
+  })) as { id: number };
+  legacyPlayInsTournamentId = legacyPlayIns.id;
+  const canonicalPlayIns = (await addTournament({
+    source: "startgg",
+    external_id:
+      "tournament/fc-pro-last-chance-qualifier-at-2026-esports-world-cup/event/fc-pro-last-chance-qualifier-at-2026-esports-world-cup",
+    game: "easportsfc",
+    name: "FC Pro Last Chance Qualifier",
+    url: "https://www.start.gg/tournament/fc-pro-last-chance-qualifier-at-2026-esports-world-cup/event/fc-pro-last-chance-qualifier-at-2026-esports-world-cup",
+    guild_id: GUILD_ID,
+  })) as { id: number };
+  canonicalPlayInsTournamentId = canonicalPlayIns.id;
 
   const base = { tournament_id: tournamentId, source: "liquipedia" };
   // 1 running, 2 scheduled, 5 finished, plus one parser duplicate that should be hidden by public reads.
@@ -147,6 +169,14 @@ describe("GET /api/tournaments", () => {
 });
 
 describe("GET /api/tournaments/[id]/matches", () => {
+  test("resolves the Liquipedia FC Pro Play-Ins mirror to the canonical start.gg event", async () => {
+    const res = await matchesGET(matchesReq(), ctx(String(legacyPlayInsTournamentId)));
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.tournament.id).toBe(canonicalPlayInsTournamentId);
+    expect(body.tournament.source).toBe("startgg");
+  });
+
   test("groups matches by status with the tournament header and total", async () => {
     const res = await matchesGET(matchesReq(), ctx(String(tournamentId)));
     expect(res.status).toBe(200);

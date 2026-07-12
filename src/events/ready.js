@@ -21,7 +21,7 @@ import { primeEwcClubCache } from '../lib/ewcClubCache.js';
 export const name = Events.ClientReady;
 export const once = true;
 
-export function execute(client) {
+export async function execute(client) {
   logger.info(`Logged in as ${client.user.tag} — serving ${client.guilds.cache.size} guild(s).`);
 
   // Print an invite link with exactly the permissions this bot needs.
@@ -53,7 +53,7 @@ export function execute(client) {
     notifyMatchEvent(client, type, match).catch((e) => logger.error(`[notify] match event failed: ${e.message}`));
   });
 
-  startMorningSync(client);
+  await startMorningSync(client);
   refreshLiveBattleRoyaleStandings().catch((e) => logger.warn(`[standings] live boot refresh failed: ${e.message}`));
   resumePolling().catch((e) => logger.error(`[poll] resume failed: ${e.message}`)); // re-arm matches still pending/running from before a restart
   refreshAllGuilds(client).catch((e) => logger.error(`[refresh] boot repaint failed: ${e.message}`)); // repaint leaderboards/voice on boot

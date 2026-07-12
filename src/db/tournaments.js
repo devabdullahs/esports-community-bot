@@ -13,6 +13,27 @@ function canonicalTournamentUrl(value) {
   }
 }
 
+const TOURNAMENT_SOURCE_SUPERSESSIONS = [
+  {
+    game: 'easportsfc',
+    supersededSource: 'liquipedia',
+    supersededUrl: 'https://liquipedia.net/easportsfc/FC_Pro_26/Play-Ins',
+    canonicalSource: 'startgg',
+    canonicalUrl:
+      'https://start.gg/tournament/fc-pro-last-chance-qualifier-at-2026-esports-world-cup/event/fc-pro-last-chance-qualifier-at-2026-esports-world-cup',
+  },
+];
+
+function sourceSupersessionFor(row) {
+  const url = canonicalTournamentUrl(row?.url);
+  return TOURNAMENT_SOURCE_SUPERSESSIONS.find(
+    (rule) =>
+      row?.game === rule.game &&
+      row?.source === rule.supersededSource &&
+      url === canonicalTournamentUrl(rule.supersededUrl),
+  );
+}
+
 // Insert (or re-activate) a tracked tournament. Returns the stored row.
 export async function addTournament(row) {
   const merged = {
@@ -100,6 +121,57 @@ export async function archiveDuplicateTournamentUrls(archivedAt = Math.floor(Dat
     }
     return archived;
   });
+}
+
+// Some organizers publish a live bracket on start.gg while Liquipedia mirrors
+// the same event more slowly. These exact event pairs are intentionally narrow:
+// never infer cross-source aliases from names, because later finals can share a
+// tournament family without being the same competition.
+export async function archiveSupersededTournamentSources(archivedAt = Math.floor(Date.now() / 1000)) {
+  return transaction(async (tx) => {
+    const rows = await tx.all(
+      `SELECT id, source, game, url, guild_id
+       FROM tournaments
+       WHERE active = 1 AND archived_at IS NULL`,
+    );
+    let archived = 0;
+    for (const duplicate of rows) {
+      const rule = sourceSupersessionFor(duplicate);
+      if (!rule) continue;
+      const canonical = rows.find(
+        (candidate) =>
+          candidate.guild_id === duplicate.guild_id &&
+          candidate.game === rule.game &&
+          candidate.source === rule.canonicalSource &&
+          canonicalTournamentUrl(candidate.url) === canonicalTournamentUrl(rule.canonicalUrl),
+      );
+      if (!canonical) continue;
+      const result = await tx.run(
+        `UPDATE tournaments SET archived_at = $1
+         WHERE id = $2 AND active = 1 AND archived_at IS NULL`,
+        [archivedAt, duplicate.id],
+      );
+      archived += result.changes || result.rowCount || 0;
+    }
+    return archived;
+  });
+}
+
+export async function resolveCanonicalTournamentId(id) {
+  const tournament = await get('SELECT id, source, game, url, guild_id FROM tournaments WHERE id = $1', [id]);
+  const rule = sourceSupersessionFor(tournament);
+  if (!rule) return id;
+  const candidates = await all(
+    `SELECT id, url
+     FROM tournaments
+     WHERE guild_id = $1 AND game = $2 AND source = $3 AND active = 1
+     ORDER BY CASE WHEN archived_at IS NULL THEN 0 ELSE 1 END, id DESC`,
+    [tournament.guild_id, rule.game, rule.canonicalSource],
+  );
+  const canonical = candidates.find(
+    (candidate) => canonicalTournamentUrl(candidate.url) === canonicalTournamentUrl(rule.canonicalUrl),
+  );
+  return canonical?.id ?? id;
 }
 
 export async function getTournamentById(id) {
