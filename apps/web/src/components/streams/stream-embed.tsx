@@ -1,6 +1,7 @@
 "use client";
 
 import type { StreamPlatform } from "@/lib/stream-types";
+import { cn } from "@/lib/utils";
 
 type EmbedUrlOptions = {
   platform: StreamPlatform;
@@ -18,7 +19,13 @@ const PLATFORM_LABELS: Partial<Record<StreamPlatform, string>> = {
 
 // Provider identifiers remain typed inputs; shared query state never becomes
 // an iframe URL directly. Twitch's parent is validated by the server page.
-export function embedUrl({ platform, handle, parent, videoId = null, autoplay = true }: EmbedUrlOptions): string | null {
+export function embedUrl({
+  platform,
+  handle,
+  parent,
+  videoId = null,
+  autoplay = true,
+}: EmbedUrlOptions): string | null {
   if (platform === "twitch") {
     if (!parent) return null;
     const url = new URL("https://player.twitch.tv/");
@@ -44,6 +51,7 @@ export function StreamEmbed({
   videoId = null,
   label,
   autoplay = true,
+  minimumTwitchHeight = false,
 }: {
   platform: StreamPlatform;
   handle: string;
@@ -51,11 +59,17 @@ export function StreamEmbed({
   videoId?: string | null;
   label: string;
   autoplay?: boolean;
+  minimumTwitchHeight?: boolean;
 }) {
   const src = embedUrl({ platform, handle, parent, videoId, autoplay });
   if (!src) return null;
   return (
-    <div className="relative aspect-video w-full overflow-hidden rounded-lg border bg-black">
+    <div
+      className={cn(
+        "relative w-full overflow-hidden rounded-lg border bg-black",
+        platform === "twitch" && minimumTwitchHeight ? "min-h-[300px]" : "aspect-video",
+      )}
+    >
       <iframe
         key={src}
         src={src}

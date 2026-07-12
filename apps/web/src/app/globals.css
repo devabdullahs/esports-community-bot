@@ -481,3 +481,15 @@
     white-space: normal;
   }
 }
+
+:fullscreen .multiview-fit-one {
+  max-width: min(100%, calc(177.78vh - 14.222rem));
+}
+
+:fullscreen .multiview-fit-two-rows {
+  max-width: min(100%, calc(177.78vh - 17.778rem));
+}
+
+:fullscreen .multiview-fit-three-rows {
+  max-width: min(100%, calc(177.78vh - 18rem));
+}

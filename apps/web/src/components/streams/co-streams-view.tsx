@@ -6,14 +6,7 @@ import { PlatformIcon } from "@/components/platform-icon";
 import { MultiStreamGrid } from "@/components/streams/multi-stream-grid";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import {
-  Command,
-  CommandEmpty,
-  CommandGroup,
-  CommandInput,
-  CommandItem,
-  CommandList,
-} from "@/components/ui/command";
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import {
   Sheet,
   SheetContent,
@@ -23,14 +16,7 @@ import {
   SheetTitle,
   SheetTrigger,
 } from "@/components/ui/sheet";
-import {
-  Select,
-  SelectContent,
-  SelectGroup,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import type { Locale } from "@/lib/i18n";
 import {
@@ -41,6 +27,7 @@ import {
   loadedIdsAfterStreamLoad,
   reconcileLoadedStreamIds,
   reconcileSelectedStreamIds,
+  reorderSelectedStreamIds,
   streamSelectionSearchParams,
   toggleSelectedStreamId,
 } from "@/lib/co-stream-multiview";
@@ -81,7 +68,12 @@ const STR = {
     loadStream: "Load stream",
     streamEnded: "Stream ended",
     fullscreenFailed: "Fullscreen could not be opened.",
-    mobilePlaybackHint: "Mobile browsers allow one active player at a time. Load a stream to switch, then press play in the player.",
+    reorderStream: (name: string) => `Reorder ${name}`,
+    streamMoved: (name: string) => `${name} moved.`,
+    mobileTwitchUnavailable:
+      "Twitch embeds require a player wider than this screen. Open the stream on Twitch to watch.",
+    mobilePlaybackHint:
+      "Mobile browsers allow one embedded player at a time. Twitch streams open on Twitch when the screen is too narrow for its supported player.",
   },
   ar: {
     eyebrow: "البث المصاحب",
@@ -110,7 +102,11 @@ const STR = {
     loadStream: "تحميل البث",
     streamEnded: "انتهى البث",
     fullscreenFailed: "تعذر فتح وضع ملء الشاشة.",
-    mobilePlaybackHint: "تسمح متصفحات الجوال بمشغّل نشط واحد في كل مرة. حمّل البث للتبديل، ثم اضغط تشغيل داخل المشغّل.",
+    reorderStream: (name: string) => `إعادة ترتيب ${name}`,
+    streamMoved: (name: string) => `تم نقل ${name}.`,
+    mobileTwitchUnavailable: "يتطلب مشغّل Twitch المضمّن شاشة أعرض. افتح البث على Twitch للمشاهدة.",
+    mobilePlaybackHint:
+      "تسمح متصفحات الجوال بمشغّل مضمّن واحد في كل مرة. تُفتح بثوث Twitch على المنصة عندما تكون الشاشة أضيق من حجم المشغّل المدعوم.",
   },
 } as const;
 
@@ -130,6 +126,7 @@ function selectionUrl(ids: string[]) {
 }
 
 const MOBILE_PLAYER_QUERY = "(max-width: 767px)";
+const TWITCH_EMBED_WIDTH_QUERY = "(min-width: 400px)";
 
 function subscribeMobilePlayer(callback: () => void) {
   const media = window.matchMedia(MOBILE_PLAYER_QUERY);
@@ -143,6 +140,20 @@ function subscribeMobilePlayer(callback: () => void) {
 
 function mobilePlayerSnapshot() {
   return window.matchMedia(MOBILE_PLAYER_QUERY).matches;
+}
+
+function subscribeTwitchEmbedWidth(callback: () => void) {
+  const media = window.matchMedia(TWITCH_EMBED_WIDTH_QUERY);
+  if (typeof media.addEventListener === "function") {
+    media.addEventListener("change", callback);
+    return () => media.removeEventListener("change", callback);
+  }
+  media.addListener(callback);
+  return () => media.removeListener(callback);
+}
+
+function twitchEmbedWidthSnapshot() {
+  return window.matchMedia(TWITCH_EMBED_WIDTH_QUERY).matches;
 }
 
 export function CoStreamsView({
@@ -169,6 +180,7 @@ export function CoStreamsView({
   const [loadedIds, setLoadedIds] = useState(() => initialLoadedStreamIds(selectedIds, initialStreams));
   const [shareStatus, setShareStatus] = useState("");
   const singleMobilePlayer = useSyncExternalStore(subscribeMobilePlayer, mobilePlayerSnapshot, () => false);
+  const twitchEmbedsSupported = useSyncExternalStore(subscribeTwitchEmbedWidth, twitchEmbedWidthSnapshot, () => false);
   const shareStatusTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const didMountSelection = useRef(false);
 
@@ -203,7 +215,10 @@ export function CoStreamsView({
       if (document.visibilityState !== "visible" || controller) return;
       controller = new AbortController();
       try {
-        const res = await fetch("/api/co-streams", { cache: "no-store", signal: controller.signal });
+        const res = await fetch("/api/co-streams", {
+          cache: "no-store",
+          signal: controller.signal,
+        });
         if (!res.ok) return;
         const data = (await res.json()) as { streams: CoStream[] };
         if (!alive || !Array.isArray(data.streams)) return;
@@ -387,6 +402,8 @@ export function CoStreamsView({
         loadedIds={loadedIds}
         parent={parent}
         autoplay={!singleMobilePlayer}
+        compactViewport={singleMobilePlayer}
+        twitchEmbedsSupported={twitchEmbedsSupported}
         strings={{
           multiView: t.multiView,
           watching: t.watching,
@@ -397,11 +414,17 @@ export function CoStreamsView({
           enterFullscreen: t.enterFullscreen,
           exitFullscreen: t.exitFullscreen,
           fullscreenFailed: t.fullscreenFailed,
+          reorderStream: t.reorderStream,
+          streamMoved: t.streamMoved,
+          mobileTwitchUnavailable: t.mobileTwitchUnavailable,
         }}
         onLoad={(id) =>
           setLoadedIds((current) => loadedIdsAfterStreamLoad(current, selectedIds, id, singleMobilePlayer))
         }
         onRemove={removeStream}
+        onReorder={(activeId, overId) =>
+          setSelectedIds((current) => reorderSelectedStreamIds(current, activeId, overId))
+        }
       />
 
       {selectedIds.length > 1 ? (
