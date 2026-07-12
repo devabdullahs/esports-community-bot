@@ -3,6 +3,7 @@ import { describe, expect, test } from "vitest";
 import { MultiStreamGrid } from "@/components/streams/multi-stream-grid";
 import {
   MAX_MULTI_STREAMS,
+  effectiveLoadedStreamIds,
   initialLoadedStreamIds,
   initialSelectedStreamIds,
   loadedIdsAfterStreamAdded,
@@ -127,6 +128,15 @@ describe("co-stream multiview state", () => {
     expect(singlePlayerSelectionIds(["one", "two", "three"], ["two"])).toEqual(["two"]);
     expect(singlePlayerSelectionIds(["one", "two"], ["missing"])).toEqual(["one"]);
     expect(singlePlayerSelectionIds([], ["one"])).toEqual([]);
+  });
+
+  test("desktop mounts every selected stream while mobile keeps only its loaded player", () => {
+    expect(effectiveLoadedStreamIds(["one", "two", "three"], ["one"], false)).toEqual([
+      "one",
+      "two",
+      "three",
+    ]);
+    expect(effectiveLoadedStreamIds(["one", "two"], ["two"], true)).toEqual(["two"]);
   });
 
   test("adding another mobile stream keeps the current player and leaves the new selection as a poster", () => {

@@ -12,6 +12,7 @@ import {
   getTournamentById as _getById,
   listActiveTournaments as _listActive,
   listArchivedTournaments as _listArchived,
+  resolveCanonicalTournamentId as _resolveCanonicalTournamentId,
 } from "@bot/db/tournaments.js";
 import { unstable_cache } from "next/cache";
 import { resolveDefaultGuildId } from "@/lib/guild";
@@ -338,7 +339,8 @@ export async function getTournamentMatches(
 ): Promise<TournamentMatches | null> {
   const guildId = await resolveDefaultGuildId();
   if (!guildId) return null;
-  const tournament = await getById(id);
+  const canonicalId = await _resolveCanonicalTournamentId(id);
+  const tournament = await getById(canonicalId);
   if (!tournament || tournament.guild_id !== guildId || tournament.active !== 1) return null;
 
   const rows = await dedupedTournamentMatches(tournament);

@@ -67,6 +67,11 @@ export function singlePlayerSelectionIds(selected: string[], loaded: string[] = 
   return activeId ? [activeId] : selectedIds.slice(0, 1);
 }
 
+export function effectiveLoadedStreamIds(selected: string[], loaded: string[], singlePlayer: boolean): string[] {
+  const selectedIds = sanitizeRequestedStreamIds(selected);
+  return singlePlayer ? reconcileLoadedStreamIds(loaded, selectedIds) : selectedIds;
+}
+
 export function loadedIdsAfterStreamAdded(
   loaded: string[],
   selected: string[],

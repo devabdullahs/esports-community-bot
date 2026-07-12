@@ -21,6 +21,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import type { Locale } from "@/lib/i18n";
 import {
   MAX_MULTI_STREAMS,
+  effectiveLoadedStreamIds,
   initialLoadedStreamIds,
   initialSelectedStreamIds,
   loadedIdsAfterStreamAdded,
@@ -259,6 +260,10 @@ export function CoStreamsView({
     const byId = new Map(streams.map((stream) => [stream.id, stream]));
     return displaySelectedIds.map((id) => byId.get(id)).filter((stream): stream is CoStream => Boolean(stream));
   }, [displaySelectedIds, streams]);
+  const playbackLoadedIds = useMemo(
+    () => effectiveLoadedStreamIds(displaySelectedIds, loadedIds, singleMobilePlayer),
+    [displaySelectedIds, loadedIds, singleMobilePlayer],
+  );
   const selectableIds = useMemo(
     () => new Set(streams.filter((stream) => stream.isLive && stream.embedChannel).map((stream) => stream.id)),
     [streams],
@@ -411,7 +416,7 @@ export function CoStreamsView({
 
       <MultiStreamGrid
         selected={selectedStreams}
-        loadedIds={loadedIds}
+        loadedIds={playbackLoadedIds}
         parent={parent}
         autoplay={!singleMobilePlayer}
         compactViewport={singleMobilePlayer}
