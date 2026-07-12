@@ -60,6 +60,13 @@ export function reconcileLoadedStreamIds(loaded: string[], selected: string[]): 
   return sanitizeRequestedStreamIds(loaded).filter((id) => selectedIds.has(id));
 }
 
+export function singlePlayerSelectionIds(selected: string[], loaded: string[] = []): string[] {
+  const selectedIds = sanitizeRequestedStreamIds(selected);
+  const selectedSet = new Set(selectedIds);
+  const activeId = sanitizeRequestedStreamIds(loaded).find((id) => selectedSet.has(id));
+  return activeId ? [activeId] : selectedIds.slice(0, 1);
+}
+
 export function loadedIdsAfterStreamAdded(
   loaded: string[],
   selected: string[],

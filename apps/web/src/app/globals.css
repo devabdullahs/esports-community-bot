@@ -483,13 +483,19 @@
 }
 
 :fullscreen .multiview-fit-one {
+  width: min(100%, calc(177.78vh - 14.222rem));
   max-width: min(100%, calc(177.78vh - 14.222rem));
+  margin-inline: auto;
 }
 
 :fullscreen .multiview-fit-two-rows {
+  width: min(100%, calc(177.78vh - 17.778rem));
   max-width: min(100%, calc(177.78vh - 17.778rem));
+  margin-inline: auto;
 }
 
 :fullscreen .multiview-fit-wide-two-rows {
+  width: calc(100vw - 2rem);
   max-width: calc(100vw - 2rem);
+  margin-inline: auto;
 }

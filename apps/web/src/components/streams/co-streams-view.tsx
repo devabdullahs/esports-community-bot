@@ -28,6 +28,7 @@ import {
   reconcileLoadedStreamIds,
   reconcileSelectedStreamIds,
   reorderSelectedStreamIds,
+  singlePlayerSelectionIds,
   streamSelectionSearchParams,
   toggleSelectedStreamId,
 } from "@/lib/co-stream-multiview";
@@ -250,15 +251,19 @@ export function CoStreamsView({
     return [...values];
   }, [streams]);
   const games = useMemo(() => [...new Set(streams.flatMap((stream) => stream.gameSlugs))], [streams]);
+  const displaySelectedIds = useMemo(
+    () => (singleMobilePlayer ? singlePlayerSelectionIds(selectedIds, loadedIds) : selectedIds),
+    [loadedIds, selectedIds, singleMobilePlayer],
+  );
   const selectedStreams = useMemo(() => {
     const byId = new Map(streams.map((stream) => [stream.id, stream]));
-    return selectedIds.map((id) => byId.get(id)).filter((stream): stream is CoStream => Boolean(stream));
-  }, [selectedIds, streams]);
+    return displaySelectedIds.map((id) => byId.get(id)).filter((stream): stream is CoStream => Boolean(stream));
+  }, [displaySelectedIds, streams]);
   const selectableIds = useMemo(
     () => new Set(streams.filter((stream) => stream.isLive && stream.embedChannel).map((stream) => stream.id)),
     [streams],
   );
-  const selectedSet = useMemo(() => new Set(selectedIds), [selectedIds]);
+  const selectedSet = useMemo(() => new Set(displaySelectedIds), [displaySelectedIds]);
   const atLimit = selectedIds.length >= MAX_MULTI_STREAMS;
   const filtered = useMemo(
     () =>
@@ -272,6 +277,13 @@ export function CoStreamsView({
   );
 
   const toggleStream = (id: string) => {
+    if (singleMobilePlayer) {
+      if (!selectableIds.has(id) || selectedSet.has(id)) return;
+      setSelectedIds([id]);
+      setLoadedIds([id]);
+      return;
+    }
+
     const wasSelected = selectedSet.has(id);
     const result = toggleSelectedStreamId(selectedIds, id, selectableIds);
     if (result.ids === selectedIds || (result.ids.length === selectedIds.length && !wasSelected)) return;
@@ -320,7 +332,7 @@ export function CoStreamsView({
         </Badge>
       </div>
 
-      <div className="flex flex-wrap items-center gap-2">
+      <div className="hidden flex-wrap items-center gap-2 md:flex">
         <Badge variant="secondary">{t.selectedCount(selectedIds.length)}</Badge>
         <Sheet>
           <SheetTrigger render={<Button type="button" variant="outline" />}>
@@ -530,6 +542,7 @@ export function CoStreamsView({
                           type="button"
                           variant={selected ? "default" : "outline"}
                           size="icon-sm"
+                          className={selected ? "hidden md:inline-flex" : undefined}
                           disabled={!selected && !canWatch}
                           aria-pressed={selected}
                           aria-label={`${selected ? t.removeStream : t.addStream}: ${stream.label}`}

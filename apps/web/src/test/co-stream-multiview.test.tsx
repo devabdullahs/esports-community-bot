@@ -13,6 +13,7 @@ import {
   reconcileSelectedStreamIds,
   reorderSelectedStreamIds,
   sanitizeRequestedStreamIds,
+  singlePlayerSelectionIds,
   streamSelectionSearchParams,
   toggleSelectedStreamId,
 } from "@/lib/co-stream-multiview";
@@ -122,6 +123,12 @@ describe("co-stream multiview state", () => {
     expect(reconcileLoadedStreamIds(["two", "one", "two", "missing"], ["one", "two"])).toEqual(["two", "one"]);
   });
 
+  test("mobile single-player mode keeps the active stream and discards the rest", () => {
+    expect(singlePlayerSelectionIds(["one", "two", "three"], ["two"])).toEqual(["two"]);
+    expect(singlePlayerSelectionIds(["one", "two"], ["missing"])).toEqual(["one"]);
+    expect(singlePlayerSelectionIds([], ["one"])).toEqual([]);
+  });
+
   test("adding another mobile stream keeps the current player and leaves the new selection as a poster", () => {
     expect(loadedIdsAfterStreamAdded(["one"], ["one", "two"], "two", true)).toEqual(["one"]);
   });
@@ -210,6 +217,18 @@ function count(markup: string, pattern: RegExp) {
 }
 
 describe("MultiStreamGrid static rendering", () => {
+  test("a single stream has no remove or reorder controls", () => {
+    const markup = renderGrid([stream("only")], ["only"]);
+    expect(markup).not.toContain("Remove stream: Creator only");
+    expect(markup).not.toContain("Reorder Creator only");
+  });
+
+  test("multiple streams expose remove and reorder controls", () => {
+    const markup = renderGrid([stream("one"), stream("two")], ["one", "two"]);
+    expect(markup).toContain("Remove stream: Creator one");
+    expect(markup).toContain("Reorder Creator one");
+  });
+
   test.each([1, 3, 6])("renders exactly %i loaded iframes", (streamCount) => {
     const streams = Array.from({ length: streamCount }, (_, index) => stream(`loaded-${index + 1}`));
     const markup = renderGrid(
