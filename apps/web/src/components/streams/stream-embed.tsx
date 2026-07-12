@@ -2,18 +2,36 @@
 
 import type { StreamPlatform } from "@/lib/stream-types";
 
-// Twitch/Kick embed by handle; YouTube embeds the LIVE VIDEO (the poller
-// resolves its id — a channel URL cannot be iframed). `parent` (Twitch
-// requirement) is the host serving the page, e.g. esportscommunity.net.
-export function embedUrl(platform: StreamPlatform, handle: string, parent: string, videoId?: string | null): string | null {
+type EmbedUrlOptions = {
+  platform: StreamPlatform;
+  handle: string;
+  parent: string;
+  videoId?: string | null;
+};
+
+const PLATFORM_LABELS: Partial<Record<StreamPlatform, string>> = {
+  twitch: "Twitch",
+  kick: "Kick",
+  youtube: "YouTube",
+};
+
+// Provider identifiers remain typed inputs; shared query state never becomes
+// an iframe URL directly. Twitch's parent is validated by the server page.
+export function embedUrl({ platform, handle, parent, videoId = null }: EmbedUrlOptions): string | null {
   if (platform === "twitch") {
-    return `https://player.twitch.tv/?channel=${encodeURIComponent(handle)}&parent=${encodeURIComponent(parent)}`;
+    if (!parent) return null;
+    const url = new URL("https://player.twitch.tv/");
+    url.searchParams.set("channel", handle);
+    url.searchParams.set("parent", parent);
+    url.searchParams.set("autoplay", "true");
+    url.searchParams.set("muted", "true");
+    return url.toString();
   }
   if (platform === "kick") {
-    return `https://player.kick.com/${encodeURIComponent(handle)}`;
+    return `https://player.kick.com/${encodeURIComponent(handle)}?autoplay=true&muted=true`;
   }
   if (platform === "youtube" && videoId) {
-    return `https://www.youtube-nocookie.com/embed/${encodeURIComponent(videoId)}?autoplay=1`;
+    return `https://www.youtube-nocookie.com/embed/${encodeURIComponent(videoId)}?autoplay=0&playsinline=1`;
   }
   return null;
 }
@@ -23,22 +41,25 @@ export function StreamEmbed({
   handle,
   parent,
   videoId = null,
+  label,
 }: {
   platform: StreamPlatform;
   handle: string;
   parent: string;
   videoId?: string | null;
+  label: string;
 }) {
-  const src = embedUrl(platform, handle, parent, videoId);
+  const src = embedUrl({ platform, handle, parent, videoId });
   if (!src) return null;
   return (
     <div className="relative aspect-video w-full overflow-hidden rounded-lg border bg-black">
       <iframe
         key={src}
         src={src}
-        title={`${handle} live stream`}
+        title={`${label} on ${PLATFORM_LABELS[platform] ?? platform}`}
         allow="autoplay; fullscreen; encrypted-media; picture-in-picture"
         allowFullScreen
+        referrerPolicy="strict-origin-when-cross-origin"
         className="absolute inset-0 size-full"
       />
     </div>

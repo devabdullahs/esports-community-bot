@@ -31,6 +31,8 @@ const {
 const { upsertEwcProfileLink, markEwcProfileLinkSynced } = await import('../src/db/ewcProfileLinks.js');
 const { addTournament } = await import('../src/db/tournaments.js');
 const { upsertMatch } = await import('../src/db/matches.js');
+const { createStreamChannel } = await import('../src/db/streamChannels.js');
+const { upsertStreamStatus } = await import('../src/db/streamChannelStatus.js');
 
 // 1) Trigger the built-in default seeds for games + media channels.
 const games = await listEwcGames();
@@ -189,6 +191,43 @@ for (const m of tMatches) {
   catch (e) { console.warn('match skip:', e.message); }
 }
 console.log(`tournament seeded: ${tournament.name} (#${tournament.id}) with ${matchCount} matches`);
+
+// 3c) Nine deterministic live co-stream groups for multiview layout QA.
+const coStreamFixtures = [
+  { platform: 'twitch', handle: 'ewc_demo_alpha', label: 'Alpha Arena', creatorKey: 'demo-alpha', gameSlugs: ['valorant'], language: 'en', title: 'Alpha watches the Valorant upper bracket', viewers: 18420 },
+  { platform: 'kick', handle: 'ewc_demo_bravo', label: 'Bravo Broadcast', creatorKey: 'demo-bravo', gameSlugs: ['valorant', 'counter-strike'], language: 'ar', title: 'Bravo Arabic co-stream: playoffs', viewers: 12350 },
+  { platform: 'youtube', handle: 'EwcDemoCharlie', label: 'Charlie Casts', creatorKey: 'demo-charlie', gameSlugs: ['valorant'], language: 'en', title: 'Charlie live from Riyadh', viewers: 9870, videoId: 'demoVideo01' },
+  { platform: 'twitch', handle: 'ewc_demo_delta', label: 'Delta Desk', creatorKey: 'demo-delta', gameSlugs: ['valorant', 'apex-legends'], language: 'ar', title: 'Delta tactical breakdown', viewers: 7650 },
+  { platform: 'kick', handle: 'ewc_demo_echo', label: 'Echo Esports', creatorKey: 'demo-echo', gameSlugs: ['valorant'], language: 'en', title: 'Echo community watch party', viewers: 6410 },
+  { platform: 'youtube', handle: 'EwcDemoFoxtrot', label: 'Foxtrot Live', creatorKey: 'demo-foxtrot', gameSlugs: ['valorant', 'rocket-league'], language: 'ar', title: 'Foxtrot Arabic multiview', viewers: 5230, videoId: 'demoVideo02' },
+  { platform: 'twitch', handle: 'ewc_demo_golf', label: 'Golf Gaming', creatorKey: 'demo-golf', gameSlugs: ['valorant'], language: 'en', title: 'Golf follows the elimination match', viewers: 4180 },
+  { platform: 'kick', handle: 'ewc_demo_hotel', label: 'Hotel Highlights', creatorKey: 'demo-hotel', gameSlugs: ['valorant', 'overwatch'], language: 'ar', title: 'Hotel highlights and analysis', viewers: 3075 },
+  { platform: 'youtube', handle: 'EwcDemoIndia', label: 'India Insights', creatorKey: 'demo-india', gameSlugs: ['valorant'], language: 'en', title: 'India live finals desk', viewers: 2190, videoId: 'demoVideo03' },
+];
+for (const fixture of coStreamFixtures) {
+  const channel = await createStreamChannel({
+    platform: fixture.platform,
+    handle: fixture.handle,
+    label: fixture.label,
+    scope: 'ewc',
+    gameSlugs: fixture.gameSlugs,
+    creatorKey: fixture.creatorKey,
+    language: fixture.language,
+    isDefault: true,
+    addedBy: 'seed',
+  });
+  await upsertStreamStatus({
+    platform: channel.platform,
+    handle: channel.handle,
+    isLive: true,
+    title: fixture.title,
+    viewerCount: fixture.viewers,
+    category: 'Valorant',
+    videoId: fixture.videoId ?? null,
+    startedAt: nowSeconds - 3600,
+  });
+}
+console.log(`co-stream fixtures seeded: ${coStreamFixtures.length}`);
 
 // 4) Link the dev auth user to this guild/season so /me resolves automatically.
 await upsertEwcProfileLink({ authUserId: DEV_AUTH_USER, discordUserId: DEV_DISCORD_ID, guildId: GUILD, season: SEASON });

@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { headers } from "next/headers";
 import { CoStreamsView } from "@/components/streams/co-streams-view";
+import { sanitizeRequestedStreamIds } from "@/lib/co-stream-multiview";
 import { getAllCoStreamsCached } from "@/lib/co-streams";
 import { dashboardPublicUrl } from "@/lib/env";
 import { localizedPath, type Locale } from "@/lib/i18n";
@@ -53,8 +54,23 @@ export async function generateMetadata(): Promise<Metadata> {
   });
 }
 
-export default async function CoStreamsPage() {
+export default async function CoStreamsPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
   const locale = await getRequestLocale();
   const streams = await getAllCoStreamsCached();
-  return <CoStreamsView streams={streams} parent={await parentHost()} locale={locale} />;
+  const params = await searchParams;
+  const hasExplicitSelection = Object.prototype.hasOwnProperty.call(params, "stream");
+  const requestedStreamIds = sanitizeRequestedStreamIds(params.stream);
+  return (
+    <CoStreamsView
+      streams={streams}
+      parent={await parentHost()}
+      locale={locale}
+      requestedStreamIds={requestedStreamIds}
+      hasExplicitSelection={hasExplicitSelection}
+    />
+  );
 }
