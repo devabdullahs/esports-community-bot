@@ -2,6 +2,8 @@ import { all, run } from './client.js';
 
 const RIYADH_OFFSET_SECONDS = 3 * 60 * 60;
 const EVENT_TYPES = new Set(['pageview', 'engagement']);
+const ACQUISITION_SOURCES = new Set(['direct', 'x', 'discord', 'google', 'bing', 'other_referral']);
+const CAMPAIGN_RE = /^[a-z0-9][a-z0-9_-]{0,63}$/;
 
 function clampInt(value, min, max) {
   const n = Math.trunc(Number(value) || 0);
@@ -18,7 +20,18 @@ function cleanString(value, maxLength) {
 function cleanPath(value) {
   const s = cleanString(value, 300);
   if (!s || !s.startsWith('/')) return '/';
-  return s.split('#')[0].slice(0, 300) || '/';
+  return s.split(/[?#]/, 1)[0].slice(0, 300) || '/';
+}
+
+function cleanAcquisitionSource(value) {
+  const source = String(value || '').trim();
+  return ACQUISITION_SOURCES.has(source) ? source : null;
+}
+
+function cleanCampaign(value) {
+  if (value == null || value === '') return null;
+  if (typeof value !== 'string' || !CAMPAIGN_RE.test(value)) return null;
+  return value;
 }
 
 function cleanCountry(value) {
@@ -123,6 +136,52 @@ function topPages(rows, since, limit) {
     .slice(0, limit);
 }
 
+function acquisitionBreakdown(rows, since) {
+  const sources = new Map();
+  const campaigns = new Map();
+
+  for (const row of rows) {
+    if (Number(row.occurred_at) < since || row.event_type !== 'pageview') continue;
+    const source = cleanAcquisitionSource(row.acquisition_source) || 'direct';
+    const sourceEntry = sources.get(source) || { source, visitors: new Set(), sessions: new Set(), pageviews: 0 };
+    if (row.visitor_id) sourceEntry.visitors.add(row.visitor_id);
+    if (row.session_id) sourceEntry.sessions.add(row.session_id);
+    sourceEntry.pageviews += 1;
+    sources.set(source, sourceEntry);
+
+    const campaign = cleanCampaign(row.campaign);
+    if (!campaign) continue;
+    const key = `${source}\0${campaign}`;
+    const campaignEntry = campaigns.get(key) || {
+      source,
+      campaign,
+      visitors: new Set(),
+      sessions: new Set(),
+      pageviews: 0,
+    };
+    if (row.visitor_id) campaignEntry.visitors.add(row.visitor_id);
+    if (row.session_id) campaignEntry.sessions.add(row.session_id);
+    campaignEntry.pageviews += 1;
+    campaigns.set(key, campaignEntry);
+  }
+
+  const summarize = (entry) => ({
+    source: entry.source,
+    ...(entry.campaign ? { campaign: entry.campaign } : {}),
+    visitors: entry.visitors.size,
+    sessions: entry.sessions.size,
+    pageviews: entry.pageviews,
+  });
+  const sort = (a, b) =>
+    b.pageviews - a.pageviews || b.visitors - a.visitors ||
+    String(a.campaign || a.source).localeCompare(String(b.campaign || b.source));
+
+  return {
+    acquisition: [...sources.values()].map(summarize).sort(sort),
+    campaigns: [...campaigns.values()].map(summarize).sort(sort).slice(0, 12),
+  };
+}
+
 function dailySeries(rows, nowSec, days) {
   const endKey = dayKeyFor(nowSec);
   const byDay = new Map();
@@ -160,7 +219,8 @@ export async function recordWebAnalyticsEvent({
   sessionId,
   eventType,
   path,
-  referrer = null,
+  acquisitionSource,
+  campaign = null,
   country = null,
   userAgent = null,
   durationSeconds = 0,
@@ -171,18 +231,25 @@ export async function recordWebAnalyticsEvent({
   const visitor = cleanString(visitorId, 80);
   const session = cleanString(sessionId, 80);
   if (!visitor || !session) throw new Error('visitorId and sessionId are required');
+  const source = cleanAcquisitionSource(acquisitionSource);
+  if (!source) throw new Error(`Invalid analytics acquisition source: ${acquisitionSource}`);
+  const campaignName = cleanCampaign(campaign);
+  if (campaign != null && campaign !== '' && !campaignName) {
+    throw new Error(`Invalid analytics campaign: ${campaign}`);
+  }
 
   await run(
     `INSERT INTO web_analytics_events (
-       visitor_id, session_id, event_type, path, referrer, country, user_agent,
+       visitor_id, session_id, event_type, path, acquisition_source, campaign, country, user_agent,
        duration_seconds, occurred_at
-     ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+     ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
     [
       visitor,
       session,
       type,
       cleanPath(path),
-      cleanString(referrer, 300),
+      source,
+      campaignName,
       cleanCountry(country),
       cleanString(userAgent, 240),
       type === 'engagement' ? clampInt(durationSeconds, 1, 300) : 0,
@@ -199,7 +266,7 @@ export async function getWebAnalyticsDashboard({ nowSec = Math.floor(Date.now() 
   const periodSince = todaySince - (safeDays - 1) * 86400;
   const fetchSince = Math.min(periodSince, thirtyDaySince);
   const rows = await all(
-    `SELECT visitor_id, session_id, event_type, path, country, duration_seconds, occurred_at
+    `SELECT visitor_id, session_id, event_type, path, acquisition_source, campaign, country, duration_seconds, occurred_at
      FROM web_analytics_events
      WHERE occurred_at >= $1
      ORDER BY occurred_at ASC`,
@@ -213,6 +280,7 @@ export async function getWebAnalyticsDashboard({ nowSec = Math.floor(Date.now() 
   const firstSeenByVisitor = new Map(
     firstSeenRows.map((row) => [row.visitor_id, Number(row.first_seen)]),
   );
+  const acquisition = acquisitionBreakdown(rows, periodSince);
 
   return {
     generatedAt: nowSec,
@@ -225,6 +293,8 @@ export async function getWebAnalyticsDashboard({ nowSec = Math.floor(Date.now() 
     },
     countries: topCountries(rows, periodSince, 12),
     pages: topPages(rows, periodSince, 12),
+    acquisition: acquisition.acquisition,
+    campaigns: acquisition.campaigns,
     daily: dailySeries(rows, nowSec, Math.min(30, safeDays)),
     totalKnownVisitors: firstSeenByVisitor.size,
   };

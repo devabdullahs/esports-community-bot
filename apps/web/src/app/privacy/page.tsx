@@ -29,7 +29,7 @@ export async function generateMetadata(): Promise<Metadata> {
   });
 }
 
-const LAST_UPDATED = "2026-07-12";
+const LAST_UPDATED = "2026-07-13";
 
 const CONTENT = {
   en: {
@@ -94,7 +94,7 @@ const CONTENT = {
           "Anonymous website analytics IDs — browser-local random visitor and session IDs used to count daily, weekly, and monthly visitors and engagement on public pages.",
         ],
         after: [
-          "The first-party analytics tracker records public page paths, anonymous visitor/session IDs, engagement seconds, browser user-agent, and country code from Cloudflare headers. Raw IP addresses are not stored in analytics events. No third-party tracking cookies, ad-network scripts, or third-party analytics scripts are used.",
+          "The first-party analytics tracker records query-free public page paths, anonymous visitor/session IDs, engagement seconds, browser user-agent, country code from Cloudflare headers, an allowlisted acquisition source (direct, X, Discord, Google, Bing, or other referral), and an optional campaign label limited to 64 lowercase letters, numbers, hyphens, or underscores. Raw referrer or destination URLs, query strings, and IP addresses are not stored in analytics events. No third-party tracking cookies, ad-network scripts, or third-party analytics scripts are used.",
         ],
       },
       {
@@ -215,7 +215,7 @@ const CONTENT = {
           "معرّفات إحصائيات الموقع المجهولة — معرّف زائر ومعرّف جلسة عشوائيان داخل المتصفح لاحتساب الزوار يوميًا وأسبوعيًا وشهريًا ومدة التفاعل في الصفحات العامة.",
         ],
         after: [
-          "يسجل التتبع الداخلي مسارات الصفحات العامة، ومعرّفات الزائر والجلسة المجهولة، وثواني التفاعل، ووكيل المتصفح، ورمز الدولة من ترويسات Cloudflare. لا يتم تخزين عناوين IP في أحداث الإحصائيات، ولا تُستخدم ملفات تعريف ارتباط تتبع أو سكريبتات شبكات إعلانية أو تحليلات خارجية.",
+          "يسجل التتبع الداخلي مسارات الصفحات العامة من دون الاستعلامات، ومعرّفات الزائر والجلسة المجهولة، وثواني التفاعل، ووكيل المتصفح، ورمز الدولة من ترويسات Cloudflare، وفئة مصدر مسموح بها (مباشر أو X أو ديسكورد أو Google أو Bing أو إحالة أخرى)، وتسمية حملة اختيارية لا تتجاوز 64 حرفًا صغيرًا أو رقمًا أو شرطة أو شرطة سفلية. لا تُخزّن روابط الإحالة أو الوجهة الخام أو سلاسل الاستعلام أو عناوين IP في أحداث الإحصائيات، ولا تُستخدم ملفات تعريف ارتباط تتبع أو سكريبتات شبكات إعلانية أو تحليلات خارجية.",
         ],
       },
       {

@@ -6,9 +6,11 @@ import { usePathname } from "next/navigation";
 const VISITOR_KEY = "ec_analytics_visitor";
 const SESSION_KEY = "ec_analytics_session";
 const SESSION_EXPIRES_KEY = "ec_analytics_session_expires";
+const ACQUISITION_KEY = "ec_analytics_acquisition";
 const SESSION_TTL_MS = 30 * 60 * 1000;
 const HEARTBEAT_MS = 15 * 1000;
 const ID_RE = /^[A-Za-z0-9_-]{16,80}$/;
+const CAMPAIGN_RE = /^[a-z0-9][a-z0-9_-]{0,63}$/;
 const STATIC_EXT_RE = /\.(?:avif|gif|ico|jpeg|jpg|js|json|map|png|svg|webmanifest|webp|xml|txt|css)$/i;
 const BLOCKED_PATHS = [
   "/admin",
@@ -22,12 +24,22 @@ const BLOCKED_PATHS = [
   "/sitemap.xml",
 ];
 
+export const ACQUISITION_SOURCES = ["direct", "x", "discord", "google", "bing", "other_referral"] as const;
+
+export type AcquisitionSource = (typeof ACQUISITION_SOURCES)[number];
+
+type Acquisition = {
+  source: AcquisitionSource;
+  campaign?: string;
+};
+
 type AnalyticsPayload = {
   visitorId: string;
   sessionId: string;
   eventType: "pageview" | "engagement";
   path: string;
-  referrer?: string;
+  acquisitionSource: AcquisitionSource;
+  campaign?: string;
   durationSeconds?: number;
 };
 
@@ -56,6 +68,77 @@ function storageSet(storage: Storage, key: string, value: string) {
   }
 }
 
+function isAcquisitionSource(value: unknown): value is AcquisitionSource {
+  return typeof value === "string" && (ACQUISITION_SOURCES as readonly string[]).includes(value);
+}
+
+function cleanCampaign(value: string | null | undefined) {
+  const campaign = value?.trim().toLowerCase() || "";
+  return CAMPAIGN_RE.test(campaign) ? campaign : undefined;
+}
+
+function hostnameMatches(hostname: string, domain: string) {
+  return hostname === domain || hostname.endsWith(`.${domain}`);
+}
+
+function sourceFromHint(value: string | null): AcquisitionSource | null {
+  const hint = value?.trim().toLowerCase();
+  if (!hint) return null;
+  if (["x", "twitter", "t.co"].includes(hint)) return "x";
+  if (["discord", "discord.com", "discord.gg"].includes(hint)) return "discord";
+  if (hint === "google") return "google";
+  if (hint === "bing") return "bing";
+  if (hint === "direct") return "direct";
+  return "other_referral";
+}
+
+function sourceFromReferrer(referrer: string, currentOrigin: string): AcquisitionSource {
+  if (!referrer) return "direct";
+  try {
+    const url = new URL(referrer);
+    if (url.origin === currentOrigin) return "direct";
+    const hostname = url.hostname.toLowerCase();
+    if (["x.com", "twitter.com", "t.co"].some((domain) => hostnameMatches(hostname, domain))) return "x";
+    if (["discord.com", "discord.gg", "discordapp.com"].some((domain) => hostnameMatches(hostname, domain))) {
+      return "discord";
+    }
+    if (
+      hostnameMatches(hostname, "google.com") ||
+      /^(?:[^.]+\.)*google\.(?:[a-z]{2,3}|co\.[a-z]{2}|com\.[a-z]{2})$/.test(hostname)
+    ) {
+      return "google";
+    }
+    if (hostnameMatches(hostname, "bing.com")) return "bing";
+    return "other_referral";
+  } catch {
+    return "direct";
+  }
+}
+
+export function deriveAcquisition(currentUrl: string, referrer = ""): Acquisition {
+  try {
+    const url = new URL(currentUrl);
+    const source = sourceFromHint(url.searchParams.get("utm_source")) ?? sourceFromReferrer(referrer, url.origin);
+    const campaign = cleanCampaign(url.searchParams.get("utm_campaign"));
+    return campaign ? { source, campaign } : { source };
+  } catch {
+    return { source: "direct" };
+  }
+}
+
+function storedAcquisition(storage: Storage) {
+  const value = storageGet(storage, ACQUISITION_KEY);
+  if (!value) return null;
+  try {
+    const parsed = JSON.parse(value) as Record<string, unknown>;
+    if (!isAcquisitionSource(parsed.source)) return null;
+    const campaign = typeof parsed.campaign === "string" ? cleanCampaign(parsed.campaign) : undefined;
+    return campaign ? { source: parsed.source, campaign } : { source: parsed.source };
+  } catch {
+    return null;
+  }
+}
+
 function randomId() {
   if (typeof crypto !== "undefined" && "randomUUID" in crypto) return crypto.randomUUID();
   return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
@@ -75,12 +158,12 @@ function sessionId() {
   const expires = Number(storageGet(window.sessionStorage, SESSION_EXPIRES_KEY) || 0);
   if (existing && ID_RE.test(existing) && expires > now) {
     storageSet(window.sessionStorage, SESSION_EXPIRES_KEY, String(now + SESSION_TTL_MS));
-    return existing;
+    return { id: existing, isNew: false };
   }
   const id = randomId();
   storageSet(window.sessionStorage, SESSION_KEY, id);
   storageSet(window.sessionStorage, SESSION_EXPIRES_KEY, String(now + SESSION_TTL_MS));
-  return id;
+  return { id, isNew: true };
 }
 
 function respectsPrivacySignals() {
@@ -111,6 +194,7 @@ export function AnalyticsTracker() {
   const pathname = usePathname();
   const visitorRef = useRef<string | null>(null);
   const sessionRef = useRef<string | null>(null);
+  const acquisitionRef = useRef<Acquisition | null>(null);
   const pathRef = useRef<string | null>(null);
   const activeStartedAtRef = useRef<number | null>(null);
   const pendingSecondsRef = useRef(0);
@@ -119,7 +203,13 @@ export function AnalyticsTracker() {
     if (!pathname || !isTrackablePath(pathname) || respectsPrivacySignals()) return;
 
     visitorRef.current = visitorId();
-    sessionRef.current = sessionId();
+    const session = sessionId();
+    if (session.id !== sessionRef.current || !acquisitionRef.current) {
+      const acquisition = session.isNew ? null : storedAcquisition(window.sessionStorage);
+      acquisitionRef.current = acquisition ?? deriveAcquisition(window.location.href, document.referrer);
+      storageSet(window.sessionStorage, ACQUISITION_KEY, JSON.stringify(acquisitionRef.current));
+    }
+    sessionRef.current = session.id;
 
     function collectVisibleSeconds() {
       if (document.visibilityState !== "visible") {
@@ -136,7 +226,9 @@ export function AnalyticsTracker() {
     function flush(beacon = false) {
       collectVisibleSeconds();
       const durationSeconds = Math.floor(pendingSecondsRef.current);
-      if (!visitorRef.current || !sessionRef.current || !pathRef.current || durationSeconds <= 0) return;
+      if (!visitorRef.current || !sessionRef.current || !acquisitionRef.current || !pathRef.current || durationSeconds <= 0) {
+        return;
+      }
       pendingSecondsRef.current = 0;
       sendAnalyticsEvent(
         {
@@ -144,6 +236,8 @@ export function AnalyticsTracker() {
           sessionId: sessionRef.current,
           eventType: "engagement",
           path: pathRef.current,
+          acquisitionSource: acquisitionRef.current.source,
+          campaign: acquisitionRef.current.campaign,
           durationSeconds,
         },
         beacon,
@@ -160,7 +254,8 @@ export function AnalyticsTracker() {
       sessionId: sessionRef.current,
       eventType: "pageview",
       path: pathname,
-      referrer: document.referrer || undefined,
+      acquisitionSource: acquisitionRef.current.source,
+      campaign: acquisitionRef.current.campaign,
     });
 
     const interval = window.setInterval(() => flush(false), HEARTBEAT_MS);

@@ -33,7 +33,12 @@ import { getAdminCopy } from "@/lib/admin-copy";
 import { flagEmoji } from "@/lib/country";
 import type { Locale } from "@/lib/i18n";
 import { getRequestLocale } from "@/lib/request-locale";
-import { getAnalyticsDashboard, type AnalyticsDay, type AnalyticsMetric } from "@/lib/web-analytics";
+import {
+  getAnalyticsDashboard,
+  type AnalyticsAcquisitionSource,
+  type AnalyticsDay,
+  type AnalyticsMetric,
+} from "@/lib/web-analytics";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -59,12 +64,24 @@ const COPY = {
     countriesDescription: "Unique visitors by country.",
     pagesTitle: "Top pages",
     pagesDescription: "Public paths with the most pageviews.",
+    acquisitionTitle: "Acquisition sources",
+    acquisitionDescription: "Allowlisted sources for public pageviews.",
+    campaignsTitle: "Campaigns",
+    campaignsDescription: "Bounded campaign labels attached to tracked links.",
     country: "Country",
     path: "Path",
+    source: "Source",
+    campaign: "Campaign",
+    sourceDirect: "Direct",
+    sourceX: "X",
+    sourceDiscord: "Discord",
+    sourceGoogle: "Google",
+    sourceBing: "Bing",
+    sourceOther: "Other referral",
     unknownCountry: "Unknown",
     dataNoteTitle: "Data quality",
     dataNote:
-      "The tracker ignores admin/API/static pages, common bots, and browsers with DNT or Global Privacy Control enabled. Countries come from Cloudflare headers; raw IP addresses are not stored in analytics events.",
+      "The tracker ignores admin/API/static pages, common bots, and browsers with DNT or Global Privacy Control enabled. Acquisition is limited to a source category and optional campaign label; raw referrer URLs, destination queries, and IP addresses are not stored in analytics events.",
     empty: "No analytics events yet.",
     updated: "Updated",
   },
@@ -88,12 +105,24 @@ const COPY = {
     countriesDescription: "الزوار الفريدون حسب الدولة.",
     pagesTitle: "أعلى الصفحات",
     pagesDescription: "المسارات العامة الأعلى في مشاهدات الصفحات.",
+    acquisitionTitle: "مصادر الزيارات",
+    acquisitionDescription: "مصادر مسموح بها مسبقًا لمشاهدات الصفحات العامة.",
+    campaignsTitle: "الحملات",
+    campaignsDescription: "تسميات حملات محدودة مرتبطة بالروابط المتتبعة.",
     country: "الدولة",
     path: "المسار",
+    source: "المصدر",
+    campaign: "الحملة",
+    sourceDirect: "مباشر",
+    sourceX: "X",
+    sourceDiscord: "ديسكورد",
+    sourceGoogle: "Google",
+    sourceBing: "Bing",
+    sourceOther: "إحالة أخرى",
     unknownCountry: "غير معروف",
     dataNoteTitle: "جودة البيانات",
     dataNote:
-      "يتجاهل التتبع صفحات الإدارة وواجهات API والملفات الثابتة والبوتات الشائعة والمتصفحات التي فعّلت DNT أو Global Privacy Control. الدول تأتي من ترويسات Cloudflare ولا يتم تخزين عناوين IP في أحداث الإحصائيات.",
+      "يتجاهل التتبع صفحات الإدارة وواجهات API والملفات الثابتة والبوتات الشائعة والمتصفحات التي فعّلت DNT أو Global Privacy Control. تقتصر بيانات المصدر على فئة مسموح بها وتسمية حملة اختيارية، ولا تُخزّن روابط الإحالة الخام أو استعلامات الوجهة أو عناوين IP في أحداث الإحصائيات.",
     empty: "لا توجد أحداث إحصائيات بعد.",
     updated: "آخر تحديث",
   },
@@ -139,6 +168,19 @@ function countryName(code: string, locale: Locale, unknown: string) {
   if (code === "XX") return unknown;
   if (!/^[A-Z]{2}$/.test(code)) return unknown;
   return regionNames(locale).of(code) || code;
+}
+
+function sourceName(source: AnalyticsAcquisitionSource, locale: Locale) {
+  const t = COPY[locale];
+  const labels: Record<AnalyticsAcquisitionSource, string> = {
+    direct: t.sourceDirect,
+    x: t.sourceX,
+    discord: t.sourceDiscord,
+    google: t.sourceGoogle,
+    bing: t.sourceBing,
+    other_referral: t.sourceOther,
+  };
+  return labels[source];
 }
 
 export default async function AdminAnalyticsPage() {
@@ -270,6 +312,74 @@ export default async function AdminAnalyticsPage() {
                       <TableCell className="max-w-[20rem] truncate font-mono text-xs">{page.path}</TableCell>
                       <TableCell className="text-end tabular-nums">{nf.format(page.visitors)}</TableCell>
                       <TableCell className="text-end tabular-nums">{nf.format(page.pageviews)}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            ) : (
+              <p className="text-sm text-muted-foreground">{t.empty}</p>
+            )}
+          </CardContent>
+        </Card>
+      </section>
+
+      <section className="grid min-w-0 gap-4 lg:grid-cols-2">
+        <Card>
+          <CardHeader>
+            <CardTitle>{t.acquisitionTitle}</CardTitle>
+            <CardDescription>{t.acquisitionDescription}</CardDescription>
+          </CardHeader>
+          <CardContent>
+            {data.acquisition.length ? (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>{t.source}</TableHead>
+                    <TableHead className="text-end">{t.visitors}</TableHead>
+                    <TableHead className="text-end">{t.sessions}</TableHead>
+                    <TableHead className="text-end">{t.pageviews}</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {data.acquisition.map((entry) => (
+                    <TableRow key={entry.source}>
+                      <TableCell>{sourceName(entry.source, locale)}</TableCell>
+                      <TableCell className="text-end tabular-nums">{nf.format(entry.visitors)}</TableCell>
+                      <TableCell className="text-end tabular-nums">{nf.format(entry.sessions)}</TableCell>
+                      <TableCell className="text-end tabular-nums">{nf.format(entry.pageviews)}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            ) : (
+              <p className="text-sm text-muted-foreground">{t.empty}</p>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>{t.campaignsTitle}</CardTitle>
+            <CardDescription>{t.campaignsDescription}</CardDescription>
+          </CardHeader>
+          <CardContent>
+            {data.campaigns.length ? (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>{t.campaign}</TableHead>
+                    <TableHead>{t.source}</TableHead>
+                    <TableHead className="text-end">{t.visitors}</TableHead>
+                    <TableHead className="text-end">{t.pageviews}</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {data.campaigns.map((entry) => (
+                    <TableRow key={`${entry.source}:${entry.campaign}`}>
+                      <TableCell className="max-w-[14rem] truncate font-mono text-xs">{entry.campaign}</TableCell>
+                      <TableCell>{sourceName(entry.source, locale)}</TableCell>
+                      <TableCell className="text-end tabular-nums">{nf.format(entry.visitors)}</TableCell>
+                      <TableCell className="text-end tabular-nums">{nf.format(entry.pageviews)}</TableCell>
                     </TableRow>
                   ))}
                 </TableBody>

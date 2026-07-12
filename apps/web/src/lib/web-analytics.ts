@@ -33,6 +33,19 @@ export type AnalyticsPage = {
   pageviews: number;
 };
 
+export type AnalyticsAcquisitionSource = "direct" | "x" | "discord" | "google" | "bing" | "other_referral";
+
+export type AnalyticsAcquisition = {
+  source: AnalyticsAcquisitionSource;
+  visitors: number;
+  sessions: number;
+  pageviews: number;
+};
+
+export type AnalyticsCampaign = AnalyticsAcquisition & {
+  campaign: string;
+};
+
 export type AnalyticsDay = {
   day: string;
   visitors: number;
@@ -53,6 +66,8 @@ export type AnalyticsDashboard = {
   };
   countries: AnalyticsCountry[];
   pages: AnalyticsPage[];
+  acquisition: AnalyticsAcquisition[];
+  campaigns: AnalyticsCampaign[];
   daily: AnalyticsDay[];
 };
 
@@ -61,7 +76,8 @@ type AnalyticsEventInput = {
   sessionId: string;
   eventType: "pageview" | "engagement";
   path: string;
-  referrer?: string | null;
+  acquisitionSource: AnalyticsAcquisitionSource;
+  campaign?: string | null;
   country?: string | null;
   userAgent?: string | null;
   durationSeconds?: number;

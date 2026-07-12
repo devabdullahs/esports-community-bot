@@ -9,6 +9,9 @@ export const dynamic = "force-dynamic";
 
 const JSON_LIMIT_BYTES = 2_048;
 const ID_RE = /^[A-Za-z0-9_-]{16,80}$/;
+const CAMPAIGN_RE = /^[a-z0-9][a-z0-9_-]{0,63}$/;
+const ACQUISITION_SOURCES = ["direct", "x", "discord", "google", "bing", "other_referral"] as const;
+type AcquisitionSource = (typeof ACQUISITION_SOURCES)[number];
 const STATIC_EXT_RE = /\.(?:avif|gif|ico|jpeg|jpg|js|json|map|png|svg|webmanifest|webp|xml|txt|css)$/i;
 const BLOCKED_PATHS = [
   "/admin",
@@ -60,19 +63,17 @@ function countryFromHeaders(headers: Headers) {
 function cleanPath(value: unknown) {
   const raw = typeof value === "string" ? value : "/";
   const path = raw.startsWith("/") ? raw : "/";
-  return path.split("#")[0].slice(0, 300) || "/";
+  return path.split(/[?#]/, 1)[0].slice(0, 300) || "/";
 }
 
-function normalizeReferrer(value: unknown, request: Request) {
-  if (typeof value !== "string" || !value.trim()) return null;
-  try {
-    const url = new URL(value);
-    const requestHost = request.headers.get("host");
-    if (requestHost && url.host === requestHost) return `${url.pathname}${url.search}`.slice(0, 300);
-    return url.origin.slice(0, 300);
-  } catch {
-    return null;
-  }
+function cleanCampaign(value: unknown) {
+  if (value == null || value === "") return null;
+  if (typeof value !== "string" || !CAMPAIGN_RE.test(value)) return undefined;
+  return value;
+}
+
+function isAcquisitionSource(value: string): value is AcquisitionSource {
+  return (ACQUISITION_SOURCES as readonly string[]).includes(value);
 }
 
 async function readPayload(request: Request) {
@@ -102,8 +103,19 @@ export async function POST(request: Request) {
   const sessionId = typeof payload.sessionId === "string" ? payload.sessionId.trim() : "";
   const eventType = payload.eventType === "engagement" ? "engagement" : payload.eventType === "pageview" ? "pageview" : null;
   const path = cleanPath(payload.path);
+  const acquisitionSource = typeof payload.acquisitionSource === "string" ? payload.acquisitionSource : "";
+  const campaign = cleanCampaign(payload.campaign);
 
-  if (!ID_RE.test(visitorId) || !ID_RE.test(sessionId) || !eventType || !isTrackablePath(path)) return empty();
+  if (
+    !ID_RE.test(visitorId) ||
+    !ID_RE.test(sessionId) ||
+    !eventType ||
+    !isTrackablePath(path) ||
+    !isAcquisitionSource(acquisitionSource) ||
+    campaign === undefined
+  ) {
+    return empty();
+  }
 
   await ensureAnalyticsSchema();
   const sourceLimited = await rateLimitOr429({
@@ -126,7 +138,8 @@ export async function POST(request: Request) {
       sessionId,
       eventType,
       path,
-      referrer: normalizeReferrer(payload.referrer, request),
+      acquisitionSource,
+      campaign,
       country: countryFromHeaders(headers),
       userAgent,
       durationSeconds: Number(payload.durationSeconds || 0),
