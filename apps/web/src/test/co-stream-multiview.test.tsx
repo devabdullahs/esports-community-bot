@@ -159,7 +159,7 @@ describe("co-stream multiview state", () => {
 
   test.each(Array.from({ length: 10 }, (_, count) => count))("returns a bounded grid class for count %i", (count) => {
     expect(multiviewGridClass(count)).toContain("grid");
-    expect(multiviewGridClass(count)).toContain("fullscreen:place-content-center");
+    expect(multiviewGridClass(count)).toContain("multiview-grid");
   });
 
   test("uses the requested asymmetric centered desktop layouts", () => {
@@ -168,7 +168,7 @@ describe("co-stream multiview state", () => {
     expect(multiviewGridClass(4)).toContain("xl:grid-cols-2");
     expect(multiviewGridClass(5)).toContain("xl:grid-cols-6");
     expect(multiviewGridClass(5)).toContain("multiview-fit-wide-two-rows");
-    expect(multiviewGridClass(5)).toContain("fullscreen:self-center");
+    expect(multiviewGridClass(5)).toContain("multiview-grid");
     expect(multiviewTileClass(5, 0)).toContain("xl:col-start-2");
     expect(multiviewGridClass(6)).toContain("xl:grid-cols-3");
   });

@@ -122,8 +122,7 @@ export function reorderSelectedStreamIds(selected: string[], activeId: string, o
 
 export function multiviewGridClass(count: number): string {
   const boundedCount = Math.max(0, Math.min(MAX_MULTI_STREAMS, Math.trunc(count)));
-  const base =
-    "grid w-full grid-cols-1 gap-4 fullscreen:self-center fullscreen:flex-1 fullscreen:place-content-center";
+  const base = "multiview-grid grid w-full grid-cols-1 gap-4";
   if (boundedCount < 2) return `${base} multiview-fit-one`;
   if (boundedCount === 2) return `${base} xl:grid-cols-2 fullscreen:grid-cols-2`;
   if (boundedCount === 3) return `${base} multiview-fit-two-rows xl:grid-cols-4 fullscreen:grid-cols-4`;

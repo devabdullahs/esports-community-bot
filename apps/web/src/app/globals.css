@@ -488,6 +488,13 @@
   margin-inline: auto;
 }
 
+:fullscreen .multiview-grid {
+  flex: 1 1 0%;
+  min-height: 0;
+  align-self: center;
+  place-content: center;
+}
+
 :fullscreen .multiview-fit-two-rows {
   width: min(100%, calc(177.78vh - 17.778rem));
   max-width: min(100%, calc(177.78vh - 17.778rem));
