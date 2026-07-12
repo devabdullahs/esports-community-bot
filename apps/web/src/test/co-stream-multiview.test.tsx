@@ -159,13 +159,14 @@ const GRID_STRINGS = {
   fullscreenFailed: "Fullscreen failed",
 };
 
-function renderGrid(selected: CoStream[], loadedIds: string[]) {
+function renderGrid(selected: CoStream[], loadedIds: string[], autoplay = true) {
   return renderToStaticMarkup(
     <MultiStreamGrid
       selected={selected}
       loadedIds={loadedIds}
       parent="localhost"
       strings={GRID_STRINGS}
+      autoplay={autoplay}
       onLoad={() => undefined}
       onRemove={() => undefined}
     />,
@@ -193,6 +194,12 @@ describe("MultiStreamGrid static rendering", () => {
   test("iframe titles identify the creator and platform", () => {
     const markup = renderGrid([stream("title")], ["title"]);
     expect(markup).toContain('title="Creator title on Twitch"');
+  });
+
+  test("passes the mobile no-autoplay policy into the active iframe URL", () => {
+    const markup = renderGrid([stream("mobile")], ["mobile"], false);
+    expect(markup).toContain("autoplay=false");
+    expect(markup).not.toContain("autoplay=true");
   });
 
   test("offline selections retain a fixed tile without an iframe", () => {

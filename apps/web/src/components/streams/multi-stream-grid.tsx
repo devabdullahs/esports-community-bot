@@ -34,6 +34,7 @@ export function MultiStreamGrid({
   loadedIds,
   parent,
   strings,
+  autoplay = true,
   onLoad,
   onRemove,
 }: {
@@ -41,6 +42,7 @@ export function MultiStreamGrid({
   loadedIds: string[];
   parent: string;
   strings: MultiStreamGridStrings;
+  autoplay?: boolean;
   onLoad: (id: string) => void;
   onRemove: (id: string) => void;
 }) {
@@ -118,6 +120,7 @@ export function MultiStreamGrid({
                   parent={parent}
                   videoId={channel.videoId}
                   label={stream.label}
+                  autoplay={autoplay}
                 />
               ) : (
                 <div className="flex aspect-video w-full items-center justify-center overflow-hidden rounded-lg border bg-black p-4 text-white">
