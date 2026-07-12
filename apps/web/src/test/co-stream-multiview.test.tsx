@@ -72,8 +72,8 @@ describe("co-stream multiview state", () => {
     ]);
   });
 
-  test("caps requested IDs and search pairs at nine", () => {
-    const ids = Array.from({ length: 10 }, (_, index) => `stream-${index + 1}`);
+  test("caps requested IDs and search pairs at six", () => {
+    const ids = Array.from({ length: 7 }, (_, index) => `stream-${index + 1}`);
     expect(sanitizeRequestedStreamIds(ids)).toEqual(ids.slice(0, MAX_MULTI_STREAMS));
     expect(streamSelectionSearchParams(ids)).toEqual(ids.slice(0, MAX_MULTI_STREAMS).map((id) => ["stream", id]));
   });
@@ -98,8 +98,8 @@ describe("co-stream multiview state", () => {
     ]);
   });
 
-  test("poll reconciliation cannot exceed nine or reorder selected IDs", () => {
-    const ids = Array.from({ length: 10 }, (_, index) => `poll-${index + 1}`);
+  test("poll reconciliation cannot exceed six or reorder selected IDs", () => {
+    const ids = Array.from({ length: 7 }, (_, index) => `poll-${index + 1}`);
     const polledStreams = [...ids].reverse().map((id) => stream(id));
     expect(reconcileSelectedStreamIds(ids, polledStreams)).toEqual(ids.slice(0, MAX_MULTI_STREAMS));
   });
@@ -142,9 +142,9 @@ describe("co-stream multiview state", () => {
     });
   });
 
-  test("a tenth add is blocked with limit feedback", () => {
-    const ids = Array.from({ length: 9 }, (_, index) => `stream-${index + 1}`);
-    expect(toggleSelectedStreamId(ids, "stream-10", [...ids, "stream-10"])).toEqual({
+  test("a seventh add is blocked with limit feedback", () => {
+    const ids = Array.from({ length: 6 }, (_, index) => `stream-${index + 1}`);
+    expect(toggleSelectedStreamId(ids, "stream-7", [...ids, "stream-7"])).toEqual({
       ids,
       limitReached: true,
     });
@@ -160,11 +160,10 @@ describe("co-stream multiview state", () => {
     expect(multiviewTileClass(3, 0)).toContain("xl:col-start-2");
     expect(multiviewGridClass(4)).toContain("xl:grid-cols-2");
     expect(multiviewGridClass(5)).toContain("xl:grid-cols-6");
+    expect(multiviewGridClass(5)).toContain("multiview-fit-wide-two-rows");
+    expect(multiviewGridClass(5)).toContain("fullscreen:self-center");
     expect(multiviewTileClass(5, 0)).toContain("xl:col-start-2");
-    expect(multiviewTileClass(7, 0)).toContain("xl:col-start-3");
-    expect(multiviewTileClass(7, 1)).toContain("xl:row-start-2");
-    expect(multiviewTileClass(8, 0)).toContain("xl:col-start-2");
-    expect(multiviewGridClass(9)).toContain("xl:grid-cols-3");
+    expect(multiviewGridClass(6)).toContain("xl:grid-cols-3");
   });
 });
 
@@ -211,7 +210,7 @@ function count(markup: string, pattern: RegExp) {
 }
 
 describe("MultiStreamGrid static rendering", () => {
-  test.each([1, 3, 9])("renders exactly %i loaded iframes", (streamCount) => {
+  test.each([1, 3, 6])("renders exactly %i loaded iframes", (streamCount) => {
     const streams = Array.from({ length: streamCount }, (_, index) => stream(`loaded-${index + 1}`));
     const markup = renderGrid(
       streams,
@@ -220,15 +219,14 @@ describe("MultiStreamGrid static rendering", () => {
     expect(count(markup, /<iframe/g)).toBe(streamCount);
   });
 
-  test("defensively renders at most nine items and iframes", () => {
-    const streams = Array.from({ length: 10 }, (_, index) => stream(`bounded-${index + 1}`));
+  test("defensively renders at most six items and iframes", () => {
+    const streams = Array.from({ length: 7 }, (_, index) => stream(`bounded-${index + 1}`));
     const markup = renderGrid(
       streams,
       streams.map((item) => item.id),
     );
-    expect(count(markup, /data-stream-tile=/g)).toBe(9);
-    expect(count(markup, /<iframe/g)).toBe(9);
-    expect(markup).toContain("fullscreen:hidden");
+    expect(count(markup, /data-stream-tile=/g)).toBe(6);
+    expect(count(markup, /<iframe/g)).toBe(6);
   });
 
   test("iframe titles identify the creator and platform", () => {
@@ -279,9 +277,9 @@ describe("MultiStreamGrid static rendering", () => {
   });
 
   test("shared selections mount one iframe and one poster per remaining stream", () => {
-    const streams = Array.from({ length: 9 }, (_, index) => stream(`shared-${index + 1}`));
+    const streams = Array.from({ length: 6 }, (_, index) => stream(`shared-${index + 1}`));
     const markup = renderGrid(streams, [streams[0].id]);
     expect(count(markup, /<iframe/g)).toBe(1);
-    expect(count(markup, />Load stream<\/button>/g)).toBe(8);
+    expect(count(markup, />Load stream<\/button>/g)).toBe(5);
   });
 });

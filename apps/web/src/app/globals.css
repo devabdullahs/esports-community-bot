@@ -490,6 +490,6 @@
   max-width: min(100%, calc(177.78vh - 17.778rem));
 }
 
-:fullscreen .multiview-fit-three-rows {
-  max-width: min(100%, calc(177.78vh - 18rem));
+:fullscreen .multiview-fit-wide-two-rows {
+  max-width: calc(100vw - 2rem);
 }

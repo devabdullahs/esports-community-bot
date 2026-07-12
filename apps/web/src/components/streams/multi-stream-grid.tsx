@@ -123,7 +123,6 @@ export function MultiStreamGrid({
   const [fullscreenStatus, setFullscreenStatus] = useState("");
   const visibleStreams = selected.slice(0, MAX_MULTI_STREAMS);
   const loaded = new Set(loadedIds.slice(0, MAX_MULTI_STREAMS));
-  const denseFullscreen = visibleStreams.length >= 7;
   const sensors = useSensors(
     useSensor(MouseSensor, { activationConstraint: { distance: 8 } }),
     useSensor(TouchSensor, {
@@ -219,7 +218,7 @@ export function MultiStreamGrid({
                           videoId={channel.videoId}
                           label={stream.label}
                           autoplay={autoplay}
-                          minimumTwitchHeight={compactViewport || (isFullscreen && denseFullscreen)}
+                          minimumTwitchHeight={compactViewport}
                         />
                       ) : (
                         <div className="flex aspect-video w-full items-center justify-center overflow-hidden rounded-lg border bg-black p-4 text-white">
@@ -251,9 +250,7 @@ export function MultiStreamGrid({
                         </div>
                       )}
 
-                      <div
-                        className={cn("flex min-w-0 items-center gap-2 py-2", denseFullscreen && "fullscreen:hidden")}
-                      >
+                      <div className="flex min-w-0 items-center gap-2 py-2">
                         <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
                           <span className="min-w-0 truncate font-medium">{stream.label}</span>
                           {platform ? (
