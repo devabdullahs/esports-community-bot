@@ -172,9 +172,9 @@ function sessionId() {
   return { id, isNew: true };
 }
 
-function respectsPrivacySignals() {
+function hasGlobalPrivacyControl() {
   const nav = navigator as Navigator & { globalPrivacyControl?: boolean };
-  return navigator.doNotTrack === "1" || nav.globalPrivacyControl === true;
+  return nav.globalPrivacyControl === true;
 }
 
 function sendAnalyticsEvent(payload: AnalyticsPayload, beacon = false) {
@@ -222,7 +222,7 @@ export function AnalyticsTracker() {
   }, []);
 
   useEffect(() => {
-    if (analyticsConsent !== "granted" || !pathname || !isTrackablePath(pathname) || respectsPrivacySignals()) return;
+    if (analyticsConsent !== "granted" || !pathname || !isTrackablePath(pathname) || hasGlobalPrivacyControl()) return;
 
     visitorRef.current = visitorId();
     const session = sessionId();

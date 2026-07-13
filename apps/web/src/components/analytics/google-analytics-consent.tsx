@@ -67,7 +67,6 @@ function storageSet(key: string, value: string) {
 function privacySignals() {
   const nav = navigator as Navigator & { globalPrivacyControl?: boolean };
   return {
-    doNotTrack: navigator.doNotTrack === "1",
     globalPrivacyControl: nav.globalPrivacyControl === true,
   };
 }
@@ -164,7 +163,7 @@ export function GoogleAnalyticsConsentBanner({
   const measurementId = normalizeGoogleAnalyticsMeasurementId(rawMeasurementId);
   const [consent, setConsent] = useState<GoogleAnalyticsConsent | null | undefined>(undefined);
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const [browserPrivacySignal, setBrowserPrivacySignal] = useState(false);
+  const [globalPrivacyControl, setGlobalPrivacyControl] = useState(false);
   const text = COPY[locale];
 
   useEffect(() => {
@@ -172,7 +171,7 @@ export function GoogleAnalyticsConsentBanner({
     window.addEventListener(ANALYTICS_SETTINGS_EVENT, openSettings);
     const initialize = window.setTimeout(() => {
       const signals = privacySignals();
-      setBrowserPrivacySignal(signals.doNotTrack || signals.globalPrivacyControl);
+      setGlobalPrivacyControl(signals.globalPrivacyControl);
       setConsent(parseGoogleAnalyticsConsent(storageGet(ANALYTICS_CONSENT_KEY)));
     }, 0);
     return () => {
@@ -221,10 +220,10 @@ export function GoogleAnalyticsConsentBanner({
 
   return (
     <Alert className="fixed bottom-[max(1rem,env(safe-area-inset-bottom))] left-1/2 z-50 w-[calc(100%-2rem)] max-w-2xl -translate-x-1/2 shadow-xl">
-      {browserPrivacySignal ? <ShieldCheckIcon aria-hidden /> : <BarChart3Icon aria-hidden />}
+      {globalPrivacyControl ? <ShieldCheckIcon aria-hidden /> : <BarChart3Icon aria-hidden />}
       <AlertTitle>{text.title}</AlertTitle>
       <AlertDescription className="flex flex-col gap-3">
-        <p>{browserPrivacySignal ? text.privacySignal : text.description}</p>
+        <p>{globalPrivacyControl ? text.privacySignal : text.description}</p>
         <div className="flex flex-wrap items-center gap-2">
           <Button type="button" variant="outline" size="sm" onClick={() => choose("denied")}>
             {text.reject}
@@ -233,7 +232,7 @@ export function GoogleAnalyticsConsentBanner({
             type="button"
             size="sm"
             onClick={() => choose("granted")}
-            disabled={browserPrivacySignal}
+            disabled={globalPrivacyControl}
           >
             {text.allow}
           </Button>

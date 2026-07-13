@@ -20,12 +20,11 @@ describe("Google Analytics consent boundary", () => {
     expect(parseGoogleAnalyticsConsent(null)).toBeNull();
   });
 
-  test("loads only after explicit consent without a browser privacy signal", () => {
+  test("loads after explicit consent unless Global Privacy Control is enabled", () => {
     const measurementId = "G-6KSKW48J1P";
     expect(shouldLoadGoogleAnalytics({ measurementId, consent: null })).toBe(false);
     expect(shouldLoadGoogleAnalytics({ measurementId, consent: "denied" })).toBe(false);
     expect(shouldLoadGoogleAnalytics({ measurementId, consent: "granted" })).toBe(true);
-    expect(shouldLoadGoogleAnalytics({ measurementId, consent: "granted", doNotTrack: true })).toBe(false);
     expect(
       shouldLoadGoogleAnalytics({ measurementId, consent: "granted", globalPrivacyControl: true }),
     ).toBe(false);

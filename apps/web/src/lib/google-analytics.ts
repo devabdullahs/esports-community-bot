@@ -18,18 +18,15 @@ export function parseGoogleAnalyticsConsent(value: string | null | undefined): G
 export function shouldLoadGoogleAnalytics({
   measurementId,
   consent,
-  doNotTrack = false,
   globalPrivacyControl = false,
 }: {
   measurementId: string | null | undefined;
   consent: GoogleAnalyticsConsent | null;
-  doNotTrack?: boolean;
   globalPrivacyControl?: boolean;
 }) {
   return Boolean(
     normalizeGoogleAnalyticsMeasurementId(measurementId) &&
       consent === "granted" &&
-      !doNotTrack &&
       !globalPrivacyControl,
   );
 }
