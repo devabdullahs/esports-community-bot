@@ -384,19 +384,29 @@ function namesFromStoredData(
   storedGameNames: string[],
   wins: Map<string, Map<string, EwcClubWin>>,
 ) {
-  const names = new Map<string, string>();
+  const names: string[] = [];
+  const seen = new Set<string>();
+  const addName = (value: unknown) => {
+    const name = stringValue(value);
+    if (!name) return;
+    const keys = [...new Set([...botClubNameKeys(name), ...clubKeys(name)])].filter(Boolean);
+    if (!keys.length || keys.some((key) => seen.has(key))) return;
+    names.push(name);
+    keys.forEach((key) => seen.add(key));
+  };
+
+  // Official standings names are the display authority. Stored game and win
+  // aliases can enrich that club, but must not create another visible row.
   for (const row of standings) {
-    const name = stringValue(row.team);
-    if (name) names.set(clubKey(name), name);
+    addName(row.team);
   }
   for (const name of storedGameNames) {
-    const key = clubKey(name);
-    if (key && !names.has(key)) names.set(key, name);
+    addName(name);
   }
   for (const key of wins.keys()) {
-    if (key && !names.has(key)) names.set(key, key);
+    addName(key);
   }
-  return [...names.values()];
+  return names;
 }
 
 type TrackerBuildInput = {

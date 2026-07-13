@@ -79,6 +79,17 @@ describe("EWC Club Championship standings", () => {
     expect(row.wins).toBe(1);
   });
 
+  test("dedupes compact aliases while preserving the official display name", () => {
+    const rows = projectEwcClubStandings([
+      candidate("100 Thieves", 1, 1000, { winCount: 1 }),
+      candidate("100thieves", 1, 1000, { winCount: 1 }),
+      candidate("Natus Vincere", 1, 1000, { winCount: 1 }),
+      candidate("natusvincere", 1, 1000, { winCount: 1 }),
+    ]);
+
+    expect(rows.map((row) => row.name)).toEqual(["100 Thieves", "Natus Vincere"]);
+  });
+
   test("a stored snapshot returns without touching a hanging Liquipedia fallback", async () => {
     await upsertEwcClubChampionshipSnapshot({
       season: "2198",
