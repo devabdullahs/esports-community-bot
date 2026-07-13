@@ -6,6 +6,7 @@ import { CheckIcon, LinkIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { type Locale } from "@/lib/i18n";
 import { shareCopy } from "@/lib/share-i18n";
+import { trackedShareUrl } from "@/lib/share-url";
 
 // Brand X (formerly Twitter) glyph. lucide's XIcon is a close (×) mark, not the
 // brand, so we inline the logo here (mirrors DiscordIcon's approach).
@@ -32,7 +33,7 @@ export function PostShare({
   const t = shareCopy[locale];
   const [copied, setCopied] = useState(false);
 
-  const xHref = `https://twitter.com/intent/tweet?url=${encodeURIComponent(url)}&text=${encodeURIComponent(title)}`;
+  const xHref = `https://twitter.com/intent/tweet?url=${encodeURIComponent(trackedShareUrl(url, "x"))}&text=${encodeURIComponent(title)}`;
 
   const copyLink = useCallback(async () => {
     try {

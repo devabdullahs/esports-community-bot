@@ -792,7 +792,12 @@ CREATE TABLE IF NOT EXISTS web_analytics_events (
   session_id       TEXT NOT NULL,
   event_type       TEXT NOT NULL CHECK (event_type IN ('pageview','engagement')),
   path             TEXT NOT NULL,
-  referrer         TEXT,
+  acquisition_source TEXT NOT NULL DEFAULT 'direct'
+    CONSTRAINT web_analytics_acquisition_source_check
+    CHECK (acquisition_source IN ('direct','x','discord','google','bing','other_referral')),
+  campaign         TEXT
+    CONSTRAINT web_analytics_campaign_check
+    CHECK (campaign IS NULL OR campaign ~ '^[a-z0-9][a-z0-9_-]{0,63}$'),
   country          TEXT,
   user_agent       TEXT,
   duration_seconds INTEGER NOT NULL DEFAULT 0,
@@ -806,6 +811,90 @@ CREATE INDEX IF NOT EXISTS idx_web_analytics_session
   ON web_analytics_events(session_id, occurred_at DESC);
 CREATE INDEX IF NOT EXISTS idx_web_analytics_country
   ON web_analytics_events(country, occurred_at DESC);
+
+ALTER TABLE web_analytics_events ADD COLUMN IF NOT EXISTS acquisition_source TEXT;
+ALTER TABLE web_analytics_events ADD COLUMN IF NOT EXISTS campaign TEXT;
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1
+      FROM information_schema.columns
+     WHERE table_schema = current_schema()
+       AND table_name = 'web_analytics_events'
+       AND column_name = 'referrer'
+  ) THEN
+    EXECUTE $migration$
+      UPDATE web_analytics_events
+      SET acquisition_source = CASE
+        WHEN referrer IS NULL OR BTRIM(referrer) = '' OR BTRIM(referrer) LIKE '/%' THEN 'direct'
+        WHEN LOWER(referrer) LIKE '%://x.com'
+          OR LOWER(referrer) LIKE '%://x.com/%'
+          OR LOWER(referrer) LIKE '%://%.x.com'
+          OR LOWER(referrer) LIKE '%://%.x.com/%'
+          OR LOWER(referrer) LIKE '%://twitter.com'
+          OR LOWER(referrer) LIKE '%://twitter.com/%'
+          OR LOWER(referrer) LIKE '%://%.twitter.com'
+          OR LOWER(referrer) LIKE '%://%.twitter.com/%'
+          OR LOWER(referrer) LIKE '%://t.co'
+          OR LOWER(referrer) LIKE '%://t.co/%'
+          OR LOWER(referrer) LIKE '%://%.t.co'
+          OR LOWER(referrer) LIKE '%://%.t.co/%' THEN 'x'
+        WHEN LOWER(referrer) LIKE '%://discord.com'
+          OR LOWER(referrer) LIKE '%://discord.com/%'
+          OR LOWER(referrer) LIKE '%://%.discord.com'
+          OR LOWER(referrer) LIKE '%://%.discord.com/%'
+          OR LOWER(referrer) LIKE '%://discord.gg'
+          OR LOWER(referrer) LIKE '%://discord.gg/%'
+          OR LOWER(referrer) LIKE '%://%.discord.gg'
+          OR LOWER(referrer) LIKE '%://%.discord.gg/%'
+          OR LOWER(referrer) LIKE '%://discordapp.com'
+          OR LOWER(referrer) LIKE '%://discordapp.com/%'
+          OR LOWER(referrer) LIKE '%://%.discordapp.com'
+          OR LOWER(referrer) LIKE '%://%.discordapp.com/%' THEN 'discord'
+        WHEN LOWER(referrer) LIKE '%://google.com'
+          OR LOWER(referrer) LIKE '%://%.google.com'
+          OR LOWER(referrer) LIKE '%://google.__'
+          OR LOWER(referrer) LIKE '%://%.google.__'
+          OR LOWER(referrer) LIKE '%://google.___'
+          OR LOWER(referrer) LIKE '%://%.google.___'
+          OR LOWER(referrer) LIKE '%://google.co.__'
+          OR LOWER(referrer) LIKE '%://%.google.co.__'
+          OR LOWER(referrer) LIKE '%://google.com.__'
+          OR LOWER(referrer) LIKE '%://%.google.com.__' THEN 'google'
+        WHEN LOWER(referrer) LIKE '%://bing.com'
+          OR LOWER(referrer) LIKE '%://bing.com/%'
+          OR LOWER(referrer) LIKE '%://www.bing.com'
+          OR LOWER(referrer) LIKE '%://www.bing.com/%'
+          OR LOWER(referrer) LIKE '%://%.bing.com'
+          OR LOWER(referrer) LIKE '%://%.bing.com/%' THEN 'bing'
+        ELSE 'other_referral'
+      END
+    $migration$;
+  END IF;
+END $$;
+UPDATE web_analytics_events
+SET acquisition_source = 'direct'
+WHERE acquisition_source IS NULL
+   OR acquisition_source NOT IN ('direct','x','discord','google','bing','other_referral');
+ALTER TABLE web_analytics_events ALTER COLUMN acquisition_source SET DEFAULT 'direct';
+ALTER TABLE web_analytics_events ALTER COLUMN acquisition_source SET NOT NULL;
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'web_analytics_acquisition_source_check') THEN
+    ALTER TABLE web_analytics_events
+      ADD CONSTRAINT web_analytics_acquisition_source_check
+      CHECK (acquisition_source IN ('direct','x','discord','google','bing','other_referral'));
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'web_analytics_campaign_check') THEN
+    ALTER TABLE web_analytics_events
+      ADD CONSTRAINT web_analytics_campaign_check
+      CHECK (campaign IS NULL OR campaign ~ '^[a-z0-9][a-z0-9_-]{0,63}$');
+  END IF;
+END $$;
+UPDATE web_analytics_events
+SET path = COALESCE(NULLIF(split_part(split_part(path, '?', 1), '#', 1), ''), '/')
+WHERE path LIKE '%?%' OR path LIKE '%#%';
+ALTER TABLE web_analytics_events DROP COLUMN IF EXISTS referrer;
 
 -- Liquipedia entity enrichment: page link, parsed fragment (infobox/roster HTML),
 -- extracted facts JSON, and freshness stamp. pandascore_id becomes nullable so

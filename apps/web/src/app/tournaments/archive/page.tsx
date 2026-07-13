@@ -22,6 +22,8 @@ import {
 } from "@/lib/i18n";
 import { buildPageMetadata } from "@/lib/metadata";
 import { getRequestLocale } from "@/lib/request-locale";
+import { hasNonTrackingQuery, paginatedPath, parsePublicPage } from "@/lib/seo-query";
+import { notFound } from "next/navigation";
 import { listArchivedTournamentSummaries } from "@/lib/tournaments";
 
 export const runtime = "nodejs";
@@ -29,27 +31,31 @@ export const dynamic = "force-dynamic";
 
 const PAGE_SIZE = 12;
 
-function pageFrom(value: string | string[] | undefined) {
-  const raw = Array.isArray(value) ? value[0] : value;
-  const parsed = Number.parseInt(raw ?? "1", 10);
-  return Number.isFinite(parsed) && parsed > 0 ? parsed : 1;
-}
-
-export async function generateMetadata(): Promise<Metadata> {
+export async function generateMetadata({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}): Promise<Metadata> {
   const locale = await getRequestLocale();
+  const params = await searchParams;
+  const page = parsePublicPage(params.page);
+  if (page === null) return { robots: { index: false, follow: true } };
   const text = copy[locale].tournaments;
   return buildPageMetadata({
     title: text.archiveTitle,
     description: text.archiveDescription,
-    path: localizedPath("/tournaments/archive", locale),
+    path: paginatedPath("/tournaments/archive", locale, page),
     locale,
+    robots: hasNonTrackingQuery(params, new Set(["page"]))
+      ? { index: false, follow: true }
+      : undefined,
   });
 }
 
 export default async function TournamentArchivePage({
   searchParams,
 }: {
-  searchParams: Promise<{ page?: string | string[] }>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const [{ page }, locale, games] = await Promise.all([
     searchParams,
@@ -58,10 +64,12 @@ export default async function TournamentArchivePage({
   ]);
   const text = copy[locale].tournaments;
   const common = copy[locale].common;
-  const current = pageFrom(page);
+  const current = parsePublicPage(page);
+  if (current === null) notFound();
   const offset = (current - 1) * PAGE_SIZE;
   const fetched = await listArchivedTournamentSummaries({ limit: PAGE_SIZE + 1, offset });
   const tournaments = fetched.slice(0, PAGE_SIZE);
+  if (current > 1 && tournaments.length === 0) notFound();
   const hasNext = fetched.length > PAGE_SIZE;
 
   return (

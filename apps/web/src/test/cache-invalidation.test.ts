@@ -249,7 +249,7 @@ describe("admin mutation routes call revalidateTag on success", () => {
     };
     const res = await newsPOST(req("POST", body));
     expect(res.status).toBe(200);
-    expect(spyRevalidateTag).toHaveBeenCalledWith("cms-news", "default");
+    expect(spyRevalidateTag).toHaveBeenCalledWith("cms-news", { expire: 0 });
   });
 
   test("PATCH /api/admin/news/[id] → revalidateTag(cms-news)", async () => {
@@ -264,7 +264,7 @@ describe("admin mutation routes call revalidateTag on success", () => {
     };
     const res = await newsIdPATCH(req("PATCH", body), ctx({ id: String(postId) }));
     expect(res.status).toBe(200);
-    expect(spyRevalidateTag).toHaveBeenCalledWith("cms-news", "default");
+    expect(spyRevalidateTag).toHaveBeenCalledWith("cms-news", { expire: 0 });
   });
 
   test("DELETE /api/admin/news/[id] → revalidateTag(cms-news)", async () => {
@@ -273,7 +273,7 @@ describe("admin mutation routes call revalidateTag on success", () => {
     const postId = await seedNewsPost(gameSlug);
     const res = await newsIdDELETE(req("DELETE"), ctx({ id: String(postId) }));
     expect(res.status).toBe(200);
-    expect(spyRevalidateTag).toHaveBeenCalledWith("cms-news", "default");
+    expect(spyRevalidateTag).toHaveBeenCalledWith("cms-news", { expire: 0 });
   });
 
   test("POST /api/admin/news/[id]/status → revalidateTag(cms-news)", async () => {
@@ -282,7 +282,7 @@ describe("admin mutation routes call revalidateTag on success", () => {
     const postId = await seedNewsPost(gameSlug);
     const res = await newsIdStatusPOST(req("POST", { status: "published" }), ctx({ id: String(postId) }));
     expect(res.status).toBe(200);
-    expect(spyRevalidateTag).toHaveBeenCalledWith("cms-news", "default");
+    expect(spyRevalidateTag).toHaveBeenCalledWith("cms-news", { expire: 0 });
   });
 
   // ---- Partners -------------------------------------------------------------

@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { notFound } from "next/navigation";
 import type { ReactNode } from "react";
 import {
   ArrowUpRightIcon,
@@ -26,6 +27,7 @@ import {
   listLatestPublishedNewsPostsCached,
   type NewsPost,
 } from "@/lib/news";
+import { newsPublicPath } from "@/lib/news-url";
 import { safeUrlOrUndefined } from "@/lib/safe-url";
 
 const COPY = {
@@ -94,13 +96,7 @@ type CoverageItem = {
 };
 
 function postHref(post: NewsPost, locale: Locale) {
-  if (post.gameSlug) {
-    return localizedPath(`/games/${post.gameSlug}/news/${post.id}`, locale);
-  }
-  if (post.mediaSlug) {
-    return localizedPath(`/media/${post.mediaSlug}/news/${post.id}`, locale);
-  }
-  return localizedPath("/news", locale);
+  return newsPublicPath(post, locale);
 }
 
 function postCover(post: NewsPost) {
@@ -150,6 +146,7 @@ export async function NewsHubView({
   );
   const hasNext = fetched.length > pageSize;
   const posts = fetched.slice(0, pageSize);
+  if (current > 1 && posts.length === 0) notFound();
   const featured = posts[0] ?? null;
   const remainingPosts = posts.slice(1);
   const basePath = ewcOnly ? "/news/ewc" : "/news";

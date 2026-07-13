@@ -8,12 +8,30 @@ import { LiquipediaAttribution } from "@/components/tournaments/liquipedia-attri
 import { Button } from "@/components/ui/button";
 import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "@/components/ui/empty";
 import { copy, localizedPath } from "@/lib/i18n";
+import { gameTitleForSlug, listGamesCached } from "@/lib/games";
 import { getMatchPageModel } from "@/lib/match-details";
-import { buildPageMetadata } from "@/lib/metadata";
+import { absoluteUrl, buildPageMetadata } from "@/lib/metadata";
 import { getRequestLocale } from "@/lib/request-locale";
+import { isIndexableMatch } from "@/lib/seo-indexability";
+import {
+  breadcrumbList,
+  localizedBreadcrumbLabels,
+  localizedMatchDescription,
+  serializeStructuredData,
+  structuredDataGraph,
+} from "@/lib/structured-data";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+
+function indexableMatchModel(model: Awaited<ReturnType<typeof getMatchPageModel>>) {
+  return Boolean(model && isIndexableMatch({
+    scheduled_at: model.scheduledAt,
+    team_a: model.teamA,
+    team_b: model.teamB,
+    has_details: Boolean(model.details),
+  }));
+}
 
 export async function generateMetadata({
   params,
@@ -23,12 +41,29 @@ export async function generateMetadata({
   const { id } = await params;
   const matchId = /^\d+$/.test(id) ? Number(id) : NaN;
   if (!Number.isSafeInteger(matchId) || matchId <= 0) return {};
-  const [model, locale] = await Promise.all([getMatchPageModel(matchId), getRequestLocale()]);
+  const [model, locale, games] = await Promise.all([
+    getMatchPageModel(matchId),
+    getRequestLocale(),
+    listGamesCached(),
+  ]);
   if (!model) return {};
+  const text = copy[locale].tournaments;
+  const teamA = model.teamA || text.tbd;
+  const teamB = model.teamB || text.tbd;
+  const tournamentName = model.tournament.name || text.title;
+  const gameTitle = gameTitleForSlug(model.tournament.game, games, locale);
   return buildPageMetadata({
-    title: `${model.teamA ?? "TBD"} vs ${model.teamB ?? "TBD"}`,
-    description: copy[locale].tournaments.matchDetails,
+    title: `${teamA} ${text.vs} ${teamB}`,
+    description: localizedMatchDescription({
+      locale,
+      teamA,
+      teamB,
+      tournamentName,
+      game: gameTitle,
+    }),
     path: localizedPath(`/matches/${matchId}`, locale),
+    locale,
+    robots: indexableMatchModel(model) ? undefined : { index: false, follow: true },
   });
 }
 
@@ -41,14 +76,40 @@ export default async function MatchDetailPage({
   const matchId = /^\d+$/.test(id) ? Number(id) : NaN;
   if (!Number.isSafeInteger(matchId) || matchId <= 0) notFound();
 
-  const [model, locale] = await Promise.all([getMatchPageModel(matchId), getRequestLocale()]);
+  const [model, locale] = await Promise.all([
+    getMatchPageModel(matchId),
+    getRequestLocale(),
+  ]);
   if (!model) notFound();
   const text = copy[locale].tournaments;
   const teamA = model.teamA || text.tbd;
   const teamB = model.teamB || text.tbd;
+  const tournamentName = model.tournament.name || text.title;
+  const pagePath = localizedPath(`/matches/${matchId}`, locale);
+  const pageUrl = absoluteUrl(pagePath);
+  const tournamentUrl = absoluteUrl(
+    localizedPath(`/tournaments/${model.tournament.id}`, locale),
+  );
+  const matchName = `${teamA} ${text.vs} ${teamB}`;
+  const breadcrumbLabels = localizedBreadcrumbLabels(locale);
+  const pageStructuredData = structuredDataGraph([
+    breadcrumbList([
+      { name: breadcrumbLabels.home, url: absoluteUrl(localizedPath("/", locale)) },
+      {
+        name: breadcrumbLabels.tournaments,
+        url: absoluteUrl(localizedPath("/tournaments", locale)),
+      },
+      { name: tournamentName, url: tournamentUrl },
+      { name: matchName, url: pageUrl },
+    ], pageUrl),
+  ]);
 
   return (
     <main className="mx-auto flex w-full max-w-5xl flex-1 flex-col gap-8 px-4 py-8 sm:px-8 sm:py-10">
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: serializeStructuredData(pageStructuredData) }}
+      />
       <Button
         render={<Link href={localizedPath(`/tournaments/${model.tournament.id}`, locale)} />}
         nativeButton={false}

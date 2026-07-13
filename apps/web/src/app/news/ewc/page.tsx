@@ -1,9 +1,11 @@
 import type { Metadata } from "next";
 
 import { NewsHubView } from "@/components/news/news-hub-view";
-import { localizedPath, type Locale } from "@/lib/i18n";
+import { type Locale } from "@/lib/i18n";
 import { buildPageMetadata } from "@/lib/metadata";
 import { getRequestLocale } from "@/lib/request-locale";
+import { hasNonTrackingQuery, paginatedPath, parsePublicPage } from "@/lib/seo-query";
+import { notFound } from "next/navigation";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -21,24 +23,35 @@ const META: Record<Locale, { title: string; description: string }> = {
   },
 };
 
-export async function generateMetadata(): Promise<Metadata> {
+export async function generateMetadata({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}): Promise<Metadata> {
   const locale = await getRequestLocale();
+  const params = await searchParams;
+  const page = parsePublicPage(params.page);
+  if (page === null) return { robots: { index: false, follow: true } };
   const meta = META[locale];
   return buildPageMetadata({
     title: meta.title,
     description: meta.description,
-    path: localizedPath("/news/ewc", locale),
+    path: paginatedPath("/news/ewc", locale, page),
     locale,
+    robots: hasNonTrackingQuery(params, new Set(["page"]))
+      ? { index: false, follow: true }
+      : undefined,
   });
 }
 
 export default async function EwcNewsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ page?: string }>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const locale = await getRequestLocale();
   const sp = await searchParams;
-  const page = Math.min(10_000, Math.max(1, Number(sp?.page) || 1));
+  const page = parsePublicPage(sp.page);
+  if (page === null) notFound();
   return <NewsHubView locale={locale} ewcOnly page={page} />;
 }

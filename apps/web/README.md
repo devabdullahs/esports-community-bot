@@ -181,6 +181,19 @@ Private and dynamic routes should not be cached at the edge:
 
 Static Next.js assets and icons can be cached aggressively through Cloudflare.
 
+Cookie-free top-level public HTML responses advertise a 60-second CDN-only TTL
+through `Cloudflare-CDN-Cache-Control`. Requests with any cookie, query string,
+RSC/prefetch header, non-HTML accept header, asset-like path, or private route do
+not receive that header. Browser caching remains controlled by Next.js.
+
+Cloudflare still needs a Cache Rule that marks extensionless `GET`/`HEAD` HTML
+as eligible only when the request has no cookies or query string and excludes
+`/api`, `/_next`, `/admin`, `/login`, and `/me` (including `/ar` variants).
+Keep Origin Cache Control and Cache Deception Armor enabled; never use a broad
+Cache Everything rule that ignores cookies. After deployment, probe `/games`
+and `/ar/games` twice for `MISS` then `HIT`, verify their `lang` values differ,
+and confirm cookie/query/private/RSC requests remain `BYPASS` or `DYNAMIC`.
+
 ## Public Data Behavior
 
 The dashboard reads from the bot database. Live pages update when the server data

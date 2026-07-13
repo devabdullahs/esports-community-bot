@@ -12,6 +12,9 @@ import {
   stripLocalePrefix,
 } from "@/lib/i18n";
 
+const LOCALE_FORWARD_PROOF_HEADER = "x-ec-locale-proof";
+const LOCALE_FORWARD_PROOF = crypto.randomUUID();
+
 function setLocaleCookie(response: NextResponse, locale: Locale) {
   response.cookies.set(LOCALE_COOKIE_NAME, locale, {
     maxAge: LOCALE_COOKIE_MAX_AGE,
@@ -23,7 +26,51 @@ function setLocaleCookie(response: NextResponse, locale: Locale) {
 function requestWithLocale(request: NextRequest, locale: Locale) {
   const requestHeaders = new Headers(request.headers);
   requestHeaders.set(LOCALE_ROUTE_HEADER, locale);
+  requestHeaders.set(LOCALE_FORWARD_PROOF_HEADER, LOCALE_FORWARD_PROOF);
   return requestHeaders;
+}
+
+const PRIVATE_HTML_PREFIXES = ["/api", "/admin", "/login", "/me"];
+const DYNAMIC_PUBLIC_HTML_PREFIXES = ["/co-streams"];
+
+export function isPublicHtmlCacheCandidate(request: NextRequest) {
+  if (request.method !== "GET" && request.method !== "HEAD") return false;
+  if (!request.headers.get("accept")?.toLowerCase().includes("text/html")) return false;
+  if (request.headers.has("cookie")) return false;
+  if (request.nextUrl.search) return false;
+  if (request.headers.get("rsc") === "1") return false;
+  if (request.headers.get("next-router-prefetch") === "1") return false;
+  if (
+    request.headers.has(LOCALE_ROUTE_HEADER) &&
+    request.headers.get(LOCALE_FORWARD_PROOF_HEADER) !== LOCALE_FORWARD_PROOF
+  ) {
+    return false;
+  }
+
+  const pathname = stripLocalePrefix(request.nextUrl.pathname);
+  if (PRIVATE_HTML_PREFIXES.some((prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`))) {
+    return false;
+  }
+  if (DYNAMIC_PUBLIC_HTML_PREFIXES.some((prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`))) {
+    return false;
+  }
+  const finalSegment = pathname.split("/").filter(Boolean).at(-1) || "";
+  if (finalSegment.includes(".")) return false;
+  return isLocaleRoutedPath(pathname);
+}
+
+function finalizePublicResponse(request: NextRequest, response: NextResponse) {
+  if (isPublicHtmlCacheCandidate(request)) {
+    response.headers.set(
+      "Cloudflare-CDN-Cache-Control",
+      "public, max-age=60, must-revalidate",
+    );
+  }
+  return response;
+}
+
+function shouldPersistLocale(request: NextRequest) {
+  return !isPublicHtmlCacheCandidate(request);
 }
 
 export function proxy(request: NextRequest) {
@@ -42,11 +89,13 @@ export function proxy(request: NextRequest) {
     // A localized rewrite can pass through the proxy again at its stripped
     // pathname. Keep the locale selected by the first pass instead of
     // replacing it with the canonical English locale.
-    const forwardedLocale = localeFromString(request.headers.get(LOCALE_ROUTE_HEADER));
+    const forwardedLocale = request.headers.get(LOCALE_FORWARD_PROOF_HEADER) === LOCALE_FORWARD_PROOF
+      ? localeFromString(request.headers.get(LOCALE_ROUTE_HEADER))
+      : null;
     if (forwardedLocale) {
-      return NextResponse.next({
+      return finalizePublicResponse(request, NextResponse.next({
         request: { headers: requestWithLocale(request, forwardedLocale) },
-      });
+      }));
     }
     if (!isLocaleRoutedPath(request.nextUrl.pathname)) return NextResponse.next();
 
@@ -64,8 +113,8 @@ export function proxy(request: NextRequest) {
     const response = NextResponse.next({
       request: { headers: requestWithLocale(request, "en") },
     });
-    setLocaleCookie(response, "en");
-    return response;
+    if (shouldPersistLocale(request)) setLocaleCookie(response, "en");
+    return finalizePublicResponse(request, response);
   }
 
   const url = request.nextUrl.clone();
@@ -80,8 +129,8 @@ export function proxy(request: NextRequest) {
   const response = NextResponse.rewrite(url, {
     request: { headers: requestWithLocale(request, routeLocale) },
   });
-  setLocaleCookie(response, routeLocale);
-  return response;
+  if (shouldPersistLocale(request)) setLocaleCookie(response, routeLocale);
+  return finalizePublicResponse(request, response);
 }
 
 export const config = {

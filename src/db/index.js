@@ -969,7 +969,9 @@ db.exec(`
     session_id       TEXT NOT NULL,
     event_type       TEXT NOT NULL CHECK (event_type IN ('pageview','engagement')),
     path             TEXT NOT NULL,
-    referrer         TEXT,
+    acquisition_source TEXT NOT NULL DEFAULT 'direct'
+      CHECK (acquisition_source IN ('direct','x','discord','google','bing','other_referral')),
+    campaign         TEXT CHECK (campaign IS NULL OR (length(campaign) BETWEEN 1 AND 64)),
     country          TEXT,
     user_agent       TEXT,
     duration_seconds INTEGER NOT NULL DEFAULT 0,
@@ -984,6 +986,77 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_web_analytics_country
     ON web_analytics_events(country, occurred_at DESC);
 `);
+
+ensureColumns('web_analytics_events', [
+  [
+    'acquisition_source',
+    "TEXT NOT NULL DEFAULT 'direct' CHECK (acquisition_source IN ('direct','x','discord','google','bing','other_referral'))",
+  ],
+  ['campaign', 'TEXT CHECK (campaign IS NULL OR (length(campaign) BETWEEN 1 AND 64))'],
+]);
+
+// Remove query fragments retained by older ingestion code before dropping the
+// legacy raw referrer field.
+db.exec(`
+  UPDATE web_analytics_events
+  SET path = COALESCE(NULLIF(substr(path, 1, instr(path, '?') - 1), ''), '/')
+  WHERE instr(path, '?') > 0;
+  UPDATE web_analytics_events
+  SET path = COALESCE(NULLIF(substr(path, 1, instr(path, '#') - 1), ''), '/')
+  WHERE instr(path, '#') > 0;
+`);
+const webAnalyticsColumns = new Set(db.prepare('PRAGMA table_info(web_analytics_events)').all().map((column) => column.name));
+if (webAnalyticsColumns.has('referrer')) {
+  db.exec(`
+    UPDATE web_analytics_events
+    SET acquisition_source = CASE
+      WHEN referrer IS NULL OR TRIM(referrer) = '' OR TRIM(referrer) LIKE '/%' THEN 'direct'
+      WHEN LOWER(referrer) LIKE '%://x.com'
+        OR LOWER(referrer) LIKE '%://x.com/%'
+        OR LOWER(referrer) LIKE '%://%.x.com'
+        OR LOWER(referrer) LIKE '%://%.x.com/%'
+        OR LOWER(referrer) LIKE '%://twitter.com'
+        OR LOWER(referrer) LIKE '%://twitter.com/%'
+        OR LOWER(referrer) LIKE '%://%.twitter.com'
+        OR LOWER(referrer) LIKE '%://%.twitter.com/%'
+        OR LOWER(referrer) LIKE '%://t.co'
+        OR LOWER(referrer) LIKE '%://t.co/%'
+        OR LOWER(referrer) LIKE '%://%.t.co'
+        OR LOWER(referrer) LIKE '%://%.t.co/%' THEN 'x'
+      WHEN LOWER(referrer) LIKE '%://discord.com'
+        OR LOWER(referrer) LIKE '%://discord.com/%'
+        OR LOWER(referrer) LIKE '%://%.discord.com'
+        OR LOWER(referrer) LIKE '%://%.discord.com/%'
+        OR LOWER(referrer) LIKE '%://discord.gg'
+        OR LOWER(referrer) LIKE '%://discord.gg/%'
+        OR LOWER(referrer) LIKE '%://%.discord.gg'
+        OR LOWER(referrer) LIKE '%://%.discord.gg/%'
+        OR LOWER(referrer) LIKE '%://discordapp.com'
+        OR LOWER(referrer) LIKE '%://discordapp.com/%'
+        OR LOWER(referrer) LIKE '%://%.discordapp.com'
+        OR LOWER(referrer) LIKE '%://%.discordapp.com/%' THEN 'discord'
+      WHEN LOWER(referrer) LIKE '%://google.com'
+        OR LOWER(referrer) LIKE '%://%.google.com'
+        OR LOWER(referrer) LIKE '%://google.__'
+        OR LOWER(referrer) LIKE '%://%.google.__'
+        OR LOWER(referrer) LIKE '%://google.___'
+        OR LOWER(referrer) LIKE '%://%.google.___'
+        OR LOWER(referrer) LIKE '%://google.co.__'
+        OR LOWER(referrer) LIKE '%://%.google.co.__'
+        OR LOWER(referrer) LIKE '%://google.com.__'
+        OR LOWER(referrer) LIKE '%://%.google.com.__' THEN 'google'
+      WHEN LOWER(referrer) LIKE '%://bing.com'
+        OR LOWER(referrer) LIKE '%://bing.com/%'
+        OR LOWER(referrer) LIKE '%://www.bing.com'
+        OR LOWER(referrer) LIKE '%://www.bing.com/%'
+        OR LOWER(referrer) LIKE '%://%.bing.com'
+        OR LOWER(referrer) LIKE '%://%.bing.com/%' THEN 'bing'
+      ELSE 'other_referral'
+    END
+  `);
+  db.exec('UPDATE web_analytics_events SET referrer = NULL');
+  db.exec('ALTER TABLE web_analytics_events DROP COLUMN referrer');
+}
 
 // Canonicalize old game keys after slug changes. Keep this tiny and explicit so existing
 // per-game boards continue to work without creating duplicate alias rows later.

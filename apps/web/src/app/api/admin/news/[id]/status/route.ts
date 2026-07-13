@@ -4,6 +4,7 @@ import { canManageGame, canManageMedia, getAdminAccess } from "@/lib/admin";
 import { recordAdminAudit } from "@/lib/audit";
 import { sameOriginOr403 } from "@/lib/community";
 import { getNewsPost, setNewsPostStatus } from "@/lib/news";
+import { indexNowUrlsForPost, scheduleIndexNowUrls } from "@/lib/indexnow";
 import { parsePostId } from "@/lib/news-validation";
 import { validateNewsContentInput } from "@bot/lib/ewcNewsContent.js";
 
@@ -48,7 +49,11 @@ export async function POST(
 
   const post = await setNewsPostStatus(postId, status);
   if (!post) return NextResponse.json({ error: "Not found" }, { status: 404 });
-  revalidateTag("cms-news", "default");
+  revalidateTag("cms-news", { expire: 0 });
   recordAdminAudit(access, "news.status", String(postId), { status });
+  scheduleIndexNowUrls([
+      ...indexNowUrlsForPost(existing),
+      ...indexNowUrlsForPost(post),
+  ]);
   return NextResponse.json(post);
 }

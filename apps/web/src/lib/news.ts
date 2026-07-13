@@ -12,6 +12,7 @@ import {
   getPublishedEwcNewsPost as _getPublished,
   listEwcNewsPostsForAdmin as _listAdmin,
   listLatestPublishedEwcNewsPosts as _listLatest,
+  listPublishedEwcNewsPostsForDiscovery as _listForDiscovery,
   listPublishedEwcNewsPosts as _listPublished,
   listPublishedMediaPosts as _listMedia,
   searchPublishedEwcNewsPosts as _searchPublished,
@@ -98,6 +99,7 @@ const listLatest = _listLatest as (args: {
   ewcOnly?: boolean;
   offset?: number;
 }) => Promise<NewsPost[]>;
+const listForDiscovery = _listForDiscovery as () => Promise<NewsPost[]>;
 const searchPublished = _searchPublished as (args: {
   query?: string;
   locale: Locale;
@@ -144,6 +146,10 @@ export function listLatestPublishedNewsPosts(
   offset = 0,
 ): Promise<NewsPost[]> {
   return listLatest({ locale, limit, ewcOnly, offset });
+}
+
+export function listPublishedNewsPostsForDiscovery(): Promise<NewsPost[]> {
+  return listForDiscovery();
 }
 
 export function searchPublishedNewsPosts(input: {
@@ -201,6 +207,12 @@ export const listLatestPublishedNewsPostsCached = unstable_cache(
     listLatestPublishedNewsPosts(locale, limit, ewcOnly, offset),
   ["news-list-latest"],
   { tags: ["cms-news", "cms-games"] },
+);
+
+export const listPublishedNewsPostsForDiscoveryCached = unstable_cache(
+  async () => listPublishedNewsPostsForDiscovery(),
+  ["news-list-published-discovery"],
+  { tags: ["cms-news", "cms-games", "cms-media"] },
 );
 
 export const listPublishedMediaPostsCached = unstable_cache(

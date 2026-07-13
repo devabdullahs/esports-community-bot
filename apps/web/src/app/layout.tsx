@@ -47,6 +47,9 @@ export async function generateMetadata(): Promise<Metadata> {
     publisher: name,
     alternates: {
       languages: alternateLanguages("/"),
+      types: {
+        "application/rss+xml": absoluteUrl(locale === "ar" ? "/feed-ar.xml" : "/feed.xml"),
+      },
     },
     icons: {
       icon: "/icon.svg",

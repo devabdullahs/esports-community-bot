@@ -16,7 +16,14 @@ import { gameTitleForSlug, listGamesCached } from "@/lib/games";
 import { getRequestLocale } from "@/lib/request-locale";
 import { safeUrlOrUndefined } from "@/lib/safe-url";
 import { getTournamentMatchesCached } from "@/lib/tournaments";
-import { buildPageMetadata } from "@/lib/metadata";
+import { absoluteUrl, buildPageMetadata } from "@/lib/metadata";
+import {
+  breadcrumbList,
+  localizedBreadcrumbLabels,
+  localizedTournamentDescription,
+  serializeStructuredData,
+  structuredDataGraph,
+} from "@/lib/structured-data";
 import { sourceLabel } from "@/lib/tournament-directory";
 
 export const runtime = "nodejs";
@@ -30,14 +37,17 @@ export async function generateMetadata({
   const { id } = await params;
   const tournamentId = /^\d+$/.test(id) ? Number(id) : NaN;
   if (!Number.isSafeInteger(tournamentId) || tournamentId <= 0) return {};
-  const [data, locale] = await Promise.all([
+  const [data, locale, games] = await Promise.all([
     getTournamentMatchesCached(tournamentId),
     getRequestLocale(),
+    listGamesCached(),
   ]);
   if (!data) return {};
+  const name = data.tournament.name || `#${id}`;
+  const gameTitle = gameTitleForSlug(data.tournament.game, games, locale);
   return buildPageMetadata({
-    title: data.tournament.name || `#${id}`,
-    description: copy[locale].tournaments.description,
+    title: name,
+    description: localizedTournamentDescription({ locale, name, game: gameTitle }),
     path: localizedPath(`/tournaments/${data.tournament.id}`, locale),
   });
 }
@@ -78,9 +88,27 @@ export default async function TournamentDetailPage({
     ? gameTitleForSlug(tournament.game, games, locale)
     : text.allGames;
   const sourceName = sourceLabel(tournament.source);
+  const tournamentName = tournament.name || `#${formatNumber(tournament.id, locale)}`;
+  const pagePath = localizedPath(`/tournaments/${tournament.id}`, locale);
+  const pageUrl = absoluteUrl(pagePath);
+  const breadcrumbLabels = localizedBreadcrumbLabels(locale);
+  const pageStructuredData = structuredDataGraph([
+    breadcrumbList([
+      { name: breadcrumbLabels.home, url: absoluteUrl(localizedPath("/", locale)) },
+      {
+        name: breadcrumbLabels.tournaments,
+        url: absoluteUrl(localizedPath("/tournaments", locale)),
+      },
+      { name: tournamentName, url: pageUrl },
+    ], pageUrl),
+  ]);
 
   return (
     <main className="mx-auto flex w-full max-w-5xl flex-1 flex-col gap-8 px-4 py-8 sm:px-8 sm:py-10">
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: serializeStructuredData(pageStructuredData) }}
+      />
       <Button
         render={<Link href={localizedPath("/tournaments", locale)} />}
         nativeButton={false}
@@ -108,7 +136,7 @@ export default async function TournamentDetailPage({
                 ) : null}
               </div>
               <h1 className="text-3xl font-semibold leading-tight sm:text-4xl" dir="auto">
-                {tournament.name || `#${formatNumber(tournament.id, locale)}`}
+                {tournamentName}
               </h1>
               <div className="flex flex-wrap items-center gap-2">
                 <FollowButton

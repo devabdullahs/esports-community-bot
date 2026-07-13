@@ -6,6 +6,7 @@ import { recordAdminAudit } from "@/lib/audit";
 import { sameOriginOr403 } from "@/lib/community";
 import { getGame } from "@/lib/games";
 import { getMediaChannel } from "@/lib/media";
+import { indexNowUrlsForPost, scheduleIndexNowUrls } from "@/lib/indexnow";
 import { createNewsPost, listAdminNewsPosts, type NewsStatus } from "@/lib/news";
 import { validateNewsInput } from "@/lib/news-validation";
 
@@ -87,7 +88,8 @@ export async function POST(request: Request) {
     authorDiscordId: resolved.authors[0]?.discordId ?? null,
     authorName: resolved.authors[0]?.name ?? null,
   });
-  revalidateTag("cms-news", "default");
+  revalidateTag("cms-news", { expire: 0 });
   recordAdminAudit(access, "news.create", String((post as { id: number }).id));
+  scheduleIndexNowUrls(indexNowUrlsForPost(post));
   return NextResponse.json(post);
 }

@@ -69,6 +69,14 @@ export function alternateLanguages(path = "/") {
   };
 }
 
+export function languageAlternates(
+  paths: Partial<Record<Locale | "x-default", string>>,
+) {
+  return Object.fromEntries(
+    Object.entries(paths).map(([locale, path]) => [locale, absoluteUrl(path)]),
+  );
+}
+
 // Liquipedia forbids hotlinking, and og:image is fetched by social crawlers, so
 // a Liquipedia entity image must be served through our caching proxy as an
 // absolute URL. PandaScore CDN images (and any other host) pass through as-is.
@@ -84,6 +92,8 @@ export function buildPageMetadata(input: {
   path?: string;
   image?: string | null;
   locale?: Locale;
+  languagePaths?: Partial<Record<Locale | "x-default", string>>;
+  robots?: Metadata["robots"];
 }): Metadata {
   const locale = input.locale ?? localeFromPathname(input.path ?? "") ?? "en";
   const url = absoluteUrl(input.path);
@@ -95,7 +105,12 @@ export function buildPageMetadata(input: {
     description,
     alternates: {
       canonical: url,
-      languages: alternateLanguages(input.path),
+      languages: input.languagePaths
+        ? languageAlternates(input.languagePaths)
+        : alternateLanguages(input.path),
+      types: {
+        "application/rss+xml": absoluteUrl(locale === "ar" ? "/feed-ar.xml" : "/feed.xml"),
+      },
     },
     openGraph: {
       type: "website",
@@ -111,6 +126,7 @@ export function buildPageMetadata(input: {
       description,
       ...(image ? { images: [image] } : {}),
     },
+    ...(input.robots ? { robots: input.robots } : {}),
   };
 }
 

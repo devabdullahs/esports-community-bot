@@ -34,6 +34,7 @@ import {
 import { copy, formatNumber, localizedPath, type Locale } from "@/lib/i18n";
 import { buildPageMetadata } from "@/lib/metadata";
 import { getRequestLocale } from "@/lib/request-locale";
+import { hasNonTrackingQuery } from "@/lib/seo-query";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -58,14 +59,20 @@ function standingsHref(locale: Locale, { region, q }: { region: ClubRegionId; q:
   return `${localizedPath("/clubs/standings", locale)}${query ? `?${query}` : ""}`;
 }
 
-export async function generateMetadata(): Promise<Metadata> {
+export async function generateMetadata({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}): Promise<Metadata> {
   const locale = await getRequestLocale();
+  const params = await searchParams;
   const text = copy[locale].ewcClubStandings;
   return buildPageMetadata({
     title: text.title,
     description: text.description,
     path: localizedPath("/clubs/standings", locale),
     locale,
+    robots: hasNonTrackingQuery(params) ? { index: false, follow: true } : undefined,
   });
 }
 

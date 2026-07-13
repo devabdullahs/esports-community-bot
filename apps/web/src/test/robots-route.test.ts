@@ -14,6 +14,7 @@ describe("robots.txt", () => {
     expect(body).toContain("Disallow: /ar/me$");
     expect(body).not.toContain("Disallow: /me\n");
     expect(body).not.toContain("Disallow: /media");
+    expect(body).not.toContain("Disallow: /login");
     expect(body).toMatch(/Sitemap: https?:\/\/[^\s]+\/sitemap\.xml/);
   });
 });

@@ -23,6 +23,8 @@ export type GameRecord = {
   focus: LocalizedText[];
   discordChannelId: string | null;
   sortOrder: number;
+  createdAt?: string;
+  updatedAt?: string;
 };
 
 export type GameInput = {

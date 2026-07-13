@@ -2,6 +2,7 @@ import "server-only";
 
 import { get } from "@bot/db/client.js";
 import { getMatchDetails } from "@bot/db/matchDetails.js";
+import { resolveDefaultGuildId } from "@/lib/guild";
 
 type Side = "a" | "b";
 type SidePlayers<T> = { a: T[]; b: T[] };
@@ -265,14 +266,18 @@ type MatchDbRow = {
 };
 
 export async function getMatchPageModel(matchId: number): Promise<MatchPageModel | null> {
+  const guildId = await resolveDefaultGuildId();
+  if (!guildId) return null;
   const match = (await get(
     `SELECT m.id, m.source, m.external_id, m.status, m.team_a, m.team_b, m.logo_a, m.logo_b,
             m.score_a, m.score_b, m.scheduled_at, m.stream_platform, m.stream_url,
             t.id AS tournament_id, t.name AS tournament_name, t.game
        FROM matches m
        JOIN tournaments t ON t.id = m.tournament_id
-      WHERE m.id = $1`,
-    [matchId],
+      WHERE m.id = $1
+        AND t.active = 1
+        AND t.guild_id = $2`,
+    [matchId, guildId],
   )) as MatchDbRow | null;
   if (!match) return null;
 

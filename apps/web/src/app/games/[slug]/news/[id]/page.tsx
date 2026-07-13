@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { notFound } from "next/navigation";
+import { notFound, permanentRedirect, redirect } from "next/navigation";
 import { ArrowLeftIcon } from "lucide-react";
 import { CommentsSection } from "@/components/comments/comments-section";
 import { DateTime } from "@/components/date-time";
@@ -20,6 +20,11 @@ import { parsePostId } from "@/lib/news-validation";
 import { getRequestLocale } from "@/lib/request-locale";
 import { safeUrlOrUndefined } from "@/lib/safe-url";
 import { absoluteUrl, buildPageMetadata, siteIconUrl, siteName } from "@/lib/metadata";
+import {
+  newsCanonicalLocale,
+  newsLanguagePaths,
+  newsPublicPath,
+} from "@/lib/news-url";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -35,12 +40,15 @@ export async function generateMetadata({
   const locale = await getRequestLocale();
   const post = await getPublishedNewsPostCached(postId, locale);
   if (!post || post.gameSlug !== slug) return {};
+  const contentLocale = newsCanonicalLocale(post, locale);
+  const translation = post.translations[contentLocale];
   return buildPageMetadata({
-    title: post.title,
-    description: post.summary || post.body.slice(0, 200),
-    path: localizedPath(`/games/${slug}/news/${id}`, locale),
+    title: translation?.title || post.title,
+    description: translation?.summary || translation?.body?.slice(0, 200) || post.summary,
+    path: newsPublicPath(post, contentLocale),
     image: post.coverImageUrl,
-    locale,
+    locale: contentLocale,
+    languagePaths: newsLanguagePaths(post),
   });
 }
 
@@ -64,6 +72,10 @@ export default async function NewsPostPage({
   const post = await getPublishedNewsPostCached(postId, locale);
   // Reject drafts (handled by getPublishedNewsPost) and cross-game id guessing.
   if (!post || post.gameSlug !== slug) notFound();
+  const contentLocale = newsCanonicalLocale(post, locale);
+  const canonicalPath = newsPublicPath(post, contentLocale);
+  if (contentLocale !== locale) redirect(canonicalPath);
+  if (id !== String(post.id)) permanentRedirect(canonicalPath);
 
   const cover = safeUrlOrUndefined(post.coverImageUrl);
   const placement = post.coverPlacement;
@@ -78,7 +90,7 @@ export default async function NewsPostPage({
 
   const common = copy[locale].common;
   const gameTitle = localizeText(game.title, locale);
-  const canonicalUrl = absoluteUrl(localizedPath(`/games/${slug}/news/${id}`, locale));
+  const canonicalUrl = absoluteUrl(canonicalPath);
   const publisherName = siteName(locale);
   const articleAuthors = post.authors.length
     ? post.authors.map((author) => ({ "@type": "Person", name: author.name }))
@@ -97,7 +109,7 @@ export default async function NewsPostPage({
     image: cover ? [cover] : undefined,
     datePublished: post.publishedAt || post.createdAt,
     dateModified: post.updatedAt || post.publishedAt || post.createdAt,
-    inLanguage: locale,
+    inLanguage: contentLocale,
     articleSection: gameTitle,
     author: articleAuthors,
     publisher: {

@@ -9,6 +9,7 @@ import { localizeText } from "@/lib/community-content";
 import { copy, localizedPath } from "@/lib/i18n";
 import { getMediaChannelCached } from "@/lib/media";
 import { listPublishedMediaPostsCached } from "@/lib/news";
+import { newsPublicPath } from "@/lib/news-url";
 import { getRequestLocale } from "@/lib/request-locale";
 import { safeUrlOrUndefined } from "@/lib/safe-url";
 import { buildPageMetadata } from "@/lib/metadata";
@@ -128,7 +129,7 @@ export default async function MediaChannelPage({
               return (
                 <Link
                   key={post.id}
-                  href={localizedPath(`/media/${slug}/news/${post.id}`, locale)}
+                  href={newsPublicPath(post, locale)}
                   className="group flex gap-4 rounded-lg border p-4 transition-colors hover:bg-muted/50"
                 >
                   {thumb ? (

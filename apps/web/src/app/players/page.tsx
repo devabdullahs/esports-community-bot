@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { notFound } from "next/navigation";
 import { ArrowLeftIcon, ArrowRightIcon, SearchIcon, UserIcon } from "lucide-react";
 import { PageBreadcrumb } from "@/components/page-breadcrumb";
 import { ProfileAvatar } from "@/components/profiles/profile-avatar";
@@ -20,17 +21,12 @@ import { copy, formatNumber, localizedPath, type Locale } from "@/lib/i18n";
 import { buildPageMetadata } from "@/lib/metadata";
 import type { PlayerProfile } from "@/lib/pandascore-profiles";
 import { getRequestLocale } from "@/lib/request-locale";
+import { hasNonTrackingQuery, paginatedPath, parsePublicPage } from "@/lib/seo-query";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 const PAGE_SIZE = 24;
-
-function pageFrom(value: string | string[] | undefined) {
-  const raw = Array.isArray(value) ? value[0] : value;
-  const parsed = Number.parseInt(raw ?? "1", 10);
-  return Number.isFinite(parsed) && parsed > 0 ? Math.min(parsed, 500) : 1;
-}
 
 function directoryHref(locale: Locale, { q, game, page }: { q: string; game: string; page: number }) {
   const params = new URLSearchParams();
@@ -41,14 +37,24 @@ function directoryHref(locale: Locale, { q, game, page }: { q: string; game: str
   return `${localizedPath("/players", locale)}${qs ? `?${qs}` : ""}`;
 }
 
-export async function generateMetadata(): Promise<Metadata> {
+export async function generateMetadata({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}): Promise<Metadata> {
   const locale = await getRequestLocale();
+  const params = await searchParams;
+  const page = parsePublicPage(params.page, 500);
+  if (page === null) return { robots: { index: false, follow: true } };
   const text = copy[locale].profiles;
   return buildPageMetadata({
     title: text.playersDirectoryTitle,
     description: text.playersDirectoryDescription,
-    path: localizedPath("/players", locale),
+    path: paginatedPath("/players", locale, page),
     locale,
+    robots: hasNonTrackingQuery(params, new Set(["page"]))
+      ? { index: false, follow: true }
+      : undefined,
   });
 }
 
@@ -106,7 +112,8 @@ export default async function PlayersDirectoryPage({
 
   const q = cleanDirectoryQuery(params.q);
   const game = cleanGameSlug(params.game);
-  const page = pageFrom(params.page);
+  const page = parsePublicPage(params.page, 500);
+  if (page === null) notFound();
   const { players, total } = await listPlayersDirectory({
     q: q || null,
     game: game || null,
@@ -115,6 +122,7 @@ export default async function PlayersDirectoryPage({
   });
   const hasPrev = page > 1;
   const hasNext = page * PAGE_SIZE < total;
+  if (page > 1 && players.length === 0) notFound();
 
   return (
     <main className="mx-auto flex w-full max-w-6xl flex-1 flex-col gap-6 px-4 py-8 sm:px-8 sm:py-10">
