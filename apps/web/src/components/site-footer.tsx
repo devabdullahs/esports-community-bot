@@ -1,13 +1,14 @@
 import Link from "next/link";
 import { MailIcon, TrophyIcon } from "lucide-react";
 import { DiscordIcon } from "@/components/discord-icon";
+import { GoogleAnalyticsSettingsButton } from "@/components/analytics/google-analytics-consent";
 import { PartnerPlacement } from "@/components/partners/partner-placement";
 import { Button } from "@/components/ui/button";
 import { CONTACT_EMAIL, DISCORD_INVITE_URL } from "@/lib/community-links";
 import { copy, localizedPath } from "@/lib/i18n";
 import { getRequestLocale } from "@/lib/request-locale";
 
-export async function SiteFooter() {
+export async function SiteFooter({ analyticsConsentEnabled = false }: { analyticsConsentEnabled?: boolean }) {
   const locale = await getRequestLocale();
   const text = copy[locale];
   const t = text.footer;
@@ -63,6 +64,7 @@ export async function SiteFooter() {
             {about.map((link) => (
               <FooterLink key={link.href} href={localizedPath(link.href, locale)} label={link.label} />
             ))}
+            {analyticsConsentEnabled ? <GoogleAnalyticsSettingsButton locale={locale} /> : null}
           </FooterColumn>
 
           {/* Contact */}

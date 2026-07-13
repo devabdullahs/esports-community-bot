@@ -11,12 +11,12 @@ const r2Host = (() => {
 export const contentSecurityPolicy = [
   "default-src 'self'",
   // Next.js App Router requires inline scripts/styles without a nonce pipeline.
-  "script-src 'self' 'unsafe-inline' https://static.cloudflareinsights.com",
+  "script-src 'self' 'unsafe-inline' https://static.cloudflareinsights.com https://www.googletagmanager.com",
   "style-src 'self' 'unsafe-inline'",
   // Covers are admin-pasted https URLs (safe-url enforces scheme), so https: is deliberate.
   `img-src 'self' data: blob: https:`,
   `font-src 'self' https://assets.esportscommunity.net${r2Host ? ` ${r2Host}` : ""}`,
-  "connect-src 'self' https://cloudflareinsights.com",
+  "connect-src 'self' https://cloudflareinsights.com https://www.google-analytics.com https://region1.google-analytics.com",
   "object-src 'none'",
   "base-uri 'self'",
   "form-action 'self'",

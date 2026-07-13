@@ -1,12 +1,14 @@
 import type { Metadata, Viewport } from "next";
 import { Suspense } from "react";
 import { AnalyticsTracker } from "@/components/analytics/analytics-tracker";
+import { GoogleAnalyticsConsentBanner } from "@/components/analytics/google-analytics-consent";
 import { DeploymentUpdateAlert } from "@/components/deployment-update-alert";
 import { Providers } from "@/components/providers";
 import { RouteFreshnessGuard } from "@/components/route-freshness-guard";
 import { SiteFooter } from "@/components/site-footer";
 import { SiteHeader } from "@/components/site-header";
 import { getDeploymentVersion } from "@/lib/deployment-version";
+import { normalizeGoogleAnalyticsMeasurementId } from "@/lib/google-analytics";
 import { copy, directionForLocale } from "@/lib/i18n";
 import { getRequestLocale } from "@/lib/request-locale";
 import {
@@ -124,6 +126,9 @@ export default async function RootLayout({
 }>) {
   const locale = await getRequestLocale();
   const deploymentVersion = getDeploymentVersion();
+  const googleAnalyticsMeasurementId = normalizeGoogleAnalyticsMeasurementId(
+    process.env.GOOGLE_ANALYTICS_MEASUREMENT_ID,
+  );
   return (
     <html lang={locale} dir={directionForLocale(locale)} suppressHydrationWarning className="h-full antialiased">
       <body className="min-h-full" suppressHydrationWarning>
@@ -146,7 +151,7 @@ export default async function RootLayout({
               {children}
             </div>
             <Suspense fallback={null}>
-              <SiteFooter />
+              <SiteFooter analyticsConsentEnabled={Boolean(googleAnalyticsMeasurementId)} />
             </Suspense>
             <Suspense fallback={null}>
               <RouteFreshnessGuard />
@@ -154,6 +159,11 @@ export default async function RootLayout({
             <Suspense fallback={null}>
               <AnalyticsTracker />
             </Suspense>
+            {googleAnalyticsMeasurementId ? (
+              <Suspense fallback={null}>
+                <GoogleAnalyticsConsentBanner measurementId={googleAnalyticsMeasurementId} locale={locale} />
+              </Suspense>
+            ) : null}
             <DeploymentUpdateAlert initialVersion={deploymentVersion} locale={locale} />
           </Providers>
         </div>

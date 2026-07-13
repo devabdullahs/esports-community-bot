@@ -94,7 +94,8 @@ const CONTENT = {
           "Anonymous website analytics IDs — browser-local random visitor and session IDs used to count daily, weekly, and monthly visitors and engagement on public pages.",
         ],
         after: [
-          "The first-party analytics tracker records query-free public page paths, anonymous visitor/session IDs, engagement seconds, browser user-agent, country code from Cloudflare headers, an allowlisted acquisition source (direct, X, Discord, Google, Bing, or other referral), and an optional campaign label limited to 64 lowercase letters, numbers, hyphens, or underscores. Raw referrer or destination URLs, query strings, and IP addresses are not stored in analytics events. No third-party tracking cookies, ad-network scripts, or third-party analytics scripts are used.",
+          "All website analytics remain disabled until you select Allow analytics. When enabled, the first-party tracker records query-free public page paths, anonymous visitor/session IDs, engagement seconds, browser user-agent, country code from Cloudflare headers, an allowlisted acquisition source (direct, X, Discord, Google, Bing, or other referral), and an optional campaign label limited to 64 lowercase letters, numbers, hyphens, or underscores. Raw referrer or destination URLs, query strings, and IP addresses are not stored in these first-party analytics events.",
+          "When enabled, Google Analytics may set Google Analytics cookies and send page paths, device and browser information, approximate location, acquisition, and engagement data to Google. Advertising storage, ad user data, ad personalization, and Google Signals remain disabled. You can withdraw or change your choice through Analytics settings in the footer.",
         ],
       },
       {
@@ -113,10 +114,10 @@ const CONTENT = {
       {
         heading: "9. Infrastructure and Data Processors",
         body: [
-          "All persistent data is stored in a managed PostgreSQL database hosted on cloud infrastructure in the MENA (Saudi Arabia) region. No third-party analytics or advertising service holds your data.",
+          "All persistent service data is stored in a managed PostgreSQL database hosted on cloud infrastructure in the MENA (Saudi Arabia) region. If you opt in to Google Analytics, Google processes the optional analytics data described above under its own terms and privacy controls.",
           "Public web traffic is routed through Cloudflare, which provides TLS termination and DDoS protection. Cloudflare may process request metadata (IP addresses, headers) in accordance with its own privacy policy.",
           "When a co-stream player is displayed, your browser sends standard request metadata, such as your IP address, browser headers, and referring origin, to Twitch, Kick, or YouTube. Those providers apply their own privacy and cookie policies to the embedded player.",
-          "The service does not intentionally share your personal data with third parties beyond the processors described here (Discord, the managed database host, Cloudflare, Twitch, Kick, YouTube, and GitHub Sponsors only if you choose to sponsor through GitHub).",
+          "The service does not intentionally share your personal data with third parties beyond the processors described here (Discord, the managed database host, Cloudflare, Google Analytics only after opt-in, Twitch, Kick, YouTube, and GitHub Sponsors only if you choose to sponsor through GitHub).",
         ],
       },
       {
@@ -215,7 +216,8 @@ const CONTENT = {
           "معرّفات إحصائيات الموقع المجهولة — معرّف زائر ومعرّف جلسة عشوائيان داخل المتصفح لاحتساب الزوار يوميًا وأسبوعيًا وشهريًا ومدة التفاعل في الصفحات العامة.",
         ],
         after: [
-          "يسجل التتبع الداخلي مسارات الصفحات العامة من دون الاستعلامات، ومعرّفات الزائر والجلسة المجهولة، وثواني التفاعل، ووكيل المتصفح، ورمز الدولة من ترويسات Cloudflare، وفئة مصدر مسموح بها (مباشر أو X أو ديسكورد أو Google أو Bing أو إحالة أخرى)، وتسمية حملة اختيارية لا تتجاوز 64 حرفًا صغيرًا أو رقمًا أو شرطة أو شرطة سفلية. لا تُخزّن روابط الإحالة أو الوجهة الخام أو سلاسل الاستعلام أو عناوين IP في أحداث الإحصائيات، ولا تُستخدم ملفات تعريف ارتباط تتبع أو سكريبتات شبكات إعلانية أو تحليلات خارجية.",
+          "تبقى جميع إحصائيات الموقع معطلة حتى تختار السماح بالإحصائيات. عند تفعيلها يسجل التتبع الداخلي مسارات الصفحات العامة من دون الاستعلامات، ومعرّفات الزائر والجلسة المجهولة، وثواني التفاعل، ووكيل المتصفح، ورمز الدولة من ترويسات Cloudflare، وفئة مصدر مسموح بها (مباشر أو X أو ديسكورد أو Google أو Bing أو إحالة أخرى)، وتسمية حملة اختيارية لا تتجاوز 64 حرفًا صغيرًا أو رقمًا أو شرطة أو شرطة سفلية. لا تُخزّن روابط الإحالة أو الوجهة الخام أو سلاسل الاستعلام أو عناوين IP في أحداث الإحصائيات الداخلية هذه.",
+          "عند تفعيل Google Analytics قد تضع الخدمة ملفات تعريف ارتباط خاصة بها وترسل إلى Google مسارات الصفحات ومعلومات الجهاز والمتصفح والموقع التقريبي ومصدر الزيارة وبيانات التفاعل. تبقى مساحة تخزين الإعلانات وبيانات مستخدم الإعلانات وتخصيص الإعلانات وGoogle Signals معطلة. يمكنك سحب موافقتك أو تغييرها من إعدادات الإحصائيات في تذييل الموقع.",
         ],
       },
       {
@@ -234,10 +236,10 @@ const CONTENT = {
       {
         heading: "٩. البنية التحتية ومعالجو البيانات",
         body: [
-          "تُخزَّن جميع البيانات الدائمة في قاعدة بيانات PostgreSQL مُدارة على بنية تحتية سحابية في منطقة الشرق الأوسط وشمال أفريقيا (المملكة العربية السعودية). لا تحتفظ أي خدمة تحليلات أو إعلانات خارجية ببياناتك.",
+          "تُخزَّن جميع بيانات الخدمة الدائمة في قاعدة بيانات PostgreSQL مُدارة على بنية تحتية سحابية في منطقة الشرق الأوسط وشمال أفريقيا (المملكة العربية السعودية). إذا وافقت على Google Analytics، تعالج Google بيانات الإحصائيات الاختيارية الموضحة أعلاه وفق شروطها وضوابط الخصوصية الخاصة بها.",
           "تمر حركة مرور الويب العامة عبر Cloudflare الذي يوفّر إنهاء TLS والحماية من هجمات DDoS. قد تعالج Cloudflare بيانات تعريف الطلبات (عناوين IP والرؤوس) وفق سياسة خصوصيتها.",
           "عند عرض مشغّل بث مصاحب، يرسل متصفحك بيانات تعريف الطلبات المعتادة، مثل عنوان IP وترويسات المتصفح والمصدر المُحيل، إلى Twitch أو Kick أو YouTube. وتطبّق هذه الجهات سياسات الخصوصية وملفات تعريف الارتباط الخاصة بها على المشغّل المضمّن.",
-          "لا تشارك الخدمة بياناتك الشخصية عمداً مع أطراف ثالثة خارج المعالجين الموضحين هنا (ديسكورد، ومضيف قاعدة البيانات المُدارة، وCloudflare، وTwitch، وKick، وYouTube، وGitHub Sponsors فقط إذا اخترت الرعاية عبر GitHub).",
+          "لا تشارك الخدمة بياناتك الشخصية عمداً مع أطراف ثالثة خارج المعالجين الموضحين هنا (ديسكورد، ومضيف قاعدة البيانات المُدارة، وCloudflare، وGoogle Analytics بعد موافقتك فقط، وTwitch، وKick، وYouTube، وGitHub Sponsors فقط إذا اخترت الرعاية عبر GitHub).",
         ],
       },
       {
