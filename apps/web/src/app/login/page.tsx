@@ -8,7 +8,7 @@ import { copy, localizedPath } from "@/lib/i18n";
 import { getRequestLocale } from "@/lib/request-locale";
 
 export const metadata: Metadata = {
-  robots: { index: false, follow: false },
+  robots: { index: false, follow: true },
 };
 
 export default async function LoginPage() {
