@@ -35,3 +35,7 @@ cs-rankings-*.png
 ewc-prediction*.png
 fut-logo.png
 tmp-*.mjs
+
+# Playwright failure artifacts
+apps/web/test-results/
+apps/web/playwright-report/
