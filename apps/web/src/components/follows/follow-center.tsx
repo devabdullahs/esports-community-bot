@@ -38,6 +38,7 @@ import {
 } from "@/components/ui/card";
 import { Toggle } from "@/components/ui/toggle";
 import { copy, localizedPath, type Locale } from "@/lib/i18n";
+import { trackProductEvent } from "@/lib/product-analytics";
 import { cn } from "@/lib/utils";
 
 const TYPE_ICONS: Record<EntityType, typeof Gamepad2Icon> = {
@@ -101,7 +102,10 @@ export function FollowCenter({
       }
       setFollowError(text.unfollowFailed);
     },
-    onSuccess: () => setFollowError(null),
+    onSuccess: () => {
+      trackProductEvent("follow_remove");
+      setFollowError(null);
+    },
     onSettled: (_data, _error, row) => {
       setPendingFollowIds((current) => {
         const next = new Set(current);
@@ -133,6 +137,7 @@ export function FollowCenter({
       setPrefsError(text.preferencesFailed);
     },
     onSuccess: (prefs, variables) => {
+      trackProductEvent("notification_prefs_update");
       queryClient.setQueryData<NotificationPrefs>(notificationPrefsQueryKey, (current) =>
         current ? { ...current, [variables.key]: prefs[variables.key] } : prefs,
       );

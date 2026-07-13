@@ -985,6 +985,30 @@ db.exec(`
     ON web_analytics_events(session_id, occurred_at DESC);
   CREATE INDEX IF NOT EXISTS idx_web_analytics_country
     ON web_analytics_events(country, occurred_at DESC);
+
+  CREATE TABLE IF NOT EXISTS web_product_events (
+    id                 INTEGER PRIMARY KEY AUTOINCREMENT,
+    visitor_id         TEXT NOT NULL,
+    session_id         TEXT NOT NULL,
+    event_name         TEXT NOT NULL CHECK (event_name IN (
+      'prediction_submit','follow_create','follow_remove','notification_prefs_update',
+      'multiview_start','multiview_share','site_search_result_open','source_link_open','discord_join_click'
+    )),
+    path               TEXT NOT NULL,
+    acquisition_source TEXT NOT NULL DEFAULT 'direct'
+      CHECK (acquisition_source IN ('direct','x','discord','google','bing','other_referral')),
+    campaign           TEXT CHECK (campaign IS NULL OR (
+      length(campaign) BETWEEN 1 AND 64
+      AND substr(campaign, 1, 1) GLOB '[a-z0-9]'
+      AND campaign NOT GLOB '*[^a-z0-9_-]*'
+    )),
+    country            TEXT,
+    occurred_at        INTEGER NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS idx_web_product_events_occurred
+    ON web_product_events(occurred_at DESC);
+  CREATE INDEX IF NOT EXISTS idx_web_product_events_name_occurred
+    ON web_product_events(event_name, occurred_at DESC);
 `);
 
 ensureColumns('web_analytics_events', [

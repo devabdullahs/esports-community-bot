@@ -5,6 +5,7 @@ import { useState } from "react";
 import { BellIcon, BellRingIcon, Loader2Icon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { copy, localizedPath, type Locale } from "@/lib/i18n";
+import { trackProductEvent } from "@/lib/product-analytics";
 
 // FollowEntityType lives in lib/follows.ts (server-only); mirror the union here
 // so the client bundle never imports the DB boundary.
@@ -60,7 +61,13 @@ export function FollowButton({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ entityType, entityKey, entityLabel, entityRef }),
       });
-      if (!res.ok) setFollowing(!next);
+      if (!res.ok) {
+        setFollowing(!next);
+      } else if (next) {
+        trackProductEvent("follow_create");
+      } else {
+        trackProductEvent("follow_remove");
+      }
     } catch {
       setFollowing(!next);
     } finally {

@@ -47,7 +47,14 @@ for (const [id, referrer] of [
 legacyDb.close();
 
 const { closeDb, db } = await import('../src/db/index.js');
-const { getWebAnalyticsDashboard, recordWebAnalyticsEvent } = await import('../src/db/webAnalytics.js');
+const {
+  getWebAnalyticsDashboard,
+  getWebProductAnalytics,
+  recordWebAnalyticsEvent,
+  recordWebProductEvent,
+} = await import('../src/db/webAnalytics.js');
+const { purgeWebAnalyticsRetention } = await import('../src/jobs/webAnalyticsRetention.js');
+const { appTables, identityColumns } = await import('../scripts/migrate-sqlite-to-postgres.mjs');
 const migratedLegacyRows = db.prepare(`
   SELECT visitor_id, acquisition_source
     FROM web_analytics_events
@@ -55,6 +62,8 @@ const migratedLegacyRows = db.prepare(`
    ORDER BY visitor_id
 `).all();
 const migratedLegacyColumns = db.prepare('PRAGMA table_info(web_analytics_events)').all();
+const migratedLegacyCount = db.prepare("SELECT COUNT(*) AS count FROM web_analytics_events WHERE visitor_id LIKE 'legacy-%'").get().count;
+const productTableExists = db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'web_product_events'").get();
 db.prepare("DELETE FROM web_analytics_events WHERE visitor_id LIKE 'legacy-%'").run();
 
 test.after(() => {
@@ -164,6 +173,8 @@ test('classifies legacy referrers before removing the raw field', () => {
     { visitor_id: 'legacy-x-shortener', acquisition_source: 'x' },
   ]);
   assert.equal(migratedLegacyColumns.some((column) => column.name === 'referrer'), false);
+  assert.equal(migratedLegacyCount, 11);
+  assert.deepEqual(productTableExists, { name: 'web_product_events' });
 });
 
 test('rejects acquisition values outside the privacy-safe contract', async () => {
@@ -198,5 +209,116 @@ test('SQLite and Postgres schemas replace raw referrers with bounded acquisition
   assert.match(postgres, /acquisition_source TEXT NOT NULL DEFAULT 'direct'/);
   assert.match(postgres, /campaign ~ '\^\[a-z0-9\]/);
   assert.match(postgres, /DROP COLUMN IF EXISTS referrer/);
+});
+
+test('records only allowlisted product events and aggregates anonymous sessions', async () => {
+  const nowSec = Math.floor(Date.UTC(2026, 6, 9, 12, 0, 0) / 1000);
+  const base = {
+    visitorId: 'product-visitor-1',
+    sessionId: 'product-session-1',
+    path: '/predictions?club=private#save',
+    acquisitionSource: 'discord',
+    campaign: 'prediction_launch',
+    country: 'SA',
+    occurredAt: nowSec,
+  };
+  await recordWebProductEvent({ ...base, eventName: 'prediction_submit' });
+  await recordWebProductEvent({ ...base, eventName: 'prediction_submit', occurredAt: nowSec + 1 });
+  await recordWebProductEvent({
+    ...base,
+    visitorId: 'product-visitor-2',
+    sessionId: 'product-session-2',
+    eventName: 'follow_create',
+    occurredAt: nowSec + 2,
+  });
+
+  const summary = await getWebProductAnalytics({ nowSec, days: 30, sessionCount: 4 });
+  assert.deepEqual(summary.events, [
+    { eventName: 'prediction_submit', events: 2, sessions: 1, conversionRate: 25 },
+    { eventName: 'follow_create', events: 1, sessions: 1, conversionRate: 25 },
+  ]);
+  assert.equal(summary.daily.at(-1).counts.prediction_submit, 2);
+  assert.equal(summary.daily.at(-1).counts.follow_create, 1);
+  const stored = db.prepare("SELECT path FROM web_product_events WHERE visitor_id = 'product-visitor-1'").get();
+  assert.deepEqual(stored, { path: '/predictions' });
+  assert.equal(
+    db.prepare('PRAGMA table_info(web_product_events)').all().some((column) => column.name === 'user_agent'),
+    false,
+  );
+
+  await assert.rejects(
+    recordWebProductEvent({ ...base, eventName: 'prediction_submit; DROP TABLE web_product_events' }),
+    /CHECK constraint failed/,
+  );
+  await assert.rejects(
+    recordWebProductEvent({ ...base, eventName: 'unknown_event' }),
+    /CHECK constraint failed/,
+  );
+});
+
+test('keeps the product-event schema equivalent across SQLite, Postgres, and migrations', () => {
+  const sqliteColumns = db.prepare('PRAGMA table_info(web_product_events)').all().map((column) => column.name);
+  assert.deepEqual(sqliteColumns, [
+    'id',
+    'visitor_id',
+    'session_id',
+    'event_name',
+    'path',
+    'acquisition_source',
+    'campaign',
+    'country',
+    'occurred_at',
+  ]);
+  const postgres = readFileSync(join(process.cwd(), 'scripts/postgres/schema.sql'), 'utf8');
+  assert.match(postgres, /CREATE TABLE IF NOT EXISTS web_product_events/);
+  assert.match(postgres, /event_name\s+TEXT NOT NULL CHECK \(event_name IN \(/);
+  assert.match(postgres, /'discord_join_click'/);
+  assert.match(postgres, /CREATE INDEX IF NOT EXISTS idx_web_product_events_occurred/);
+  assert.doesNotMatch(postgres.match(/CREATE TABLE IF NOT EXISTS web_product_events[\s\S]*?\n\);/)?.[0] || '', /user_agent/);
+  assert.ok(appTables.includes('web_product_events'));
+  assert.equal(identityColumns.get('web_product_events'), 'id');
+});
+
+test('purges only analytics events older than the injected ninety-day cutoff', async () => {
+  const cutoff = Math.floor(Date.UTC(2026, 6, 10, 0, 0, 0) / 1000) - 90 * 86400;
+  await recordWebAnalyticsEvent({
+    visitorId: 'retention-expired-traffic',
+    sessionId: 'retention-expired-traffic',
+    eventType: 'pageview',
+    path: '/retention-expired',
+    acquisitionSource: 'direct',
+    occurredAt: cutoff - 1,
+  });
+  await recordWebAnalyticsEvent({
+    visitorId: 'retention-kept-traffic',
+    sessionId: 'retention-kept-traffic',
+    eventType: 'pageview',
+    path: '/retention-kept',
+    acquisitionSource: 'direct',
+    occurredAt: cutoff,
+  });
+  await recordWebProductEvent({
+    visitorId: 'retention-expired-product',
+    sessionId: 'retention-expired-product',
+    eventName: 'discord_join_click',
+    path: '/',
+    acquisitionSource: 'direct',
+    occurredAt: cutoff - 1,
+  });
+  await recordWebProductEvent({
+    visitorId: 'retention-kept-product',
+    sessionId: 'retention-kept-product',
+    eventName: 'discord_join_click',
+    path: '/',
+    acquisitionSource: 'direct',
+    occurredAt: cutoff,
+  });
+
+  assert.deepEqual(await purgeWebAnalyticsRetention({ cutoff }), { webEvents: 1, productEvents: 1 });
+  assert.equal(db.prepare("SELECT COUNT(*) AS count FROM web_analytics_events WHERE visitor_id = 'retention-expired-traffic'").get().count, 0);
+  assert.equal(db.prepare("SELECT COUNT(*) AS count FROM web_product_events WHERE visitor_id = 'retention-expired-product'").get().count, 0);
+  assert.equal(db.prepare("SELECT COUNT(*) AS count FROM web_analytics_events WHERE visitor_id = 'retention-kept-traffic'").get().count, 1);
+  assert.equal(db.prepare("SELECT COUNT(*) AS count FROM web_product_events WHERE visitor_id = 'retention-kept-product'").get().count, 1);
+  assert.deepEqual(await purgeWebAnalyticsRetention({ cutoff }), { webEvents: 0, productEvents: 0 });
 });
 

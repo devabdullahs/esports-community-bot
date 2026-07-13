@@ -1,4 +1,4 @@
-import { all, run } from './client.js';
+import { all, run, transaction } from './client.js';
 
 const RIYADH_OFFSET_SECONDS = 3 * 60 * 60;
 const EVENT_TYPES = new Set(['pageview', 'engagement']);
@@ -214,6 +214,46 @@ function dailySeries(rows, nowSec, days) {
   }));
 }
 
+function productEventSummary(rows, nowSec, days, sessionCount) {
+  const byName = new Map();
+  for (const row of rows) {
+    const eventName = cleanString(row.event_name, 80);
+    if (!eventName) continue;
+    const entry = byName.get(eventName) || { eventName, events: 0, sessions: new Set() };
+    entry.events += 1;
+    if (row.session_id) entry.sessions.add(row.session_id);
+    byName.set(eventName, entry);
+  }
+
+  const events = [...byName.values()]
+    .map((entry) => ({
+      eventName: entry.eventName,
+      events: entry.events,
+      sessions: entry.sessions.size,
+      conversionRate: sessionCount ? Math.round((entry.sessions.size / sessionCount) * 10_000) / 100 : 0,
+    }))
+    .sort((a, b) => b.events - a.events || b.sessions - a.sessions || a.eventName.localeCompare(b.eventName))
+    .slice(0, 6);
+  const topNames = new Set(events.map((entry) => entry.eventName));
+  const endKey = dayKeyFor(nowSec);
+  const byDay = new Map();
+  for (let offset = days - 1; offset >= 0; offset -= 1) {
+    const key = endKey - offset;
+    byDay.set(key, { day: dateLabelForDayKey(key), counts: {} });
+  }
+  for (const row of rows) {
+    const eventName = cleanString(row.event_name, 80);
+    const entry = byDay.get(dayKeyFor(row.occurred_at));
+    if (!eventName || !entry || !topNames.has(eventName)) continue;
+    entry.counts[eventName] = (entry.counts[eventName] || 0) + 1;
+  }
+
+  return {
+    events,
+    daily: [...byDay.values()],
+  };
+}
+
 export async function recordWebAnalyticsEvent({
   visitorId,
   sessionId,
@@ -258,6 +298,74 @@ export async function recordWebAnalyticsEvent({
   );
 }
 
+export async function recordWebProductEvent({
+  visitorId,
+  sessionId,
+  eventName,
+  path,
+  acquisitionSource,
+  campaign = null,
+  country = null,
+  occurredAt = Math.floor(Date.now() / 1000),
+}) {
+  const name = cleanString(eventName, 80);
+  if (!name) throw new Error('eventName is required');
+  const visitor = cleanString(visitorId, 80);
+  const session = cleanString(sessionId, 80);
+  if (!visitor || !session) throw new Error('visitorId and sessionId are required');
+  const source = cleanAcquisitionSource(acquisitionSource);
+  if (!source) throw new Error(`Invalid analytics acquisition source: ${acquisitionSource}`);
+  const campaignName = cleanCampaign(campaign);
+  if (campaign != null && campaign !== '' && !campaignName) {
+    throw new Error(`Invalid analytics campaign: ${campaign}`);
+  }
+
+  await run(
+    `INSERT INTO web_product_events (
+       visitor_id, session_id, event_name, path, acquisition_source, campaign, country, occurred_at
+     ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+    [
+      visitor,
+      session,
+      name,
+      cleanPath(path),
+      source,
+      campaignName,
+      cleanCountry(country),
+      clampInt(occurredAt, 1, 4_102_444_800),
+    ],
+  );
+}
+
+export async function getWebProductAnalytics({
+  nowSec = Math.floor(Date.now() / 1000),
+  days = 30,
+  sessionCount = 0,
+} = {}) {
+  const safeDays = clampInt(days, 7, 120);
+  const since = startOfRiyadhDay(nowSec) - (safeDays - 1) * 86400;
+  const rows = await all(
+    `SELECT event_name, session_id, occurred_at
+     FROM web_product_events
+     WHERE occurred_at >= $1
+     ORDER BY occurred_at ASC`,
+    [since],
+  );
+  return productEventSummary(rows, nowSec, safeDays, clampInt(sessionCount, 0, Number.MAX_SAFE_INTEGER));
+}
+
+export async function purgeWebAnalyticsEvents(cutoff) {
+  const safeCutoff = clampInt(cutoff, 1, 4_102_444_800);
+  return transaction(async (client) => {
+    const webEvents = await client.run('DELETE FROM web_analytics_events WHERE occurred_at < $1', [safeCutoff]);
+    const productEvents = await client.run('DELETE FROM web_product_events WHERE occurred_at < $1', [safeCutoff]);
+    return {
+      webEvents: webEvents.rowCount,
+      productEvents: productEvents.rowCount,
+    };
+  });
+}
+
 export async function getWebAnalyticsDashboard({ nowSec = Math.floor(Date.now() / 1000), days = 30 } = {}) {
   const safeDays = clampInt(days, 7, 120);
   const todaySince = startOfRiyadhDay(nowSec);
@@ -281,6 +389,12 @@ export async function getWebAnalyticsDashboard({ nowSec = Math.floor(Date.now() 
     firstSeenRows.map((row) => [row.visitor_id, Number(row.first_seen)]),
   );
   const acquisition = acquisitionBreakdown(rows, periodSince);
+  const selected = summarizePeriod(`Last ${safeDays} days`, rows, firstSeenByVisitor, periodSince);
+  const productEvents = await getWebProductAnalytics({
+    nowSec,
+    days: safeDays,
+    sessionCount: selected.sessions,
+  });
 
   return {
     generatedAt: nowSec,
@@ -289,13 +403,14 @@ export async function getWebAnalyticsDashboard({ nowSec = Math.floor(Date.now() 
       today: summarizePeriod('Today', rows, firstSeenByVisitor, todaySince),
       sevenDays: summarizePeriod('Last 7 days', rows, firstSeenByVisitor, sevenDaySince),
       thirtyDays: summarizePeriod('Last 30 days', rows, firstSeenByVisitor, thirtyDaySince),
-      selected: summarizePeriod(`Last ${safeDays} days`, rows, firstSeenByVisitor, periodSince),
+      selected,
     },
     countries: topCountries(rows, periodSince, 12),
     pages: topPages(rows, periodSince, 12),
     acquisition: acquisition.acquisition,
     campaigns: acquisition.campaigns,
     daily: dailySeries(rows, nowSec, Math.min(30, safeDays)),
+    productEvents,
     totalKnownVisitors: firstSeenByVisitor.size,
   };
 }

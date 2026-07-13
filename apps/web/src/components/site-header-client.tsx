@@ -60,6 +60,7 @@ import {
 import { Separator } from "@/components/ui/separator";
 import { DISCORD_INVITE_URL } from "@/lib/community-links";
 import { isActivePath } from "@/lib/nav";
+import { trackProductEvent } from "@/lib/product-analytics";
 import {
   LOCALE_COOKIE_MAX_AGE,
   LOCALE_COOKIE_NAME,
@@ -354,7 +355,12 @@ export function SiteHeaderClient({
               ) : null}
               <DropdownMenuItem
                 render={
-                  <a href={DISCORD_INVITE_URL} target="_blank" rel="noopener noreferrer" />
+                  <a
+                    href={DISCORD_INVITE_URL}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    onClick={() => trackProductEvent("discord_join_click")}
+                  />
                 }
               >
                 <DiscordIcon />
@@ -415,7 +421,10 @@ export function SiteHeaderClient({
                     href={DISCORD_INVITE_URL}
                     target="_blank"
                     rel="noopener noreferrer"
-                    onClick={() => setMobileOpen(false)}
+                    onClick={() => {
+                      trackProductEvent("discord_join_click");
+                      setMobileOpen(false);
+                    }}
                   />
                 }
                 nativeButton={false}

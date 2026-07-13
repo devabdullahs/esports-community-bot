@@ -70,6 +70,7 @@ const appTables = [
   'user_notification_prefs',
   'user_notifications',
   'web_analytics_events',
+  'web_product_events',
   'tournament_standings',
 ];
 
@@ -98,6 +99,7 @@ const identityColumns = new Map([
   ['user_follows', 'id'],
   ['user_notifications', 'id'],
   ['web_analytics_events', 'id'],
+  ['web_product_events', 'id'],
   ['tournament_standings', 'id'],
 ]);
 

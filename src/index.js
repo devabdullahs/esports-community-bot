@@ -18,6 +18,7 @@ import { stopLogoWarmup } from './jobs/logoWarmup.js';
 import { stopNotifier } from './jobs/notifier.js';
 import { stopLiquipediaEnrichment } from './jobs/liquipediaEnrichment.js';
 import { stopStandingsSync } from './jobs/standingsSync.js';
+import { startWebAnalyticsRetention, stopWebAnalyticsRetention } from './jobs/webAnalyticsRetention.js';
 import { deployCommands } from './lib/commandRegistry.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -32,6 +33,7 @@ const client = new Client({
 client.commands = new Collection();
 
 await ensurePostgresAppSchema();
+startWebAnalyticsRetention();
 
 // --- Load commands ---
 for (const { file, mod } of await loadModules(join(here, 'commands'))) {
@@ -74,6 +76,7 @@ async function shutdown(signal) {
   stopNotifier();
   stopLiquipediaEnrichment();
   stopStandingsSync();
+  stopWebAnalyticsRetention();
   client.destroy();
   await closeDbClient().catch((err) => logger.warn(`Failed to close DB cleanly: ${err.message}`));
   process.exit(0);

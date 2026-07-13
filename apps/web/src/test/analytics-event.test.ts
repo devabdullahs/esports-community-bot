@@ -4,6 +4,7 @@ process.env.EWC_ANALYTICS_VISITOR_RATE_LIMIT_PER_HOUR = "50";
 import { describe, expect, test } from "vitest";
 import { POST } from "@/app/api/analytics/event/route";
 import { getAnalyticsDashboard } from "@/lib/web-analytics";
+import { all } from "@bot/db/client.js";
 
 function analyticsRequest(
   visitorId: string,
@@ -92,5 +93,106 @@ describe("analytics acquisition ingestion", () => {
     const dashboard = await getAnalyticsDashboard({ days: 30 });
     expect(dashboard.pages.some((page) => page.path === "/news/invalid-source")).toBe(false);
     expect(dashboard.pages.some((page) => page.path === "/news/invalid-campaign")).toBe(false);
+  });
+});
+
+async function productEventCount() {
+  const [row] = await all("SELECT COUNT(*) AS count FROM web_product_events");
+  return Number(row?.count || 0);
+}
+
+describe("product analytics ingestion", () => {
+  test("records a valid allowlisted event without arbitrary fields", async () => {
+    const before = await productEventCount();
+    const response = await POST(
+      analyticsRequest("visitorproductevent1", "sessionproductevent1", "203.0.113.30", {
+        eventType: "product",
+        eventName: "prediction_submit",
+        path: "/predictions?club=private#save",
+        entityId: "private-entity",
+        eventToken: "must-not-persist",
+      }),
+    );
+
+    expect(response.status).toBe(204);
+    expect(await productEventCount()).toBe(before + 1);
+    const [stored] = await all(
+      "SELECT event_name, path FROM web_product_events WHERE visitor_id = $1",
+      ["visitorproductevent1"],
+    );
+    expect(stored).toEqual({ event_name: "prediction_submit", path: "/predictions" });
+  });
+
+  test("rejects invalid product names and privacy-sensitive requests without inserts", async () => {
+    const before = await productEventCount();
+    const invalidName = await POST(
+      analyticsRequest("visitorproductevent2", "sessionproductevent2", "203.0.113.31", {
+        eventType: "product",
+        eventName: "prediction_submit?club=private",
+      }),
+    );
+    const crossSite = await POST(new Request("http://localhost/api/analytics/event", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "User-Agent": "Mozilla/5.0",
+        "sec-fetch-site": "cross-site",
+      },
+      body: JSON.stringify({
+        visitorId: "visitorproductevent3",
+        sessionId: "sessionproductevent3",
+        eventType: "product",
+        eventName: "follow_create",
+        path: "/teams/1",
+        acquisitionSource: "direct",
+      }),
+    }));
+    const dnt = await POST(new Request("http://localhost/api/analytics/event", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "User-Agent": "Mozilla/5.0",
+        DNT: "1",
+      },
+      body: JSON.stringify({
+        visitorId: "visitorproductevent4",
+        sessionId: "sessionproductevent4",
+        eventType: "product",
+        eventName: "follow_create",
+        path: "/teams/1",
+        acquisitionSource: "direct",
+      }),
+    }));
+    const gpc = await POST(new Request("http://localhost/api/analytics/event", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "User-Agent": "Mozilla/5.0",
+        "sec-gpc": "1",
+      },
+      body: JSON.stringify({
+        visitorId: "visitorproductevent5",
+        sessionId: "sessionproductevent5",
+        eventType: "product",
+        eventName: "follow_create",
+        path: "/teams/1",
+        acquisitionSource: "direct",
+      }),
+    }));
+    const malformed = await POST(new Request("http://localhost/api/analytics/event", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "User-Agent": "Mozilla/5.0" },
+      body: "{not-json",
+    }));
+    const oversized = await POST(new Request("http://localhost/api/analytics/event", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "User-Agent": "Mozilla/5.0" },
+      body: JSON.stringify({ padding: "x".repeat(2_100) }),
+    }));
+
+    for (const response of [invalidName, crossSite, dnt, gpc, malformed, oversized]) {
+      expect(response.status).toBe(204);
+    }
+    expect(await productEventCount()).toBe(before);
   });
 });

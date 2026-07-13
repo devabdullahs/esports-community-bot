@@ -9,6 +9,7 @@ import {
   ChartTooltipContent,
   type ChartConfig,
 } from "@/components/ui/chart";
+import type { ProductEventName } from "@/lib/product-analytics";
 
 type AnalyticsTrendPoint = {
   day: string;
@@ -89,6 +90,86 @@ export function AnalyticsTrendChart({
         <Bar dataKey="visitors" fill="var(--color-visitors)" radius={[4, 4, 0, 0]} />
         <Bar dataKey="sessions" fill="var(--color-sessions)" radius={[4, 4, 0, 0]} />
         <Bar dataKey="pageviews" fill="var(--color-pageviews)" radius={[4, 4, 0, 0]} />
+      </BarChart>
+    </ChartContainer>
+  );
+}
+
+type ProductEventTrendPoint = {
+  day: string;
+  counts: Partial<Record<ProductEventName, number>>;
+};
+
+export function ProductEventsTrendChart({
+  days,
+  eventNames,
+  labels,
+}: {
+  days: ProductEventTrendPoint[];
+  eventNames: ProductEventName[];
+  labels: Record<ProductEventName, string>;
+}) {
+  const chartConfig = Object.fromEntries(
+    eventNames.map((eventName, index) => [
+      eventName,
+      {
+        label: labels[eventName],
+        color: `var(--chart-${(index % 5) + 1})`,
+      },
+    ]),
+  ) as ChartConfig;
+  const chartData = days.map((day) => ({
+    ...day.counts,
+    day: day.day,
+    label: day.day.slice(5),
+  }));
+
+  return (
+    <ChartContainer
+      config={chartConfig}
+      className="h-[260px] min-h-[220px] w-full"
+      initialDimension={{ width: 720, height: 260 }}
+    >
+      <BarChart
+        accessibilityLayer
+        data={chartData}
+        margin={{ top: 12, right: 12, bottom: 0, left: 0 }}
+      >
+        <CartesianGrid vertical={false} />
+        <XAxis
+          dataKey="label"
+          tickLine={false}
+          axisLine={false}
+          tickMargin={10}
+          minTickGap={16}
+        />
+        <YAxis
+          tickLine={false}
+          axisLine={false}
+          tickMargin={8}
+          width={34}
+          allowDecimals={false}
+        />
+        <ChartTooltip
+          content={
+            <ChartTooltipContent
+              indicator="dot"
+              labelFormatter={(_value, payload) => {
+                const day = payload?.[0]?.payload?.day;
+                return typeof day === "string" ? day : "";
+              }}
+            />
+          }
+        />
+        <ChartLegend content={<ChartLegendContent />} />
+        {eventNames.map((eventName) => (
+          <Bar
+            key={eventName}
+            dataKey={eventName}
+            fill={`var(--color-${eventName})`}
+            radius={[4, 4, 0, 0]}
+          />
+        ))}
       </BarChart>
     </ChartContainer>
   );
