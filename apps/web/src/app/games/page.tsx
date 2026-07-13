@@ -20,6 +20,7 @@ import {
 import { localizeText } from "@/lib/community-content";
 import { gameTitleForSlug, listGamesCached } from "@/lib/games";
 import { listLatestPublishedNewsPostsCached } from "@/lib/news";
+import { newsPublicPath } from "@/lib/news-url";
 import {
   copy,
   localizedPath,
@@ -231,7 +232,7 @@ export default async function GamesPage() {
               {latestPosts.map((post) => (
                 <Link
                   key={post.id}
-                  href={localizedPath(`/games/${post.gameSlug}/news/${post.id}`, locale)}
+                  href={newsPublicPath(post, locale)}
                   className="group block"
                 >
                   <Card size="sm" className="h-full ring-1 ring-transparent transition-all group-hover:-translate-y-0.5 group-hover:border-primary/30 group-hover:shadow-md group-hover:ring-primary/40">

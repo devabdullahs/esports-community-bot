@@ -36,6 +36,7 @@ import { CLUB_REGION_IDS, cleanClubRegion, type ClubRegionId } from "@/lib/ewc-c
 import { copy, formatNumber, localizedPath, type Locale } from "@/lib/i18n";
 import { buildPageMetadata } from "@/lib/metadata";
 import { getRequestLocale } from "@/lib/request-locale";
+import { hasNonTrackingQuery } from "@/lib/seo-query";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -61,14 +62,20 @@ function clubsHref(locale: Locale, { region, q, scope }: { region: ClubRegionId;
   return `${localizedPath("/clubs", locale)}${qs ? `?${qs}` : ""}`;
 }
 
-export async function generateMetadata(): Promise<Metadata> {
+export async function generateMetadata({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}): Promise<Metadata> {
   const locale = await getRequestLocale();
+  const params = await searchParams;
   const text = copy[locale].ewcClubs;
   return buildPageMetadata({
     title: text.title,
     description: text.description,
     path: localizedPath("/clubs", locale),
     locale,
+    robots: hasNonTrackingQuery(params) ? { index: false, follow: true } : undefined,
   });
 }
 

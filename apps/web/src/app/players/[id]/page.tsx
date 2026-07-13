@@ -26,6 +26,7 @@ import {
   type ProfileReturnContext,
 } from "@/lib/profile-navigation";
 import { getRequestLocale } from "@/lib/request-locale";
+import { isIndexablePlayer } from "@/lib/seo-indexability";
 import { safeUrlOrUndefined } from "@/lib/safe-url";
 
 export const runtime = "nodejs";
@@ -81,6 +82,7 @@ export async function generateMetadata({
     path: localizedPath(`/players/${id}`, locale),
     image: player.image_url,
     locale,
+    robots: isIndexablePlayer(player) ? undefined : { index: false, follow: true },
   });
 }
 

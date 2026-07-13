@@ -39,7 +39,7 @@ function isSafeHttpUrl(value) {
   }
 }
 
-function readMoreUrl(post) {
+function readMoreUrl(post, locale = post.defaultLocale) {
   const publicUrl = config.dashboard.publicUrl;
   if (!publicUrl) return null;
   const base = publicUrl.replace(/\/$/, '');
@@ -47,23 +47,28 @@ function readMoreUrl(post) {
   const path = post.mediaSlug
     ? `/media/${post.mediaSlug}/news/${post.id}`
     : `/games/${post.gameSlug}/news/${post.id}`;
-  const url = `${base}${path}`;
-  return isSafeHttpUrl(url) ? url : null;
+  try {
+    const localizedPath = locale === 'ar' ? `/ar${path}` : path;
+    const url = new URL(`${base}${localizedPath}`);
+    url.searchParams.set('utm_source', 'discord');
+    url.searchParams.set('utm_medium', 'community');
+    url.searchParams.set('utm_campaign', 'news_announcement');
+    return isSafeHttpUrl(url.toString()) ? url.toString() : null;
+  } catch {
+    return null;
+  }
 }
 
 // AR primary, EN fallback (community is Arabic-first). getTranslationForLocale already
-// falls back: requested -> defaultLocale -> en -> ar -> null. The embed now carries the
-// full article body (capped to Discord's 4096) instead of the short summary, plus the
-// byline (avatar + every author), the game, and a publish timestamp so readers get the
-// whole post in Discord without opening the site.
-function buildNewsPayload(post, game = null) {
+// falls back: requested -> defaultLocale -> en -> ar -> null. Discord receives a
+// concise preview; the website remains the authoritative home of the full article.
+export function buildNewsPayload(post, game = null) {
   const translation = getTranslationForLocale(post, 'ar') || getTranslationForLocale(post, 'en');
   const title = clampText(translation?.title || post.title || 'News update', DISCORD_TITLE_CAP);
-  const body = prepareBodyForDiscord(translation?.body || '');
-  const summary = clampText(translation?.summary || post.summary || '', 600);
-  // Prefer the body; fall back to the summary for posts that only have a lead.
-  const description = body || summary;
-  const url = readMoreUrl(post);
+  const summary = prepareBodyForDiscord(translation?.summary || post.summary || '');
+  const bodyLead = prepareBodyForDiscord(translation?.body || '');
+  const description = clampText(summary || bodyLead, 600);
+  const url = readMoreUrl(post, translation?.locale);
 
   const embed = new EmbedBuilder().setColor(0x5865f2).setTitle(title);
   if (url) embed.setURL(url);

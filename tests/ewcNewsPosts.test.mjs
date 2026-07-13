@@ -84,6 +84,19 @@ test('requires both translations before publishing translated posts', () => {
   assert.match(published.error, /AR/);
 });
 
+test('rejects XML-invalid control characters before storing feed content', () => {
+  const result = validateNewsContentInput({
+    status: 'published',
+    contentMode: 'shared',
+    defaultLocale: 'en',
+    translations: {
+      en: { title: 'Broken\u0001 title', summary: 'Summary', body: 'Body' },
+    },
+  });
+  assert.equal(result.ok, false);
+  assert.match(result.error, /unsupported control characters/i);
+});
+
 test('lists shared posts in both public languages and preserves cover URLs', async () => {
   const post = await createEwcNewsPost({
     gameSlug: 'valorant',

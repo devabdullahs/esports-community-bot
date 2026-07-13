@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { ArrowLeftIcon, ArrowRightIcon, CrownIcon, TrophyIcon, UsersRoundIcon } from "lucide-react";
 import { LeaderboardTable } from "@/components/dashboard/leaderboard-table";
 import { PartnerPlacement } from "@/components/partners/partner-placement";
@@ -26,22 +26,32 @@ import {
 import { getRequestLocale } from "@/lib/request-locale";
 import { getPublicEwcLeaderboardCached, isKnownEwcLeaderboardNamespace } from "@/lib/public-ewc-leaderboard";
 import { buildPageMetadata } from "@/lib/metadata";
+import { hasNonTrackingQuery, paginatedPath, parsePublicPage } from "@/lib/seo-query";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function generateMetadata({
   params,
+  searchParams,
 }: {
   params: Promise<{ guildId: string; season: string }>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
 }): Promise<Metadata> {
   const { guildId, season } = await params;
+  const query = await searchParams;
+  const page = parsePublicPage(query.page);
+  if (page === null) return { robots: { index: false, follow: true } };
   const locale = await getRequestLocale();
   const text = copy[locale];
   return buildPageMetadata({
     title: text.leaderboard.title(season),
     description: text.leaderboard.badge,
-    path: localizedPath(`/leaderboard/${guildId}/${season}`, locale),
+    path: paginatedPath(`/leaderboard/${guildId}/${season}`, locale, page),
+    locale,
+    robots: hasNonTrackingQuery(query, new Set(["page"]))
+      ? { index: false, follow: true }
+      : undefined,
   });
 }
 
@@ -50,10 +60,12 @@ export default async function LeaderboardPage({
   searchParams,
 }: {
   params: Promise<{ guildId: string; season: string }>;
-  searchParams: Promise<{ page?: string }>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const { guildId, season } = await params;
-  const { page: requestedPage } = await searchParams;
+  const query = await searchParams;
+  const requestedPage = parsePublicPage(query.page);
+  if (requestedPage === null) notFound();
   const locale = await getRequestLocale();
   const text = copy[locale];
 
@@ -85,13 +97,15 @@ export default async function LeaderboardPage({
       returnedRowCount: leaderboard.rows.length,
     });
   }
+  if (pageModel.page !== requestedPage) {
+    redirect(
+      paginatedPath(`/leaderboard/${guildId}/${season}`, locale, pageModel.page),
+    );
+  }
   // "Top score" is the global #1 — always from page 1, not the current page's first row.
   const topScore = leaderboard.topScore ?? leaderboard.rows[0]?.overallPoints ?? 0;
   const leaderboardPath = `/leaderboard/${guildId}/${season}`;
-  const pageHref = (targetPage: number) => localizedPath(
-    `${leaderboardPath}?page=${targetPage}`,
-    locale,
-  );
+  const pageHref = (targetPage: number) => paginatedPath(leaderboardPath, locale, targetPage);
 
   return (
     <main

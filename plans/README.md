@@ -849,6 +849,17 @@ tradeoffs). One consolidated plan of four safe, low-risk fixes:
 |------|-------|----------|--------|--------|
 | 061  | Deep-audit fixes: YouTube non-200 status, homepage parallel fetch, session cache() dedup, canvas render smoke test | P2 | S (each) | TODO |
 
+### SEO audit @ `0f1ff8a` (2026-07-13)
+
+| Plan | Title | Priority | Effort | Status |
+|------|-------|----------|--------|--------|
+| 094 | Improve SEO and search discoverability | P1 | L | DONE |
+
+Plan 094 delivered locale/canonical correctness, complete sitemap inventory,
+localized feeds, structured data, privacy-safe acquisition reporting, IndexNow,
+and conservative CDN caching for cookie-free public HTML. Requests carrying
+cookies, query strings, RSC/prefetch headers, or private paths remain dynamic.
+
 Considered and rejected (do not re-audit): N+1 tournament-summary queries (low
 leverage — cached, single-guild, bounded N); CSP `img-src https:` tightening
 (would break admin-pasted covers); Postgres TLS fail-fast (server lacks SSL —

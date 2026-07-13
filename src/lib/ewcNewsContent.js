@@ -38,7 +38,22 @@ function legacyTranslation(raw) {
   });
 }
 
+function hasInvalidXmlCharacters(value) {
+  for (const character of String(value || '')) {
+    const point = character.codePointAt(0) || 0;
+    const valid = point === 0x9 || point === 0xa || point === 0xd ||
+      (point >= 0x20 && point <= 0xd7ff) ||
+      (point >= 0xe000 && point <= 0xfffd) ||
+      (point >= 0x10000 && point <= 0x10ffff);
+    if (!valid) return true;
+  }
+  return false;
+}
+
 function validateTranslation(locale, translation, { requirePublishable }) {
+  if ([translation.title, translation.summary, translation.body].some(hasInvalidXmlCharacters)) {
+    return `${locale.toUpperCase()} content contains unsupported control characters`;
+  }
   if (translation.title.length > NEWS_TITLE_MAX_LENGTH) {
     return `${locale.toUpperCase()} headline must be ${NEWS_TITLE_MAX_LENGTH} characters or fewer`;
   }

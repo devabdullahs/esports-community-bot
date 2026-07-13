@@ -292,6 +292,20 @@ export async function listLatestPublishedEwcNewsPosts({ locale, limit = 4, ewcOn
   return (await Promise.all(rows.map((row) => hydrate(row, locale)))).filter(Boolean);
 }
 
+// Complete public inventory for sitemap/feed generation. Unlike the homepage
+// query, this intentionally includes media-owned posts and has no presentation
+// cap. Callers still derive the one or two public locale URLs from each post's
+// content mode and complete translations.
+export async function listPublishedEwcNewsPostsForDiscovery() {
+  const rows = await all(
+    `SELECT * FROM ewc_news_posts
+     WHERE status = 'published'
+     ORDER BY published_at DESC, id DESC`,
+    [],
+  );
+  return Promise.all(rows.map((row) => hydrate(row)));
+}
+
 // Bounded public search used by MCP clients. Shared posts search their one
 // canonical translation; translated posts search only the requested locale.
 // Legacy rows without side-table translations remain searchable as a fallback.

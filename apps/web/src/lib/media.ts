@@ -33,6 +33,8 @@ export type MediaChannelRecord = {
   discordChannelId: string | null;
   gameSlug: string | null;
   sortOrder: number;
+  createdAt?: string;
+  updatedAt?: string;
 };
 
 export type MediaChannelInput = {

@@ -32,6 +32,7 @@ import {
   localizedPath,
 } from "@/lib/i18n";
 import { listPublishedNewsPostsCached } from "@/lib/news";
+import { newsPublicPath } from "@/lib/news-url";
 import { getRequestLocale } from "@/lib/request-locale";
 import { safeUrlOrUndefined } from "@/lib/safe-url";
 import { canManageGame, getAdminAccess } from "@/lib/admin";
@@ -257,7 +258,7 @@ export default async function GamePage({
               return (
                 <Link
                   key={post.id}
-                  href={localizedPath(`/games/${slug}/news/${post.id}`, locale)}
+                  href={newsPublicPath(post, locale)}
                   className="group block"
                 >
                   <Card className="h-full overflow-hidden ring-1 ring-transparent transition-all group-hover:-translate-y-0.5 group-hover:border-primary/30 group-hover:shadow-md group-hover:ring-primary/40">

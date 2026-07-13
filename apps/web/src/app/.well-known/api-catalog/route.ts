@@ -25,6 +25,11 @@ export function GET() {
       anchor: absoluteUrl("/api/public-mcp"),
       "service-doc": [{ href: absoluteUrl("/docs/mcp"), title: "Public MCP server" }],
     },
+    {
+      anchor: absoluteUrl("/feed.xml"),
+      alternate: [{ href: absoluteUrl("/feed-ar.xml"), title: "Arabic news feed" }],
+      "service-doc": [{ href: absoluteUrl("/news"), title: "Published news" }],
+    },
   ];
 
   return new Response(JSON.stringify({ linkset }, null, 2), {

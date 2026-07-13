@@ -28,6 +28,7 @@ import { LiveCoStreamsStrip } from "@/components/streams/live-co-streams-strip";
 import { localizeText } from "@/lib/community-content";
 import { gameTitleForSlug, listGamesCached } from "@/lib/games";
 import { listLatestPublishedNewsPostsCached, type NewsPost } from "@/lib/news";
+import { newsPublicPath } from "@/lib/news-url";
 import { listTournamentSummariesCached, type TournamentSummary } from "@/lib/tournaments";
 import {
   copy,
@@ -73,13 +74,7 @@ export default async function Home() {
   const secondaryPosts = latestPosts.slice(1);
   const featuredPostCover = featuredPost ? safeUrlOrUndefined(featuredPost.coverImageUrl) : null;
   const newsPostHref = (post: NewsPost) => {
-    if (post.gameSlug) {
-      return localizedPath(`/games/${post.gameSlug}/news/${post.id}`, locale);
-    }
-    if (post.mediaSlug) {
-      return localizedPath(`/media/${post.mediaSlug}/news/${post.id}`, locale);
-    }
-    return newsHref;
+    return newsPublicPath(post, locale);
   };
   const newsPostLabel = (post: NewsPost) => {
     if (post.gameSlug) return gameTitleOf(post.gameSlug);

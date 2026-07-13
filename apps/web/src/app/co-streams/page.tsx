@@ -7,6 +7,7 @@ import { dashboardPublicUrl } from "@/lib/env";
 import { localizedPath, type Locale } from "@/lib/i18n";
 import { buildPageMetadata } from "@/lib/metadata";
 import { getRequestLocale } from "@/lib/request-locale";
+import { hasNonTrackingQuery } from "@/lib/seo-query";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -43,14 +44,20 @@ async function parentHost(): Promise<string> {
   return /^[a-z0-9.-]{1,253}$/i.test(raw) ? raw : fallback;
 }
 
-export async function generateMetadata(): Promise<Metadata> {
+export async function generateMetadata({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}): Promise<Metadata> {
   const locale = await getRequestLocale();
+  const params = await searchParams;
   const meta = META[locale];
   return buildPageMetadata({
     title: meta.title,
     description: meta.description,
     path: localizedPath("/co-streams", locale),
     locale,
+    robots: hasNonTrackingQuery(params) ? { index: false, follow: true } : undefined,
   });
 }
 

@@ -31,6 +31,7 @@ import {
   type PlayerProfile,
 } from "@/lib/pandascore-profiles";
 import { getRequestLocale } from "@/lib/request-locale";
+import { isIndexableTeam } from "@/lib/seo-indexability";
 import { safeUrlOrUndefined } from "@/lib/safe-url";
 
 export const runtime = "nodejs";
@@ -110,7 +111,11 @@ export async function generateMetadata({
   const id = parseId(rawId);
   if (!id) return {};
 
-  const [team, locale] = await Promise.all([getTeamProfile(id), getRequestLocale()]);
+  const [team, players, locale] = await Promise.all([
+    getTeamProfile(id),
+    getTeamPlayers(id),
+    getRequestLocale(),
+  ]);
   if (!team) return {};
 
   return buildPageMetadata({
@@ -119,6 +124,9 @@ export async function generateMetadata({
     path: localizedPath(`/teams/${id}`, locale),
     image: team.image_url,
     locale,
+    robots: isIndexableTeam(team, players.length > 0)
+      ? undefined
+      : { index: false, follow: true },
   });
 }
 

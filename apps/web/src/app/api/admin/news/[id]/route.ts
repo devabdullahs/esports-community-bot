@@ -6,6 +6,7 @@ import { recordAdminAudit } from "@/lib/audit";
 import { sameOriginOr403 } from "@/lib/community";
 import { getGame } from "@/lib/games";
 import { getMediaChannel } from "@/lib/media";
+import { indexNowUrlsForPost, scheduleIndexNowUrls } from "@/lib/indexnow";
 import { deleteNewsPost, getNewsPost, updateNewsPost } from "@/lib/news";
 import { parsePostId, validateNewsInput } from "@/lib/news-validation";
 
@@ -83,8 +84,12 @@ export async function PATCH(
     authorName: resolved.authors[0]?.name ?? null,
   });
   if (!updated) return NextResponse.json({ error: "Not found" }, { status: 404 });
-  revalidateTag("cms-news", "default");
+  revalidateTag("cms-news", { expire: 0 });
   recordAdminAudit(access, "news.update", String(postId));
+  scheduleIndexNowUrls([
+      ...indexNowUrlsForPost(existing),
+      ...indexNowUrlsForPost(updated),
+  ]);
   return NextResponse.json(updated);
 }
 
@@ -111,7 +116,8 @@ export async function DELETE(
 
   const result = await deleteNewsPost(postId);
   if (result.changes === 0) return NextResponse.json({ error: "Not found" }, { status: 404 });
-  revalidateTag("cms-news", "default");
+  revalidateTag("cms-news", { expire: 0 });
   recordAdminAudit(access, "news.delete", String(postId));
+  scheduleIndexNowUrls(indexNowUrlsForPost(existing));
   return NextResponse.json({ ok: true });
 }

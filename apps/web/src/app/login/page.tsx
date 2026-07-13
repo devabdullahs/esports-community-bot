@@ -1,10 +1,15 @@
 import { Suspense } from "react";
+import type { Metadata } from "next";
 import Link from "next/link";
 import { TrophyIcon } from "lucide-react";
 import { LoginPanel } from "@/components/dashboard/login-panel";
 import { Skeleton } from "@/components/ui/skeleton";
 import { copy, localizedPath } from "@/lib/i18n";
 import { getRequestLocale } from "@/lib/request-locale";
+
+export const metadata: Metadata = {
+  robots: { index: false, follow: false },
+};
 
 export default async function LoginPage() {
   const locale = await getRequestLocale();
