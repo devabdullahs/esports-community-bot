@@ -15,6 +15,16 @@ export function parseGoogleAnalyticsConsent(value: string | null | undefined): G
   return value === "granted" || value === "denied" ? value : null;
 }
 
+export function enqueueGoogleTagCommand(dataLayer: unknown[], ...command: unknown[]) {
+  const gtag: (...args: unknown[]) => void = function () {
+    // gtag.js requires the function's Arguments object, not a plain array.
+    // eslint-disable-next-line prefer-rest-params
+    dataLayer.push(arguments);
+  };
+
+  gtag(...command);
+}
+
 export function shouldLoadGoogleAnalytics({
   measurementId,
   consent,

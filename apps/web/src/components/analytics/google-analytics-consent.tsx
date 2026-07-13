@@ -10,6 +10,7 @@ import {
   ANALYTICS_CONSENT_CHANGED_EVENT,
   ANALYTICS_CONSENT_KEY,
   ANALYTICS_SETTINGS_EVENT,
+  enqueueGoogleTagCommand,
   normalizeGoogleAnalyticsMeasurementId,
   parseGoogleAnalyticsConsent,
   shouldLoadGoogleAnalytics,
@@ -20,7 +21,7 @@ import { localizedPath, type Locale } from "@/lib/i18n";
 const SCRIPT_ID = "ec-google-analytics";
 
 type GoogleAnalyticsWindow = Window & {
-  dataLayer?: unknown[][];
+  dataLayer?: unknown[];
   gtag?: (...args: unknown[]) => void;
   __ecGoogleAnalyticsId?: string;
 };
@@ -74,7 +75,7 @@ function privacySignals() {
 function queueGtag(...args: unknown[]) {
   const analyticsWindow = window as GoogleAnalyticsWindow;
   analyticsWindow.dataLayer = analyticsWindow.dataLayer || [];
-  analyticsWindow.dataLayer.push(args);
+  enqueueGoogleTagCommand(analyticsWindow.dataLayer, ...args);
 }
 
 function enableGoogleAnalytics(measurementId: string) {
@@ -90,17 +91,17 @@ function enableGoogleAnalytics(measurementId: string) {
       functionality_storage: "granted",
       security_storage: "granted",
     });
-    queueGtag("consent", "update", {
-      analytics_storage: "granted",
-      ad_storage: "denied",
-      ad_user_data: "denied",
-      ad_personalization: "denied",
-    });
     queueGtag("js", new Date());
     queueGtag("config", measurementId, {
       send_page_view: false,
       allow_google_signals: false,
       allow_ad_personalization_signals: false,
+    });
+    queueGtag("consent", "update", {
+      analytics_storage: "granted",
+      ad_storage: "denied",
+      ad_user_data: "denied",
+      ad_personalization: "denied",
     });
     analyticsWindow.__ecGoogleAnalyticsId = measurementId;
   } else {
