@@ -48,7 +48,15 @@ describe("localized RSS", () => {
     expect(feed).toContain("https://esportscommunity.net/games/valorant/news/7");
     expect(feed).toContain("English &lt;title&gt;");
     expect(feed).toContain("A &amp; B");
+    expect(feed).toContain('<guid isPermaLink="false">urn:esports-community:news:7:en</guid>');
     expect(feed).not.toContain("/ar/games/valorant/news/7");
+  });
+
+  it("keeps the item identifier stable when an article moves", async () => {
+    listPosts.mockResolvedValue([post({ gameSlug: null, mediaSlug: "echo-mena" })]);
+    const feed = await newsRss("en");
+    expect(feed).toContain("https://esportscommunity.net/media/echo-mena/news/7");
+    expect(feed).toContain('<guid isPermaLink="false">urn:esports-community:news:7:en</guid>');
   });
 
   it("omits an incomplete translation instead of advertising a broken locale", async () => {

@@ -46,6 +46,7 @@ export async function listIndexablePlayers(): Promise<SeoEntityEntry[]> {
           OR NULLIF(TRIM(COALESCE(p.nationality, '')), '') IS NOT NULL
           OR NULLIF(TRIM(COALESCE(p.first_name, '')), '') IS NOT NULL
           OR NULLIF(TRIM(COALESCE(p.last_name, '')), '') IS NOT NULL
+          OR p.current_team_id IS NOT NULL
           OR NULLIF(TRIM(COALESCE(p.current_team_name, '')), '') IS NOT NULL
           OR NULLIF(TRIM(COALESCE(p.role, '')), '') IS NOT NULL
           OR NULLIF(TRIM(COALESCE(p.liquipedia_url, '')), '') IS NOT NULL
@@ -138,18 +139,22 @@ export async function listIndexableTournaments(): Promise<SeoEntityEntry[]> {
 }
 
 export async function listIndexableLeaderboards(): Promise<SeoLeaderboardEntry[]> {
+  const guildId = await resolveDefaultGuildId();
+  if (!guildId) return [];
   const rows = await all(
     `SELECT guild_id, season, MAX(updated_at) AS updated_at
        FROM (
          SELECT guild_id, season, COALESCE(scored_at, created_at) AS updated_at
            FROM ewc_prediction_seasons
+          WHERE guild_id = $1
          UNION ALL
          SELECT guild_id, season, COALESCE(scored_at, created_at) AS updated_at
            FROM ewc_prediction_weeks
+          WHERE guild_id = $1
        ) namespaces
       GROUP BY guild_id, season
       ORDER BY guild_id, season`,
-    [],
+    [guildId],
   ) as Array<{
     guild_id: string | number;
     season: string | number;

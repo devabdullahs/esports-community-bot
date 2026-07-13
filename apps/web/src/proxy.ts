@@ -31,6 +31,7 @@ function requestWithLocale(request: NextRequest, locale: Locale) {
 }
 
 const PRIVATE_HTML_PREFIXES = ["/api", "/admin", "/login", "/me"];
+const DYNAMIC_PUBLIC_HTML_PREFIXES = ["/co-streams"];
 
 export function isPublicHtmlCacheCandidate(request: NextRequest) {
   if (request.method !== "GET" && request.method !== "HEAD") return false;
@@ -48,6 +49,9 @@ export function isPublicHtmlCacheCandidate(request: NextRequest) {
 
   const pathname = stripLocalePrefix(request.nextUrl.pathname);
   if (PRIVATE_HTML_PREFIXES.some((prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`))) {
+    return false;
+  }
+  if (DYNAMIC_PUBLIC_HTML_PREFIXES.some((prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`))) {
     return false;
   }
   const finalSegment = pathname.split("/").filter(Boolean).at(-1) || "";

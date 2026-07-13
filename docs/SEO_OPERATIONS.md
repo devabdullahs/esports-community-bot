@@ -16,7 +16,7 @@
 - English RSS: `https://esportscommunity.net/feed.xml`.
 - Arabic RSS: `https://esportscommunity.net/feed-ar.xml`.
 - IndexNow is optional. Enable `EWC_INDEXNOW_ENABLED` and configure a random
-  `EWC_INDEXNOW_KEY`; verify `/indexnow/<key>.txt` before publishing. Do not
+  `EWC_INDEXNOW_KEY`; verify `/<key>.txt` before publishing. Do not
   publish or link that entropy-bearing verification URL.
 - After a canonical or sitemap fix, request validation in Search Console. A
   redirect, intentional `noindex`, or private route exclusion is not an error.

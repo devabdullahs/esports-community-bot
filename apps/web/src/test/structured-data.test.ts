@@ -4,7 +4,6 @@ import {
   localizedMatchDescription,
   localizedTournamentDescription,
   serializeStructuredData,
-  sportsEvent,
   structuredDataGraph,
 } from "@/lib/structured-data";
 
@@ -56,38 +55,6 @@ describe("structured metadata", () => {
         ],
       }],
     });
-  });
-
-  test("builds SportsEvent only for a complete, timestamped match", () => {
-    const complete = {
-      url: "https://example.test/matches/7",
-      locale: "en" as const,
-      teamA: "Falcons",
-      teamB: "Liquid",
-      scheduledAt: 1_700_000_000,
-      details: { kind: "dota2" },
-      status: "scheduled" as const,
-      tournamentName: "Riyadh Masters",
-      tournamentUrl: "https://example.test/tournaments/42",
-      game: "Dota 2",
-      description: "Falcons vs Liquid match details.",
-    };
-
-    expect(sportsEvent(complete)).toMatchObject({
-      "@type": "SportsEvent",
-      name: "Falcons vs Liquid",
-      startDate: "2023-11-14T22:13:20.000Z",
-      eventStatus: "https://schema.org/EventScheduled",
-      sport: "Dota 2",
-      competitor: [
-        { "@type": "Organization", name: "Falcons" },
-        { "@type": "Organization", name: "Liquid" },
-      ],
-    });
-    expect(sportsEvent({ ...complete, teamB: "TBD" })).toBeNull();
-    expect(sportsEvent({ ...complete, details: null })).toBeNull();
-    expect(sportsEvent({ ...complete, scheduledAt: null })).toBeNull();
-    expect(sportsEvent({ ...complete, scheduledAt: Number.MAX_VALUE })).toBeNull();
   });
 
   test("escapes data before embedding it in an inline JSON script", () => {

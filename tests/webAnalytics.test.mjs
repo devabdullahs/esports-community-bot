@@ -3,13 +3,59 @@ import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
+import Database from 'better-sqlite3';
 
 const dir = mkdtempSync(join(tmpdir(), 'web-analytics-'));
 process.env.DB_PATH = join(dir, 'bot.sqlite');
 process.env.LOG_LEVEL = 'error';
 
+const legacyDb = new Database(process.env.DB_PATH);
+legacyDb.exec(`
+  CREATE TABLE web_analytics_events (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    visitor_id TEXT NOT NULL,
+    session_id TEXT NOT NULL,
+    event_type TEXT NOT NULL,
+    path TEXT NOT NULL,
+    referrer TEXT,
+    country TEXT,
+    user_agent TEXT,
+    duration_seconds INTEGER NOT NULL DEFAULT 0,
+    occurred_at INTEGER NOT NULL
+  );
+`);
+const insertLegacy = legacyDb.prepare(`
+  INSERT INTO web_analytics_events
+    (visitor_id, session_id, event_type, path, referrer, occurred_at)
+  VALUES (?, ?, 'pageview', '/legacy', ?, 1)
+`);
+for (const [id, referrer] of [
+  ['x', 'https://x.com'],
+  ['x-shortener', 'https://t.co'],
+  ['discord', 'https://discord.gg'],
+  ['discord-legacy', 'https://cdn.discordapp.com'],
+  ['google', 'https://www.google.com'],
+  ['google-country', 'https://news.google.co.uk'],
+  ['google-lookalike', 'https://google.evil.example'],
+  ['bing', 'https://www.bing.com'],
+  ['referral', 'https://publisher.example'],
+  ['internal', '/news?page=2'],
+  ['direct', null],
+]) {
+  insertLegacy.run(`legacy-${id}`, `legacy-${id}`, referrer);
+}
+legacyDb.close();
+
 const { closeDb, db } = await import('../src/db/index.js');
 const { getWebAnalyticsDashboard, recordWebAnalyticsEvent } = await import('../src/db/webAnalytics.js');
+const migratedLegacyRows = db.prepare(`
+  SELECT visitor_id, acquisition_source
+    FROM web_analytics_events
+   WHERE visitor_id LIKE 'legacy-%'
+   ORDER BY visitor_id
+`).all();
+const migratedLegacyColumns = db.prepare('PRAGMA table_info(web_analytics_events)').all();
+db.prepare("DELETE FROM web_analytics_events WHERE visitor_id LIKE 'legacy-%'").run();
 
 test.after(() => {
   closeDb();
@@ -101,6 +147,23 @@ test('summarizes visitors, returning users, engagement, countries, and top pages
     ],
   );
   assert.equal(dashboard.daily.at(-1).visitors, 2);
+});
+
+test('classifies legacy referrers before removing the raw field', () => {
+  assert.deepEqual(migratedLegacyRows, [
+    { visitor_id: 'legacy-bing', acquisition_source: 'bing' },
+    { visitor_id: 'legacy-direct', acquisition_source: 'direct' },
+    { visitor_id: 'legacy-discord', acquisition_source: 'discord' },
+    { visitor_id: 'legacy-discord-legacy', acquisition_source: 'discord' },
+    { visitor_id: 'legacy-google', acquisition_source: 'google' },
+    { visitor_id: 'legacy-google-country', acquisition_source: 'google' },
+    { visitor_id: 'legacy-google-lookalike', acquisition_source: 'other_referral' },
+    { visitor_id: 'legacy-internal', acquisition_source: 'direct' },
+    { visitor_id: 'legacy-referral', acquisition_source: 'other_referral' },
+    { visitor_id: 'legacy-x', acquisition_source: 'x' },
+    { visitor_id: 'legacy-x-shortener', acquisition_source: 'x' },
+  ]);
+  assert.equal(migratedLegacyColumns.some((column) => column.name === 'referrer'), false);
 });
 
 test('rejects acquisition values outside the privacy-safe contract', async () => {

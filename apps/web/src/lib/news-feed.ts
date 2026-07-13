@@ -51,7 +51,7 @@ export async function newsRss(locale: Locale) {
       "<item>",
       `<title>${xml(content?.title)}</title>`,
       `<link>${xml(url)}</link>`,
-      `<guid isPermaLink="true">${xml(url)}</guid>`,
+      `<guid isPermaLink="false">${xml(`urn:esports-community:news:${post.id}:${locale}`)}</guid>`,
       Number.isNaN(published.getTime()) ? "" : `<pubDate>${published.toUTCString()}</pubDate>`,
       `<description>${xml(description)}</description>`,
       "</item>",

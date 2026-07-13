@@ -14,8 +14,8 @@ function completeTranslation(value: { title?: string; body?: string } | undefine
 }
 
 export function newsBasePath(post: NewsUrlPost) {
-  if (post.gameSlug) return `/games/${post.gameSlug}/news/${post.id}`;
   if (post.mediaSlug) return `/media/${post.mediaSlug}/news/${post.id}`;
+  if (post.gameSlug) return `/games/${post.gameSlug}/news/${post.id}`;
   return `/news`;
 }
 

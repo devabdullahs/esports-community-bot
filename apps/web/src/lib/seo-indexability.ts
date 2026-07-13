@@ -14,6 +14,8 @@ type PlayerLike = {
   first_name?: string | null;
   last_name?: string | null;
   current_team_name?: string | null;
+  current_team_id?: number | string | null;
+  resolved_team_name?: string | null;
   role?: string | null;
   liquipedia_url?: string | null;
   liquipedia_facts?: string | null;
@@ -48,6 +50,8 @@ export function isIndexablePlayer(player: PlayerLike) {
     player.first_name,
     player.last_name,
     player.current_team_name,
+    player.current_team_id,
+    player.resolved_team_name,
     player.role,
     player.liquipedia_url,
     player.liquipedia_facts,

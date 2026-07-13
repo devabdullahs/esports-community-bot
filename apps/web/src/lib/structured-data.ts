@@ -5,20 +5,6 @@ type BreadcrumbItem = {
   url: string;
 };
 
-type MatchEventInput = {
-  url: string;
-  locale: Locale;
-  teamA: string | null;
-  teamB: string | null;
-  scheduledAt: number | null;
-  details: unknown;
-  status: "running" | "scheduled" | "finished";
-  tournamentName: string;
-  tournamentUrl: string;
-  game?: string | null;
-  description: string;
-};
-
 export function localizedTournamentDescription({
   locale,
   name,
@@ -69,44 +55,6 @@ export function breadcrumbList(items: BreadcrumbItem[], pageUrl: string) {
       name: item.name,
       item: item.url,
     })),
-  };
-}
-
-function realParticipant(value: string | null) {
-  const normalized = String(value ?? "").trim();
-  return normalized && !/^(?:tbd|lobby|unknown|bye|-+)$/i.test(normalized)
-    ? normalized
-    : null;
-}
-
-export function sportsEvent(input: MatchEventInput) {
-  const teamA = realParticipant(input.teamA);
-  const teamB = realParticipant(input.teamB);
-  if (!teamA || !teamB || !input.details) return null;
-
-  const timestamp = Number(input.scheduledAt);
-  if (!Number.isFinite(timestamp) || timestamp <= 0) return null;
-  const startDate = new Date(timestamp * 1000);
-  if (!Number.isFinite(startDate.getTime())) return null;
-
-  return {
-    "@type": "SportsEvent",
-    "@id": `${input.url}#sports-event`,
-    name: `${teamA} ${input.locale === "ar" ? "ضد" : "vs"} ${teamB}`,
-    url: input.url,
-    description: input.description,
-    startDate: startDate.toISOString(),
-    inLanguage: input.locale,
-    ...(input.status === "scheduled"
-      ? { eventStatus: "https://schema.org/EventScheduled" }
-      : {}),
-    ...(input.game ? { sport: input.game } : {}),
-    competitor: [teamA, teamB].map((name) => ({ "@type": "Organization", name })),
-    superEvent: {
-      "@type": "SportsEvent",
-      name: input.tournamentName,
-      url: input.tournamentUrl,
-    },
   };
 }
 

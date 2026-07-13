@@ -113,6 +113,14 @@ describe("path-authoritative locale proxy", () => {
     expect(response.headers.get("cloudflare-cdn-cache-control")).toBeNull();
   });
 
+  test.each(["/co-streams", "/ar/co-streams"])(
+    "host-dependent co-stream HTML %s is never edge-cacheable",
+    (pathname) => {
+      const response = proxy(request(pathname, { accept: "text/html" }));
+      expect(response.headers.get("cloudflare-cdn-cache-control")).toBeNull();
+    },
+  );
+
   test.each([
     ["query", "/games?page=2", {}],
     ["RSC", "/games", { rsc: true }],

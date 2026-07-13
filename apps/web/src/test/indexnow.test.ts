@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { indexNowKey, submitIndexNowUrls } from "@/lib/indexnow";
-import { GET as getIndexNowKey } from "@/app/indexnow/[key]/route";
+import { GET as getIndexNowKey } from "@/app/[key]/route";
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -34,7 +34,7 @@ describe("IndexNow", () => {
     const body = JSON.parse(String(init.body));
     expect(body.host).toBe("esportscommunity.net");
     expect(body.keyLocation).toBe(
-      "https://esportscommunity.net/indexnow/test-indexnow-key-1234567890.txt",
+      "https://esportscommunity.net/test-indexnow-key-1234567890.txt",
     );
     expect(body.urlList).toEqual(["https://esportscommunity.net/news/1"]);
   });
@@ -42,7 +42,7 @@ describe("IndexNow", () => {
   it("serves verification only at the entropy-bearing configured path", async () => {
     process.env.EWC_INDEXNOW_ENABLED = "true";
     process.env.EWC_INDEXNOW_KEY = "test-indexnow-key-1234567890";
-    const request = new Request("https://esportscommunity.net/indexnow/value.txt");
+    const request = new Request("https://esportscommunity.net/value.txt");
 
     const missing = await getIndexNowKey(request, {
       params: Promise.resolve({ key: "guess.txt" }),

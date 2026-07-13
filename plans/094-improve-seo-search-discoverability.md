@@ -34,8 +34,9 @@ content signals, and gives operators enough attribution to improve publishing.
 4. RSS uses physical `/feed.xml` and `/feed-ar.xml` routes.
 5. IndexNow is optional, bounded, asynchronous through Next `after()`, and
    covers publish, update, move, unpublish, and delete URL lifecycles.
-6. `SportsEvent` is emitted only for a single scheduled match. Tournament pages
-   receive unique metadata and breadcrumb structured data.
+6. Tournament and match pages receive unique metadata and breadcrumb structured
+   data. `SportsEvent` is intentionally omitted until a verified physical or
+   virtual location is available; required event fields are never invented.
 7. Acquisition data is an allowlisted category and optional bounded campaign,
    never a raw destination URL or query string.
 8. Cookie-free top-level public HTML advertises a short Cloudflare-only cache

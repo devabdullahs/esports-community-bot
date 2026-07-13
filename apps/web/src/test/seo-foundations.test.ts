@@ -39,6 +39,11 @@ describe("SEO URL foundations", () => {
     expect(newsAvailableLocales(translated)).toEqual(["en"]);
   });
 
+  test("uses media ownership for media posts that also reference a game", () => {
+    const mediaPost = { ...arabicShared, mediaSlug: "echo-mena" };
+    expect(newsPublicPath(mediaPost, "ar")).toBe("/ar/media/echo-mena/news/10");
+  });
+
   test("normalizes pagination and separates tracking from content queries", () => {
     expect(parsePublicPage(undefined)).toBe(1);
     expect(parsePublicPage("2")).toBe(2);
@@ -54,6 +59,8 @@ describe("SEO URL foundations", () => {
     expect(isIndexableTeam({ name: "Falcons", location: "Saudi Arabia" })).toBe(true);
     expect(isIndexablePlayer({ name: "Player" })).toBe(false);
     expect(isIndexablePlayer({ name: "Player", current_team_name: "Falcons" })).toBe(true);
+    expect(isIndexablePlayer({ name: "Player", current_team_id: 42 })).toBe(true);
+    expect(isIndexablePlayer({ name: "Player", resolved_team_name: "Falcons" })).toBe(true);
     expect(isIndexableMatch({
       scheduled_at: 1,
       team_a: "Falcons",

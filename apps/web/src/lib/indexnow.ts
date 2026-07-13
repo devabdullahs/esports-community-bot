@@ -48,7 +48,9 @@ export async function submitIndexNowUrls(input: Iterable<string>) {
       body: JSON.stringify({
         host: site.host,
         key,
-        keyLocation: new URL(`/indexnow/${key}.txt`, site).toString(),
+        // IndexNow keys authorize only their own directory and descendants.
+        // Article URLs span the whole site, so verification must live at root.
+        keyLocation: new URL(`/${key}.txt`, site).toString(),
         urlList: urls,
       }),
       cache: "no-store",

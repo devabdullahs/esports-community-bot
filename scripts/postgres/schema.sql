@@ -814,6 +814,64 @@ CREATE INDEX IF NOT EXISTS idx_web_analytics_country
 
 ALTER TABLE web_analytics_events ADD COLUMN IF NOT EXISTS acquisition_source TEXT;
 ALTER TABLE web_analytics_events ADD COLUMN IF NOT EXISTS campaign TEXT;
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1
+      FROM information_schema.columns
+     WHERE table_schema = current_schema()
+       AND table_name = 'web_analytics_events'
+       AND column_name = 'referrer'
+  ) THEN
+    EXECUTE $migration$
+      UPDATE web_analytics_events
+      SET acquisition_source = CASE
+        WHEN referrer IS NULL OR BTRIM(referrer) = '' OR BTRIM(referrer) LIKE '/%' THEN 'direct'
+        WHEN LOWER(referrer) LIKE '%://x.com'
+          OR LOWER(referrer) LIKE '%://x.com/%'
+          OR LOWER(referrer) LIKE '%://%.x.com'
+          OR LOWER(referrer) LIKE '%://%.x.com/%'
+          OR LOWER(referrer) LIKE '%://twitter.com'
+          OR LOWER(referrer) LIKE '%://twitter.com/%'
+          OR LOWER(referrer) LIKE '%://%.twitter.com'
+          OR LOWER(referrer) LIKE '%://%.twitter.com/%'
+          OR LOWER(referrer) LIKE '%://t.co'
+          OR LOWER(referrer) LIKE '%://t.co/%'
+          OR LOWER(referrer) LIKE '%://%.t.co'
+          OR LOWER(referrer) LIKE '%://%.t.co/%' THEN 'x'
+        WHEN LOWER(referrer) LIKE '%://discord.com'
+          OR LOWER(referrer) LIKE '%://discord.com/%'
+          OR LOWER(referrer) LIKE '%://%.discord.com'
+          OR LOWER(referrer) LIKE '%://%.discord.com/%'
+          OR LOWER(referrer) LIKE '%://discord.gg'
+          OR LOWER(referrer) LIKE '%://discord.gg/%'
+          OR LOWER(referrer) LIKE '%://%.discord.gg'
+          OR LOWER(referrer) LIKE '%://%.discord.gg/%'
+          OR LOWER(referrer) LIKE '%://discordapp.com'
+          OR LOWER(referrer) LIKE '%://discordapp.com/%'
+          OR LOWER(referrer) LIKE '%://%.discordapp.com'
+          OR LOWER(referrer) LIKE '%://%.discordapp.com/%' THEN 'discord'
+        WHEN LOWER(referrer) LIKE '%://google.com'
+          OR LOWER(referrer) LIKE '%://%.google.com'
+          OR LOWER(referrer) LIKE '%://google.__'
+          OR LOWER(referrer) LIKE '%://%.google.__'
+          OR LOWER(referrer) LIKE '%://google.___'
+          OR LOWER(referrer) LIKE '%://%.google.___'
+          OR LOWER(referrer) LIKE '%://google.co.__'
+          OR LOWER(referrer) LIKE '%://%.google.co.__'
+          OR LOWER(referrer) LIKE '%://google.com.__'
+          OR LOWER(referrer) LIKE '%://%.google.com.__' THEN 'google'
+        WHEN LOWER(referrer) LIKE '%://bing.com'
+          OR LOWER(referrer) LIKE '%://bing.com/%'
+          OR LOWER(referrer) LIKE '%://www.bing.com'
+          OR LOWER(referrer) LIKE '%://www.bing.com/%'
+          OR LOWER(referrer) LIKE '%://%.bing.com'
+          OR LOWER(referrer) LIKE '%://%.bing.com/%' THEN 'bing'
+        ELSE 'other_referral'
+      END
+    $migration$;
+  END IF;
+END $$;
 UPDATE web_analytics_events
 SET acquisition_source = 'direct'
 WHERE acquisition_source IS NULL

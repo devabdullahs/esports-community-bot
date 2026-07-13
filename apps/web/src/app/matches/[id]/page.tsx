@@ -12,17 +12,26 @@ import { gameTitleForSlug, listGamesCached } from "@/lib/games";
 import { getMatchPageModel } from "@/lib/match-details";
 import { absoluteUrl, buildPageMetadata } from "@/lib/metadata";
 import { getRequestLocale } from "@/lib/request-locale";
+import { isIndexableMatch } from "@/lib/seo-indexability";
 import {
   breadcrumbList,
   localizedBreadcrumbLabels,
   localizedMatchDescription,
   serializeStructuredData,
-  sportsEvent,
   structuredDataGraph,
 } from "@/lib/structured-data";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+
+function indexableMatchModel(model: Awaited<ReturnType<typeof getMatchPageModel>>) {
+  return Boolean(model && isIndexableMatch({
+    scheduled_at: model.scheduledAt,
+    team_a: model.teamA,
+    team_b: model.teamB,
+    has_details: Boolean(model.details),
+  }));
+}
 
 export async function generateMetadata({
   params,
@@ -53,6 +62,8 @@ export async function generateMetadata({
       game: gameTitle,
     }),
     path: localizedPath(`/matches/${matchId}`, locale),
+    locale,
+    robots: indexableMatchModel(model) ? undefined : { index: false, follow: true },
   });
 }
 
@@ -65,44 +76,22 @@ export default async function MatchDetailPage({
   const matchId = /^\d+$/.test(id) ? Number(id) : NaN;
   if (!Number.isSafeInteger(matchId) || matchId <= 0) notFound();
 
-  const [model, locale, games] = await Promise.all([
+  const [model, locale] = await Promise.all([
     getMatchPageModel(matchId),
     getRequestLocale(),
-    listGamesCached(),
   ]);
   if (!model) notFound();
   const text = copy[locale].tournaments;
   const teamA = model.teamA || text.tbd;
   const teamB = model.teamB || text.tbd;
   const tournamentName = model.tournament.name || text.title;
-  const gameTitle = gameTitleForSlug(model.tournament.game, games, locale);
   const pagePath = localizedPath(`/matches/${matchId}`, locale);
   const pageUrl = absoluteUrl(pagePath);
   const tournamentUrl = absoluteUrl(
     localizedPath(`/tournaments/${model.tournament.id}`, locale),
   );
   const matchName = `${teamA} ${text.vs} ${teamB}`;
-  const description = localizedMatchDescription({
-    locale,
-    teamA,
-    teamB,
-    tournamentName,
-    game: gameTitle,
-  });
   const breadcrumbLabels = localizedBreadcrumbLabels(locale);
-  const event = sportsEvent({
-    url: pageUrl,
-    locale,
-    teamA: model.teamA,
-    teamB: model.teamB,
-    scheduledAt: model.scheduledAt,
-    details: model.details,
-    status: model.status,
-    tournamentName,
-    tournamentUrl,
-    game: gameTitle,
-    description,
-  });
   const pageStructuredData = structuredDataGraph([
     breadcrumbList([
       { name: breadcrumbLabels.home, url: absoluteUrl(localizedPath("/", locale)) },
@@ -113,7 +102,6 @@ export default async function MatchDetailPage({
       { name: tournamentName, url: tournamentUrl },
       { name: matchName, url: pageUrl },
     ], pageUrl),
-    ...(event ? [event] : []),
   ]);
 
   return (
