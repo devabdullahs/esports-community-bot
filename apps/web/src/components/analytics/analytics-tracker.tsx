@@ -1,7 +1,13 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
+import {
+  ANALYTICS_CONSENT_CHANGED_EVENT,
+  ANALYTICS_CONSENT_KEY,
+  parseGoogleAnalyticsConsent,
+  type GoogleAnalyticsConsent,
+} from "@/lib/google-analytics";
 
 const VISITOR_KEY = "ec_analytics_visitor";
 const SESSION_KEY = "ec_analytics_session";
@@ -192,6 +198,7 @@ function sendAnalyticsEvent(payload: AnalyticsPayload, beacon = false) {
 
 export function AnalyticsTracker() {
   const pathname = usePathname();
+  const [analyticsConsent, setAnalyticsConsent] = useState<GoogleAnalyticsConsent | null | undefined>(undefined);
   const visitorRef = useRef<string | null>(null);
   const sessionRef = useRef<string | null>(null);
   const acquisitionRef = useRef<Acquisition | null>(null);
@@ -200,7 +207,22 @@ export function AnalyticsTracker() {
   const pendingSecondsRef = useRef(0);
 
   useEffect(() => {
-    if (!pathname || !isTrackablePath(pathname) || respectsPrivacySignals()) return;
+    const onConsentChanged = (event: Event) => {
+      const detail = (event as CustomEvent<unknown>).detail;
+      setAnalyticsConsent(parseGoogleAnalyticsConsent(typeof detail === "string" ? detail : null));
+    };
+    window.addEventListener(ANALYTICS_CONSENT_CHANGED_EVENT, onConsentChanged);
+    const initialize = window.setTimeout(() => {
+      setAnalyticsConsent(parseGoogleAnalyticsConsent(storageGet(window.localStorage, ANALYTICS_CONSENT_KEY)));
+    }, 0);
+    return () => {
+      window.clearTimeout(initialize);
+      window.removeEventListener(ANALYTICS_CONSENT_CHANGED_EVENT, onConsentChanged);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (analyticsConsent !== "granted" || !pathname || !isTrackablePath(pathname) || respectsPrivacySignals()) return;
 
     visitorRef.current = visitorId();
     const session = sessionId();
@@ -272,9 +294,11 @@ export function AnalyticsTracker() {
       window.clearInterval(interval);
       document.removeEventListener("visibilitychange", onVisibilityChange);
       window.removeEventListener("pagehide", onPageHide);
-      flush(true);
+      if (parseGoogleAnalyticsConsent(storageGet(window.localStorage, ANALYTICS_CONSENT_KEY)) === "granted") {
+        flush(true);
+      }
     };
-  }, [pathname]);
+  }, [analyticsConsent, pathname]);
 
   return null;
 }
