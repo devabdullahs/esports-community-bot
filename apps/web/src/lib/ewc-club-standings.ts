@@ -61,8 +61,15 @@ function eligibility(value: unknown): EwcClubStandingEligibility {
 export function projectEwcClubStandings(
   clubs: readonly EwcClubStandingCandidate[],
 ): EwcClubStandingRow[] {
+  const seen = new Set<string>();
   return clubs
     .filter((club) => club.hasStanding !== false && clubKey(club.name))
+    .filter((club) => {
+      const keys = clubKeys(club.name);
+      if (keys.some((key) => seen.has(key))) return false;
+      keys.forEach((key) => seen.add(key));
+      return true;
+    })
     .map((club) => ({
       rank: officialRank(club.rank),
       name: club.name.trim(),

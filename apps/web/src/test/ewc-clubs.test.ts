@@ -4,6 +4,7 @@ import {
   getEwcClubTrackerFromDatabase,
   type EwcClubGame,
 } from "@/lib/ewc-clubs";
+import { clubKeys as clubKeysForTest } from "@/lib/ewc-club-regions";
 
 function qualifiedGame(label: string, pageUrl: string | null = null): EwcClubGame {
   return {
@@ -35,6 +36,54 @@ describe("EWC club tracker helpers", () => {
         { qualifiedGames: [qualifiedGame("counter strike 2")] },
       ]),
     ).toBe(1);
+  });
+
+  test("merges compact stored aliases into the official standings club", async () => {
+    const { get, run } = await import("@bot/db/client.js");
+    const { upsertEwcClubChampionshipSnapshot } = await import(
+      "@bot/db/ewcClubChampionshipSnapshots.js"
+    );
+    await run(
+      `INSERT OR IGNORE INTO ewc_games
+         (slug, title_json, description_json, status_json, owner_json, focus_json, sort_order)
+       VALUES ($1, $2, '{}', '{}', '{}', '[]', 0)`,
+      ["alias-probe", JSON.stringify({ en: "Alias Probe", ar: "Alias Probe" })],
+    );
+    await run(
+      `INSERT INTO tournaments (source, external_id, game, name, guild_id, ewc, active)
+       VALUES ('liquipedia', $1, 'alias-probe', 'Alias Probe Event', 'guild', 1, 1)`,
+      ["club-alias-probe"],
+    );
+    const tournament = await get(
+      `SELECT id FROM tournaments WHERE source = 'liquipedia' AND external_id = $1`,
+      ["club-alias-probe"],
+    ) as { id: number };
+    await run(
+      `INSERT INTO tournament_standings (tournament_id, section, rank, team, points)
+       VALUES ($1, 'Standings', 1, '100thieves', '12'),
+              ($1, 'Standings', 2, 'natusvincere', '8')`,
+      [tournament.id],
+    );
+    await upsertEwcClubChampionshipSnapshot({
+      season: "2199",
+      sourceUrl: "https://liquipedia.net/esports/Esports_World_Cup/2199/Club_Championship_Standings",
+      standings: [
+        { rank: 1, team: "100 Thieves", points: 1000, wins: 1 },
+        { rank: 1, team: "Natus Vincere", points: 1000, wins: 1 },
+      ],
+      prizepool: [],
+      fetchedAt: "2000-07-10T10:00:00.000Z",
+    });
+
+    const tracker = await getEwcClubTrackerFromDatabase("2199");
+
+    expect(tracker.clubs.filter((club) => clubKeysForTest(club.name).includes("100thieves")))
+      .toHaveLength(1);
+    expect(tracker.clubs.filter((club) => clubKeysForTest(club.name).includes("natusvincere")))
+      .toHaveLength(1);
+    expect(tracker.clubs.map((club) => club.name)).toEqual(
+      expect.arrayContaining(["100 Thieves", "Natus Vincere"]),
+    );
   });
 
   test("database fallback returns local points and qualified games", async () => {
