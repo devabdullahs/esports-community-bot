@@ -1,5 +1,6 @@
 import { describe, expect, test } from "vitest";
 import { GET } from "@/app/robots.txt/route";
+import { metadata as loginMetadata } from "@/app/login/page";
 
 describe("robots.txt", () => {
   test("blocks private account routes without prefix-blocking public media pages", async () => {
@@ -16,5 +17,9 @@ describe("robots.txt", () => {
     expect(body).not.toContain("Disallow: /media");
     expect(body).not.toContain("Disallow: /login");
     expect(body).toMatch(/Sitemap: https?:\/\/[^\s]+\/sitemap\.xml/);
+  });
+
+  test("lets crawlers follow links from the noindex login page", () => {
+    expect(loginMetadata.robots).toEqual({ index: false, follow: true });
   });
 });
