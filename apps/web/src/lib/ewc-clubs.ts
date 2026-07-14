@@ -37,6 +37,33 @@ type RawStanding = {
   topEightFinishes?: number | string | null;
 };
 
+type RawClubEntry = {
+  name?: unknown;
+  wiki?: unknown;
+  url?: unknown;
+  status?: unknown;
+};
+
+type RawClubGame = {
+  label?: unknown;
+  shortLabel?: unknown;
+  pageUrl?: unknown;
+  icon?: unknown;
+  status?: unknown;
+  entries?: unknown;
+};
+
+type RawClub = {
+  name?: unknown;
+  pageUrl?: unknown;
+  logo?: unknown;
+  clubSupportProgram?: unknown;
+  qualifiedCount?: unknown;
+  possibleEvents?: unknown;
+  totalTeams?: unknown;
+  games?: unknown;
+};
+
 type TeamProfileRow = {
   name: string | null;
   image_url: string | null;
@@ -135,6 +162,68 @@ function numberValue(value: unknown) {
   if (value == null || value === "") return null;
   const parsed = typeof value === "number" ? value : Number(String(value).replace(/,/g, ""));
   return Number.isFinite(parsed) ? parsed : null;
+}
+
+function nonNegativeInteger(value: unknown) {
+  const parsed = numberValue(value);
+  return parsed != null && Number.isInteger(parsed) && parsed >= 0 ? parsed : null;
+}
+
+function cleanDirectoryGame(value: unknown): EwcClubGame | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const game = value as RawClubGame;
+  const label = stringValue(game.label) ?? stringValue(game.shortLabel);
+  if (!label) return null;
+  const entries = Array.isArray(game.entries)
+    ? game.entries.flatMap((entry): EwcClubGame["entries"] => {
+        if (!entry || typeof entry !== "object" || Array.isArray(entry)) return [];
+        const raw = entry as RawClubEntry;
+        const name = stringValue(raw.name);
+        if (!name) return [];
+        return [{
+          name,
+          wiki: stringValue(raw.wiki),
+          url: stringValue(raw.url),
+          status: stringValue(raw.status),
+        }];
+      })
+    : [];
+  return {
+    label,
+    shortLabel: stringValue(game.shortLabel) ?? label,
+    pageUrl: stringValue(game.pageUrl),
+    icon: stringValue(game.icon),
+    status: stringValue(game.status) ?? "has_team",
+    entries,
+  };
+}
+
+function cleanDirectoryClubs(value: unknown): RawClub[] {
+  if (!Array.isArray(value)) return [];
+  return value.filter((club): club is RawClub => (
+    Boolean(club) && typeof club === "object" && !Array.isArray(club) && Boolean(stringValue((club as RawClub).name))
+  ));
+}
+
+function directoryGames(club: RawClub | null) {
+  return Array.isArray(club?.games)
+    ? club.games.map(cleanDirectoryGame).filter((game): game is EwcClubGame => Boolean(game))
+    : [];
+}
+
+function mergeClubGames(...groups: EwcClubGame[][]) {
+  const merged: EwcClubGame[] = [];
+  for (const game of groups.flat()) {
+    const pageUrl = stringValue(game.pageUrl);
+    const label = clubKey(game.label) || clubKey(game.shortLabel);
+    const index = merged.findIndex((current) => (
+      (pageUrl && pageUrl === stringValue(current.pageUrl))
+      || (label && label === (clubKey(current.label) || clubKey(current.shortLabel)))
+    ));
+    if (index < 0) merged.push(game);
+    else if (game.entries.length > merged[index].entries.length) merged[index] = game;
+  }
+  return merged.sort((a, b) => a.shortLabel.localeCompare(b.shortLabel));
 }
 
 function profileScore(profile: TeamProfileRow & { facts: Record<string, unknown> | null }) {
@@ -381,6 +470,7 @@ async function storedGamesByClubKey() {
 
 function namesFromStoredData(
   standings: RawStanding[],
+  directoryClubs: RawClub[],
   storedGameNames: string[],
   wins: Map<string, Map<string, EwcClubWin>>,
 ) {
@@ -400,6 +490,9 @@ function namesFromStoredData(
   for (const row of standings) {
     addName(row.team);
   }
+  for (const club of directoryClubs) {
+    addName(club.name);
+  }
   for (const name of storedGameNames) {
     addName(name);
   }
@@ -412,6 +505,7 @@ function namesFromStoredData(
 type TrackerBuildInput = {
   season: string;
   standings: RawStanding[];
+  directoryClubs: RawClub[];
   standingsSource: string;
   updatedAt: string | null;
   dataSource: EwcClubTracker["dataSource"];
@@ -436,6 +530,7 @@ async function buildEwcClubTracker(input: TrackerBuildInput): Promise<EwcClubTra
     winsByClubKey(input.season),
   ]);
   const standingsMap = new Map<string, { rank: number | null; points: number | null; eligibility: string | null; wins: number | null }>();
+  const directoryMap = new Map<string, RawClub>();
   for (const row of input.standings) {
     if (!row.team) continue;
     addLookup(standingsMap, row.team, {
@@ -445,21 +540,31 @@ async function buildEwcClubTracker(input: TrackerBuildInput): Promise<EwcClubTra
       wins: numberValue(row.wins),
     });
   }
+  for (const club of input.directoryClubs) {
+    addLookup(directoryMap, club.name, club);
+  }
   const gamesByClubKey = storedGames.byKey;
 
-  const clubs = namesFromStoredData(input.standings, storedGames.names, wins)
+  const clubs = namesFromStoredData(input.standings, input.directoryClubs, storedGames.names, wins)
     .map((name): EwcClubTrackerClub | null => {
       const profile = lookupByClubName(profiles, name);
       const region = classifyClubRegion(name, profile);
       const standing = lookupByClubName(standingsMap, name);
-      const qualifiedGames = gamesForClub(gamesByClubKey, name);
+      const directory = lookupByClubName(directoryMap, name);
+      const authoritativeGames = directoryGames(directory);
+      const localQualifiedGames = gamesForClub(gamesByClubKey, name);
+      const qualifiedGames = mergeClubGames(
+        authoritativeGames.filter((game) => game.status === "qualified"),
+        localQualifiedGames,
+      );
+      const possibleGames = authoritativeGames.filter((game) => game.status === "can_qualify");
       const clubWins = winsForClub(wins, name);
-      if (!standing && !qualifiedGames.length && !clubWins.length) return null;
+      if (!standing && !directory && !qualifiedGames.length && !clubWins.length) return null;
       return {
         name,
-        pageUrl: stringValue(profile?.liquipedia_url),
-        logo: stringValue(profile?.image_url),
-        supportProgram: isFeaturedClubName(name),
+        pageUrl: stringValue(directory?.pageUrl) ?? stringValue(profile?.liquipedia_url),
+        logo: stringValue(directory?.logo) ?? stringValue(profile?.image_url),
+        supportProgram: Boolean(directory?.clubSupportProgram) || isFeaturedClubName(name),
         featured: isFeaturedClubName(name),
         region,
         regionSource: sourceForRegion(name, profile),
@@ -468,12 +573,12 @@ async function buildEwcClubTracker(input: TrackerBuildInput): Promise<EwcClubTra
         points: standing?.points ?? null,
         eligibility: standing?.eligibility ?? null,
         hasStanding: Boolean(standing),
-        qualifiedCount: qualifiedGames.length,
-        possibleEvents: 0,
-        totalTeams: 0,
-        games: qualifiedGames,
+        qualifiedCount: nonNegativeInteger(directory?.qualifiedCount) ?? qualifiedGames.length,
+        possibleEvents: nonNegativeInteger(directory?.possibleEvents) ?? 0,
+        totalTeams: nonNegativeInteger(directory?.totalTeams) ?? 0,
+        games: authoritativeGames.length ? authoritativeGames : qualifiedGames,
         qualifiedGames,
-        possibleGames: [],
+        possibleGames,
         wins: clubWins,
         winCount: Math.max(clubWins.length, standing?.wins ?? 0),
       };
@@ -486,7 +591,7 @@ async function buildEwcClubTracker(input: TrackerBuildInput): Promise<EwcClubTra
       if (points) return points;
       const rank = (a.rank ?? 9999) - (b.rank ?? 9999);
       if (rank) return rank;
-      const qualified = b.qualifiedGames.length - a.qualifiedGames.length;
+      const qualified = b.qualifiedCount - a.qualifiedCount;
       if (qualified) return qualified;
       return a.name.localeCompare(b.name);
     });
@@ -521,6 +626,7 @@ type StoredClubChampionshipSnapshot = {
   season: string;
   sourceUrl: string;
   standings: RawStanding[];
+  clubs?: RawClub[];
   fetchedAt: string;
 };
 
@@ -533,6 +639,7 @@ export async function getEwcClubTrackerFromDatabase(season?: string): Promise<Ew
   return buildEwcClubTracker({
     season: trackerSeason,
     standings: snapshot?.standings ?? [],
+    directoryClubs: cleanDirectoryClubs(snapshot?.clubs),
     standingsSource: snapshot?.sourceUrl ?? standingsSourceUrl(trackerSeason),
     updatedAt: snapshot?.fetchedAt ?? null,
     dataSource: snapshot ? "stored-snapshot" : "database-fallback",
@@ -580,6 +687,7 @@ async function getEwcClubTrackerFromLiveFallback(season: string) {
   return buildEwcClubTracker({
     season,
     standings,
+    directoryClubs: [],
     standingsSource: payload.sourceUrl ?? standingsSourceUrl(season),
     updatedAt: new Date().toISOString(),
     dataSource: "liquipedia-fallback",

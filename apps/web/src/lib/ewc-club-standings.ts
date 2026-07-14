@@ -17,6 +17,7 @@ export type EwcClubStandingCandidate = {
   points?: number | null;
   eligibility?: string | null;
   hasStanding?: boolean;
+  qualifiedCount?: number | null;
   qualifiedGames?: readonly unknown[];
   wins?: readonly unknown[];
   winCount?: number | null;
@@ -54,6 +55,11 @@ function officialRank(value: unknown) {
   return rank != null && Number.isInteger(rank) && rank > 0 ? rank : null;
 }
 
+function officialCount(value: unknown) {
+  const count = finiteNumber(value);
+  return count != null && Number.isInteger(count) && count >= 0 ? count : null;
+}
+
 function eligibility(value: unknown): EwcClubStandingEligibility {
   return value === "champion" || value === "prize" ? value : null;
 }
@@ -76,7 +82,7 @@ export function projectEwcClubStandings(
       logo: club.logo?.trim() || null,
       points: finiteNumber(club.points),
       eligibility: eligibility(club.eligibility),
-      qualifiedGameCount: club.qualifiedGames?.length ?? 0,
+      qualifiedGameCount: officialCount(club.qualifiedCount) ?? club.qualifiedGames?.length ?? 0,
       wins: finiteNumber(club.winCount) ?? club.wins?.length ?? 0,
       region: club.region,
       locationLabel: club.locationLabel?.trim() || null,

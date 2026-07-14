@@ -7,6 +7,7 @@ import { getSettings, setClubChampionshipMessage, getGuildsWithClubChampionship 
 import { LIQUIPEDIA_ATTRIBUTION } from '../lib/render.js';
 
 const nowSec = () => Math.floor(Date.now() / 1000);
+export const EWC_CLUB_DIRECTORY_REFRESH_MS = 6 * 60 * 60 * 1000;
 
 function rankLabel(rank) {
   return rank === 1 ? '🥇' : rank === 2 ? '🥈' : rank === 3 ? '🥉' : `**${rank}.**`;
@@ -85,11 +86,40 @@ export async function updateClubChampionship(
     };
     const season = clubChampionshipSeason(s.cc_page);
     if (!season) throw new Error(`could not determine a season from ${s.cc_page}`);
+    const existing = typeof snapshots.getEwcClubChampionshipSnapshot === 'function'
+      ? await snapshots.getEwcClubChampionshipSnapshot(season).catch(() => null)
+      : null;
+    const directoryAge = existing?.clubsFetchedAt ? Date.now() - new Date(existing.clubsFetchedAt).getTime() : Infinity;
+    let directory = null;
+    if (!existing?.clubs?.length || !Number.isFinite(directoryAge) || directoryAge >= EWC_CLUB_DIRECTORY_REFRESH_MS) {
+      try {
+        const fetchedDirectory = await liquipedia.fetchEwcClubs(Number(season));
+        const validClubs = fetchedDirectory?.clubs?.length
+          && fetchedDirectory.clubs.every((club) => (
+            String(club?.name ?? '').trim()
+            && Number.isInteger(Number(club?.qualifiedCount))
+            && Number(club.qualifiedCount) >= 0
+          ));
+        if (validClubs) {
+          directory = {
+            clubs: fetchedDirectory.clubs,
+            clubsSourceUrl: fetchedDirectory.sourceUrl,
+            clubsFetchedAt: new Date(),
+          };
+        } else {
+          logger.warn(`[cc] EWC ${season} clubs directory was empty or invalid; preserving the last good copy`);
+        }
+      } catch (error) {
+        const level = /backing off after a rate limit/i.test(error.message) ? 'debug' : 'warn';
+        logger[level](`[cc] EWC ${season} clubs directory refresh failed: ${error.message}`);
+      }
+    }
     await snapshots.upsertEwcClubChampionshipSnapshot({
       season,
       sourceUrl: data.sourceUrl || clubChampionshipSourceUrl(wiki, s.cc_page),
       standings: data.standings,
       prizepool: data.prizepool,
+      ...(directory ?? {}),
       fetchedAt: new Date(),
     });
   } catch (e) {

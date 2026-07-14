@@ -79,6 +79,16 @@ describe("EWC Club Championship standings", () => {
     expect(row.wins).toBe(1);
   });
 
+  test("prefers the authoritative directory qualification count over locally tracked games", () => {
+    const [row] = projectEwcClubStandings([
+      candidate("Team Falcons", 13, 250, {
+        qualifiedCount: 22,
+        qualifiedGames: ["one", "two", "three", "four"],
+      }),
+    ]);
+    expect(row.qualifiedGameCount).toBe(22);
+  });
+
   test("dedupes compact aliases while preserving the official display name", () => {
     const rows = projectEwcClubStandings([
       candidate("100 Thieves", 1, 1000, { winCount: 1 }),

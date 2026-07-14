@@ -440,6 +440,9 @@ db.exec(`
     source_url      TEXT NOT NULL,
     standings_json  TEXT NOT NULL,
     prizepool_json  TEXT NOT NULL DEFAULT '[]',
+    clubs_source_url TEXT,
+    clubs_json       TEXT,
+    clubs_fetched_at TEXT,
     fetched_at      TEXT NOT NULL,
     updated_at      TEXT NOT NULL DEFAULT (datetime('now'))
   );
@@ -835,6 +838,11 @@ ensureColumns('ewc_prediction_weeks', [
   ['open_announced_at', 'TEXT'],
 ]);
 ensureColumns('ewc_prediction_seasons', [['score_after', 'INTEGER'], ['best_weeks', 'INTEGER']]);
+ensureColumns('ewc_club_championship_snapshots', [
+  ['clubs_source_url', 'TEXT'],
+  ['clubs_json', 'TEXT'],
+  ['clubs_fetched_at', 'TEXT'],
+]);
 ensureColumns('ewc_profile_links', [
   ['public_identity_enabled', 'INTEGER NOT NULL DEFAULT 1'],
   ['public_display_name', 'TEXT'],

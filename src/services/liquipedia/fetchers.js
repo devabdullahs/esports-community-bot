@@ -348,17 +348,19 @@ export async function fetchClubChampionship(wiki, page) {
 // EWC 2026 club / roster catalog
 // ---------------------------------------------------------------------------
 
-const EWC_CLUBS_PAGE = 'Esports_World_Cup/2026/Clubs';
 const EWC_PLAYER_LIST_PAGE = 'Esports_World_Cup/2026/Player_List';
 const EWC_MAIN_PAGE = 'Esports_World_Cup/2026';
 
-export async function fetchEwcClubs() {
-  const data = await parsePage('esports', EWC_CLUBS_PAGE);
+export async function fetchEwcClubs(year = 2026) {
+  const season = Number.isInteger(Number(year)) ? String(Number(year)) : '2026';
+  const page = `Esports_World_Cup/${season}/Clubs`;
+  const sourceUrl = `https://liquipedia.net/esports/${page}`;
+  const data = await parsePage('esports', page);
   const html = data?.parse?.text?.['*'];
-  if (!html) return { sourceUrl: 'https://liquipedia.net/esports/Esports_World_Cup/2026/Clubs', games: [], clubs: [] };
+  if (!html) return { sourceUrl, games: [], clubs: [] };
   const parsed = parseEwcClubs(cheerio.load(html));
   return {
-    sourceUrl: 'https://liquipedia.net/esports/Esports_World_Cup/2026/Clubs',
+    sourceUrl,
     ...parsed,
   };
 }
