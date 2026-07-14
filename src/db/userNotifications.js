@@ -1,4 +1,4 @@
-import { all, get, run } from './client.js';
+import { all, get, run, transaction } from './client.js';
 import { dmNotBefore, normalizeNotificationSchedule } from '../lib/notificationSchedule.js';
 
 const DEFAULT_PREFS = {
@@ -214,4 +214,19 @@ export async function listPendingDmNotifications(limit = 20, { nowSec = Math.flo
 export async function setDmStatus(id, status) {
   if (!['sent', 'skipped', 'failed'].includes(status)) throw new Error(`Invalid dm_status: ${status}`);
   await run('UPDATE user_notifications SET dm_status = $1 WHERE id = $2', [status, id]);
+}
+
+export async function setDmStatuses(ids, status) {
+  if (!['sent', 'skipped', 'failed'].includes(status)) throw new Error(`Invalid dm_status: ${status}`);
+  const safeIds = [...new Set(ids.map(Number).filter((id) => Number.isSafeInteger(id) && id > 0))];
+  if (!safeIds.length) return 0;
+  return transaction(async (tx) => {
+    const placeholders = safeIds.map((_, index) => `$${index + 2}`).join(', ');
+    const result = await tx.run(
+      `UPDATE user_notifications SET dm_status = $1
+       WHERE dm_status = 'pending' AND id IN (${placeholders})`,
+      [status, ...safeIds],
+    );
+    return result.changes || 0;
+  });
 }
