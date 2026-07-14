@@ -1,4 +1,5 @@
 import { fetchEwcClubs } from '../services/liquipedia.js';
+import { getEwcClubChampionshipSnapshot } from '../db/ewcClubChampionshipSnapshots.js';
 import { config } from '../config.js';
 import { normalizeClubName } from './ewcPredictions.js';
 import { logger } from './logger.js';
@@ -16,10 +17,20 @@ function hasFreshCache() {
 
 function refreshEwcClubCache() {
   if (inFlight) return inFlight;
-  inFlight = fetchEwcClubs()
+  inFlight = getEwcClubChampionshipSnapshot('2026')
+    .catch(() => null)
+    .then((snapshot) => {
+      const storedAt = snapshot?.clubsFetchedAt ? new Date(snapshot.clubsFetchedAt).getTime() : 0;
+      if (snapshot?.clubs?.length && Number.isFinite(storedAt) && Date.now() - storedAt < TTL_MS) {
+        cachedClubs = snapshot.clubs;
+        cachedAt = storedAt;
+        return { clubs: cachedClubs, cachedAt: storedAt };
+      }
+      return fetchEwcClubs();
+    })
     .then((data) => {
       cachedClubs = data.clubs || [];
-      cachedAt = Date.now();
+      cachedAt = data.cachedAt || Date.now();
       return cachedClubs;
     })
     .catch((error) => {

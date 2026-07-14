@@ -29,13 +29,31 @@ function snapshot(season, team, points, fetchedAt = `${season}-07-10T12:00:00.00
   };
 }
 
+function clubsDirectory(season, name = 'Team Falcons', qualifiedCount = 22) {
+  return {
+    clubsSourceUrl: `https://liquipedia.net/esports/Esports_World_Cup/${season}/Clubs`,
+    clubs: [{ name, qualifiedCount, possibleEvents: 25, totalTeams: 22, games: [] }],
+    clubsFetchedAt: `${season}-07-10T12:30:00.000Z`,
+  };
+}
+
 test.after(() => {
   closeDb();
   rmSync(dir, { recursive: true, force: true });
 });
 
 test('schema is mirrored in SQLite and Postgres', () => {
-  const expected = ['season', 'source_url', 'standings_json', 'prizepool_json', 'fetched_at', 'updated_at'];
+  const expected = [
+    'season',
+    'source_url',
+    'standings_json',
+    'prizepool_json',
+    'clubs_source_url',
+    'clubs_json',
+    'clubs_fetched_at',
+    'fetched_at',
+    'updated_at',
+  ];
   const sqliteColumns = db.prepare('PRAGMA table_info(ewc_club_championship_snapshots)').all().map((row) => row.name);
   assert.deepEqual(sqliteColumns, expected);
 
@@ -64,6 +82,38 @@ test('inserts, atomically replaces, and keeps seasons independent', async () => 
   assert.equal(current.fetchedAt, '2026-07-10T13:00:00.000Z');
   assert.equal(previous.standings[0].team, 'Old Guard');
   assert.equal((await getLatestEwcClubChampionshipSnapshot()).season, '2026');
+});
+
+test('round-trips the authoritative clubs directory and preserves it across standings-only refreshes', async () => {
+  await upsertEwcClubChampionshipSnapshot({
+    ...snapshot('2031', 'Team Falcons', 250),
+    ...clubsDirectory('2031'),
+  });
+  await upsertEwcClubChampionshipSnapshot(
+    snapshot('2031', 'Team Falcons', 300, '2031-07-10T14:00:00.000Z'),
+  );
+
+  const stored = await getEwcClubChampionshipSnapshot('2031');
+  assert.equal(stored.standings[0].points, 300);
+  assert.equal(stored.clubs[0].name, 'Team Falcons');
+  assert.equal(stored.clubs[0].qualifiedCount, 22);
+  assert.equal(stored.clubsFetchedAt, '2031-07-10T12:30:00.000Z');
+});
+
+test('rejects empty or invalid clubs directories without replacing the last good copy', async () => {
+  await upsertEwcClubChampionshipSnapshot({
+    ...snapshot('2032', 'Team Falcons', 250),
+    ...clubsDirectory('2032'),
+  });
+  await assert.rejects(
+    upsertEwcClubChampionshipSnapshot({
+      ...snapshot('2032', 'Team Falcons', 300),
+      ...clubsDirectory('2032'),
+      clubs: [],
+    }),
+    /at least one club/i,
+  );
+  assert.equal((await getEwcClubChampionshipSnapshot('2032')).clubs[0].qualifiedCount, 22);
 });
 
 test('rejects invalid derived standing metrics', async () => {

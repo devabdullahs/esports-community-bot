@@ -326,9 +326,15 @@ CREATE TABLE IF NOT EXISTS ewc_club_championship_snapshots (
   source_url      TEXT NOT NULL,
   standings_json  TEXT NOT NULL,
   prizepool_json  TEXT NOT NULL DEFAULT '[]',
+  clubs_source_url TEXT,
+  clubs_json       TEXT,
+  clubs_fetched_at TEXT,
   fetched_at      TEXT NOT NULL,
   updated_at      TEXT NOT NULL DEFAULT (to_char(now() AT TIME ZONE 'UTC', 'YYYY-MM-DD HH24:MI:SS'))
 );
+ALTER TABLE ewc_club_championship_snapshots ADD COLUMN IF NOT EXISTS clubs_source_url TEXT;
+ALTER TABLE ewc_club_championship_snapshots ADD COLUMN IF NOT EXISTS clubs_json TEXT;
+ALTER TABLE ewc_club_championship_snapshots ADD COLUMN IF NOT EXISTS clubs_fetched_at TEXT;
 
 CREATE INDEX IF NOT EXISTS idx_ewc_season_predictions_season
   ON ewc_season_predictions(guild_id, season, score DESC);

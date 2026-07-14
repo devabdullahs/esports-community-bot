@@ -95,3 +95,87 @@ test('an empty parse cannot overwrite or post over the last good data', async ()
   assert.equal(channelFetches, 0);
   assert.equal((await getEwcClubChampionshipSnapshot('2026')).standings[0].team, 'Last Good Club');
 });
+
+test('stores the authoritative clubs directory with the standings snapshot', async () => {
+  const guildId = 'guild-clubs-directory';
+  await configure(guildId);
+  const client = { channels: { fetch: async () => null } };
+  let directoryFetches = 0;
+
+  await updateClubChampionship(client, guildId, {
+    liquipedia: {
+      fetchClubChampionship: async () => payload('Team Falcons', 250),
+      fetchEwcClubs: async () => {
+        directoryFetches += 1;
+        return {
+          sourceUrl: 'https://liquipedia.net/esports/Esports_World_Cup/2026/Clubs',
+          clubs: [{ name: 'Team Falcons', qualifiedCount: 22, possibleEvents: 25, games: [] }],
+        };
+      },
+    },
+  });
+
+  const stored = await getEwcClubChampionshipSnapshot('2026');
+  assert.equal(directoryFetches, 1);
+  assert.equal(stored.clubs[0].qualifiedCount, 22);
+});
+
+test('reuses a fresh directory without another Liquipedia request', async () => {
+  const guildId = 'guild-clubs-reuse';
+  await configure(guildId);
+  await upsertEwcClubChampionshipSnapshot({
+    season: '2026',
+    ...payload('Team Falcons', 250),
+    clubsSourceUrl: 'https://liquipedia.net/esports/Esports_World_Cup/2026/Clubs',
+    clubs: [{ name: 'Team Falcons', qualifiedCount: 22, possibleEvents: 25, games: [] }],
+    clubsFetchedAt: new Date(),
+    fetchedAt: new Date(),
+  });
+  let directoryFetches = 0;
+  const client = { channels: { fetch: async () => null } };
+
+  await updateClubChampionship(client, guildId, {
+    liquipedia: {
+      fetchClubChampionship: async () => payload('Team Falcons', 300),
+      fetchEwcClubs: async () => {
+        directoryFetches += 1;
+        throw new Error('temporary directory failure');
+      },
+    },
+  });
+
+  const stored = await getEwcClubChampionshipSnapshot('2026');
+  assert.equal(directoryFetches, 0);
+  assert.equal(stored.standings[0].points, 300);
+  assert.equal(stored.clubs[0].qualifiedCount, 22);
+});
+
+test('a failed stale directory refresh preserves the last good copy and still updates standings', async () => {
+  const guildId = 'guild-clubs-stale-failure';
+  await configure(guildId);
+  await upsertEwcClubChampionshipSnapshot({
+    season: '2026',
+    ...payload('Team Falcons', 250),
+    clubsSourceUrl: 'https://liquipedia.net/esports/Esports_World_Cup/2026/Clubs',
+    clubs: [{ name: 'Team Falcons', qualifiedCount: 22, possibleEvents: 25, games: [] }],
+    clubsFetchedAt: '2026-07-01T00:00:00.000Z',
+    fetchedAt: '2026-07-01T00:00:00.000Z',
+  });
+  let directoryFetches = 0;
+  const client = { channels: { fetch: async () => null } };
+
+  await updateClubChampionship(client, guildId, {
+    liquipedia: {
+      fetchClubChampionship: async () => payload('Team Falcons', 350),
+      fetchEwcClubs: async () => {
+        directoryFetches += 1;
+        throw new Error('temporary directory failure');
+      },
+    },
+  });
+
+  const stored = await getEwcClubChampionshipSnapshot('2026');
+  assert.equal(directoryFetches, 1);
+  assert.equal(stored.standings[0].points, 350);
+  assert.equal(stored.clubs[0].qualifiedCount, 22);
+});

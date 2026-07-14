@@ -79,6 +79,30 @@ function cleanPrizepool(value) {
   }
 }
 
+function cleanClubs(value) {
+  if (value == null) return null;
+  if (!Array.isArray(value) || value.length === 0) {
+    throw new TypeError('EWC clubs directory must contain at least one club.');
+  }
+  const clubs = value.map((club) => {
+    if (!club || typeof club !== 'object' || Array.isArray(club)) {
+      throw new TypeError('EWC clubs directory rows must be objects.');
+    }
+    const name = String(club.name ?? '').replace(/\s+/g, ' ').trim();
+    if (!name) throw new TypeError('EWC clubs directory rows must include a name.');
+    const qualifiedCount = nullableNumber(club.qualifiedCount, 'qualifiedCount', { integer: true });
+    if (qualifiedCount == null || qualifiedCount < 0) {
+      throw new TypeError('EWC clubs directory qualifiedCount is invalid.');
+    }
+    return { ...club, name, qualifiedCount };
+  });
+  try {
+    return JSON.parse(JSON.stringify(clubs));
+  } catch {
+    throw new TypeError('EWC clubs directory must be JSON serializable.');
+  }
+}
+
 function parseJsonArray(value) {
   if (typeof value !== 'string' || !value.trim()) return null;
   try {
@@ -93,12 +117,16 @@ function toSnapshot(row) {
   if (!row) return null;
   const standings = parseJsonArray(row.standings_json);
   const prizepool = parseJsonArray(row.prizepool_json);
+  const clubs = parseJsonArray(row.clubs_json) ?? [];
   if (!standings?.length || !prizepool) return null;
   return {
     season: row.season,
     sourceUrl: row.source_url,
     standings,
     prizepool,
+    clubsSourceUrl: row.clubs_source_url || null,
+    clubs,
+    clubsFetchedAt: row.clubs_fetched_at || null,
     fetchedAt: row.fetched_at,
     updatedAt: row.updated_at,
   };
@@ -108,11 +136,17 @@ export function validateEwcClubChampionshipSnapshot(input) {
   if (!input || typeof input !== 'object') {
     throw new TypeError('Club Championship snapshot input is required.');
   }
+  const clubs = cleanClubs(input.clubs);
+  const clubsSourceUrl = clubs ? cleanSourceUrl(input.clubsSourceUrl) : null;
+  const clubsFetchedAt = clubs ? cleanTimestamp(input.clubsFetchedAt, 'clubsFetchedAt') : null;
   return {
     season: cleanSeason(input.season),
     sourceUrl: cleanSourceUrl(input.sourceUrl),
     standings: cleanStandings(input.standings),
     prizepool: cleanPrizepool(input.prizepool),
+    clubsSourceUrl,
+    clubs,
+    clubsFetchedAt,
     fetchedAt: cleanTimestamp(input.fetchedAt, 'fetchedAt'),
   };
 }
@@ -121,18 +155,33 @@ export async function upsertEwcClubChampionshipSnapshot(input) {
   const snapshot = validateEwcClubChampionshipSnapshot(input);
   const standingsJson = JSON.stringify(snapshot.standings);
   const prizepoolJson = JSON.stringify(snapshot.prizepool);
+  const clubsJson = snapshot.clubs ? JSON.stringify(snapshot.clubs) : null;
   const updatedAt = new Date().toISOString();
   await run(
     `INSERT INTO ewc_club_championship_snapshots
-       (season, source_url, standings_json, prizepool_json, fetched_at, updated_at)
-     VALUES ($1, $2, $3, $4, $5, $6)
+       (season, source_url, standings_json, prizepool_json, clubs_source_url, clubs_json,
+        clubs_fetched_at, fetched_at, updated_at)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
      ON CONFLICT (season) DO UPDATE SET
        source_url = excluded.source_url,
        standings_json = excluded.standings_json,
        prizepool_json = excluded.prizepool_json,
+       clubs_source_url = COALESCE(excluded.clubs_source_url, ewc_club_championship_snapshots.clubs_source_url),
+       clubs_json = COALESCE(excluded.clubs_json, ewc_club_championship_snapshots.clubs_json),
+       clubs_fetched_at = COALESCE(excluded.clubs_fetched_at, ewc_club_championship_snapshots.clubs_fetched_at),
        fetched_at = excluded.fetched_at,
        updated_at = excluded.updated_at`,
-    [snapshot.season, snapshot.sourceUrl, standingsJson, prizepoolJson, snapshot.fetchedAt, updatedAt],
+    [
+      snapshot.season,
+      snapshot.sourceUrl,
+      standingsJson,
+      prizepoolJson,
+      snapshot.clubsSourceUrl,
+      clubsJson,
+      snapshot.clubsFetchedAt,
+      snapshot.fetchedAt,
+      updatedAt,
+    ],
   );
   return getEwcClubChampionshipSnapshot(snapshot.season);
 }
@@ -141,7 +190,8 @@ export const saveEwcClubChampionshipSnapshot = upsertEwcClubChampionshipSnapshot
 
 export async function getEwcClubChampionshipSnapshot(season) {
   const row = await get(
-    `SELECT season, source_url, standings_json, prizepool_json, fetched_at, updated_at
+    `SELECT season, source_url, standings_json, prizepool_json, clubs_source_url, clubs_json,
+            clubs_fetched_at, fetched_at, updated_at
        FROM ewc_club_championship_snapshots
       WHERE season = $1`,
     [cleanSeason(season)],
@@ -151,7 +201,8 @@ export async function getEwcClubChampionshipSnapshot(season) {
 
 export async function getLatestEwcClubChampionshipSnapshot() {
   const row = await get(
-    `SELECT season, source_url, standings_json, prizepool_json, fetched_at, updated_at
+    `SELECT season, source_url, standings_json, prizepool_json, clubs_source_url, clubs_json,
+            clubs_fetched_at, fetched_at, updated_at
        FROM ewc_club_championship_snapshots
       ORDER BY fetched_at DESC, updated_at DESC, season DESC
       LIMIT 1`,

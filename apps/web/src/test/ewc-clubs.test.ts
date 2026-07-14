@@ -154,4 +154,43 @@ describe("EWC club tracker helpers", () => {
       qualifiedGames: [expect.objectContaining({ shortLabel: "Probe Game" })],
     });
   });
+
+  test("uses the authoritative Clubs Q count even when fewer local tournaments are tracked", async () => {
+    const { upsertEwcClubChampionshipSnapshot } = await import(
+      "@bot/db/ewcClubChampionshipSnapshots.js"
+    );
+    await upsertEwcClubChampionshipSnapshot({
+      season: "2197",
+      sourceUrl: "https://liquipedia.net/esports/Esports_World_Cup/2197/Club_Championship_Standings",
+      standings: [{ rank: 1, team: "Team Falcons", points: 250 }],
+      prizepool: [],
+      clubsSourceUrl: "https://liquipedia.net/esports/Esports_World_Cup/2197/Clubs",
+      clubs: [{
+        name: "Team Falcons",
+        qualifiedCount: 22,
+        possibleEvents: 25,
+        totalTeams: 22,
+        games: [
+          { label: "Dota 2", shortLabel: "Dota2", status: "qualified", entries: [{ name: "Falcons", wiki: "dota2" }] },
+          { label: "Rocket League", shortLabel: "Rocket League", status: "qualified", entries: [{ name: "Falcons", wiki: "rocketleague" }] },
+          { label: "Overwatch", shortLabel: "Overwatch", status: "can_qualify", entries: [{ name: "Falcons", wiki: "overwatch" }] },
+        ],
+      }],
+      clubsFetchedAt: "2197-07-10T12:30:00.000Z",
+      fetchedAt: "2197-07-10T12:00:00.000Z",
+    });
+
+    const tracker = await getEwcClubTrackerFromDatabase("2197");
+    const club = tracker.clubs.find((entry) => entry.name === "Team Falcons");
+    expect(club).toMatchObject({
+      qualifiedCount: 22,
+      possibleEvents: 25,
+      totalTeams: 22,
+      qualifiedGames: expect.arrayContaining([
+        expect.objectContaining({ shortLabel: "Dota2" }),
+        expect.objectContaining({ shortLabel: "Rocket League" }),
+      ]),
+      possibleGames: [expect.objectContaining({ shortLabel: "Overwatch" })],
+    });
+  });
 });

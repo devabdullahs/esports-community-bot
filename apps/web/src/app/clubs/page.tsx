@@ -176,7 +176,7 @@ function ClubCard({ club, locale }: { club: EwcClubTrackerClub; locale: Locale }
           <div className="rounded-lg border bg-muted/30 p-3">
             <p className="text-xs text-muted-foreground">{text.qualifiedGames}</p>
             <p className="text-lg font-semibold">
-              {formatNumber(club.qualifiedGames.length, locale)}
+              {formatNumber(club.qualifiedCount, locale)}
               {club.possibleEvents ? (
                 <span className="text-sm font-normal text-muted-foreground">
                   {" "}
@@ -208,7 +208,7 @@ function ClubCard({ club, locale }: { club: EwcClubTrackerClub; locale: Locale }
         <section className="flex flex-col gap-2">
           <div className="flex items-center justify-between gap-3">
             <h2 className="text-sm font-semibold">{text.qualifiedGames}</h2>
-            <Badge variant="outline">{text.qualifiedCount(club.qualifiedGames.length)}</Badge>
+            <Badge variant="outline">{text.qualifiedCount(club.qualifiedCount)}</Badge>
           </div>
           <GameChips games={club.qualifiedGames} empty={text.noQualified} />
         </section>
