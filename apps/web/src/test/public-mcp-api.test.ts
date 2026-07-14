@@ -124,6 +124,13 @@ beforeAll(async () => {
     status: "running",
     scheduled_at: Math.floor(Date.now() / 1000),
   });
+  const { recordTournamentSyncSuccess } = await import("@bot/db/tournamentSyncHealth.js");
+  await recordTournamentSyncSuccess({
+    tournamentId,
+    source: "liquipedia",
+    itemCount: 1,
+    at: Math.floor(Date.now() / 1000),
+  });
 
   ({ POST: publicMcpPOST } = await import("@/app/api/public-mcp/route"));
 });
@@ -298,6 +305,28 @@ describe("/api/public-mcp tools", () => {
     const body = await parseMcpResponse(response);
     expect(body.result.isError).not.toBe(true);
     expect(body.result.structuredContent).toBeTruthy();
+  });
+
+  test("tournament tools expose only the coarse public sync-health object", async () => {
+    const [statusResponse, listResponse] = await Promise.all([
+      publicMcpPOST(publicMcpRequest(toolCall("get_tournament_status", { tournamentId }), { ip: "203.0.113.70" })),
+      publicMcpPOST(publicMcpRequest(toolCall("list_tournaments", { gameSlug: "valorant" }), { ip: "203.0.113.71" })),
+    ]);
+    const status = await parseMcpResponse(statusResponse);
+    const list = await parseMcpResponse(listResponse);
+    const healths = [
+      status.result.structuredContent.tournament.syncHealth,
+      list.result.structuredContent.tournaments.find((row: { id: number }) => row.id === tournamentId).syncHealth,
+    ];
+    for (const health of healths) {
+      expect(health).toEqual({
+        state: "fresh",
+        lastSuccessAt: expect.any(Number),
+        source: "liquipedia",
+      });
+      expect(Object.keys(health).sort()).toEqual(["lastSuccessAt", "source", "state"]);
+      expect(JSON.stringify(health)).not.toMatch(/error|message|stack|credential|token|responseBody/i);
+    }
   });
 
   test("search_news never returns drafts", async () => {

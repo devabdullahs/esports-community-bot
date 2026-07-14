@@ -16,7 +16,8 @@ export type AdminNavIcon =
   | "radio"
   | "key"
   | "shield"
-  | "clipboard";
+  | "clipboard"
+  | "activity";
 
 export type AdminNavItem = {
   href: string;
@@ -80,6 +81,7 @@ export function adminNavSections(
       { href: "/admin/users", label: t.links.usersTitle, icon: "users" },
       { href: "/admin/partners", label: t.links.partnersTitle, icon: "handshake" },
       { href: "/admin/streams", label: t.links.streamsTitle, icon: "radio" },
+      { href: "/admin/source-health", label: locale === "ar" ? "\u0635\u062d\u0629 \u0627\u0644\u0645\u0635\u0627\u062f\u0631" : "Source health", icon: "activity" },
     );
     systemItems.push(
       { href: "/admin/team", label: t.links.teamTitle, icon: "shield" },

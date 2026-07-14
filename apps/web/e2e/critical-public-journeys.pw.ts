@@ -28,6 +28,34 @@ test("English home reaches the seeded tournament detail through the directory", 
     tournamentLink.click(),
   ]);
   await expect(page.getByRole("heading", { level: 1 })).toContainText("EWC 2026");
+  await expect(page.locator("[data-sync-health]")).toHaveAttribute("data-sync-health", "fresh");
+  await expect(page.getByText("Updated:", { exact: false })).toBeVisible();
+
+  const tournamentPath = new URL(page.url()).pathname;
+  const polled = await page.evaluate(async (path) => {
+    const response = await fetch(`/api${path}/matches`);
+    return response.json();
+  }, tournamentPath);
+  await page.route(`**/api${tournamentPath}/matches`, async (route) => {
+    await route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({
+        ...polled,
+        tournament: {
+          ...polled.tournament,
+          syncHealth: {
+            state: "delayed",
+            lastSuccessAt: polled.tournament.syncHealth.lastSuccessAt,
+            source: polled.tournament.syncHealth.source,
+          },
+        },
+      }),
+    });
+  });
+  await page.waitForTimeout(16_000);
+  await page.evaluate(() => window.dispatchEvent(new Event("visibilitychange")));
+  await expect(page.locator("[data-sync-health]")).toHaveAttribute("data-sync-health", "delayed");
+  await expect(page.getByText("Displayed data may lag", { exact: false })).toBeVisible();
 });
 
 test("Arabic tournament navigation preserves RTL at the mobile layout", async ({ page }, testInfo) => {
@@ -48,6 +76,8 @@ test("Arabic tournament navigation preserves RTL at the mobile layout", async ({
     tournamentLink.click(),
   ]);
   await expect(page.getByRole("heading", { level: 1 })).toContainText("EWC 2026");
+  await expect(page.locator("[data-sync-health]")).toHaveAttribute("data-sync-health", "fresh");
+  await expect(page.getByText("\u0645\u062d\u062f\u0651\u062b", { exact: true })).toBeVisible();
 
   if (testInfo.project.name === "mobile-chromium") {
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);

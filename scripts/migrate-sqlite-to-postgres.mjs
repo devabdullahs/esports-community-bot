@@ -72,6 +72,7 @@ const appTables = [
   'web_analytics_events',
   'web_product_events',
   'tournament_standings',
+  'tournament_sync_health',
 ];
 
 const authTables = ['user', 'session', 'account', 'verification'];

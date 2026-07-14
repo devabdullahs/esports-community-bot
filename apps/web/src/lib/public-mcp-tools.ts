@@ -413,6 +413,7 @@ export function registerPublicMcpTools(
           ewc: t.ewc,
           status: tournamentStatus(t),
           matchCounts: t.matchCounts,
+          syncHealth: t.syncHealth,
           hasStandings: t.hasStandings,
           featuredMatch: t.featuredMatch,
           lastMatchAt: t.last_match_at,

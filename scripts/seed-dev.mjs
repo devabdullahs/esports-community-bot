@@ -32,6 +32,7 @@ const {
 const { upsertEwcProfileLink, markEwcProfileLinkSynced } = await import('../src/db/ewcProfileLinks.js');
 const { addTournament } = await import('../src/db/tournaments.js');
 const { upsertMatch, getMatch } = await import('../src/db/matches.js');
+const { recordTournamentSyncSuccess } = await import('../src/db/tournamentSyncHealth.js');
 const { upsertTeam } = await import('../src/db/teams.js');
 const { upsertFollow } = await import('../src/db/userFollows.js');
 const { enqueueNotifications } = await import('../src/db/userNotifications.js');
@@ -215,6 +216,12 @@ for (const m of tMatches) {
   try { await upsertMatch({ tournament_id: tournament.id, source: 'liquipedia', ...m }); matchCount += 1; }
   catch (e) { console.warn('match skip:', e.message); }
 }
+await recordTournamentSyncSuccess({
+  tournamentId: tournament.id,
+  source: tournament.source,
+  itemCount: matchCount,
+  at: nowSeconds,
+});
 console.log(`tournament seeded: ${tournament.name} (#${tournament.id}) with ${matchCount} matches`);
 
 // 3d) The authenticated account overview reads these same stored rows; no E2E
