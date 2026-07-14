@@ -216,6 +216,26 @@ ensureColumns('tournaments', [
   ['ewc', 'INTEGER NOT NULL DEFAULT 0'],
 ]);
 
+// Durable schedule-sync outcomes. This stores only coarse operational categories
+// so public projections never need provider messages, URLs, or response payloads.
+db.exec(`
+  CREATE TABLE IF NOT EXISTS tournament_sync_health (
+    tournament_id          INTEGER PRIMARY KEY REFERENCES tournaments(id) ON DELETE CASCADE,
+    source                 TEXT NOT NULL CHECK (source IN ('liquipedia','startgg','pandascore')),
+    last_attempt_at        INTEGER,
+    last_success_at        INTEGER,
+    last_failure_at        INTEGER,
+    last_failure_category  TEXT CHECK (last_failure_category IN ('rate_limit','auth','timeout','network','parse','unknown')),
+    consecutive_failures   INTEGER NOT NULL DEFAULT 0,
+    last_item_count        INTEGER,
+    updated_at             INTEGER NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS idx_tournament_sync_health_source
+    ON tournament_sync_health(source);
+  CREATE INDEX IF NOT EXISTS idx_tournament_sync_health_last_success
+    ON tournament_sync_health(last_success_at DESC);
+`);
+
 // Migration: pandascore_id used to be NOT NULL; Liquipedia-only entities (games
 // PandaScore doesn't cover: battle royale, TFT, ...) need it nullable. SQLite
 // can't relax a NOT NULL in place, so rebuild the table once on old dev DBs.

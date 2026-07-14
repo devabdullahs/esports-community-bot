@@ -978,3 +978,21 @@ CREATE TABLE IF NOT EXISTS tournament_standings (
 ALTER TABLE tournament_standings ADD COLUMN IF NOT EXISTS section_order INTEGER NOT NULL DEFAULT 0;
 CREATE INDEX IF NOT EXISTS idx_tournament_standings_tournament
   ON tournament_standings(tournament_id, section_order, rank);
+
+-- Durable, coarse schedule-sync health. Categories are deliberately closed:
+-- provider messages, URLs, tokens, and response data do not belong in this table.
+CREATE TABLE IF NOT EXISTS tournament_sync_health (
+  tournament_id          BIGINT PRIMARY KEY REFERENCES tournaments(id) ON DELETE CASCADE,
+  source                 TEXT NOT NULL CHECK (source IN ('liquipedia','startgg','pandascore')),
+  last_attempt_at        BIGINT,
+  last_success_at        BIGINT,
+  last_failure_at        BIGINT,
+  last_failure_category  TEXT CHECK (last_failure_category IN ('rate_limit','auth','timeout','network','parse','unknown')),
+  consecutive_failures   INTEGER NOT NULL DEFAULT 0,
+  last_item_count        INTEGER,
+  updated_at             BIGINT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_tournament_sync_health_source
+  ON tournament_sync_health(source);
+CREATE INDEX IF NOT EXISTS idx_tournament_sync_health_last_success
+  ON tournament_sync_health(last_success_at DESC);
