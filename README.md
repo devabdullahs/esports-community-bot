@@ -1,56 +1,63 @@
-# Esports Community Bot
+# Esports Community
 
-Private Discord bot and web dashboard for the Esports Community server. It tracks
-esports tournaments, live matches, schedules, match cards, EWC prediction games,
-news, media posts, and Discord profile showcases from one shared data layer.
+Discord bot and bilingual web platform for the Esports Community. The project
+tracks esports tournaments and live matches, publishes community news, powers
+co-stream discovery, runs Esports World Cup prediction games, and gives staff a
+scoped administration workspace backed by one shared data layer.
 
-The project is built with Node.js, discord.js v14, Next.js, Better Auth, SQLite
-for local/self-hosted development, and PostgreSQL for the CranL production
-deployment.
+The bot uses Node.js and discord.js v14. The web app uses Next.js, Better Auth,
+and shadcn/ui. Local development can use SQLite; the CranL production deployment
+uses PostgreSQL.
 
 > This project is not affiliated with Discord, Liquipedia, the Esports World
-> Cup, or any tournament organizer. Tournament data from Liquipedia is credited
-> and used under CC-BY-SA 3.0.
+> Cup, or any tournament organizer. Liquipedia data is attributed and used under
+> CC-BY-SA 3.0.
 
-## What It Does
+## Highlights
 
-- Tracks Liquipedia tournaments for the games supported by the community.
-- Posts Discord live boards grouped by live matches, upcoming matches, and recent
-  results.
-- Posts per-game live match cards with generated images, team logos, scores, and
-  match links.
-- Keeps optional voice-channel status updated with the nearest live match.
-- Runs EWC weekly and season prediction systems with scoring, profile pages, and
-  image leaderboards.
-- Syncs EWC prediction metadata to Discord Application Role Connections.
-- Provides a bilingual web dashboard with Arabic RTL support, news, media,
-  public game pages, prediction leaderboards, and an admin CMS.
-- Stores admin actions in an audit log so changes can be reviewed later.
+- Tracks tournaments from Liquipedia, start.gg, and other configured sources.
+- Publishes live, upcoming, and recent match boards and generated Discord cards.
+- Provides tournament pages, standings, match details, team and player profiles,
+  global search, and localized Arabic RTL routes.
+- Runs weekly and season EWC predictions with scoring, public leaderboards,
+  Discord profile metadata, and staff operations tooling.
+- Lets members follow games, tournaments, teams, and players, with instant or
+  daily-digest notifications and configurable quiet hours.
+- Lists official co-streamers and supports desktop multiview for up to six live
+  streams. Mobile keeps a single-stream playback experience.
+- Provides game and media publishing workflows, comments, website analytics,
+  tournament source health, staff scopes, and an administrative audit log.
+- Exposes a public read-only MCP server and a separately authenticated,
+  permission-scoped admin MCP server.
+- Supports consent-aware Google Analytics, first-party product analytics,
+  structured data, localized feeds, sitemaps, and optional IndexNow submission.
 
 ## Architecture
 
-The repository contains one Discord bot and one Next.js dashboard. They share the
-same database modules in `src/db`.
+The Discord bot and Next.js application share the database modules in `src/db`.
+The production entry point can run both processes in one service.
 
-- Bot entry point: `src/index.js`
-- Web app: `apps/web`
-- Combined production entry point: `src/start-production.js`
-- Shared database client: `src/db/client.js`
-- Liquipedia client and parsers: `src/services/liquipedia`
-- EWC prediction scoring: `src/lib/ewcPredictions.js`
+| Area | Path |
+| --- | --- |
+| Bot entry point | `src/index.js` |
+| Combined production entry point | `src/start-production.js` |
+| Discord commands and events | `src/commands`, `src/events` |
+| Background jobs | `src/jobs` |
+| Shared SQLite/Postgres data layer | `src/db` |
+| Database adapter | `src/db/client.js` |
+| Liquipedia queue, fetchers, and parsers | `src/services/liquipedia` |
+| Prediction scoring | `src/lib/ewcPredictions.js` |
+| Next.js application | `apps/web` |
+| Browser tests | `apps/web/e2e` |
 
-Local development can use SQLite. Production on CranL uses PostgreSQL by setting
-`DATABASE_URL` and `DB_DRIVER=postgres`. The Postgres schema is applied at boot by
-the app when the Postgres driver is active.
-
-All Liquipedia access must go through the serialized client in
-`src/services/liquipedia/client.js`. Do not add direct HTTP calls to Liquipedia.
+All Liquipedia traffic must use the single serialized queue in
+`src/services/liquipedia/client.js`. Never add a direct or parallel fetch path.
 
 ## Quick Start
 
 Requirements:
 
-- Node.js 20 or newer
+- Node.js 20.12 or newer
 - npm
 - A Discord application and bot token
 
@@ -59,36 +66,101 @@ npm install
 cp .env.example .env
 ```
 
-Fill in the required Discord values:
+Set the required local values:
 
 ```env
 DISCORD_TOKEN=
 DISCORD_CLIENT_ID=
+DISCORD_CLIENT_SECRET=
 DISCORD_GUILD_ID=
 LIQUIPEDIA_USER_AGENT=EsportsCommunityBot/1.0 (contact@example.com)
+BETTER_AUTH_SECRET=replace-with-a-random-secret
 ```
 
-Then register commands and start the bot:
+Register the Discord commands and start the bot:
 
 ```bash
 npm run deploy
 npm start
 ```
 
-For a local dashboard preview:
+Run the web app separately during development:
 
 ```bash
 DB_PATH="./data/dev-dashboard.sqlite" npm run seed:dev
 npm run web:dev
 ```
 
-## Production Deployment
+The dashboard is available at `http://localhost:3000` by default. Development
+authentication bypass settings are documented in `.env.example` and must never
+be enabled in production.
 
-The current production target is CranL:
+## Discord Commands
 
-- The app runs as one service that starts both the bot and the web dashboard.
-- PostgreSQL is provided by CranL as a managed database.
-- Cloudflare fronts the public domain and R2 serves uploaded media assets.
+Member-facing commands:
+
+| Command | Purpose |
+| --- | --- |
+| `/match` | Search live, upcoming, and recent matches |
+| `/lookup` | Look up a local or Liquipedia team/player profile |
+| `/list_tournaments` | List tracked tournaments and their status |
+| `/follow` | Follow and manage games, tournaments, teams, or players |
+| `/ewc_predict` | Submit predictions, inspect leaderboards/profiles, and manage the linked showcase |
+
+Staff commands use Discord permissions and server-side checks:
+
+| Command | Purpose |
+| --- | --- |
+| `/add_tournament` | Track a supported tournament source |
+| `/remove_tournament` | Stop tracking a tournament |
+| `/set_channel` / `/unset_channel` | Configure or remove boards, match cards, news, and voice status |
+| `/set_costreams` | Configure co-stream announcement delivery and mention role |
+| `/set_log` | Configure the bot audit-log channel |
+| `/set_ewc` | Configure EWC Club Championship output |
+| `/set_cs_rankings` | Configure Counter-Strike Valve rankings |
+| `/ewc_admin` | Operate prediction weeks, scoring, leaderboards, and seasons |
+| `Apps -> Delete After` | Preview and confirm deletion of messages after a selected message |
+
+## Web Platform
+
+Public routes include games, tournaments, matches, teams, players, news, media,
+co-streams, EWC club standings, prediction leaderboards, and localized feeds.
+Discord login adds a personal workspace for follows, notifications, prediction
+history, and profile settings.
+
+The admin workspace provides scoped access to content publishing, comments,
+co-streams, users, partners, predictions, source health, analytics, staff roles,
+MCP keys, and audit history. Staff access is deny-by-default and derives from
+the configured super-admin list or database-backed game/media scopes.
+
+Arabic pages live under `/ar`, render RTL, and use the same data and feature set
+as English routes.
+
+## MCP Servers
+
+The project exposes two Streamable HTTP MCP endpoints:
+
+| Server | Endpoint | Documentation | Access |
+| --- | --- | --- | --- |
+| Public MCP | `/api/public-mcp` | `/docs/mcp` | Read-only public data; no key required |
+| Admin MCP | `/api/mcp` | `/docs/admin-mcp` | Bearer key with explicit owner permissions and tool scopes |
+
+Admins create and revoke their own keys at `/admin/mcp`. The admin server also
+contains the public read tools, so an admin client only needs one MCP
+configuration. State-changing tools use conservative workflows, idempotency
+controls, and administrative audit entries.
+
+The repository-level maintainer guide is [`docs/ADMIN_MCP.md`](docs/ADMIN_MCP.md).
+Never commit or share a real MCP key.
+
+## Production and Data
+
+The active production target is CranL:
+
+- One service runs the bot and web application through `npm run start:production`.
+- CranL provides managed PostgreSQL.
+- Cloudflare fronts `esportscommunity.net` and R2 serves uploaded assets.
+- Deployment builds from the repository's `main` branch.
 
 Typical production database settings:
 
@@ -98,140 +170,52 @@ DATABASE_URL=postgresql://...
 PGSSLMODE=disable
 ```
 
-Use `PGSSLMODE=require` only if the database endpoint supports SSL. CranL's
-internal Postgres endpoint may use plain TCP, so `disable` can be correct there.
+Use the TLS mode supported by the database endpoint. `verify-full` with a trusted
+CA is preferred for external connections; CranL internal networking may require
+`disable`.
 
-A Docker self-hosting path is still possible, but CranL is the active deployment
-path for this server.
-
-## Database Migration
-
-The app can migrate an existing SQLite bot database into PostgreSQL:
+To migrate an existing SQLite database:
 
 ```bash
-npm run db:sqlite-to-pg -- --dry-run --sqlite backups/nas-2026-06-13/bot.sqlite
-npm run db:sqlite-to-pg -- --sqlite backups/nas-2026-06-13/bot.sqlite
+npm run db:sqlite-to-pg -- --dry-run --sqlite path/to/bot.sqlite
+npm run db:sqlite-to-pg -- --sqlite path/to/bot.sqlite
 ```
 
-Use a dry run first to confirm source table counts. The real run applies the
-Postgres schema, copies rows, and prints target counts for verification.
+Always run the dry run first and compare the printed source/target counts.
 
-## Discord Commands
+## Configuration
 
-Most commands are staff-only through Discord default member permissions. The
-public commands are for members to inspect matches and submit predictions.
+`.env.example` is the canonical configuration reference. Important groups are:
 
-| Command | Purpose |
+| Group | Variables |
 | --- | --- |
-| `/match` | Public match lookup and detail card |
-| `/lookup` | Public Liquipedia player/team page lookup |
-| `/add_tournament` | Track a Liquipedia tournament |
-| `/remove_tournament` | Stop tracking a tournament |
-| `/list_tournaments` | List tracked tournaments and current counts |
-| `/set_channel leaderboard` | Configure all-game or per-game status boards |
-| `/set_channel card` | Configure all-game or per-game match image cards |
-| `/set_channel voice` | Configure a voice channel for live status |
-| `/unset_channel` | Remove a configured board, card, or voice channel |
-| `/set_log` | Configure the audit-log channel |
-| `/set_ewc` | Configure EWC club championship output |
-| `/set_cs_rankings` | Configure Counter-Strike Valve rankings |
-| `/ewc_predict` | Member prediction commands and guide |
-| `/ewc_admin` | Prediction setup, scoring, leaderboard, and season controls |
+| Discord and OAuth | `DISCORD_TOKEN`, `DISCORD_CLIENT_ID`, `DISCORD_CLIENT_SECRET`, `DISCORD_GUILD_ID` |
+| Database | `DB_DRIVER`, `DATABASE_URL`, `DB_PATH`, `PGSSLMODE`, `PGSSLROOTCERT` |
+| Web/auth | `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL`, `EWC_DASHBOARD_PUBLIC_URL`, `EWC_DASHBOARD_INTERNAL_SECRET` |
+| Admin access | `EWC_DASHBOARD_SUPER_ADMIN_DISCORD_IDS` |
+| Liquipedia | `LIQUIPEDIA_USER_AGENT`, `LIQUIPEDIA_PARSE_MIN_GAP_MS`, `LIQUIPEDIA_CACHE_TTL_MS`, `LIQUIPEDIA_RATE_STATE_PATH` |
+| Tournament sources | `STARTGG_TOKEN`, `LPDB_API_KEY`, `PANDASCORE_TOKEN` |
+| Co-stream status | `TWITCH_CLIENT_ID`, `TWITCH_CLIENT_SECRET`, `KICK_CLIENT_ID`, `KICK_CLIENT_SECRET` |
+| MCP | `EWC_MCP_ENABLED`, `EWC_MCP_ALLOWED_ORIGINS`, `EWC_PUBLIC_MCP_ENABLED`, `EWC_PUBLIC_MCP_ALLOWED_ORIGINS` |
+| Analytics and search | `GOOGLE_ANALYTICS_MEASUREMENT_ID`, `EWC_INDEXNOW_ENABLED`, `EWC_INDEXNOW_KEY`, `EWC_GOOGLE_SITE_VERIFICATION` |
+| R2 assets | `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET`, `R2_PUBLIC_BASE_URL` |
 
-## Web Dashboard
-
-The dashboard provides:
-
-- Public home page and game pages
-- Live and upcoming match sections
-- News and media pages
-- EWC prediction leaderboard and profile pages
-- Discord login through Better Auth
-- Admin CMS for games, media, news, and staff scopes
-- Audit log for administrative actions
-- Admin MCP keys and tools for approved AI/admin workflows
-
-The dashboard is bilingual. Arabic pages use RTL layout and the same Thmanyah
-Sans font stack as English pages.
-
-Website users should start with the public Admin MCP guide at `/docs/admin-mcp`.
-[`docs/ADMIN_MCP.md`](docs/ADMIN_MCP.md) is the maintainer-oriented repo guide.
-
-## Fonts
-
-The web app uses only Thmanyah Sans:
-
-- Regular
-- Medium
-- Bold
-
-The font files are served from the configured asset base URL, usually
-`https://assets.esportscommunity.net/thmanyahsans/woff2`. Do not use the older
-Thmanyah display or serif families in the app.
-
-## Image and Media Storage
-
-News cover images and public media assets can be served from Cloudflare R2.
-
-Required R2 variables:
-
-```env
-R2_ACCOUNT_ID=
-R2_ACCESS_KEY_ID=
-R2_SECRET_ACCESS_KEY=
-R2_BUCKET=
-R2_PUBLIC_BASE_URL=https://assets.esportscommunity.net
-```
-
-If R2 is not configured, admins can still paste remote image URLs where the CMS
-supports it.
-
-## Important Environment Variables
-
-| Variable | Purpose |
-| --- | --- |
-| `DISCORD_TOKEN` | Discord bot token |
-| `DISCORD_CLIENT_ID` | Discord application client ID |
-| `DISCORD_CLIENT_SECRET` | Discord OAuth client secret for the dashboard |
-| `DISCORD_GUILD_ID` | Guild-scoped command deployment |
-| `DATABASE_URL` | PostgreSQL connection URL |
-| `DB_DRIVER` | Set to `postgres` for production Postgres |
-| `DB_PATH` | SQLite database path for local/self-hosted use |
-| `PGSSLMODE` | `disable`, `require`, or `no-verify` |
-| `BETTER_AUTH_SECRET` | Better Auth signing/encryption secret |
-| `BETTER_AUTH_URL` | Public auth base URL |
-| `EWC_DASHBOARD_PUBLIC_URL` | Public dashboard URL |
-| `EWC_DASHBOARD_INTERNAL_URL` | Bot-to-web internal URL |
-| `EWC_DASHBOARD_INTERNAL_SECRET` | Shared secret for internal sync routes |
-| `EWC_DASHBOARD_SUPER_ADMIN_DISCORD_IDS` | Comma-separated Discord IDs with full dashboard access |
-| `LIQUIPEDIA_USER_AGENT` | Required descriptive User-Agent with contact info |
-| `LIQUIPEDIA_PARSE_MIN_GAP_MS` | Minimum gap between parse requests |
-| `LIQUIPEDIA_CACHE_TTL_MS` | Liquipedia response cache TTL |
-| `LIQUIPEDIA_RATE_STATE_PATH` | Persistent Liquipedia backoff state |
-| `THMANYAH_FONT_BASE_URL` | Public base URL for hosted Thmanyah font files |
-
-See `.env.example` for the full list.
+Secrets belong only in deployment configuration or a local ignored `.env` file.
 
 ## Liquipedia Rules
 
-Liquipedia access is intentionally conservative:
+Liquipedia access is deliberately conservative:
 
-- Use a descriptive User-Agent with contact information.
-- Reuse cached responses as long as possible.
-- Keep parse requests serialized and spaced apart.
-- Persist backoff state across restarts.
-- Never scrape generated HTML pages.
-- Never add direct `axios` or `fetch` calls to `liquipedia.net`.
-
-Every Discord match card and board includes Liquipedia attribution:
-
-```text
-Data from Liquipedia - CC-BY-SA 3.0
-```
+- Use a descriptive User-Agent with valid contact information.
+- Route parse and search traffic through the existing serialized client.
+- Respect the configured minimum gaps and cache TTLs.
+- Persist rate-limit and backoff state across restarts.
+- Use fixtures in tests; tests must never contact Liquipedia.
+- Keep source attribution on rendered match and tournament content.
 
 ## Verification
 
-Run these before claiming a code change is done:
+Required code checks:
 
 ```bash
 npm test
@@ -240,27 +224,38 @@ npm --workspace @esports-community-bot/web run test
 npm run web:build
 ```
 
+Browser coverage and local production smoke checks:
+
+```bash
+npm run web:e2e:install
+npm run web:e2e
+npm run web:smoke:local
+```
+
+CI runs the bot tests, web lint/tests/build, and Playwright browser suite.
+
 ## Project Map
 
 ```text
 src/
-  commands/                 Discord slash commands
+  commands/                 Discord slash and context-menu commands
   db/                       shared SQLite/Postgres database modules
   events/                   Discord event handlers
-  jobs/                     sync, polling, cards, rankings, predictions
-  lib/                      scoring, cards, games, markdown, logos
-  services/liquipedia/      rate-limited Liquipedia client and parsers
+  jobs/                     polling, sync, cards, rankings, and predictions
+  lib/                      scoring, rendering, games, markdown, and logos
+  services/liquipedia/      serialized Liquipedia client and parsers
 apps/web/
-  src/app/                  Next.js App Router pages and API routes
-  src/components/           dashboard UI components
-  src/lib/                  auth, admin access, data helpers, security
-scripts/
-  migrate-sqlite-to-postgres.mjs
-  seed-dev.mjs
-tests/
-  *.test.mjs                bot-side node:test suite
+  e2e/                      Playwright browser journeys
+  src/app/                  App Router pages, feeds, and API routes
+  src/components/           shadcn-based product and admin UI
+  src/lib/                  auth, RBAC, MCP, data, analytics, and security helpers
+  src/test/                 Vitest web tests
+docs/                       deployment, MCP, and search-operations guides
+scripts/                    migration, seed, E2E, and smoke-test runners
+tests/                      bot-side node:test suite
 ```
 
 ## License
 
-MIT for the project code. Liquipedia content remains under CC-BY-SA 3.0.
+MIT for project code. Third-party data and assets remain under their respective
+licenses; Liquipedia content is CC-BY-SA 3.0.
