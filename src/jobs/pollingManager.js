@@ -16,6 +16,7 @@ import {
 import { getMatchDetailsFetchedAt, upsertMatchDetails } from '../db/matchDetails.js';
 import { getTournamentById } from '../db/tournaments.js';
 import { replaceTournamentStandings } from '../db/tournamentStandings.js';
+import { fetchTournamentSchedule } from './tournamentScheduleFetch.js';
 
 // Targeted backoff polling: a match is polled (every livePollIntervalMs) only while it is
 // actually running, and polling stops the moment it finishes / leaves the ticker. Matches
@@ -34,7 +35,6 @@ const ARM_LOOKAHEAD_SECONDS = Math.max(
 );
 
 const watchers = new Map(); // external_id -> { armTimer?, pollTimer? }
-const tournamentPolls = new Map(); // tournament.id -> Promise<parsed matches>
 const detailRefreshes = new Map(); // match.id -> { promise, finalRequested }
 const MATCH_DETAIL_GAMES = new Set(['valorant', 'dota2']);
 
@@ -158,14 +158,6 @@ function startPolling(match, tournament, { initialPollDelayMs = 0 } = {}) {
   }
   watchers.set(match.external_id, w);
   startLoop();
-}
-
-async function fetchTournamentSchedule(service, tournament) {
-  const key = tournament.id || `${tournament.source}:${tournament.external_id}`;
-  if (tournamentPolls.has(key)) return tournamentPolls.get(key);
-  const promise = service.fetchSchedule(tournament).finally(() => tournamentPolls.delete(key));
-  tournamentPolls.set(key, promise);
-  return promise;
 }
 
 function fetchedMoreThanSecondsAgo(fetchedAt, seconds) {

@@ -90,9 +90,11 @@ export function publicTournamentSyncHealth(
   } = {},
 ) {
   const normalizedSource = normalizeTournamentSyncSource(source ?? health?.source) || 'liquipedia';
-  const lastSuccessAt = finiteUnixSeconds(health?.last_success_at, null);
+  const now = finiteUnixSeconds(nowSec, Math.floor(Date.now() / 1000));
+  const storedLastSuccessAt = finiteUnixSeconds(health?.last_success_at, null);
+  const lastSuccessAt = storedLastSuccessAt == null ? null : Math.min(now, storedLastSuccessAt);
   return {
-    state: classifyTournamentSyncHealth(health, { archivedAt, hasRunningMatch, pollIntervalMs, nowSec }),
+    state: classifyTournamentSyncHealth(health, { archivedAt, hasRunningMatch, pollIntervalMs, nowSec: now }),
     lastSuccessAt,
     source: normalizedSource,
   };
