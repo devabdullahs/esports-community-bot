@@ -63,6 +63,28 @@ export async function listActiveTournaments(guildId) {
     : all('SELECT * FROM tournaments WHERE active = 1 AND archived_at IS NULL ORDER BY created_at DESC');
 }
 
+// Bounded, guild-scoped local autocomplete source. The command layer still
+// re-resolves an id before writing, so this only improves discovery latency.
+export async function searchActiveTournaments(guildId, { q = '', limit = 50 } = {}) {
+  if (!guildId) return [];
+  const text = String(q || '').trim().toLowerCase();
+  const cappedLimit = Math.min(100, Math.max(1, Number(limit) || 50));
+  const params = [guildId];
+  let where = 'active = 1 AND archived_at IS NULL AND guild_id = $1';
+  if (text) {
+    params.push(`%${text}%`);
+    where += ` AND (lower(name) LIKE $2 OR lower(external_id) LIKE $2 OR lower(game) LIKE $2)`;
+  }
+  params.push(cappedLimit);
+  return all(
+    `SELECT * FROM tournaments
+     WHERE ${where}
+     ORDER BY lower(name) ASC, id ASC
+     LIMIT $${params.length}`,
+    params,
+  );
+}
+
 export async function listEwcTournamentsForGame(guildId, game) {
   return all(
     `SELECT id, source, game, name, url, archived_at

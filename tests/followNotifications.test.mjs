@@ -103,6 +103,40 @@ test('fan-out reaches game, tournament, team, and player followers exactly once'
   assert.deepEqual(ids.sort(), [GAME_FAN, TOURN_FAN, TEAM_FAN, PLAYER_FAN].sort());
 });
 
+test('a tournament follow created by Discord uses the shared notification fan-out', async () => {
+  const DISCORD_COMMAND_FAN = '200000000000000010';
+  const { execute: executeFollow } = await import('../src/commands/follow.js');
+  const interaction = {
+    guildId: GUILD,
+    locale: 'en-US',
+    user: { id: DISCORD_COMMAND_FAN },
+    options: {
+      getSubcommand: () => 'tournament',
+      getString: () => null,
+      getInteger: () => tournament.id,
+    },
+    replies: [],
+    async reply(payload) {
+      this.replies.push(payload);
+    },
+  };
+
+  await executeFollow(interaction);
+  assert.equal(interaction.replies[0].flags, 64);
+  const ids = await listFollowerIdsForMatch({
+    game: 'valorant',
+    tournamentId: tournament.id,
+    teamA: 'Team Liquid',
+    teamB: 'Karmine Corp',
+  });
+  assert.ok(ids.includes(DISCORD_COMMAND_FAN));
+  await deleteFollow({
+    discordUserId: DISCORD_COMMAND_FAN,
+    entityType: 'tournament',
+    entityKey: String(tournament.id),
+  });
+});
+
 test('unrelated matches reach no one', async () => {
   const ids = await listFollowerIdsForMatch({
     game: 'dota2',
