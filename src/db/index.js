@@ -932,6 +932,8 @@ db.exec(`
     entity_key      TEXT NOT NULL,
     entity_label    TEXT NOT NULL DEFAULT '',
     entity_ref      TEXT NOT NULL DEFAULT '',
+    notify_match_start  INTEGER,
+    notify_match_result INTEGER,
     created_at      TEXT NOT NULL DEFAULT (datetime('now')),
     UNIQUE (discord_user_id, entity_type, entity_key)
   );
@@ -943,6 +945,11 @@ db.exec(`
     dm_enabled          INTEGER NOT NULL DEFAULT 1,
     notify_match_start  INTEGER NOT NULL DEFAULT 1,
     notify_match_result INTEGER NOT NULL DEFAULT 1,
+    dm_delivery_mode    TEXT NOT NULL DEFAULT 'instant',
+    timezone            TEXT NOT NULL DEFAULT 'Asia/Riyadh',
+    quiet_start_minute  INTEGER,
+    quiet_end_minute    INTEGER,
+    digest_minute       INTEGER NOT NULL DEFAULT 1080,
     updated_at          TEXT NOT NULL DEFAULT (datetime('now'))
   );
 
@@ -957,6 +964,8 @@ db.exec(`
     dedupe_key      TEXT NOT NULL,
     read_at         TEXT,
     dm_status       TEXT NOT NULL DEFAULT 'skipped' CHECK (dm_status IN ('pending','sent','skipped','failed')),
+    dm_delivery_mode TEXT NOT NULL DEFAULT 'instant',
+    dm_not_before    INTEGER NOT NULL DEFAULT 0,
     created_at      TEXT NOT NULL DEFAULT (datetime('now')),
     UNIQUE (discord_user_id, dedupe_key)
   );
@@ -1010,6 +1019,27 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_web_product_events_name_occurred
     ON web_product_events(event_name, occurred_at DESC);
 `);
+
+// These are additive so old SQLite databases retain their notification history.
+// The due index must be created after ensureColumns has repaired old tables.
+ensureColumns('user_follows', [
+  ['notify_match_start', 'INTEGER'],
+  ['notify_match_result', 'INTEGER'],
+]);
+ensureColumns('user_notification_prefs', [
+  ['dm_delivery_mode', "TEXT NOT NULL DEFAULT 'instant'"],
+  ['timezone', "TEXT NOT NULL DEFAULT 'Asia/Riyadh'"],
+  ['quiet_start_minute', 'INTEGER'],
+  ['quiet_end_minute', 'INTEGER'],
+  ['digest_minute', 'INTEGER NOT NULL DEFAULT 1080'],
+]);
+ensureColumns('user_notifications', [
+  ['dm_delivery_mode', 'TEXT'],
+  ['dm_not_before', 'INTEGER'],
+]);
+db.prepare("UPDATE user_notifications SET dm_delivery_mode = 'instant' WHERE dm_delivery_mode IS NULL").run();
+db.prepare("UPDATE user_notifications SET dm_not_before = 0 WHERE dm_status = 'pending' AND dm_not_before IS NULL").run();
+db.exec('CREATE INDEX IF NOT EXISTS idx_user_notifications_dm_due ON user_notifications(dm_status, dm_not_before, id)');
 
 ensureColumns('web_analytics_events', [
   [

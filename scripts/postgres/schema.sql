@@ -753,6 +753,8 @@ CREATE TABLE IF NOT EXISTS user_follows (
   entity_key      TEXT NOT NULL,
   entity_label    TEXT NOT NULL DEFAULT '',
   entity_ref      TEXT NOT NULL DEFAULT '',
+  notify_match_start  INTEGER,
+  notify_match_result INTEGER,
   created_at      TEXT NOT NULL DEFAULT (to_char(now() AT TIME ZONE 'UTC', 'YYYY-MM-DD HH24:MI:SS')),
   UNIQUE (discord_user_id, entity_type, entity_key)
 );
@@ -764,6 +766,11 @@ CREATE TABLE IF NOT EXISTS user_notification_prefs (
   dm_enabled          INTEGER NOT NULL DEFAULT 1,
   notify_match_start  INTEGER NOT NULL DEFAULT 1,
   notify_match_result INTEGER NOT NULL DEFAULT 1,
+  dm_delivery_mode    TEXT NOT NULL DEFAULT 'instant',
+  timezone            TEXT NOT NULL DEFAULT 'Asia/Riyadh',
+  quiet_start_minute  INTEGER,
+  quiet_end_minute    INTEGER,
+  digest_minute       INTEGER NOT NULL DEFAULT 1080,
   updated_at          TEXT NOT NULL DEFAULT (to_char(now() AT TIME ZONE 'UTC', 'YYYY-MM-DD HH24:MI:SS'))
 );
 
@@ -778,11 +785,26 @@ CREATE TABLE IF NOT EXISTS user_notifications (
   dedupe_key      TEXT NOT NULL,
   read_at         TEXT,
   dm_status       TEXT NOT NULL DEFAULT 'skipped' CHECK (dm_status IN ('pending','sent','skipped','failed')),
+  dm_delivery_mode TEXT NOT NULL DEFAULT 'instant',
+  dm_not_before    BIGINT NOT NULL DEFAULT 0,
   created_at      TEXT NOT NULL DEFAULT (to_char(now() AT TIME ZONE 'UTC', 'YYYY-MM-DD HH24:MI:SS')),
   UNIQUE (discord_user_id, dedupe_key)
 );
 CREATE INDEX IF NOT EXISTS idx_user_notifications_user ON user_notifications(discord_user_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_user_notifications_dm   ON user_notifications(dm_status);
+
+ALTER TABLE user_follows ADD COLUMN IF NOT EXISTS notify_match_start INTEGER;
+ALTER TABLE user_follows ADD COLUMN IF NOT EXISTS notify_match_result INTEGER;
+ALTER TABLE user_notification_prefs ADD COLUMN IF NOT EXISTS dm_delivery_mode TEXT NOT NULL DEFAULT 'instant';
+ALTER TABLE user_notification_prefs ADD COLUMN IF NOT EXISTS timezone TEXT NOT NULL DEFAULT 'Asia/Riyadh';
+ALTER TABLE user_notification_prefs ADD COLUMN IF NOT EXISTS quiet_start_minute INTEGER;
+ALTER TABLE user_notification_prefs ADD COLUMN IF NOT EXISTS quiet_end_minute INTEGER;
+ALTER TABLE user_notification_prefs ADD COLUMN IF NOT EXISTS digest_minute INTEGER NOT NULL DEFAULT 1080;
+ALTER TABLE user_notifications ADD COLUMN IF NOT EXISTS dm_delivery_mode TEXT;
+ALTER TABLE user_notifications ADD COLUMN IF NOT EXISTS dm_not_before BIGINT;
+UPDATE user_notifications SET dm_delivery_mode = 'instant' WHERE dm_delivery_mode IS NULL;
+UPDATE user_notifications SET dm_not_before = 0 WHERE dm_status = 'pending' AND dm_not_before IS NULL;
+CREATE INDEX IF NOT EXISTS idx_user_notifications_dm_due ON user_notifications(dm_status, dm_not_before, id);
 
 -- Privacy-friendly first-party website analytics. visitor_id/session_id are
 -- browser-generated random ids; raw IP addresses are intentionally not stored.

@@ -21,8 +21,10 @@ const {
   upsertFollow,
   deleteFollow,
   listFollowsForUser,
+  listFollowersForMatch,
   listFollowerIdsForMatch,
   listPersonalizedMatchesForUser,
+  updateFollowNotificationOverrides,
 } = await import('../src/db/userFollows.js');
 const {
   enqueueNotifications,
@@ -101,6 +103,97 @@ test('fan-out reaches game, tournament, team, and player followers exactly once'
     teamB: 'Karmine Corp',
   });
   assert.deepEqual(ids.sort(), [GAME_FAN, TOURN_FAN, TEAM_FAN, PLAYER_FAN].sort());
+});
+
+test('per-follow event overrides use OR semantics across every matching follow', async () => {
+  const OVERRIDE_FAN = '200000000000000011';
+  const ALL_OFF_FAN = '200000000000000012';
+  await Promise.all([
+    upsertFollow({ discordUserId: OVERRIDE_FAN, entityType: 'game', entityKey: 'valorant' }),
+    upsertFollow({ discordUserId: OVERRIDE_FAN, entityType: 'team', entityKey: 'Team Liquid' }),
+    upsertFollow({ discordUserId: ALL_OFF_FAN, entityType: 'game', entityKey: 'valorant' }),
+    upsertFollow({ discordUserId: ALL_OFF_FAN, entityType: 'team', entityKey: 'Team Liquid' }),
+  ]);
+  await Promise.all([
+    upsertNotificationPrefs(OVERRIDE_FAN, { notifyMatchStart: false }),
+    upsertNotificationPrefs(ALL_OFF_FAN, { notifyMatchStart: true }),
+  ]);
+  for (const follow of await listFollowsForUser(OVERRIDE_FAN)) {
+    await updateFollowNotificationOverrides({
+      discordUserId: OVERRIDE_FAN,
+      followId: follow.id,
+      notifyMatchStart: follow.entity_type === 'team',
+    });
+  }
+  for (const follow of await listFollowsForUser(ALL_OFF_FAN)) {
+    await updateFollowNotificationOverrides({ discordUserId: ALL_OFF_FAN, followId: follow.id, notifyMatchStart: false });
+  }
+
+  const recipients = await listFollowersForMatch({
+    game: 'valorant',
+    tournamentId: tournament.id,
+    teamA: 'Team Liquid',
+    teamB: 'Karmine Corp',
+  });
+  const overrideRecipient = recipients.find((recipient) => recipient.discordUserId === OVERRIDE_FAN);
+  assert.equal(overrideRecipient.follows.length, 2);
+  const policyRecipients = recipients.filter((recipient) => [OVERRIDE_FAN, ALL_OFF_FAN].includes(recipient.discordUserId));
+  assert.equal((await enqueueNotifications({
+    recipients: policyRecipients,
+    type: 'match_start',
+    matchId: match.id,
+    title: 'Override match',
+    dedupeKey: 'match_start:test:override-or',
+    nowSec: 1_800_000_000,
+  })), 1); // OVERRIDE_FAN is enabled by its team override; ALL_OFF_FAN is not.
+  assert.equal((await listNotificationsForUser(OVERRIDE_FAN)).length, 1);
+  assert.equal((await listNotificationsForUser(ALL_OFF_FAN)).length, 0);
+  await Promise.all([
+    deleteFollow({ discordUserId: OVERRIDE_FAN, entityType: 'game', entityKey: 'valorant' }),
+    deleteFollow({ discordUserId: OVERRIDE_FAN, entityType: 'team', entityKey: 'Team Liquid' }),
+    deleteFollow({ discordUserId: ALL_OFF_FAN, entityType: 'game', entityKey: 'valorant' }),
+    deleteFollow({ discordUserId: ALL_OFF_FAN, entityType: 'team', entityKey: 'Team Liquid' }),
+  ]);
+});
+
+test('enqueue captures instant quiet-hour and daily-digest delivery timestamps', async () => {
+  const SCHEDULE_FAN = '200000000000000013';
+  const now = Math.floor(Date.UTC(2026, 0, 2, 21, 30) / 1000); // 00:30 Riyadh
+  await upsertNotificationPrefs(SCHEDULE_FAN, {
+    timezone: 'Asia/Riyadh',
+    quietStartMinute: 23 * 60,
+    quietEndMinute: 7 * 60,
+  });
+  await enqueueNotifications({
+    userIds: [SCHEDULE_FAN],
+    type: 'match_start',
+    matchId: match.id,
+    title: 'Quiet instant',
+    dedupeKey: 'match_start:test:quiet-instant',
+    nowSec: now,
+  });
+  const instant = (await listNotificationsForUser(SCHEDULE_FAN)).find((row) => row.dedupe_key === 'match_start:test:quiet-instant');
+  assert.equal(instant.dm_delivery_mode, 'instant');
+  assert.equal(instant.dm_not_before, Math.floor(Date.UTC(2026, 0, 3, 4) / 1000));
+
+  await upsertNotificationPrefs(SCHEDULE_FAN, {
+    dmDeliveryMode: 'daily_digest',
+    quietStartMinute: null,
+    quietEndMinute: null,
+    digestMinute: 18 * 60,
+  });
+  await enqueueNotifications({
+    userIds: [SCHEDULE_FAN],
+    type: 'match_result',
+    matchId: match.id,
+    title: 'Daily digest',
+    dedupeKey: 'match_result:test:daily-digest',
+    nowSec: now,
+  });
+  const digest = (await listNotificationsForUser(SCHEDULE_FAN)).find((row) => row.dedupe_key === 'match_result:test:daily-digest');
+  assert.equal(digest.dm_delivery_mode, 'daily_digest');
+  assert.equal(digest.dm_not_before, Math.floor(Date.UTC(2026, 0, 3, 15) / 1000));
+  await run("UPDATE user_notifications SET dm_status = 'skipped' WHERE discord_user_id = $1", [SCHEDULE_FAN]);
 });
 
 test('a tournament follow created by Discord uses the shared notification fan-out', async () => {
