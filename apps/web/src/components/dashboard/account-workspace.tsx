@@ -9,6 +9,7 @@ import {
 } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { ProfileDashboard } from "@/components/dashboard/profile-dashboard";
+import { TodayForYou } from "@/components/dashboard/today-for-you";
 import { FollowCenter } from "@/components/follows/follow-center";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { copy, type Locale } from "@/lib/i18n";
@@ -61,7 +62,10 @@ export function AccountWorkspace({
       </div>
 
       <TabsContent value="overview">
-        <ProfileDashboard guildId={guildId} season={season} locale={locale} section="overview" />
+        <div className="flex flex-col gap-8">
+          <ProfileDashboard guildId={guildId} season={season} locale={locale} section="overview" />
+          <TodayForYou locale={locale} />
+        </div>
       </TabsContent>
       <TabsContent value="predictions">
         <ProfileDashboard guildId={guildId} season={season} locale={locale} section="predictions" />

@@ -107,6 +107,16 @@ export async function listNotificationPageForUser(discordUserId, { limit = 30, o
   };
 }
 
+export async function listUnreadNotificationsForUser(discordUserId, { limit = 3 } = {}) {
+  const safeLimit = Math.min(20, Math.max(1, Math.trunc(Number(limit) || 3)));
+  return all(
+    `SELECT * FROM user_notifications
+     WHERE discord_user_id = $1 AND read_at IS NULL
+     ORDER BY created_at DESC, id DESC LIMIT $2`,
+    [discordUserId, safeLimit],
+  );
+}
+
 export async function countUnreadNotifications(discordUserId) {
   const row = await get(
     'SELECT COUNT(*) AS count FROM user_notifications WHERE discord_user_id = $1 AND read_at IS NULL',

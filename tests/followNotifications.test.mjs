@@ -14,6 +14,7 @@ process.env.EWC_DASHBOARD_PUBLIC_URL = 'https://example.test';
 const { closeDb } = await import('../src/db/index.js');
 const { addTournament } = await import('../src/db/tournaments.js');
 const { upsertMatch, getMatch } = await import('../src/db/matches.js');
+const { run } = await import('../src/db/client.js');
 const { upsertTeam } = await import('../src/db/teams.js');
 const { upsertPlayer } = await import('../src/db/players.js');
 const {
@@ -21,6 +22,7 @@ const {
   deleteFollow,
   listFollowsForUser,
   listFollowerIdsForMatch,
+  listPersonalizedMatchesForUser,
 } = await import('../src/db/userFollows.js');
 const {
   enqueueNotifications,
@@ -28,6 +30,7 @@ const {
   upsertNotificationPrefs,
   listNotificationPageForUser,
   listNotificationsForUser,
+  listUnreadNotificationsForUser,
   listPendingDmNotifications,
   countUnreadNotifications,
   markNotificationRead,
@@ -330,4 +333,116 @@ test('concurrent follow writes cannot race past the per-user quota', async () =>
   const rows = await listFollowsForUser(userId);
   assert.equal(rows.length, MAX_FOLLOWS_PER_USER);
   assert.equal(results.filter((result) => result?.limited).length, 25);
+});
+
+test('personalized match selection covers every follow type with bounded, deduped activity', async () => {
+  const now = 2_000_000_000;
+  const gameFan = '200000000000000101';
+  const tournamentFan = '200000000000000102';
+  const teamFan = '200000000000000103';
+  const playerFan = '200000000000000104';
+  const allFan = '200000000000000105';
+  const todayTournament = await addTournament({
+    source: 'liquipedia',
+    external_id: 'today-for-you/cup',
+    game: 'valorant',
+    name: 'Today For You Cup',
+    url: 'https://liquipedia.net/valorant/Today_For_You/Cup',
+    guild_id: GUILD,
+  });
+  const archivedTournament = await addTournament({
+    source: 'liquipedia',
+    external_id: 'today-for-you/archived',
+    game: 'valorant',
+    name: 'Archived Today Cup',
+    url: 'https://liquipedia.net/valorant/Today_For_You/Archived',
+    guild_id: GUILD,
+  });
+  await run('UPDATE tournaments SET archived_at = $1 WHERE id = $2', [now, archivedTournament.id]);
+
+  const playerTeam = await upsertTeam({ game: 'valorant', pandascore_id: 9501, name: 'Player Team' });
+  const personalizedPlayer = await upsertPlayer({
+    game: 'valorant',
+    pandascore_id: 9601,
+    name: 'Today Player',
+    current_team_id: playerTeam.id,
+    current_team_pandascore_id: 9501,
+    current_team_name: 'Player Team',
+  });
+  const createMatch = (externalId, patch = {}) => upsertMatch({
+    tournament_id: todayTournament.id,
+    source: 'liquipedia',
+    external_id: externalId,
+    team_a: 'Team Liquid',
+    team_b: 'Player Team',
+    score_a: null,
+    score_b: null,
+    status: 'running',
+    scheduled_at: now - 60,
+    ...patch,
+  });
+  const allCriteria = await createMatch('Match:today-all');
+  const secondLive = await createMatch('Match:today-live-2', { scheduled_at: now - 30 });
+  await createMatch('Match:today-live-3', { scheduled_at: now - 10 });
+  const firstUpcoming = await createMatch('Match:today-upcoming-1', {
+    status: 'scheduled',
+    scheduled_at: now + 60,
+  });
+  const placeholderUpcoming = await createMatch('Match:today-placeholder', {
+    team_b: 'TBD',
+    status: 'scheduled',
+    scheduled_at: now + 120,
+  });
+  await createMatch('Match:today-outside-window', { status: 'scheduled', scheduled_at: now + 8 * 24 * 60 * 60 });
+  await createMatch('Match:today-past', { status: 'scheduled', scheduled_at: now - 1 });
+  await upsertMatch({
+    tournament_id: archivedTournament.id,
+    source: 'liquipedia',
+    external_id: 'Match:today-archived',
+    team_a: 'Team Liquid',
+    team_b: 'Player Team',
+    status: 'running',
+    scheduled_at: now - 60,
+  });
+
+  await upsertFollow({ discordUserId: gameFan, entityType: 'game', entityKey: 'valorant' });
+  await upsertFollow({ discordUserId: tournamentFan, entityType: 'tournament', entityKey: String(todayTournament.id) });
+  await upsertFollow({ discordUserId: teamFan, entityType: 'team', entityKey: 'team liquid!' });
+  await upsertFollow({ discordUserId: playerFan, entityType: 'player', entityKey: String(personalizedPlayer.id) });
+  await Promise.all([
+    upsertFollow({ discordUserId: allFan, entityType: 'game', entityKey: 'valorant' }),
+    upsertFollow({ discordUserId: allFan, entityType: 'tournament', entityKey: String(todayTournament.id) }),
+    upsertFollow({ discordUserId: allFan, entityType: 'team', entityKey: 'Team Liquid' }),
+    upsertFollow({ discordUserId: allFan, entityType: 'player', entityKey: String(personalizedPlayer.id) }),
+  ]);
+
+  for (const userId of [gameFan, tournamentFan, teamFan, playerFan]) {
+    const selected = await listPersonalizedMatchesForUser(userId, { nowSec: now });
+    assert.ok(selected.live.some((row) => row.id === allCriteria.id), `expected ${userId} to see the matching live match`);
+  }
+
+  const selected = await listPersonalizedMatchesForUser(allFan, { nowSec: now, liveLimit: 2, upcomingLimit: 2 });
+  assert.deepEqual(selected.live.map((row) => row.id), [allCriteria.id, secondLive.id]);
+  assert.deepEqual(selected.upcoming.map((row) => row.id), [firstUpcoming.id, placeholderUpcoming.id]);
+  assert.equal(selected.live.filter((row) => row.id === allCriteria.id).length, 1);
+  assert.equal(selected.live.length, 2);
+  assert.equal(selected.upcoming.length, 2);
+  assert.ok(selected.upcoming.some((row) => row.teamB === 'TBD'));
+  assert.ok(![...selected.live, ...selected.upcoming].some((row) => row.tournamentName === 'Archived Today Cup'));
+});
+
+test('unread notification reads stay member-scoped and bounded', async () => {
+  const userId = '200000000000000106';
+  for (let index = 1; index <= 4; index += 1) {
+    await enqueueNotifications({
+      userIds: [userId],
+      type: 'match_result',
+      matchId: match.id,
+      title: `Unread result ${index}`,
+      dedupeKey: `unread-result:${index}`,
+    });
+  }
+  const unread = await listUnreadNotificationsForUser(userId, { limit: 3 });
+  assert.equal(unread.length, 3);
+  assert.ok(unread.every((row) => row.discord_user_id === userId && row.read_at === null));
 });

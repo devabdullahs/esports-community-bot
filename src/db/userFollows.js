@@ -122,3 +122,119 @@ export async function listFollowerIdsForMatch({ game, tournamentId, teamA, teamB
 
   return [...ids];
 }
+
+const DEFAULT_PERSONALIZED_LIVE_LIMIT = 5;
+const DEFAULT_PERSONALIZED_UPCOMING_LIMIT = 5;
+const DEFAULT_PERSONALIZED_WINDOW_SECONDS = 7 * 24 * 60 * 60;
+const MAX_PERSONALIZED_MATCH_CANDIDATES = 500;
+
+function boundedPositiveInteger(value, fallback, maximum) {
+  const parsed = Math.trunc(Number(value));
+  if (!Number.isFinite(parsed) || parsed < 1) return fallback;
+  return Math.min(parsed, maximum);
+}
+
+function followedMatchProjection(row) {
+  return {
+    id: Number(row.id),
+    tournamentId: Number(row.tournament_id),
+    tournamentName: textOrEmpty(row.tournament_name),
+    game: textOrEmpty(row.game),
+    teamA: textOrEmpty(row.team_a),
+    teamB: textOrEmpty(row.team_b),
+    status: row.status,
+    scheduledAt: row.scheduled_at == null ? null : Number(row.scheduled_at),
+  };
+}
+
+// This stays a bounded candidate query because team aliases are normalized in JS
+// by normalizeTeamName. Keeping that shared matcher avoids a subtly different
+// SQL-only normalization path from notification fan-out.
+export async function listPersonalizedMatchesForUser(
+  discordUserId,
+  {
+    nowSec,
+    liveLimit = DEFAULT_PERSONALIZED_LIVE_LIMIT,
+    upcomingLimit = DEFAULT_PERSONALIZED_UPCOMING_LIMIT,
+    upcomingWindowSec = DEFAULT_PERSONALIZED_WINDOW_SECONDS,
+  } = {},
+) {
+  const now = Math.trunc(Number(nowSec));
+  if (!discordUserId || !Number.isFinite(now)) {
+    throw new Error('listPersonalizedMatchesForUser requires discordUserId and nowSec.');
+  }
+  const safeLiveLimit = boundedPositiveInteger(liveLimit, DEFAULT_PERSONALIZED_LIVE_LIMIT, 20);
+  const safeUpcomingLimit = boundedPositiveInteger(upcomingLimit, DEFAULT_PERSONALIZED_UPCOMING_LIMIT, 20);
+  const safeWindow = boundedPositiveInteger(upcomingWindowSec, DEFAULT_PERSONALIZED_WINDOW_SECONDS, 14 * 24 * 60 * 60);
+  const candidateLimit = Math.min(
+    MAX_PERSONALIZED_MATCH_CANDIDATES,
+    Math.max(100, (safeLiveLimit + safeUpcomingLimit) * 20),
+  );
+
+  const [follows, candidates] = await Promise.all([
+    listFollowsForUser(discordUserId),
+    all(
+      `SELECT m.id, m.tournament_id, m.team_a, m.team_b, m.status, m.scheduled_at,
+              t.game, t.name AS tournament_name
+       FROM matches m
+       JOIN tournaments t ON t.id = m.tournament_id
+       WHERE t.active = 1
+         AND t.archived_at IS NULL
+         AND (
+           (m.status = 'running' AND (m.scheduled_at IS NULL OR m.scheduled_at >= $1 - 43200))
+           OR (m.status = 'scheduled' AND m.scheduled_at >= $1 AND m.scheduled_at <= $2)
+         )
+       ORDER BY CASE m.status WHEN 'running' THEN 0 ELSE 1 END,
+                m.scheduled_at ASC,
+                m.id ASC
+       LIMIT $3`,
+      [now, now + safeWindow, candidateLimit],
+    ),
+  ]);
+  if (!follows.length) return { live: [], upcoming: [] };
+
+  const gameKeys = new Set(
+    follows.filter((follow) => follow.entity_type === 'game').map((follow) => follow.entity_key),
+  );
+  const tournamentKeys = new Set(
+    follows.filter((follow) => follow.entity_type === 'tournament').map((follow) => follow.entity_key),
+  );
+  const teamKeys = new Set(
+    follows.filter((follow) => follow.entity_type === 'team').map((follow) => follow.entity_key),
+  );
+  const playerTeams = await all(
+    `SELECT p.game, p.current_team_name
+     FROM user_follows f
+     JOIN players p ON CAST(p.id AS TEXT) = f.entity_key
+     WHERE f.discord_user_id = $1
+       AND f.entity_type = 'player'
+       AND p.current_team_name IS NOT NULL`,
+    [discordUserId],
+  );
+
+  const matchesFollow = (row) => {
+    const matchGame = textOrEmpty(row.game).toLowerCase();
+    if (gameKeys.has(matchGame) || tournamentKeys.has(String(row.tournament_id))) return true;
+
+    const matchTeams = [normalizeTeamName(row.team_a), normalizeTeamName(row.team_b)].filter(Boolean);
+    if (matchTeams.some((team) => teamKeys.has(team))) return true;
+
+    return playerTeams.some((player) => {
+      if (!matchTeams.includes(normalizeTeamName(player.current_team_name))) return false;
+      const playerGame = textOrEmpty(player.game).toLowerCase();
+      return !matchGame || !playerGame || playerGame === matchGame;
+    });
+  };
+
+  const seen = new Set();
+  const live = [];
+  const upcoming = [];
+  for (const row of candidates) {
+    if (!matchesFollow(row) || seen.has(row.id)) continue;
+    seen.add(row.id);
+    if (row.status === 'running' && live.length < safeLiveLimit) live.push(followedMatchProjection(row));
+    if (row.status === 'scheduled' && upcoming.length < safeUpcomingLimit) upcoming.push(followedMatchProjection(row));
+    if (live.length === safeLiveLimit && upcoming.length === safeUpcomingLimit) break;
+  }
+  return { live, upcoming };
+}

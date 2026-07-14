@@ -11,10 +11,12 @@ import {
   getNotificationPrefs as _getPrefs,
   listNotificationPageForUser as _listNotificationPage,
   listNotificationsForUser as _listNotifications,
+  listUnreadNotificationsForUser as _listUnreadNotifications,
   markAllNotificationsRead as _markAllRead,
   markNotificationRead as _markRead,
   upsertNotificationPrefs as _upsertPrefs,
 } from "@bot/db/userNotifications.js";
+import { listPersonalizedMatchesForUser as _listPersonalizedMatches } from "@bot/db/userFollows.js";
 import { getDiscordAccountForAuthUser } from "@/lib/auth-database";
 import { getOptionalSession } from "@/lib/session";
 
@@ -53,6 +55,17 @@ export type NotificationPrefs = {
   updated_at: string | null;
 };
 
+export type PersonalizedMatchRow = {
+  id: number;
+  tournamentId: number;
+  tournamentName: string;
+  game: string;
+  teamA: string;
+  teamB: string;
+  status: "running" | "scheduled";
+  scheduledAt: number | null;
+};
+
 const upsertFollow = _upsertFollow as unknown as (input: {
   discordUserId: string;
   entityType: FollowEntityType;
@@ -79,6 +92,14 @@ const listNotificationPage = _listNotificationPage as unknown as (
   discordUserId: string,
   opts?: { limit?: number; offset?: number },
 ) => Promise<{ notifications: NotificationRow[]; nextOffset: number | null }>;
+const listUnreadNotifications = _listUnreadNotifications as unknown as (
+  discordUserId: string,
+  opts?: { limit?: number },
+) => Promise<NotificationRow[]>;
+const listPersonalizedMatches = _listPersonalizedMatches as unknown as (
+  discordUserId: string,
+  opts: { nowSec: number; liveLimit?: number; upcomingLimit?: number; upcomingWindowSec?: number },
+) => Promise<{ live: PersonalizedMatchRow[]; upcoming: PersonalizedMatchRow[] }>;
 const countUnread = _countUnread as unknown as (discordUserId: string) => Promise<number>;
 const markRead = _markRead as unknown as (discordUserId: string, id: number) => Promise<number>;
 const markAllRead = _markAllRead as unknown as (discordUserId: string) => Promise<number>;
@@ -95,6 +116,8 @@ export {
   upsertFollow,
   listNotificationPage,
   listNotifications,
+  listUnreadNotifications,
+  listPersonalizedMatches,
   countUnread,
   markRead,
   markAllRead,
