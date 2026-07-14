@@ -10,6 +10,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { LiquipediaAttribution } from "@/components/tournaments/liquipedia-attribution";
 import { PartnerPlacement } from "@/components/partners/partner-placement";
 import { TournamentMatchList } from "@/components/tournaments/tournament-match-list";
+import { TournamentSyncHealthStatus } from "@/components/tournaments/tournament-sync-health";
 import { copy, formatNumber, localizedPath } from "@/lib/i18n";
 import { getViewerFollowState } from "@/lib/follows";
 import { gameTitleForSlug, listGamesCached } from "@/lib/games";
@@ -138,6 +139,7 @@ export default async function TournamentDetailPage({
               <h1 className="text-3xl font-semibold leading-tight sm:text-4xl" dir="auto">
                 {tournamentName}
               </h1>
+              <TournamentSyncHealthStatus tournamentId={tournament.id} locale={locale} initialData={data} />
               <div className="flex flex-wrap items-center gap-2">
                 <FollowButton
                   entityType="tournament"

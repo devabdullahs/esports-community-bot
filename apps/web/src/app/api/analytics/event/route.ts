@@ -1,8 +1,13 @@
 import { NextResponse } from "next/server";
-import { ensureAnalyticsSchema, recordAnalyticsEvent } from "@/lib/web-analytics";
+import {
+  ensureAnalyticsSchema,
+  recordAnalyticsEvent,
+  recordProductAnalyticsEvent,
+} from "@/lib/web-analytics";
 import { clientIp } from "@/lib/community";
 import { rateLimitOr429 } from "@/lib/rate-limit";
 import { readBoundedJson } from "@/lib/request-body";
+import { isProductEventName } from "@/lib/product-analytics";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -101,7 +106,15 @@ export async function POST(request: Request) {
 
   const visitorId = typeof payload.visitorId === "string" ? payload.visitorId.trim() : "";
   const sessionId = typeof payload.sessionId === "string" ? payload.sessionId.trim() : "";
-  const eventType = payload.eventType === "engagement" ? "engagement" : payload.eventType === "pageview" ? "pageview" : null;
+  const eventType =
+    payload.eventType === "engagement"
+      ? "engagement"
+      : payload.eventType === "pageview"
+        ? "pageview"
+        : payload.eventType === "product"
+          ? "product"
+          : null;
+  const eventName = eventType === "product" && isProductEventName(payload.eventName) ? payload.eventName : null;
   const path = cleanPath(payload.path);
   const acquisitionSource = typeof payload.acquisitionSource === "string" ? payload.acquisitionSource : "";
   const campaign = cleanCampaign(payload.campaign);
@@ -110,6 +123,7 @@ export async function POST(request: Request) {
     !ID_RE.test(visitorId) ||
     !ID_RE.test(sessionId) ||
     !eventType ||
+    (eventType === "product" && !eventName) ||
     !isTrackablePath(path) ||
     !isAcquisitionSource(acquisitionSource) ||
     campaign === undefined
@@ -133,17 +147,29 @@ export async function POST(request: Request) {
   if (visitorLimited) return visitorLimited;
 
   try {
-    await recordAnalyticsEvent({
-      visitorId,
-      sessionId,
-      eventType,
-      path,
-      acquisitionSource,
-      campaign,
-      country: countryFromHeaders(headers),
-      userAgent,
-      durationSeconds: Number(payload.durationSeconds || 0),
-    });
+    if (eventType === "product" && eventName) {
+      await recordProductAnalyticsEvent({
+        visitorId,
+        sessionId,
+        eventName,
+        path,
+        acquisitionSource,
+        campaign,
+        country: countryFromHeaders(headers),
+      });
+    } else if (eventType === "pageview" || eventType === "engagement") {
+      await recordAnalyticsEvent({
+        visitorId,
+        sessionId,
+        eventType,
+        path,
+        acquisitionSource,
+        campaign,
+        country: countryFromHeaders(headers),
+        userAgent,
+        durationSeconds: Number(payload.durationSeconds || 0),
+      });
+    }
   } catch (error) {
     console.error("[analytics] failed to record event", error);
   }

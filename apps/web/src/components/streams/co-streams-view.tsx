@@ -33,6 +33,7 @@ import {
   streamSelectionSearchParams,
   toggleSelectedStreamId,
 } from "@/lib/co-stream-multiview";
+import { trackProductEvent } from "@/lib/product-analytics";
 import type { CoStream, CoStreamChannel, StreamPlatform } from "@/lib/stream-types";
 
 const PLATFORM_LABELS: Record<StreamPlatform, string> = {
@@ -292,6 +293,9 @@ export function CoStreamsView({
     const wasSelected = selectedSet.has(id);
     const result = toggleSelectedStreamId(selectedIds, id, selectableIds);
     if (result.ids === selectedIds || (result.ids.length === selectedIds.length && !wasSelected)) return;
+    if (!wasSelected && selectedIds.length < 2 && result.ids.length === 2) {
+      trackProductEvent("multiview_start");
+    }
     setSelectedIds(result.ids);
     setLoadedIds((current) =>
       wasSelected
@@ -315,6 +319,7 @@ export function CoStreamsView({
     const url = selectionUrl(selectedIds);
     try {
       await navigator.clipboard.writeText(url.toString());
+      trackProductEvent("multiview_share");
       setShareStatus(t.linkCopied);
       if (shareStatusTimer.current) clearTimeout(shareStatusTimer.current);
       shareStatusTimer.current = setTimeout(() => setShareStatus(""), 2_500);

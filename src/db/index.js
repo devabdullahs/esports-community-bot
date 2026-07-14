@@ -216,6 +216,26 @@ ensureColumns('tournaments', [
   ['ewc', 'INTEGER NOT NULL DEFAULT 0'],
 ]);
 
+// Durable schedule-sync outcomes. This stores only coarse operational categories
+// so public projections never need provider messages, URLs, or response payloads.
+db.exec(`
+  CREATE TABLE IF NOT EXISTS tournament_sync_health (
+    tournament_id          INTEGER PRIMARY KEY REFERENCES tournaments(id) ON DELETE CASCADE,
+    source                 TEXT NOT NULL CHECK (source IN ('liquipedia','startgg','pandascore')),
+    last_attempt_at        INTEGER,
+    last_success_at        INTEGER,
+    last_failure_at        INTEGER,
+    last_failure_category  TEXT CHECK (last_failure_category IN ('rate_limit','auth','timeout','network','parse','unknown')),
+    consecutive_failures   INTEGER NOT NULL DEFAULT 0,
+    last_item_count        INTEGER,
+    updated_at             INTEGER NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS idx_tournament_sync_health_source
+    ON tournament_sync_health(source);
+  CREATE INDEX IF NOT EXISTS idx_tournament_sync_health_last_success
+    ON tournament_sync_health(last_success_at DESC);
+`);
+
 // Migration: pandascore_id used to be NOT NULL; Liquipedia-only entities (games
 // PandaScore doesn't cover: battle royale, TFT, ...) need it nullable. SQLite
 // can't relax a NOT NULL in place, so rebuild the table once on old dev DBs.
@@ -932,6 +952,8 @@ db.exec(`
     entity_key      TEXT NOT NULL,
     entity_label    TEXT NOT NULL DEFAULT '',
     entity_ref      TEXT NOT NULL DEFAULT '',
+    notify_match_start  INTEGER,
+    notify_match_result INTEGER,
     created_at      TEXT NOT NULL DEFAULT (datetime('now')),
     UNIQUE (discord_user_id, entity_type, entity_key)
   );
@@ -943,6 +965,11 @@ db.exec(`
     dm_enabled          INTEGER NOT NULL DEFAULT 1,
     notify_match_start  INTEGER NOT NULL DEFAULT 1,
     notify_match_result INTEGER NOT NULL DEFAULT 1,
+    dm_delivery_mode    TEXT NOT NULL DEFAULT 'instant',
+    timezone            TEXT NOT NULL DEFAULT 'Asia/Riyadh',
+    quiet_start_minute  INTEGER,
+    quiet_end_minute    INTEGER,
+    digest_minute       INTEGER NOT NULL DEFAULT 1080,
     updated_at          TEXT NOT NULL DEFAULT (datetime('now'))
   );
 
@@ -957,6 +984,8 @@ db.exec(`
     dedupe_key      TEXT NOT NULL,
     read_at         TEXT,
     dm_status       TEXT NOT NULL DEFAULT 'skipped' CHECK (dm_status IN ('pending','sent','skipped','failed')),
+    dm_delivery_mode TEXT NOT NULL DEFAULT 'instant',
+    dm_not_before    INTEGER NOT NULL DEFAULT 0,
     created_at      TEXT NOT NULL DEFAULT (datetime('now')),
     UNIQUE (discord_user_id, dedupe_key)
   );
@@ -985,7 +1014,52 @@ db.exec(`
     ON web_analytics_events(session_id, occurred_at DESC);
   CREATE INDEX IF NOT EXISTS idx_web_analytics_country
     ON web_analytics_events(country, occurred_at DESC);
+
+  CREATE TABLE IF NOT EXISTS web_product_events (
+    id                 INTEGER PRIMARY KEY AUTOINCREMENT,
+    visitor_id         TEXT NOT NULL,
+    session_id         TEXT NOT NULL,
+    event_name         TEXT NOT NULL CHECK (event_name IN (
+      'prediction_submit','follow_create','follow_remove','notification_prefs_update',
+      'multiview_start','multiview_share','site_search_result_open','source_link_open','discord_join_click'
+    )),
+    path               TEXT NOT NULL,
+    acquisition_source TEXT NOT NULL DEFAULT 'direct'
+      CHECK (acquisition_source IN ('direct','x','discord','google','bing','other_referral')),
+    campaign           TEXT CHECK (campaign IS NULL OR (
+      length(campaign) BETWEEN 1 AND 64
+      AND substr(campaign, 1, 1) GLOB '[a-z0-9]'
+      AND campaign NOT GLOB '*[^a-z0-9_-]*'
+    )),
+    country            TEXT,
+    occurred_at        INTEGER NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS idx_web_product_events_occurred
+    ON web_product_events(occurred_at DESC);
+  CREATE INDEX IF NOT EXISTS idx_web_product_events_name_occurred
+    ON web_product_events(event_name, occurred_at DESC);
 `);
+
+// These are additive so old SQLite databases retain their notification history.
+// The due index must be created after ensureColumns has repaired old tables.
+ensureColumns('user_follows', [
+  ['notify_match_start', 'INTEGER'],
+  ['notify_match_result', 'INTEGER'],
+]);
+ensureColumns('user_notification_prefs', [
+  ['dm_delivery_mode', "TEXT NOT NULL DEFAULT 'instant'"],
+  ['timezone', "TEXT NOT NULL DEFAULT 'Asia/Riyadh'"],
+  ['quiet_start_minute', 'INTEGER'],
+  ['quiet_end_minute', 'INTEGER'],
+  ['digest_minute', 'INTEGER NOT NULL DEFAULT 1080'],
+]);
+ensureColumns('user_notifications', [
+  ['dm_delivery_mode', 'TEXT'],
+  ['dm_not_before', 'INTEGER'],
+]);
+db.prepare("UPDATE user_notifications SET dm_delivery_mode = 'instant' WHERE dm_delivery_mode IS NULL").run();
+db.prepare("UPDATE user_notifications SET dm_not_before = 0 WHERE dm_status = 'pending' AND dm_not_before IS NULL").run();
+db.exec('CREATE INDEX IF NOT EXISTS idx_user_notifications_dm_due ON user_notifications(dm_status, dm_not_before, id)');
 
 ensureColumns('web_analytics_events', [
   [

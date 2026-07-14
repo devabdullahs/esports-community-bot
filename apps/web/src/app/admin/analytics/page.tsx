@@ -10,7 +10,7 @@ import {
   UsersIcon,
 } from "lucide-react";
 import { AdminPageShell } from "@/components/admin/admin-page-shell";
-import { AnalyticsTrendChart } from "@/components/admin/analytics-trend-chart";
+import { AnalyticsTrendChart, ProductEventsTrendChart } from "@/components/admin/analytics-trend-chart";
 import { Badge } from "@/components/ui/badge";
 import {
   Card,
@@ -31,7 +31,7 @@ import {
 import { getAdminAccess } from "@/lib/admin";
 import { getAdminCopy } from "@/lib/admin-copy";
 import { flagEmoji } from "@/lib/country";
-import type { Locale } from "@/lib/i18n";
+import { copy, type Locale } from "@/lib/i18n";
 import { getRequestLocale } from "@/lib/request-locale";
 import {
   getAnalyticsDashboard,
@@ -194,6 +194,7 @@ export default async function AdminAnalyticsPage() {
   const data = await getAnalyticsDashboard({ days: 30 });
   const nf = numberFormat(locale);
   const updatedAt = dateTimeFormat(locale).format(new Date(data.generatedAt * 1000));
+  const productAnalyticsCopy = copy[locale].analytics;
 
   return (
     <AdminPageShell
@@ -246,6 +247,59 @@ export default async function AdminAnalyticsPage() {
             <OverviewRow label={t.returning} value={nf.format(data.periods.thirtyDays.returningVisitors)} />
             <OverviewRow label={t.sessions} value={nf.format(data.periods.thirtyDays.sessions)} />
             <OverviewRow label={t.avgSession} value={formatDuration(data.periods.thirtyDays.avgSecondsPerSession, locale)} />
+          </CardContent>
+        </Card>
+      </section>
+
+      <section className="grid min-w-0 gap-4 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)]">
+        <Card>
+          <CardHeader>
+            <CardTitle>{productAnalyticsCopy.productEventsTitle}</CardTitle>
+            <CardDescription>{productAnalyticsCopy.productEventsDescription}</CardDescription>
+          </CardHeader>
+          <CardContent>
+            {data.productEvents.events.length ? (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>{productAnalyticsCopy.event}</TableHead>
+                    <TableHead className="text-end">{productAnalyticsCopy.events}</TableHead>
+                    <TableHead className="text-end">{t.sessions}</TableHead>
+                    <TableHead className="text-end">{productAnalyticsCopy.conversionRate}</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {data.productEvents.events.map((event) => (
+                    <TableRow key={event.eventName}>
+                      <TableCell>{productAnalyticsCopy.productEvents[event.eventName]}</TableCell>
+                      <TableCell className="text-end tabular-nums">{nf.format(event.events)}</TableCell>
+                      <TableCell className="text-end tabular-nums">{nf.format(event.sessions)}</TableCell>
+                      <TableCell className="text-end tabular-nums">{nf.format(event.conversionRate)}%</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            ) : (
+              <p className="text-sm text-muted-foreground">{t.empty}</p>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>{productAnalyticsCopy.productEventsTrendTitle}</CardTitle>
+            <CardDescription>{productAnalyticsCopy.productEventsTrendDescription}</CardDescription>
+          </CardHeader>
+          <CardContent>
+            {data.productEvents.events.length ? (
+              <ProductEventsTrendChart
+                days={data.productEvents.daily}
+                eventNames={data.productEvents.events.map((event) => event.eventName)}
+                labels={productAnalyticsCopy.productEvents}
+              />
+            ) : (
+              <p className="text-sm text-muted-foreground">{t.empty}</p>
+            )}
           </CardContent>
         </Card>
       </section>

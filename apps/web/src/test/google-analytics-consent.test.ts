@@ -46,4 +46,17 @@ describe("Google Analytics consent boundary", () => {
     ).toBe(false);
     expect(shouldLoadGoogleAnalytics({ measurementId: "invalid", consent: "granted" })).toBe(false);
   });
+
+  test("keeps product events out of GA until consent is granted and sends no properties", () => {
+    const measurementId = "G-6KSKW48J1P";
+    const dataLayer: unknown[] = [];
+
+    expect(shouldLoadGoogleAnalytics({ measurementId, consent: null })).toBe(false);
+    expect(shouldLoadGoogleAnalytics({ measurementId, consent: "denied" })).toBe(false);
+    expect(shouldLoadGoogleAnalytics({ measurementId, consent: "granted", globalPrivacyControl: true })).toBe(false);
+    expect(shouldLoadGoogleAnalytics({ measurementId, consent: "granted" })).toBe(true);
+
+    enqueueGoogleTagCommand(dataLayer, "event", "prediction_submit");
+    expect(Array.from(dataLayer[0] as IArguments)).toEqual(["event", "prediction_submit"]);
+  });
 });

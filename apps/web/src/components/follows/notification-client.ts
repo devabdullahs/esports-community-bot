@@ -14,18 +14,30 @@ export type FollowRow = {
   entity_key: string;
   entity_label: string;
   entity_ref: string;
+  notify_match_start: number | null;
+  notify_match_result: number | null;
 };
 
 export type NotificationPrefs = {
   dm_enabled: number;
   notify_match_start: number;
   notify_match_result: number;
+  dm_delivery_mode: "instant" | "daily_digest";
+  timezone: string;
+  quiet_start_minute: number | null;
+  quiet_end_minute: number | null;
+  digest_minute: number;
 };
 
 export type NotificationPrefsPatch = {
   dmEnabled?: boolean;
   notifyMatchStart?: boolean;
   notifyMatchResult?: boolean;
+  dmDeliveryMode?: "instant" | "daily_digest";
+  timezone?: string;
+  quietStartMinute?: number | null;
+  quietEndMinute?: number | null;
+  digestMinute?: number;
 };
 
 export const followsQueryKey = ["me", "follows"] as const;
@@ -76,6 +88,22 @@ export async function removeFollow(row: FollowRow) {
       body: JSON.stringify({ entityType: row.entity_type, entityKey: row.entity_key }),
     }),
   );
+}
+
+export type FollowOverride = "inherit" | "on" | "off";
+
+export async function updateFollowNotificationOverrides(
+  row: FollowRow,
+  patch: { notifyMatchStart?: FollowOverride; notifyMatchResult?: FollowOverride },
+) {
+  const data = await jsonOrThrow<{ follow: FollowRow }>(
+    await fetch("/api/me/follows", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id: row.id, ...patch }),
+    }),
+  );
+  return data.follow;
 }
 
 export async function fetchNotificationPrefs(signal?: AbortSignal) {

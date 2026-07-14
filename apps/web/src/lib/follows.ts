@@ -4,6 +4,7 @@ import {
   deleteFollow as _deleteFollow,
   getFollow as _getFollow,
   listFollowsForUser as _listFollows,
+  updateFollowNotificationOverrides as _updateFollowNotificationOverrides,
   upsertFollow as _upsertFollow,
 } from "@bot/db/userFollows.js";
 import {
@@ -11,10 +12,12 @@ import {
   getNotificationPrefs as _getPrefs,
   listNotificationPageForUser as _listNotificationPage,
   listNotificationsForUser as _listNotifications,
+  listUnreadNotificationsForUser as _listUnreadNotifications,
   markAllNotificationsRead as _markAllRead,
   markNotificationRead as _markRead,
   upsertNotificationPrefs as _upsertPrefs,
 } from "@bot/db/userNotifications.js";
+import { listPersonalizedMatchesForUser as _listPersonalizedMatches } from "@bot/db/userFollows.js";
 import { getDiscordAccountForAuthUser } from "@/lib/auth-database";
 import { getOptionalSession } from "@/lib/session";
 
@@ -28,6 +31,8 @@ export type FollowRow = {
   entity_key: string;
   entity_label: string;
   entity_ref: string;
+  notify_match_start: number | null;
+  notify_match_result: number | null;
   created_at: string;
 };
 
@@ -42,6 +47,8 @@ export type NotificationRow = {
   dedupe_key: string;
   read_at: string | null;
   dm_status: "pending" | "sent" | "skipped" | "failed";
+  dm_delivery_mode: "instant" | "daily_digest";
+  dm_not_before: number | null;
   created_at: string;
 };
 
@@ -50,7 +57,23 @@ export type NotificationPrefs = {
   dm_enabled: number;
   notify_match_start: number;
   notify_match_result: number;
+  dm_delivery_mode: "instant" | "daily_digest";
+  timezone: string;
+  quiet_start_minute: number | null;
+  quiet_end_minute: number | null;
+  digest_minute: number;
   updated_at: string | null;
+};
+
+export type PersonalizedMatchRow = {
+  id: number;
+  tournamentId: number;
+  tournamentName: string;
+  game: string;
+  teamA: string;
+  teamB: string;
+  status: "running" | "scheduled";
+  scheduledAt: number | null;
 };
 
 const upsertFollow = _upsertFollow as unknown as (input: {
@@ -71,6 +94,12 @@ const getFollow = _getFollow as unknown as (input: {
   entityKey: string;
 }) => Promise<FollowRow | null>;
 const listFollows = _listFollows as unknown as (discordUserId: string) => Promise<FollowRow[]>;
+const updateFollowNotificationOverrides = _updateFollowNotificationOverrides as unknown as (input: {
+  discordUserId: string;
+  followId: number;
+  notifyMatchStart?: boolean | null;
+  notifyMatchResult?: boolean | null;
+}) => Promise<FollowRow | null>;
 const listNotifications = _listNotifications as unknown as (
   discordUserId: string,
   opts?: { limit?: number; offset?: number },
@@ -79,22 +108,42 @@ const listNotificationPage = _listNotificationPage as unknown as (
   discordUserId: string,
   opts?: { limit?: number; offset?: number },
 ) => Promise<{ notifications: NotificationRow[]; nextOffset: number | null }>;
+const listUnreadNotifications = _listUnreadNotifications as unknown as (
+  discordUserId: string,
+  opts?: { limit?: number },
+) => Promise<NotificationRow[]>;
+const listPersonalizedMatches = _listPersonalizedMatches as unknown as (
+  discordUserId: string,
+  opts: { nowSec: number; liveLimit?: number; upcomingLimit?: number; upcomingWindowSec?: number },
+) => Promise<{ live: PersonalizedMatchRow[]; upcoming: PersonalizedMatchRow[] }>;
 const countUnread = _countUnread as unknown as (discordUserId: string) => Promise<number>;
 const markRead = _markRead as unknown as (discordUserId: string, id: number) => Promise<number>;
 const markAllRead = _markAllRead as unknown as (discordUserId: string) => Promise<number>;
 const getPrefs = _getPrefs as unknown as (discordUserId: string) => Promise<NotificationPrefs>;
 const upsertPrefs = _upsertPrefs as unknown as (
   discordUserId: string,
-  patch: { dmEnabled?: boolean; notifyMatchStart?: boolean; notifyMatchResult?: boolean },
+  patch: {
+    dmEnabled?: boolean;
+    notifyMatchStart?: boolean;
+    notifyMatchResult?: boolean;
+    dmDeliveryMode?: "instant" | "daily_digest";
+    timezone?: string;
+    quietStartMinute?: number | null;
+    quietEndMinute?: number | null;
+    digestMinute?: number;
+  },
 ) => Promise<NotificationPrefs>;
 
 export {
   deleteFollow,
   getFollow,
   listFollows,
+  updateFollowNotificationOverrides,
   upsertFollow,
   listNotificationPage,
   listNotifications,
+  listUnreadNotifications,
+  listPersonalizedMatches,
   countUnread,
   markRead,
   markAllRead,

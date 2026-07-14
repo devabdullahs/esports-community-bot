@@ -44,3 +44,28 @@ jobs:
       - run: npm --workspace @esports-community-bot/web run typecheck:native
       - run: npm --workspace @esports-community-bot/web run test
       - run: npm run web:build
+
+  e2e:
+    needs: web
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      # Keep the job-level path inside the workspace; the runner creates and
+      # removes its own isolated database below this ignored directory.
+      DB_PATH: ${{ github.workspace }}/data/ci-e2e.sqlite
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run web:e2e:install
+      - run: npm run web:e2e
+      - name: Upload Playwright failure artifacts
+        if: failure()
+        uses: actions/upload-artifact@65c4c4a1ddee5b72f698fdd19549f0f0fb45cf08 # v4
+        with:
+          name: playwright-failure-artifacts
+          path: apps/web/test-results
+          if-no-files-found: ignore

@@ -1,5 +1,6 @@
 import { SlashCommandBuilder, InteractionContextType, MessageFlags } from 'discord.js';
 import { getMatchesForGuild } from '../db/matches.js';
+import { buildMatchFollowRow } from '../lib/followComponents.js';
 import { buildMatchCardPayload, MATCH_STATUS } from '../lib/matchMessage.js';
 import { tryAcquireRenderSlot } from '../lib/renderGate.js';
 
@@ -50,7 +51,12 @@ export async function execute(interaction) {
   }
   try {
     await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-    await interaction.editReply(await buildMatchCardPayload(m));
+    const payload = await buildMatchCardPayload(m);
+    const followRow = buildMatchFollowRow(m, { locale: interaction.locale });
+    if (followRow && (payload.components?.length || 0) < 5) {
+      payload.components = [...(payload.components || []), followRow];
+    }
+    await interaction.editReply(payload);
   } finally {
     slot.release();
   }

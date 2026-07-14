@@ -8,6 +8,11 @@ import {
   parseGoogleAnalyticsConsent,
   type GoogleAnalyticsConsent,
 } from "@/lib/google-analytics";
+import {
+  PRODUCT_ANALYTICS_EVENT,
+  productEventDispatchFromEvent,
+  type ProductEventName,
+} from "@/lib/product-analytics";
 
 const VISITOR_KEY = "ec_analytics_visitor";
 const SESSION_KEY = "ec_analytics_session";
@@ -42,12 +47,31 @@ type Acquisition = {
 type AnalyticsPayload = {
   visitorId: string;
   sessionId: string;
-  eventType: "pageview" | "engagement";
+  eventType: "pageview" | "engagement" | "product";
   path: string;
   acquisitionSource: AcquisitionSource;
   campaign?: string;
   durationSeconds?: number;
+  eventName?: ProductEventName;
 };
+
+const MAX_SEEN_PRODUCT_EVENT_TOKENS = 128;
+
+export function markProductEventTokenSeen(
+  seen: Set<symbol>,
+  order: symbol[],
+  token: symbol,
+  maxTokens = MAX_SEEN_PRODUCT_EVENT_TOKENS,
+) {
+  if (seen.has(token)) return false;
+  seen.add(token);
+  order.push(token);
+  if (order.length > maxTokens) {
+    const oldest = order.shift();
+    if (oldest) seen.delete(oldest);
+  }
+  return true;
+}
 
 function stripLocale(path: string) {
   return path.replace(/^\/(?:en|ar)(?=\/|$)/, "") || "/";
@@ -205,6 +229,8 @@ export function AnalyticsTracker() {
   const pathRef = useRef<string | null>(null);
   const activeStartedAtRef = useRef<number | null>(null);
   const pendingSecondsRef = useRef(0);
+  const seenProductEventTokensRef = useRef(new Set<symbol>());
+  const productEventTokenOrderRef = useRef<symbol[]>([]);
 
   useEffect(() => {
     const onConsentChanged = (event: Event) => {
@@ -232,6 +258,8 @@ export function AnalyticsTracker() {
       storageSet(window.sessionStorage, ACQUISITION_KEY, JSON.stringify(acquisitionRef.current));
     }
     sessionRef.current = session.id;
+    const seenProductEventTokens = seenProductEventTokensRef.current;
+    const productEventTokenOrder = productEventTokenOrderRef.current;
 
     function collectVisibleSeconds() {
       if (document.visibilityState !== "visible") {
@@ -280,6 +308,29 @@ export function AnalyticsTracker() {
       campaign: acquisitionRef.current.campaign,
     });
 
+    const onProductEvent = (event: Event) => {
+      const productEvent = productEventDispatchFromEvent(event);
+      if (!productEvent || !visitorRef.current || !sessionRef.current || !acquisitionRef.current || !pathRef.current) {
+        return;
+      }
+
+      if (!markProductEventTokenSeen(
+        seenProductEventTokens,
+        productEventTokenOrder,
+        productEvent.token,
+      )) return;
+
+      sendAnalyticsEvent({
+        visitorId: visitorRef.current,
+        sessionId: sessionRef.current,
+        eventType: "product",
+        eventName: productEvent.name,
+        path: pathRef.current,
+        acquisitionSource: acquisitionRef.current.source,
+        campaign: acquisitionRef.current.campaign,
+      });
+    };
+
     const interval = window.setInterval(() => flush(false), HEARTBEAT_MS);
     const onVisibilityChange = () => {
       if (document.visibilityState === "hidden") flush(true);
@@ -289,11 +340,15 @@ export function AnalyticsTracker() {
 
     document.addEventListener("visibilitychange", onVisibilityChange);
     window.addEventListener("pagehide", onPageHide);
+    window.addEventListener(PRODUCT_ANALYTICS_EVENT, onProductEvent);
 
     return () => {
       window.clearInterval(interval);
       document.removeEventListener("visibilitychange", onVisibilityChange);
       window.removeEventListener("pagehide", onPageHide);
+      window.removeEventListener(PRODUCT_ANALYTICS_EVENT, onProductEvent);
+      seenProductEventTokens.clear();
+      productEventTokenOrder.length = 0;
       if (parseGoogleAnalyticsConsent(storageGet(window.localStorage, ANALYTICS_CONSENT_KEY)) === "granted") {
         flush(true);
       }

@@ -5,8 +5,11 @@ import {
 } from "@bot/db/client.js";
 import {
   getWebAnalyticsDashboard as _getWebAnalyticsDashboard,
+  getWebProductAnalytics as _getWebProductAnalytics,
   recordWebAnalyticsEvent as _recordWebAnalyticsEvent,
+  recordWebProductEvent as _recordWebProductEvent,
 } from "@bot/db/webAnalytics.js";
+import type { ProductEventName } from "@/lib/product-analytics";
 
 export type AnalyticsMetric = {
   label: string;
@@ -54,6 +57,23 @@ export type AnalyticsDay = {
   engagementSeconds: number;
 };
 
+export type AnalyticsProductEvent = {
+  eventName: ProductEventName;
+  events: number;
+  sessions: number;
+  conversionRate: number;
+};
+
+export type AnalyticsProductEventDay = {
+  day: string;
+  counts: Partial<Record<ProductEventName, number>>;
+};
+
+export type AnalyticsProductEvents = {
+  events: AnalyticsProductEvent[];
+  daily: AnalyticsProductEventDay[];
+};
+
 export type AnalyticsDashboard = {
   generatedAt: number;
   timezone: string;
@@ -69,6 +89,7 @@ export type AnalyticsDashboard = {
   acquisition: AnalyticsAcquisition[];
   campaigns: AnalyticsCampaign[];
   daily: AnalyticsDay[];
+  productEvents: AnalyticsProductEvents;
 };
 
 type AnalyticsEventInput = {
@@ -84,12 +105,22 @@ type AnalyticsEventInput = {
   occurredAt?: number;
 };
 
+type ProductAnalyticsEventInput = Omit<AnalyticsEventInput, "eventType" | "durationSeconds" | "userAgent"> & {
+  eventName: ProductEventName;
+};
+
 const ensurePostgresAppSchema = _ensurePostgresAppSchema as unknown as () => Promise<void>;
 const recordWebAnalyticsEvent = _recordWebAnalyticsEvent as unknown as (input: AnalyticsEventInput) => Promise<void>;
+const recordWebProductEvent = _recordWebProductEvent as unknown as (input: ProductAnalyticsEventInput) => Promise<void>;
 const getWebAnalyticsDashboard = _getWebAnalyticsDashboard as unknown as (input?: {
   nowSec?: number;
   days?: number;
 }) => Promise<AnalyticsDashboard>;
+const getWebProductAnalytics = _getWebProductAnalytics as unknown as (input?: {
+  nowSec?: number;
+  days?: number;
+  sessionCount?: number;
+}) => Promise<AnalyticsProductEvents>;
 
 let schemaPromise: Promise<void> | null = null;
 
@@ -105,6 +136,20 @@ export async function ensureAnalyticsSchema(): Promise<void> {
 export async function recordAnalyticsEvent(input: AnalyticsEventInput): Promise<void> {
   await ensureSchemaOnce();
   await recordWebAnalyticsEvent(input);
+}
+
+export async function recordProductAnalyticsEvent(input: ProductAnalyticsEventInput): Promise<void> {
+  await ensureSchemaOnce();
+  await recordWebProductEvent(input);
+}
+
+export async function getProductAnalytics(input?: {
+  nowSec?: number;
+  days?: number;
+  sessionCount?: number;
+}): Promise<AnalyticsProductEvents> {
+  await ensureSchemaOnce();
+  return getWebProductAnalytics(input);
 }
 
 export async function getAnalyticsDashboard(input?: { nowSec?: number; days?: number }): Promise<AnalyticsDashboard> {

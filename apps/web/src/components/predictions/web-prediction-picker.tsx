@@ -19,6 +19,7 @@ import { Field, FieldDescription, FieldGroup, FieldLabel } from "@/components/ui
 import { Progress, ProgressLabel, ProgressValue } from "@/components/ui/progress";
 import { actionablePickerGames, knownPickerClubs, seasonPickerSlots, type PickerRound } from "@/lib/ewc-web-picker-model";
 import { copy, formatNumber, type Locale } from "@/lib/i18n";
+import { trackProductEvent } from "@/lib/product-analytics";
 
 type Picker = {
   weekly: PickerRound[];
@@ -97,7 +98,10 @@ export function WebPredictionPicker({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ weekKey, gameKey, pick }),
       })),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey }),
+    onSuccess: () => {
+      trackProductEvent("prediction_submit");
+      return queryClient.invalidateQueries({ queryKey });
+    },
   });
   const season = useMutation({
     mutationFn: async (body: { action: "set"; index: number; pick: string } | { action: "swap"; a: number; b: number }) =>
@@ -106,7 +110,10 @@ export function WebPredictionPicker({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
       })),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey }),
+    onSuccess: () => {
+      trackProductEvent("prediction_submit");
+      return queryClient.invalidateQueries({ queryKey });
+    },
   });
 
   if (!picker) return null;

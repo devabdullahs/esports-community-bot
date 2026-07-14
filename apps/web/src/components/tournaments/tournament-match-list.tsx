@@ -34,6 +34,11 @@ import { safeUrlOrUndefined } from "@/lib/safe-url";
 type MatchStatus = "running" | "scheduled" | "finished";
 type Winner = "a" | "b" | "draw" | null;
 type TournamentCopy = (typeof copy)[Locale]["tournaments"];
+type PublicSyncHealth = {
+  state: "fresh" | "delayed" | "unavailable" | "final";
+  lastSuccessAt: number | null;
+  source: "liquipedia" | "startgg" | "pandascore";
+};
 
 type MatchRow = {
   id: number;
@@ -76,6 +81,7 @@ export type TournamentMatchesPayload = {
     ewc: boolean;
     completed: boolean;
     final_standings_section: string | null;
+    syncHealth: PublicSyncHealth;
   };
   matches: { running: MatchRow[]; scheduled: MatchRow[]; finished: MatchRow[] };
   standings?: StandingRow[];

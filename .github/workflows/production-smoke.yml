@@ -1,0 +1,39 @@
+name: Production Smoke
+
+on:
+  workflow_dispatch:
+    inputs:
+      base_url:
+        description: Public HTTPS base URL to probe
+        required: false
+        type: string
+  schedule:
+    - cron: "17 5 * * *"
+
+permissions:
+  contents: read
+
+jobs:
+  public-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      BASE_URL: ${{ inputs.base_url || vars.EWC_PUBLIC_URL }}
+      EVENT_NAME: ${{ github.event_name }}
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 24
+          cache: npm
+      - name: Probe public routes
+        run: |
+          if [ -z "$BASE_URL" ]; then
+            if [ "$EVENT_NAME" = "schedule" ]; then
+              echo "Public smoke is not configured; scheduled probe skipped." >> "$GITHUB_STEP_SUMMARY"
+              exit 0
+            fi
+            echo "Set the base_url input or EWC_PUBLIC_URL repository variable before running this workflow." >&2
+            exit 1
+          fi
+          node scripts/smoke-public.mjs --base-url "$BASE_URL"

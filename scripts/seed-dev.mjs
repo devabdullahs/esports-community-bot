@@ -13,6 +13,7 @@ const GUILD = '1200000000000000001';
 const SEASON = '2026';
 const DEV_DISCORD_ID = '100000000000000001'; // dev-auth bypass discord id
 const DEV_AUTH_USER = 'dev-local-auth-user'; // dev-auth bypass auth user id
+const nowSeconds = Math.floor(Date.now() / 1000);
 
 const { closeDb } = await import('../src/db/index.js');
 const { listEwcGames } = await import('../src/db/ewcGames.js');
@@ -30,7 +31,11 @@ const {
 } = await import('../src/db/ewcPredictions.js');
 const { upsertEwcProfileLink, markEwcProfileLinkSynced } = await import('../src/db/ewcProfileLinks.js');
 const { addTournament } = await import('../src/db/tournaments.js');
-const { upsertMatch } = await import('../src/db/matches.js');
+const { upsertMatch, getMatch } = await import('../src/db/matches.js');
+const { recordTournamentSyncSuccess } = await import('../src/db/tournamentSyncHealth.js');
+const { upsertTeam } = await import('../src/db/teams.js');
+const { upsertFollow } = await import('../src/db/userFollows.js');
+const { enqueueNotifications } = await import('../src/db/userNotifications.js');
 const { createStreamChannel } = await import('../src/db/streamChannels.js');
 const { upsertStreamStatus } = await import('../src/db/streamChannelStatus.js');
 
@@ -167,9 +172,31 @@ for (const [mi, m] of members.entries()) {
 
 // Mark weeks scored with the final standings.
 for (const row of weekRows) await markEwcWeekScored(row.id, finalStandings);
+await upsertEwcWeek({
+  guildId: GUILD,
+  season: SEASON,
+  weekKey: 'today-open',
+  label: 'Today picks',
+  openAt: nowSeconds - 3600,
+  closeAt: nowSeconds + 7200,
+  games: [
+    { key: 'valorant', game: 'Valorant', event: 'EWC 2026', lockAt: nowSeconds + 3600 },
+  ],
+  createdBy: 'seed',
+});
 console.log(`season + ${weekRows.length} weeks scored for ${members.length} members`);
 
-// 3b) One tracked tournament + a few matches so /tournaments has data to render.
+// 3b) One public team supports the global-search browser journey without adding
+// external image requests to the local preview.
+const seededTeam = await upsertTeam({
+  game: 'valorant',
+  pandascore_id: 990001,
+  name: 'Team Falcons',
+  slug: 'team-falcons',
+});
+console.log(`team seeded: ${seededTeam.name} (#${seededTeam.id})`);
+
+// 3c) One tracked tournament + a few matches so /tournaments has data to render.
 // addTournament/upsertMatch upsert on their unique keys, so re-running is idempotent.
 const tournament = await addTournament({
   source: 'liquipedia',
@@ -179,7 +206,6 @@ const tournament = await addTournament({
   url: 'https://liquipedia.net/valorant/EWC/2026',
   guild_id: GUILD,
 });
-const nowSeconds = Math.floor(Date.now() / 1000);
 const tMatches = [
   { external_id: 'Match:val-run', team_a: 'Team Falcons', team_b: 'Team Liquid', score_a: 1, score_b: 0, status: 'running', scheduled_at: nowSeconds - 1800 },
   { external_id: 'Match:val-sch', team_a: 'Team Vitality', team_b: 'Gen.G', score_a: null, score_b: null, status: 'scheduled', scheduled_at: nowSeconds + 7200 },
@@ -190,9 +216,37 @@ for (const m of tMatches) {
   try { await upsertMatch({ tournament_id: tournament.id, source: 'liquipedia', ...m }); matchCount += 1; }
   catch (e) { console.warn('match skip:', e.message); }
 }
+await recordTournamentSyncSuccess({
+  tournamentId: tournament.id,
+  source: tournament.source,
+  itemCount: matchCount,
+  at: nowSeconds,
+});
 console.log(`tournament seeded: ${tournament.name} (#${tournament.id}) with ${matchCount} matches`);
 
-// 3c) Nine deterministic live co-stream groups for multiview layout QA.
+// 3d) The authenticated account overview reads these same stored rows; no E2E
+// fixture reaches an upstream provider or needs a production auth bypass.
+await upsertFollow({
+  discordUserId: DEV_DISCORD_ID,
+  entityType: 'game',
+  entityKey: 'valorant',
+  entityLabel: 'Valorant',
+  entityRef: '/games/valorant',
+});
+const liveMatch = await getMatch('liquipedia', 'Match:val-run');
+if (liveMatch) {
+  await enqueueNotifications({
+    userIds: [DEV_DISCORD_ID],
+    type: 'match_result',
+    matchId: liveMatch.id,
+    title: 'Falcons result ready',
+    body: 'EWC 2026 - Valorant',
+    url: `/tournaments/${tournament.id}`,
+    dedupeKey: 'seed:today-for-you:result',
+  });
+}
+
+// 3e) Nine deterministic live co-stream groups for multiview layout QA.
 const coStreamFixtures = [
   { platform: 'twitch', handle: 'ewc_demo_alpha', label: 'Alpha Arena', creatorKey: 'demo-alpha', gameSlugs: ['valorant'], language: 'en', title: 'Alpha watches the Valorant upper bracket', viewers: 18420 },
   { platform: 'kick', handle: 'ewc_demo_bravo', label: 'Bravo Broadcast', creatorKey: 'demo-bravo', gameSlugs: ['valorant', 'counter-strike'], language: 'ar', title: 'Bravo Arabic co-stream: playoffs', viewers: 12350 },

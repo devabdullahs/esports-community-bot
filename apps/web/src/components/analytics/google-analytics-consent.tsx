@@ -17,6 +17,10 @@ import {
   type GoogleAnalyticsConsent,
 } from "@/lib/google-analytics";
 import { localizedPath, type Locale } from "@/lib/i18n";
+import {
+  PRODUCT_ANALYTICS_EVENT,
+  productEventDispatchFromEvent,
+} from "@/lib/product-analytics";
 
 const SCRIPT_ID = "ec-google-analytics";
 
@@ -209,6 +213,22 @@ export function GoogleAnalyticsConsentBanner({
       page_title: document.title,
     });
   }, [consent, measurementId, pathname]);
+
+  useEffect(() => {
+    if (!measurementId || consent !== "granted") return;
+    const signals = privacySignals();
+    if (!shouldLoadGoogleAnalytics({ measurementId, consent, ...signals })) return;
+
+    const onProductEvent = (event: Event) => {
+      const productEvent = productEventDispatchFromEvent(event);
+      const analyticsWindow = window as GoogleAnalyticsWindow;
+      if (!productEvent || analyticsWindow.__ecGoogleAnalyticsId !== measurementId || !analyticsWindow.gtag) return;
+      queueGtag("event", productEvent.name);
+    };
+
+    window.addEventListener(PRODUCT_ANALYTICS_EVENT, onProductEvent);
+    return () => window.removeEventListener(PRODUCT_ANALYTICS_EVENT, onProductEvent);
+  }, [consent, measurementId]);
 
   function choose(nextConsent: GoogleAnalyticsConsent) {
     storageSet(ANALYTICS_CONSENT_KEY, nextConsent);

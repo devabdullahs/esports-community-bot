@@ -1,4 +1,7 @@
+"use client";
+
 import { copy, type Locale } from "@/lib/i18n";
+import { trackProductEvent } from "@/lib/product-analytics";
 
 // Legal requirement (operator decision): every tournaments/matches surface must
 // carry visible Liquipedia attribution with links to the site and the license.
@@ -18,6 +21,7 @@ export function LiquipediaAttribution({ locale }: { locale: Locale }) {
         target="_blank"
         rel="noopener noreferrer nofollow"
         className="underline underline-offset-2 hover:text-foreground"
+        onClick={() => trackProductEvent("source_link_open")}
       >
         {text.attributionView}
       </a>

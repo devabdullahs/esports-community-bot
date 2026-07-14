@@ -4,6 +4,7 @@ import type { ReactNode } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
+  ActivityIcon,
   BarChart3Icon,
   ClipboardListIcon,
   Gamepad2Icon,
@@ -58,6 +59,7 @@ const NAV_ICONS: Record<AdminNavIcon, LucideIcon> = {
   key: KeyRoundIcon,
   shield: ShieldIcon,
   clipboard: ClipboardListIcon,
+  activity: ActivityIcon,
 };
 
 export function AdminDashboardShell({

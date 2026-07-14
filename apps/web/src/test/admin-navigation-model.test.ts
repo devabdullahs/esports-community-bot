@@ -19,6 +19,7 @@ describe("admin navigation model", () => {
       "/admin/users",
       "/admin/partners",
       "/admin/streams",
+      "/admin/source-health",
       "/admin/mcp",
       "/admin/team",
       "/admin/audit",
@@ -29,7 +30,7 @@ describe("admin navigation model", () => {
 
   test("scoped admins never see super-only entries but keep MCP keys", () => {
     const hrefs = allHrefs(adminNavSections("en", false, true, true));
-    for (const href of ["/admin/analytics", "/admin/predictions", "/admin/users", "/admin/partners", "/admin/streams", "/admin/team", "/admin/audit"]) {
+    for (const href of ["/admin/analytics", "/admin/predictions", "/admin/users", "/admin/partners", "/admin/streams", "/admin/source-health", "/admin/team", "/admin/audit"]) {
       expect(hrefs).not.toContain(href);
     }
     expect(hrefs).toContain("/admin/mcp");

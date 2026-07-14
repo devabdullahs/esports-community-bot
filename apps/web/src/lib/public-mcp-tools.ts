@@ -5,6 +5,10 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { getAllCoStreamsCached, type CoStream } from "@/lib/co-streams";
 import {
+  publicDirectoryPlayer,
+  publicDirectoryTeam,
+} from "@/lib/public-directory-projections";
+import {
   cleanDirectoryQuery,
   cleanGameSlug,
   listPlayersDirectory,
@@ -116,16 +120,17 @@ function publicNewsPost(post: NewsPost) {
 }
 
 function safeTeam(team: TeamProfile) {
+  const safe = publicDirectoryTeam(team);
   return {
-    id: team.id,
-    webUrl: absoluteUrl(`/teams/${team.id}`),
-    game: team.game,
-    name: team.name,
-    slug: team.slug,
-    acronym: team.acronym,
-    nationality: team.nationality,
-    location: team.location,
-    imageUrl: team.image_url,
+    id: safe.id,
+    webUrl: absoluteUrl(`/teams/${safe.id}`),
+    game: safe.game,
+    name: safe.name,
+    slug: safe.slug,
+    acronym: safe.acronym,
+    nationality: safe.nationality,
+    location: safe.location,
+    imageUrl: safe.image_url,
     liquipediaUrl: team.liquipedia_url,
     lastSeenAt: team.last_seen_at,
     updatedAt: team.updated_at,
@@ -133,25 +138,26 @@ function safeTeam(team: TeamProfile) {
 }
 
 function safePlayer(player: PlayerProfile) {
+  const safe = publicDirectoryPlayer(player);
   return {
-    id: player.id,
-    webUrl: absoluteUrl(`/players/${player.id}`),
-    game: player.game,
-    name: player.name,
-    slug: player.slug,
-    firstName: player.first_name,
-    lastName: player.last_name,
-    nationality: player.nationality,
-    imageUrl: player.image_url,
-    role: player.role,
-    currentTeamName: player.current_team_name,
-    resolvedTeam: player.resolved_team_id
+    id: safe.id,
+    webUrl: absoluteUrl(`/players/${safe.id}`),
+    game: safe.game,
+    name: safe.name,
+    slug: safe.slug,
+    firstName: safe.first_name,
+    lastName: safe.last_name,
+    nationality: safe.nationality,
+    imageUrl: safe.image_url,
+    role: safe.role,
+    currentTeamName: safe.current_team_name,
+    resolvedTeam: safe.resolved_team_id
       ? {
-          id: player.resolved_team_id,
-          webUrl: absoluteUrl(`/teams/${player.resolved_team_id}`),
-          name: player.resolved_team_name,
-          slug: player.resolved_team_slug,
-          imageUrl: player.resolved_team_image_url,
+          id: safe.resolved_team_id,
+          webUrl: absoluteUrl(`/teams/${safe.resolved_team_id}`),
+          name: safe.resolved_team_name,
+          slug: safe.resolved_team_slug,
+          imageUrl: safe.resolved_team_image_url,
         }
       : null,
     liquipediaUrl: player.liquipedia_url,
@@ -407,6 +413,7 @@ export function registerPublicMcpTools(
           ewc: t.ewc,
           status: tournamentStatus(t),
           matchCounts: t.matchCounts,
+          syncHealth: t.syncHealth,
           hasStandings: t.hasStandings,
           featuredMatch: t.featuredMatch,
           lastMatchAt: t.last_match_at,

@@ -21,6 +21,7 @@ import {
 } from '../db/matches.js';
 import { armMatch } from './pollingManager.js';
 import { refreshAllGuilds } from './refresh.js';
+import { fetchTournamentSchedule } from './tournamentScheduleFetch.js';
 import * as liquipedia from '../services/liquipedia.js';
 import * as startgg from '../services/startgg.js';
 import * as pandascore from '../services/pandascore.js';
@@ -85,7 +86,7 @@ export async function syncTournament(client, t) {
     }
   }
 
-  const matches = await service.fetchSchedule(t);
+  const matches = await fetchTournamentSchedule(service, t);
   const currentIds = matches.map((m) => m.externalId);
   for (const parsed of matches) {
     const row = await upsertMatch(toMatchRow(parsed, t.id));

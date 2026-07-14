@@ -47,6 +47,7 @@ async function seed(): Promise<void> {
   await import("@bot/db/index.js");
   const { addTournament, archiveTournament, updateTournamentEwc } = await import("@bot/db/tournaments.js");
   const { upsertMatch } = await import("@bot/db/matches.js");
+  const { recordTournamentSyncSuccess } = await import("@bot/db/tournamentSyncHealth.js");
 
   const tournament = (await addTournament({
     source: "liquipedia",
@@ -107,6 +108,12 @@ async function seed(): Promise<void> {
       scheduled_at: 1_800_000_000 + i * 3600,
     });
   }
+  await recordTournamentSyncSuccess({
+    tournamentId,
+    source: "liquipedia",
+    itemCount: 8,
+    at: Math.floor(Date.now() / 1000),
+  });
 
   for (let i = 0; i < 13; i += 1) {
     const archived = (await addTournament({
@@ -166,6 +173,19 @@ describe("GET /api/tournaments", () => {
     expect(t).toBeTruthy();
     expect(t.ewc).toBe(true);
   });
+
+  test("returns only the approved coarse sync-health shape", async () => {
+    const res = await listGET();
+    const body = await res.json();
+    const health = body.tournaments.find((row: { id: number }) => row.id === tournamentId).syncHealth;
+    expect(health).toEqual({
+      state: "fresh",
+      lastSuccessAt: expect.any(Number),
+      source: "liquipedia",
+    });
+    expect(Object.keys(health).sort()).toEqual(["lastSuccessAt", "source", "state"]);
+    expect(JSON.stringify(health)).not.toMatch(/error|message|stack|credential|token|responseBody/i);
+  });
 });
 
 describe("GET /api/tournaments/[id]/matches", () => {
@@ -187,6 +207,11 @@ describe("GET /api/tournaments/[id]/matches", () => {
     expect(body.matches.scheduled).toHaveLength(2);
     expect(body.matches.finished).toHaveLength(5);
     expect(body.total).toBe(8);
+    expect(body.tournament.syncHealth).toEqual({
+      state: "fresh",
+      lastSuccessAt: expect.any(Number),
+      source: "liquipedia",
+    });
     // finished ordered most-recent-first (scheduled_at DESC)
     const finishedTimes = body.matches.finished.map((m: { scheduled_at: number }) => m.scheduled_at);
     expect(finishedTimes).toEqual([...finishedTimes].sort((a, b) => b - a));
