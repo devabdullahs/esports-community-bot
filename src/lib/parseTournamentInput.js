@@ -37,7 +37,9 @@ export function formatLiquipediaPageTitle(page) {
 //   Explicit form  : pandascore:12345 | startgg:<slug> | liquipedia:<game>/<Page>
 // Returns null when nothing matches.
 export function parseTournamentInput(raw) {
-  const input = String(raw ?? '').trim();
+  const input = String(raw ?? '')
+    .trim()
+    .replace(/^url:\s*/i, '');
   if (!input) return null;
 
   // Liquipedia URL -> capture <game> and the page path after it.

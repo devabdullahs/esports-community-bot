@@ -3,6 +3,19 @@ import test from 'node:test';
 
 import { parseTournamentInput } from '../src/lib/parseTournamentInput.js';
 
+test('parseTournamentInput normalizes a legacy url: prefix', () => {
+  assert.deepEqual(
+    parseTournamentInput('url:https://liquipedia.net/mobilelegends/MWI/2026'),
+    {
+      source: 'liquipedia',
+      game: 'mobilelegends',
+      externalId: 'mobilelegends/MWI/2026',
+      url: 'https://liquipedia.net/mobilelegends/MWI/2026',
+      name: 'MWI 2026',
+    },
+  );
+});
+
 test('parseTournamentInput preserves start.gg event scope', () => {
   const parsed = parseTournamentInput('https://www.start.gg/tournament/evo-2026/event/tekken-8');
 

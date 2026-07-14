@@ -38,21 +38,36 @@ export function truncate(s, max) {
   return s.length <= max ? s : `${s.slice(0, max - 1)}…`;
 }
 
+function safeHttpUrl(value) {
+  const raw = String(value ?? '')
+    .trim()
+    .replace(/^url:\s*/i, '');
+  if (!raw) return null;
+
+  try {
+    const parsed = new URL(raw);
+    return parsed.protocol === 'http:' || parsed.protocol === 'https:' ? parsed.toString() : null;
+  } catch {
+    return null;
+  }
+}
+
 // Public page for a match's tournament (so tags / detail cards can link to it).
 export function tournamentUrl(m) {
-  if (m.tournament_url) return m.tournament_url;
+  const storedUrl = safeHttpUrl(m.tournament_url);
+  if (storedUrl) return storedUrl;
   if (m.tournament_source === 'liquipedia' && m.tournament_path) {
-    return `https://liquipedia.net/${m.tournament_path}`;
+    return safeHttpUrl(`https://liquipedia.net/${m.tournament_path}`);
   }
   if (m.tournament_source === 'startgg' && m.tournament_path) {
-    return `https://www.start.gg/tournament/${m.tournament_path}`;
+    return safeHttpUrl(`https://www.start.gg/tournament/${m.tournament_path}`);
   }
   return null;
 }
 
 export function matchUrl(m) {
   if (m.source === 'liquipedia' && m.game && /^Match:/i.test(m.external_id || '')) {
-    return `https://liquipedia.net/${m.game}/${m.external_id}`;
+    return safeHttpUrl(`https://liquipedia.net/${m.game}/${m.external_id}`);
   }
   return tournamentUrl(m);
 }
