@@ -93,7 +93,8 @@ function digestLine(row) {
 
 function digestChunks(rows) {
   const manage = siteUrl('/me');
-  const baseLength = '**Match alert digest**'.length + (manage ? manage.length + 28 : 0);
+  // Reserve room for the omitted-count footer when a user's digest spans chunks.
+  const baseLength = '**Match alert digest**'.length + (manage ? manage.length + 28 : 0) + 80;
   const chunks = [];
   let chunk = [];
   let length = baseLength;
