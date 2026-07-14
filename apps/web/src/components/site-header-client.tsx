@@ -30,6 +30,7 @@ import {
 } from "@/components/follows/notification-badge";
 import { ModeToggle } from "@/components/mode-toggle";
 import { SignOutButton } from "@/components/dashboard/sign-out-button";
+import { GlobalSearch } from "@/components/search/global-search";
 import { signOut } from "@/lib/auth-client";
 import { Button } from "@/components/ui/button";
 import {
@@ -304,6 +305,7 @@ export function SiteHeaderClient({
         </NavigationMenu>
 
         <nav className="ms-auto flex shrink-0 items-center gap-1 sm:gap-2">
+          <GlobalSearch locale={locale} />
           {/* Desktop account menu: Discord, Admin, profile, and sign out under one trigger. */}
           <DropdownMenu>
             <DropdownMenuTrigger
@@ -436,6 +438,7 @@ export function SiteHeaderClient({
                 {text.common.joinDiscord}
               </Button>
               <nav className="flex flex-col gap-1 px-3 pb-3">
+                <GlobalSearch locale={locale} mobile onResultOpen={() => setMobileOpen(false)} />
                 <p className="px-3 pb-1 pt-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                   {text.common.browse}
                 </p>

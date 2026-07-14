@@ -31,6 +31,7 @@ const {
 const { upsertEwcProfileLink, markEwcProfileLinkSynced } = await import('../src/db/ewcProfileLinks.js');
 const { addTournament } = await import('../src/db/tournaments.js');
 const { upsertMatch } = await import('../src/db/matches.js');
+const { upsertTeam } = await import('../src/db/teams.js');
 const { createStreamChannel } = await import('../src/db/streamChannels.js');
 const { upsertStreamStatus } = await import('../src/db/streamChannelStatus.js');
 
@@ -169,7 +170,17 @@ for (const [mi, m] of members.entries()) {
 for (const row of weekRows) await markEwcWeekScored(row.id, finalStandings);
 console.log(`season + ${weekRows.length} weeks scored for ${members.length} members`);
 
-// 3b) One tracked tournament + a few matches so /tournaments has data to render.
+// 3b) One public team supports the global-search browser journey without adding
+// external image requests to the local preview.
+const seededTeam = await upsertTeam({
+  game: 'valorant',
+  pandascore_id: 990001,
+  name: 'Team Falcons',
+  slug: 'team-falcons',
+});
+console.log(`team seeded: ${seededTeam.name} (#${seededTeam.id})`);
+
+// 3c) One tracked tournament + a few matches so /tournaments has data to render.
 // addTournament/upsertMatch upsert on their unique keys, so re-running is idempotent.
 const tournament = await addTournament({
   source: 'liquipedia',
@@ -192,7 +203,7 @@ for (const m of tMatches) {
 }
 console.log(`tournament seeded: ${tournament.name} (#${tournament.id}) with ${matchCount} matches`);
 
-// 3c) Nine deterministic live co-stream groups for multiview layout QA.
+// 3d) Nine deterministic live co-stream groups for multiview layout QA.
 const coStreamFixtures = [
   { platform: 'twitch', handle: 'ewc_demo_alpha', label: 'Alpha Arena', creatorKey: 'demo-alpha', gameSlugs: ['valorant'], language: 'en', title: 'Alpha watches the Valorant upper bracket', viewers: 18420 },
   { platform: 'kick', handle: 'ewc_demo_bravo', label: 'Bravo Broadcast', creatorKey: 'demo-bravo', gameSlugs: ['valorant', 'counter-strike'], language: 'ar', title: 'Bravo Arabic co-stream: playoffs', viewers: 12350 },
