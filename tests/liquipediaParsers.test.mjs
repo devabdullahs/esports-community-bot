@@ -336,7 +336,17 @@ test('parseTournamentEwcAffiliation: detects Esports World Cup Foundation organi
     </div>
   `);
   assert.equal(parseTournamentEwcAffiliation($), true);
+  assert.equal(parseTournamentEwcAffiliation(load(`
+    <div class="fo-nttax-infobox">
+      <div><div class="infobox-description">Organizers:</div></div>
+      <div><a href="https://esportsworldcup.com/">Esports Foundation</a></div>
+    </div>
+  `)), true);
   assert.equal(parseTournamentEwcAffiliation(load('<div class="fo-nttax-infobox">Organizer EA</div>')), false);
+  assert.equal(parseTournamentEwcAffiliation(load(`
+    <div class="fo-nttax-infobox">Organizer EA</div>
+    <p>Read more at <a href="https://esportsworldcup.com/">Esports Foundation</a>.</p>
+  `)), false);
 });
 
 // ---------------------------------------------------------------------------

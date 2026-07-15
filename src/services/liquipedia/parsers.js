@@ -1142,7 +1142,16 @@ export function parseEwcEventPlacements($, event, players = []) {
 }
 
 export function parseTournamentEwcAffiliation($) {
-  const infobox = $('.fo-nttax-infobox, .infobox, .infobox-center, .tournament-infobox').first();
-  const text = (infobox.length ? infobox.text() : $.text()).replace(/\s+/g, ' ').trim();
-  return /(?:Esports\s*World\s*Cup|EWC)\s*Foundation/i.test(text);
+  const infobox = $('.fo-nttax-infobox, .infobox, .infobox-center, .tournament-infobox');
+  const scope = infobox.length ? infobox : $.root();
+  const text = scope.text().replace(/\s+/g, ' ').trim();
+  if (/(?:Esports\s*World\s*Cup|EWC)\s*Foundation/i.test(text)) return true;
+
+  // Liquipedia currently labels the organizer "Esports Foundation" while
+  // linking to the official EWC domain. Trust the stable domain rather than a
+  // broad body-text match, so unrelated tournaments remain excluded.
+  return scope
+    .find('a[href]')
+    .toArray()
+    .some((link) => /^https:\/\/(?:www\.)?esportsworldcup\.com(?:\/|$)/i.test(String($(link).attr('href') ?? '')));
 }

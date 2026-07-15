@@ -3,6 +3,7 @@
 
 import * as cheerio from 'cheerio';
 import { logger } from '../../lib/logger.js';
+import { isEwcTournamentReference } from '../../lib/ewcTournament.js';
 import { formatLiquipediaPageTitle } from '../../lib/parseTournamentInput.js';
 import { normalizeTeamName } from '../../lib/render.js';
 import * as lpdb from '../lpdb.js';
@@ -111,6 +112,9 @@ export async function resolveTournamentTitle(tournament) {
 }
 
 export async function resolveTournamentEwc(tournament) {
+  // Preserve explicit flags and verified aliases even if an upstream page is
+  // temporarily incomplete. The daily sync must never downgrade known EWC events.
+  if (isEwcTournamentReference(tournament)) return true;
   const [game, ...rest] = tournament.external_id.split('/');
   const page = rest.join('/');
   if (!game || !page) return false;

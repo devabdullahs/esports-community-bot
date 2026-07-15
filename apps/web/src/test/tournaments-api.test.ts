@@ -34,6 +34,7 @@ function ctx(id: string) {
 
 let tournamentId: number;
 let organizerTaggedTournamentId: number;
+let mwiTournamentId: number;
 let archivedTournamentId: number;
 let newestArchivedTournamentId: number;
 let legacyPlayInsTournamentId: number;
@@ -69,6 +70,16 @@ async function seed(): Promise<void> {
   })) as { id: number };
   organizerTaggedTournamentId = organizerTagged.id;
   await updateTournamentEwc(organizerTaggedTournamentId, true);
+
+  const mwi = (await addTournament({
+    source: "liquipedia",
+    external_id: "mobilelegends/MWI/2026",
+    game: "mobilelegends",
+    name: "MLBB Women's International 2026",
+    url: "https://liquipedia.net/mobilelegends/MWI/2026",
+    guild_id: GUILD_ID,
+  })) as { id: number };
+  mwiTournamentId = mwi.id;
 
   const legacyPlayIns = (await addTournament({
     source: "liquipedia",
@@ -170,6 +181,15 @@ describe("GET /api/tournaments", () => {
     expect(res.status).toBe(200);
     const body = await res.json();
     const t = body.tournaments.find((row: { id: number }) => row.id === organizerTaggedTournamentId);
+    expect(t).toBeTruthy();
+    expect(t.ewc).toBe(true);
+  });
+
+  test("recognizes the verified MWI 2026 alias before its organizer flag is refreshed", async () => {
+    const res = await listGET();
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    const t = body.tournaments.find((row: { id: number }) => row.id === mwiTournamentId);
     expect(t).toBeTruthy();
     expect(t.ewc).toBe(true);
   });

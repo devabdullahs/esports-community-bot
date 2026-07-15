@@ -12,6 +12,7 @@ import {
   listTournamentSyncHealth as _listTournamentSyncHealth,
 } from "@bot/db/tournamentSyncHealth.js";
 import { publicTournamentSyncHealth as _publicTournamentSyncHealth } from "@bot/lib/tournamentSyncHealth.js";
+import { isEwcTournamentReference } from "@bot/lib/ewcTournament.js";
 import { normalizeTeamName as _normalizeTeamName } from "@bot/lib/render.js";
 import {
   getTournamentById as _getById,
@@ -162,21 +163,6 @@ const dedupeMatches = _dedupeMatches as <T extends MatchRow>(rows: T[]) => T[];
 
 function zeroCounts(): MatchCounts {
   return { running: 0, scheduled: 0, finished: 0 };
-}
-
-// A tracked tournament belongs to the Esports World Cup when its Liquipedia page
-// lives under a .../Esports_World_Cup/... path, or its display name says so (e.g.
-// "FC Pro 26 World Championship at Esports World Cup 2026"). Distinct events such
-// as "Overwatch World Cup" or "PUBG Mobile World Cup" intentionally do NOT match.
-function isEwcTournament(t: {
-  name: string | null;
-  external_id: string;
-  url: string | null;
-  ewc?: number | null;
-}): boolean {
-  if (Number(t.ewc) === 1) return true;
-  const haystack = `${t.external_id} ${t.url ?? ""} ${t.name ?? ""}`.toLowerCase();
-  return haystack.includes("esports_world_cup") || haystack.includes("esports world cup");
 }
 
 const MATCH_COLUMNS =
@@ -338,7 +324,7 @@ async function tournamentSummary(
     archived_at: t.archived_at,
     last_match_at: t.last_match_at,
     created_at: t.created_at,
-    ewc: isEwcTournament(t),
+    ewc: isEwcTournamentReference(t),
     matchCounts: countsFromRows(rows),
     syncHealth: syncHealthForTournament(t, healthByTournamentId.get(t.id), rows.some((row) => row.status === "running")),
     hasStandings: withStandings.has(t.id),
@@ -412,7 +398,7 @@ export async function getTournamentMatches(
   const rawRunning = rows.filter((m) => m.status === "running");
   const coStreamMap = await liveCoStreamsByMatch(rawRunning, {
     gameSlug: tournament.game,
-    includeEwc: isEwcTournament(tournament),
+    includeEwc: isEwcTournamentReference(tournament),
   });
   const running = rawRunning.map((m) => ({
     ...withTeamIds(publicMatch(m), resolveTeamId),
@@ -425,7 +411,7 @@ export async function getTournamentMatches(
     .filter((m) => m.status === "finished")
     .map((m) => withTeamIds(publicMatch(m), resolveTeamId));
   const finished = finishedAll.slice(offset, offset + limit);
-  const ewc = isEwcTournament(tournament);
+  const ewc = isEwcTournamentReference(tournament);
   const standingsHaveResults = rawStandings.some(
     (row) => /[1-9]/.test(String(row.points ?? "")) || /[1-9]/.test(String(row.extra ?? "")),
   );
