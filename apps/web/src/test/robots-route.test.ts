@@ -1,6 +1,12 @@
-import { describe, expect, test } from "vitest";
+import { describe, expect, test, vi } from "vitest";
+
+const { getRequestLocale } = vi.hoisted(() => ({ getRequestLocale: vi.fn() }));
+
+vi.mock("@/lib/request-locale", () => ({ getRequestLocale }));
+
 import { GET } from "@/app/robots.txt/route";
-import { metadata as loginMetadata } from "@/app/login/page";
+import { generateMetadata } from "@/app/login/page";
+import { copy } from "@/lib/i18n";
 
 describe("robots.txt", () => {
   test("blocks private account routes without prefix-blocking public media pages", async () => {
@@ -19,7 +25,15 @@ describe("robots.txt", () => {
     expect(body).toMatch(/Sitemap: https?:\/\/[^\s]+\/sitemap\.xml/);
   });
 
-  test("lets crawlers follow links from the noindex login page", () => {
-    expect(loginMetadata.robots).toEqual({ index: false, follow: true });
+  test("keeps the localized login metadata noindex while allowing follow", async () => {
+    getRequestLocale.mockResolvedValueOnce("en");
+    const english = await generateMetadata();
+    getRequestLocale.mockResolvedValueOnce("ar");
+    const arabic = await generateMetadata();
+
+    expect(english.title).toBe(copy.en.login.metadataTitle);
+    expect(arabic.title).toBe(copy.ar.login.metadataTitle);
+    expect(english.robots).toEqual({ index: false, follow: true });
+    expect(arabic.robots).toEqual({ index: false, follow: true });
   });
 });
