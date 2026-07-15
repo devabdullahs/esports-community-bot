@@ -68,6 +68,23 @@ test("login keeps the public shell, bilingual direction, and responsive actions"
   }
 });
 
+test("login keeps the footer pinned to the bottom on tall viewports", async ({ page }) => {
+  await page.setViewportSize({ width: 1920, height: 1080 });
+
+  for (const locale of locales) {
+    await page.goto(locale.path);
+
+    const footer = page.locator("footer");
+    await expect(footer).toBeVisible();
+
+    const footerBox = await footer.boundingBox();
+    expect(footerBox).not.toBeNull();
+    if (footerBox) {
+      expect(Math.abs(footerBox.y + footerBox.height - 1080)).toBeLessThanOrEqual(1);
+    }
+  }
+});
+
 test("login sends normalized localized callback paths without contacting Discord", async ({ page }) => {
   const callbacks: string[] = [];
   await page.route(authPath, async (route) => {
