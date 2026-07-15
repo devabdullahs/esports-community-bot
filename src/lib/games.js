@@ -1,3 +1,5 @@
+import { isEwcTournamentReference } from './ewcTournament.js';
+
 // Liquipedia wikis. `slug` is the path segment in liquipedia.net/<slug>/... and matches what
 // the bot auto-detects from a tournament URL, so an explicit pick stays consistent with it.
 // `tag` is the short badge shown on the leaderboard.
@@ -165,8 +167,12 @@ export function isKnownGameSlug(slug) {
 // True when a match's tournament is part of the Esports World Cup (detected from the Liquipedia
 // page path / URL, e.g. "counterstrike/Esports_World_Cup/2026" or "esports/Esports_World_Cup/...").
 export function isEwcMatch(m) {
-  const hay = `${m?.tournament_path || ''} ${m?.tournament_url || ''} ${m?.external_id || ''}`.toLowerCase();
-  return /esports[_ ]?world[_ ]?cup/.test(hay);
+  return isEwcTournamentReference({
+    external_id: m?.tournament_path || m?.external_id,
+    url: m?.tournament_url,
+    name: m?.tournament_name,
+    ewc: m?.ewc,
+  });
 }
 
 // Tekken, Street Fighter, Fatal Fury, etc. all share Liquipedia's `fighters` wiki, so the slug

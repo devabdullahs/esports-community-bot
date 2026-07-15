@@ -1,6 +1,7 @@
 import cron from 'node-cron';
 import { config } from '../config.js';
 import { logger } from '../lib/logger.js';
+import { isEwcTournamentReference } from '../lib/ewcTournament.js';
 import { normalizeTeamName } from '../lib/render.js';
 import { listActiveTournaments } from '../db/tournaments.js';
 import { listGameNextMatchAt, listTrackedTeamNamesForGame } from '../db/matches.js';
@@ -88,11 +89,6 @@ function needsPlayerPageRefresh(player, ttlMs, now, imageBackfillCutoff) {
   return !isFresh(player?.liquipedia_parsed_at, ttlMs, now) || needsPlayerImageBackfill(player, imageBackfillCutoff);
 }
 
-function isEwcTournament(tournament) {
-  const text = `${tournament?.name ?? ''} ${tournament?.external_id ?? ''} ${tournament?.url ?? ''}`.toLowerCase();
-  return Number(tournament?.ewc || 0) === 1 || text.includes('esports_world_cup') || text.includes('esports world cup');
-}
-
 function playerUrl(wiki, page) {
   return page ? `https://liquipedia.net/${wiki}/${encodeURIComponent(page)}` : null;
 }
@@ -128,7 +124,7 @@ export async function runLiquipediaEnrichment({
 
   try {
     const tournaments = await listActiveTournaments();
-    const ewcGames = new Set(tournaments.filter(isEwcTournament).map((t) => t.game).filter(Boolean));
+    const ewcGames = new Set(tournaments.filter(isEwcTournamentReference).map((t) => t.game).filter(Boolean));
     const games = [...new Set(tournaments.map((t) => t.game).filter(Boolean))].filter((g) =>
       liquipedia.wikiForGame(g),
     );
