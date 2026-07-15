@@ -142,7 +142,7 @@ export default async function RootLayout({
         >
           {copy[locale].common.skipToContent}
         </a>
-        <div className="app-root flex min-h-full flex-col">
+        <div className="app-root flex min-h-svh flex-col">
           <Providers>
             <Suspense fallback={null}>
               <SiteHeader />
