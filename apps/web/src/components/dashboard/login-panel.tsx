@@ -1,8 +1,10 @@
 "use client";
 
-import { useSearchParams } from "next/navigation";
-import { useState } from "react";
+import Image from "next/image";
 import Link from "next/link";
+import { useRef, useState } from "react";
+import { ArrowRightIcon } from "lucide-react";
+import { useSearchParams } from "next/navigation";
 import { signIn } from "@/lib/auth-client";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -11,12 +13,12 @@ import {
   Card,
   CardContent,
   CardDescription,
+  CardFooter,
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
 import {
   Field,
-  FieldDescription,
   FieldGroup,
   FieldSeparator,
 } from "@/components/ui/field";
@@ -25,69 +27,113 @@ import {
   localizedPath,
   type Locale,
 } from "@/lib/i18n";
+import { loginCallbackUrl } from "@/lib/login-navigation";
 
 export function LoginPanel({ locale }: { locale: Locale }) {
   const searchParams = useSearchParams();
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
+  const pendingRef = useRef(false);
   const text = copy[locale].login;
-  const common = copy[locale].common;
-  const callbackURL = searchParams.get("callbackURL") || localizedPath("/me", locale);
+  const callbackURL = loginCallbackUrl(searchParams.get("callbackURL"), locale);
 
   async function onSignIn() {
+    if (pendingRef.current) return;
+    pendingRef.current = true;
     setError(null);
     setPending(true);
-    const result = await signIn.social({
-      provider: "discord",
-      callbackURL,
-    });
-    if (result?.error) {
-      const message = (result.error && typeof result.error.message === "string" && result.error.message) || text.failedMessage;
-      setError(message);
+
+    try {
+      const result = await signIn.social({
+        provider: "discord",
+        callbackURL,
+      });
+      if (result?.error) {
+        setError(text.failedMessage);
+      }
+    } catch {
+      setError(text.failedMessage);
+    } finally {
+      pendingRef.current = false;
       setPending(false);
     }
   }
 
+  return <LoginPanelContent locale={locale} pending={pending} error={error} onSignIn={onSignIn} />;
+}
+
+export function LoginPanelContent({
+  locale,
+  pending = false,
+  error = null,
+  onSignIn,
+}: {
+  locale: Locale;
+  pending?: boolean;
+  error?: string | null;
+  onSignIn?: () => void;
+}) {
+  const text = copy[locale].login;
+  const common = copy[locale].common;
+
   return (
-    <div className="flex flex-col gap-6">
-      <Card>
-        <CardHeader className="text-center">
+    <Card className="mx-auto w-full max-w-lg">
+      <CardHeader className="flex flex-row items-center gap-3 text-start">
+        <Image src="/icon.svg" alt="" width={40} height={40} className="size-10 shrink-0" />
+        <div className="flex min-w-0 flex-col gap-1">
           <CardTitle className="text-xl">{text.title}</CardTitle>
           <CardDescription>{text.description}</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <FieldGroup>
-            {error ? (
-              <Field>
-                <Alert variant="destructive">
-                  <AlertTitle>{text.failedTitle}</AlertTitle>
-                  <AlertDescription>{error}</AlertDescription>
-                </Alert>
-              </Field>
-            ) : null}
+        </div>
+      </CardHeader>
+      <CardContent>
+        <FieldGroup>
+          {error ? (
             <Field>
-              <Button onClick={onSignIn} disabled={pending}>
-                <DiscordIcon data-icon="inline-start" />
-                {pending ? text.pending : text.continue}
-              </Button>
+              <Alert variant="destructive">
+                <AlertTitle>{text.failedTitle}</AlertTitle>
+                <AlertDescription>{error}</AlertDescription>
+              </Alert>
             </Field>
-            <FieldSeparator>
-              {locale === "ar"
-                ? "\u0622\u0645\u0646 \u0648\u0645\u062e\u0635\u0635 \u0644\u0644\u0645\u062c\u062a\u0645\u0639"
-                : "Secure community access"}
-            </FieldSeparator>
-            <Field>
-              <FieldDescription className="text-center">
-                {text.legalPrefix}{" "}
-                <Link href={localizedPath("/terms", locale)}>{common.termsOfService}</Link>
-                {" "}
-                {text.legalAnd}{" "}
-                <Link href={localizedPath("/privacy", locale)}>{common.privacyPolicy}</Link>.
-              </FieldDescription>
-            </Field>
-          </FieldGroup>
-        </CardContent>
-      </Card>
-    </div>
+          ) : null}
+          <Field>
+            <Button onClick={onSignIn} disabled={pending} aria-busy={pending} size="lg" className="w-full">
+              <DiscordIcon data-icon="inline-start" />
+              {pending ? text.pending : text.continue}
+            </Button>
+          </Field>
+          <FieldSeparator>{text.trust}</FieldSeparator>
+          <Field>
+            <Button
+              render={<Link href={localizedPath("/", locale)} />}
+              nativeButton={false}
+              variant="outline"
+              size="lg"
+              className="w-full"
+            >
+              {text.browse}
+              <ArrowRightIcon data-icon="inline-end" className="rtl:rotate-180" />
+            </Button>
+          </Field>
+        </FieldGroup>
+      </CardContent>
+      <CardFooter className="justify-center">
+        <p className="text-center text-sm leading-6 text-muted-foreground">
+          {text.legalPrefix}{" "}
+          <Link
+            href={localizedPath("/terms", locale)}
+            className="font-medium text-foreground underline underline-offset-4 transition-colors hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          >
+            {common.termsOfService}
+          </Link>{" "}
+          {text.legalAnd}{" "}
+          <Link
+            href={localizedPath("/privacy", locale)}
+            className="font-medium text-foreground underline underline-offset-4 transition-colors hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          >
+            {common.privacyPolicy}
+          </Link>.
+        </p>
+      </CardFooter>
+    </Card>
   );
 }
