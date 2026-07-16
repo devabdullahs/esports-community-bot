@@ -610,13 +610,16 @@ db.exec(`
     amount        INTEGER NOT NULL
   );
 
-  -- Community comments on news posts. One-level threads: a reply's parent/root
+  -- Community comments on durable targets. One-level threads: a reply's parent/root
   -- both point at the ROOT comment (replies to replies are re-targeted to the
   -- root in createComment). Soft delete (status='deleted') keeps reply threads
-  -- intact; a hard-deleted POST cascades its comments away.
+  -- intact; a hard-deleted news post cascades its comments away. post_id is
+  -- retained for that news FK while target_type/target_id identify every target.
   CREATE TABLE IF NOT EXISTS post_comments (
     id                INTEGER PRIMARY KEY AUTOINCREMENT,
-    post_id           INTEGER NOT NULL REFERENCES ewc_news_posts(id) ON DELETE CASCADE,
+    post_id           INTEGER REFERENCES ewc_news_posts(id) ON DELETE CASCADE,
+    target_type       TEXT    NOT NULL DEFAULT 'news' CHECK (target_type IN ('news','match')),
+    target_id         INTEGER NOT NULL,
     parent_comment_id INTEGER REFERENCES post_comments(id) ON DELETE SET NULL,
     root_comment_id   INTEGER REFERENCES post_comments(id) ON DELETE SET NULL,
     auth_user_id      TEXT NOT NULL,
@@ -632,11 +635,12 @@ db.exec(`
     updated_at        TEXT NOT NULL DEFAULT (datetime('now')),
     edited_at         TEXT,
     deleted_at        TEXT,
-    deleted_by        TEXT
+    deleted_by        TEXT,
+    CHECK (
+      (target_type = 'news' AND post_id = target_id)
+      OR (target_type = 'match' AND post_id IS NULL)
+    )
   );
-  CREATE INDEX IF NOT EXISTS idx_post_comments_post ON post_comments(post_id, status, created_at);
-  CREATE INDEX IF NOT EXISTS idx_post_comments_root ON post_comments(root_comment_id, created_at);
-  CREATE INDEX IF NOT EXISTS idx_post_comments_autoapprove ON post_comments(status, auto_approve_at);
 
   CREATE TABLE IF NOT EXISTS post_likes (
     post_id         INTEGER NOT NULL REFERENCES ewc_news_posts(id) ON DELETE CASCADE,
@@ -894,7 +898,103 @@ db.exec(`
     updated_at      TEXT NOT NULL DEFAULT (datetime('now'))
   );
 `);
-ensureColumns('post_comments', [['author_avatar_url', 'TEXT']]);
+
+// SQLite cannot relax post_comments.post_id from NOT NULL in place. Rebuild
+// only legacy/partial tables, preserving ids so every existing reply, like,
+// report, and moderation action keeps pointing at the same comment row.
+function ensurePostCommentTargetSchema() {
+  const columns = db.prepare('PRAGMA table_info(post_comments)').all();
+  const names = new Set(columns.map((column) => column.name));
+  const postId = columns.find((column) => column.name === 'post_id');
+  const needsRebuild = !names.has('target_type') || !names.has('target_id') || postId?.notnull === 1;
+
+  if (needsRebuild) {
+    const value = (name, fallback) => (names.has(name) ? name : fallback);
+    const oldPostId = value('post_id', 'NULL');
+    const oldTargetType = names.has('target_type')
+      ? "CASE WHEN target_type IN ('news','match') THEN target_type ELSE 'news' END"
+      : "'news'";
+    const oldTargetId = names.has('target_id') ? `COALESCE(target_id, ${oldPostId})` : oldPostId;
+
+    db.pragma('foreign_keys = OFF');
+    try {
+      db.exec(`
+        BEGIN IMMEDIATE;
+        DROP TRIGGER IF EXISTS delete_match_comments;
+        DROP TABLE IF EXISTS post_comments_target_migration;
+        CREATE TABLE post_comments_target_migration (
+          id                INTEGER PRIMARY KEY AUTOINCREMENT,
+          post_id           INTEGER REFERENCES ewc_news_posts(id) ON DELETE CASCADE,
+          target_type       TEXT    NOT NULL DEFAULT 'news' CHECK (target_type IN ('news','match')),
+          target_id         INTEGER NOT NULL,
+          parent_comment_id INTEGER REFERENCES post_comments_target_migration(id) ON DELETE SET NULL,
+          root_comment_id   INTEGER REFERENCES post_comments_target_migration(id) ON DELETE SET NULL,
+          auth_user_id      TEXT NOT NULL,
+          discord_user_id   TEXT NOT NULL,
+          author_name       TEXT NOT NULL DEFAULT '',
+          author_avatar_url TEXT,
+          body              TEXT NOT NULL,
+          status            TEXT NOT NULL DEFAULT 'visible'
+                            CHECK (status IN ('visible','pending','hidden','rejected','deleted')),
+          flag_reason_json  TEXT,
+          auto_approve_at   INTEGER,
+          created_at        TEXT NOT NULL DEFAULT (datetime('now')),
+          updated_at        TEXT NOT NULL DEFAULT (datetime('now')),
+          edited_at         TEXT,
+          deleted_at        TEXT,
+          deleted_by        TEXT,
+          CHECK (
+            (target_type = 'news' AND post_id = target_id)
+            OR (target_type = 'match' AND post_id IS NULL)
+          )
+        );
+        INSERT INTO post_comments_target_migration
+          (id, post_id, target_type, target_id, parent_comment_id, root_comment_id,
+           auth_user_id, discord_user_id, author_name, author_avatar_url, body,
+           status, flag_reason_json, auto_approve_at, created_at, updated_at,
+           edited_at, deleted_at, deleted_by)
+        SELECT ${value('id', 'NULL')}, ${oldPostId}, ${oldTargetType}, ${oldTargetId},
+               ${value('parent_comment_id', 'NULL')}, ${value('root_comment_id', 'NULL')},
+               ${value('auth_user_id', "''")}, ${value('discord_user_id', "''")},
+               ${value('author_name', "''")}, ${value('author_avatar_url', 'NULL')}, ${value('body', "''")},
+               ${value('status', "'visible'")}, ${value('flag_reason_json', 'NULL')}, ${value('auto_approve_at', 'NULL')},
+               ${value('created_at', "datetime('now')")}, ${value('updated_at', "datetime('now')")},
+               ${value('edited_at', 'NULL')}, ${value('deleted_at', 'NULL')}, ${value('deleted_by', 'NULL')}
+          FROM post_comments;
+        DROP TABLE post_comments;
+        ALTER TABLE post_comments_target_migration RENAME TO post_comments;
+        COMMIT;
+      `);
+    } catch (error) {
+      try {
+        db.exec('ROLLBACK;');
+      } catch {
+        // The migration did not reach BEGIN; surface the original error below.
+      }
+      throw error;
+    } finally {
+      db.pragma('foreign_keys = ON');
+    }
+  }
+
+  db.exec(`
+    CREATE INDEX IF NOT EXISTS idx_post_comments_target
+      ON post_comments(target_type, target_id, status, created_at, id);
+    CREATE INDEX IF NOT EXISTS idx_post_comments_target_root
+      ON post_comments(target_type, target_id, root_comment_id, status, created_at, id);
+    CREATE INDEX IF NOT EXISTS idx_post_comments_autoapprove
+      ON post_comments(status, auto_approve_at);
+    CREATE INDEX IF NOT EXISTS idx_post_comments_moderation
+      ON post_comments(status, created_at, id);
+    CREATE TRIGGER IF NOT EXISTS delete_match_comments
+      AFTER DELETE ON matches
+      BEGIN
+        DELETE FROM post_comments WHERE target_type = 'match' AND target_id = OLD.id;
+      END;
+  `);
+}
+
+ensurePostCommentTargetSchema();
 ensureColumns('stream_channels', [
   ['creator_key', "TEXT NOT NULL DEFAULT ''"],
   ['game_slugs', "TEXT NOT NULL DEFAULT '[]'"],

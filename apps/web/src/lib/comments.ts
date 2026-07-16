@@ -3,7 +3,7 @@ import "server-only";
 import {
   createComment as _create,
   getComment as _get,
-  listCommentsForPost as _list,
+  listCommentsForTarget as _listTarget,
   editComment as _edit,
   setCommentStatus as _setStatus,
   autoApproveDueComments as _autoApprove,
@@ -37,7 +37,9 @@ import type { CommentReportReason, CommentStatus } from "@/lib/comment-validatio
 
 export type CommentRecord = {
   id: number;
-  postId: number;
+  postId: number | null;
+  targetType: "news" | "match";
+  targetId: number;
   parentCommentId: number | null;
   rootCommentId: number | null;
   authUserId: string;
@@ -56,7 +58,9 @@ export type CommentRecord = {
 };
 
 type CreateInput = {
-  postId: number;
+  postId?: number;
+  targetType?: "news" | "match";
+  targetId?: number;
   parentCommentId?: number | null;
   authUserId: string;
   discordUserId: string;
@@ -70,8 +74,9 @@ type CreateInput = {
 
 const createComment = _create as (i: CreateInput) => Promise<{ comment: CommentRecord } | { error: string }>;
 const getComment = _get as (id: number) => Promise<CommentRecord | null>;
-const listForPost = _list as (
-  postId: number,
+const listForTarget = _listTarget as (
+  targetType: "news" | "match",
+  targetId: number,
   limit?: number,
   opts?: { includeAllStatuses?: boolean },
 ) => Promise<CommentRecord[]>;
@@ -203,7 +208,7 @@ export function moderationFor(body: string): {
 // via autoApproveDueCommentsForModeration() and is unaffected.
 let lastReadSweepAt = 0;
 
-// --- public (post-page) view ------------------------------------------------
+// --- public target-page view -------------------------------------------------
 
 export type PublicComment = {
   id: number;
@@ -278,14 +283,15 @@ function replyRenders(c: CommentRecord, viewer: string | null, moderator: boolea
 }
 
 /**
- * Build the threaded comment tree for a post as seen by `viewer`. Runs the lazy
+ * Build the threaded comment tree for a target as seen by `viewer`. Runs the lazy
  * auto-approval sweep first (no cron needed). Visibility:
  *  - visible -> shown to all
  *  - pending -> shown only to its author (with a pending badge client-side)
  *  - deleted / pending-not-yours root WITH replies -> placeholder so the thread holds
  */
-export async function getPostCommentsView(
-  postId: number,
+export async function getTargetCommentsView(
+  targetType: "news" | "match",
+  targetId: number,
   viewer: string | null,
   { moderator = false }: { moderator?: boolean } = {},
 ): Promise<PublicComment[]> {
@@ -294,7 +300,7 @@ export async function getPostCommentsView(
     await autoApproveDue().catch(() => {});
   }
   const rows = await fillMissingAuthorAvatars(
-    await listForPost(postId, 100, { includeAllStatuses: moderator }),
+    await listForTarget(targetType, targetId, 100, { includeAllStatuses: moderator }),
   );
   const ids = rows.map((c) => Number(c.id));
   const [counts, viewerLikes, reportCounts] = await Promise.all([
@@ -339,13 +345,34 @@ export async function getPostCommentsView(
   return out;
 }
 
+// Compatibility entry point for existing news routes.
+export function getPostCommentsView(
+  postId: number,
+  viewer: string | null,
+  options: { moderator?: boolean } = {},
+): Promise<PublicComment[]> {
+  return getTargetCommentsView("news", postId, viewer, options);
+}
+
 // --- mutations + moderation -------------------------------------------------
 
 export type CreateResult = { comment: CommentRecord } | { error: string };
 
-export async function createPostComment(input: Omit<CreateInput, "status" | "flagReason" | "autoApproveAt">): Promise<CreateResult> {
+type UserCreateInput = Omit<CreateInput, "status" | "flagReason" | "autoApproveAt">;
+
+export async function createTargetComment(input: UserCreateInput): Promise<CreateResult> {
   const mod = moderationFor(input.body);
   return createComment({ ...input, status: mod.status, flagReason: mod.flagReason, autoApproveAt: mod.autoApproveAt });
+}
+
+export function createPostComment(input: Omit<UserCreateInput, "targetType" | "targetId"> & { postId: number }): Promise<CreateResult> {
+  return createTargetComment({ ...input, targetType: "news", targetId: input.postId });
+}
+
+export function createMatchComment(
+  input: Omit<UserCreateInput, "postId" | "targetType" | "targetId"> & { matchId: number },
+): Promise<CreateResult> {
+  return createTargetComment({ ...input, targetType: "match", targetId: input.matchId });
 }
 
 export async function editOwnComment(id: number, body: string): Promise<CommentRecord | null> {

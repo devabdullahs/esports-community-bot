@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowLeftIcon } from "lucide-react";
+import { CommentsSection } from "@/components/comments/comments-section";
 import { MatchHeader } from "@/components/matches/match-header";
 import { MatchDetailTabs } from "@/components/matches/match-detail-tabs";
 import { LiquipediaAttribution } from "@/components/tournaments/liquipedia-attribution";
@@ -132,6 +133,8 @@ export default async function MatchDetailPage({
           </EmptyHeader>
         </Empty>
       )}
+
+      <CommentsSection target={{ type: "match", id: model.id }} locale={locale} />
 
       <LiquipediaAttribution locale={locale} />
     </main>

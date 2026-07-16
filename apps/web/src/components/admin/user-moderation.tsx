@@ -14,7 +14,9 @@ import { Input } from "@/components/ui/input";
 
 type UserComment = {
   id: number;
-  postId: number;
+  postId: number | null;
+  targetType: "news" | "match";
+  targetId: number;
   body: string;
   status: string;
   createdAt: string;
@@ -153,10 +155,10 @@ export function UserModeration({
                   <Badge variant="outline">{t.comments.filters[c.status as keyof typeof t.comments.filters] ?? c.status}</Badge>
                   <LocalDateTime value={c.createdAt} locale={locale} />
                   <a
-                    href={localizedPath(`/admin/news/${c.postId}`, locale)}
+                    href={localizedPath(c.targetType === "news" ? `/admin/news/${c.targetId}` : `/matches/${c.targetId}`, locale)}
                     className="underline-offset-2 hover:underline"
                   >
-                    {t.comments.postFallback(c.postId)}
+                    {c.targetType === "news" ? t.comments.postFallback(c.targetId) : t.comments.matchFallback(c.targetId)}
                   </a>
                 </div>
                 <p dir="auto" className="bidi-plaintext whitespace-pre-wrap break-words rounded-md bg-muted/40 p-3 text-sm">

@@ -105,7 +105,7 @@ export async function activityForDiscordIds(ids) {
 // see hidden/deleted rows too).
 export async function listCommentsByAuthor(discordUserId, limit = 50) {
   const rows = await all(
-    `SELECT id, post_id, body, status, created_at
+    `SELECT id, post_id, target_type, target_id, body, status, created_at
      FROM post_comments
      WHERE discord_user_id = $1
      ORDER BY created_at DESC, id DESC
@@ -114,7 +114,9 @@ export async function listCommentsByAuthor(discordUserId, limit = 50) {
   );
   return rows.map((row) => ({
     id: row.id,
-    postId: row.post_id,
+    postId: row.post_id ?? null,
+    targetType: row.target_type ?? 'news',
+    targetId: row.target_id ?? row.post_id,
     body: row.body,
     status: row.status,
     createdAt: row.created_at,

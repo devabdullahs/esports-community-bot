@@ -26,7 +26,15 @@ type BlockRow = {
   reason: string | null;
   createdAt: string;
 };
-type AuthorComment = { id: number; postId: number; body: string; status: string; createdAt: string };
+type AuthorComment = {
+  id: number;
+  postId: number | null;
+  targetType: "news" | "match";
+  targetId: number;
+  body: string;
+  status: string;
+  createdAt: string;
+};
 
 export type CommunityUserRow = {
   authUserId: string;
@@ -58,13 +66,7 @@ export type CommunityUserDetail = {
     reason: string | null;
     createdAt: string;
   } | null;
-  comments: Array<{
-    id: number;
-    postId: number;
-    body: string;
-    status: string;
-    createdAt: string;
-  }>;
+  comments: AuthorComment[];
 };
 
 type AuthUserRow = {

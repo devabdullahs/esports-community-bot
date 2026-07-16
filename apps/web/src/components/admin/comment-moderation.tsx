@@ -13,8 +13,9 @@ import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 
 type ModComment = {
   id: number;
-  postId: number;
-  postTitle: string | null;
+  targetType: "news" | "match";
+  targetId: number;
+  targetTitle: string | null;
   parentCommentId: number | null;
   authorName: string;
   authorAvatarUrl: string | null;
@@ -160,10 +161,10 @@ export function CommentModeration({ locale }: { locale: Locale }) {
               <div className="text-xs text-muted-foreground">
                 {t.comments.onPost}{" "}
                 <a
-                  href={localizedPath(`/admin/news/${c.postId}`, locale)}
+                  href={localizedPath(c.targetType === "news" ? `/admin/news/${c.targetId}` : `/matches/${c.targetId}`, locale)}
                   className="underline-offset-2 hover:underline"
                 >
-                  {c.postTitle || t.comments.postFallback(c.postId)}
+                  {c.targetTitle || (c.targetType === "news" ? t.comments.postFallback(c.targetId) : t.comments.matchFallback(c.targetId))}
                 </a>
               </div>
 

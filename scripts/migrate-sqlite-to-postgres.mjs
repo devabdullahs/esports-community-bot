@@ -208,8 +208,8 @@ function postgresSslConfig() {
   return undefined;
 }
 
-function readRows(sqlite, table, columns) {
-  const selectList = columns.map(quoteIdent).join(', ');
+function readRows(sqlite, table, sourceColumns) {
+  const selectList = sourceColumns.map(quoteIdent).join(', ');
   // ORDER BY rowid = creation order, so a self-referential table (post_comments'
   // parent_comment_id -> post_comments.id) always inserts parents before the
   // replies that point at them, and the copy is deterministic across runs.
@@ -227,12 +227,20 @@ async function copyTable({ sqlite, client, table }) {
     return { table, copied: 0, skipped: true, reason: 'missing in PostgreSQL target' };
   }
 
+  const sourceColumnSet = new Set(sourceColumns);
   const columns = sourceColumns.filter((column) => targetColumns.includes(column));
+  // A pre-target SQLite backup can be migrated directly into the current
+  // Postgres schema. Every historical post_comments row is a news target, so
+  // synthesize the two additive columns without mutating the source database.
+  if (table === 'post_comments') {
+    if (targetColumns.includes('target_type') && !sourceColumnSet.has('target_type')) columns.push('target_type');
+    if (targetColumns.includes('target_id') && !sourceColumnSet.has('target_id')) columns.push('target_id');
+  }
   if (!columns.length) {
     return { table, copied: 0, skipped: true, reason: 'no shared columns' };
   }
 
-  const rows = readRows(sqlite, table, columns);
+  const rows = readRows(sqlite, table, sourceColumns);
   if (!rows.length) return { table, copied: 0, skipped: false };
 
   const columnSql = columns.map(quoteIdent).join(', ');
@@ -241,7 +249,11 @@ async function copyTable({ sqlite, client, table }) {
 
   let copied = 0;
   for (const row of rows) {
-    const values = columns.map((column) => row[column]);
+    const values = columns.map((column) => {
+      if (table === 'post_comments' && column === 'target_type') return row.target_type ?? 'news';
+      if (table === 'post_comments' && column === 'target_id') return row.target_id ?? row.post_id;
+      return row[column];
+    });
     const result = await client.query(insertSql, values);
     copied += result.rowCount || 0;
   }

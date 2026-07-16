@@ -43,6 +43,9 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
 
   // Per-comment moderation table is written by moderateComment; also mirror to the
   // dashboard-wide admin audit log.
-  recordAdminAudit(access, `comment.${action}`, String(id), { postId: Number(existing.postId) });
+  recordAdminAudit(access, `comment.${action}`, String(id), {
+    targetType: existing.targetType,
+    targetId: Number(existing.targetId),
+  });
   return NextResponse.json({ comment: { id: Number(updated.id), status: updated.status } });
 }

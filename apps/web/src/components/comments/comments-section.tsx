@@ -59,7 +59,7 @@ type ApiComment = {
 
 type ApiData = {
   comments: ApiComment[];
-  postLike: { count: number; liked: boolean };
+  postLike?: { count: number; liked: boolean };
   viewer: {
     signedIn: boolean;
     verified: boolean;
@@ -70,6 +70,8 @@ type ApiData = {
     avatarUrl: string | null;
   };
 };
+
+export type CommentTarget = { type: "news" | "match"; id: number };
 
 async function api(url: string, method: string, body?: unknown) {
   const res = await fetch(url, {
@@ -82,9 +84,12 @@ async function api(url: string, method: string, body?: unknown) {
   return json;
 }
 
-export function CommentsSection({ postId, locale }: { postId: number; locale: Locale }) {
+export function CommentsSection({ target, locale }: { target: CommentTarget; locale: Locale }) {
   const t = commentsCopy[locale];
   const pathname = usePathname();
+  const commentsUrl = target.type === "news"
+    ? `/api/news/${target.id}/comments`
+    : `/api/matches/${target.id}/comments`;
   const [data, setData] = useState<ApiData | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
@@ -93,12 +98,12 @@ export function CommentsSection({ postId, locale }: { postId: number; locale: Lo
 
   const load = useCallback(async () => {
     try {
-      setData(await api(`/api/news/${postId}/comments`, "GET"));
+      setData(await api(commentsUrl, "GET"));
       setError(null);
     } catch {
       setError(t.loadError);
     }
-  }, [postId, t.loadError]);
+  }, [commentsUrl, t.loadError]);
 
   // load() only setStates inside async continuations (after fetch), not synchronously.
   useEffect(() => {
@@ -112,11 +117,11 @@ export function CommentsSection({ postId, locale }: { postId: number; locale: Lo
   // is component-local and survives the re-render (React reconciles by comment id).
   const refresh = useCallback(async () => {
     try {
-      setData(await api(`/api/news/${postId}/comments`, "GET"));
+      setData(await api(commentsUrl, "GET"));
     } catch {
       // Ignore transient background-refresh failures; the next tick retries.
     }
-  }, [postId]);
+  }, [commentsUrl]);
 
   useEffect(() => {
     const POLL_MS = 15_000;
@@ -145,10 +150,11 @@ export function CommentsSection({ postId, locale }: { postId: number; locale: Lo
   }
 
   async function togglePostLike() {
-    if (!data) return;
+    const postLike = data?.postLike;
+    if (!postLike || target.type !== "news") return;
     await run(async () => {
-      const liked = data.postLike.liked;
-      const summary = await api(`/api/news/${postId}/like`, liked ? "DELETE" : "PUT");
+      const liked = postLike.liked;
+      const summary = await api(`/api/news/${target.id}/like`, liked ? "DELETE" : "PUT");
       setData((d) => (d ? { ...d, postLike: summary } : d));
     });
   }
@@ -176,7 +182,7 @@ export function CommentsSection({ postId, locale }: { postId: number; locale: Lo
 
   async function submit(body: string, parentCommentId: number | null) {
     await run(async () => {
-      await api(`/api/news/${postId}/comments`, "POST", { body, parentCommentId });
+      await api(commentsUrl, "POST", { body, parentCommentId });
       await load();
     });
   }
@@ -228,7 +234,7 @@ export function CommentsSection({ postId, locale }: { postId: number; locale: Lo
           {t.title}
           {total ? <span className="text-base font-normal text-muted-foreground">· {total}</span> : null}
         </h2>
-        {data ? (
+        {data?.postLike ? (
           <Button
             variant={data.postLike.liked ? "default" : "outline"}
             size="sm"

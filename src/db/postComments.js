@@ -1,6 +1,7 @@
 import { all, get, run, transaction } from './client.js';
 
-// Community comments on news posts. Prepared, parameterized statements only.
+// Community comments on durable targets (news posts and matches). Prepared,
+// parameterized statements only.
 // Threads are ONE level: a reply's parent_comment_id and root_comment_id both
 // point at the ROOT comment, and a reply-to-a-reply is re-targeted to that root
 // (see createComment). Deletes are SOFT (status='deleted') so reply threads keep
@@ -20,11 +21,25 @@ function parseJson(value, fallback) {
   }
 }
 
+const COMMENT_TARGET_TYPES = new Set(['news', 'match']);
+
+function commentTarget({ postId, targetType = 'news', targetId = null }) {
+  const type = String(targetType || 'news');
+  const id = Number(targetId ?? postId);
+  if (!COMMENT_TARGET_TYPES.has(type) || !Number.isSafeInteger(id) || id <= 0) return null;
+  return { type, id };
+}
+
 function hydrate(row) {
   if (!row) return null;
+  const targetType = row.target_type ?? 'news';
+  const targetId = row.target_id ?? row.post_id;
   return {
     id: row.id,
-    postId: row.post_id,
+    // Keep postId for established news consumers. It is null for match comments.
+    postId: row.post_id ?? null,
+    targetType,
+    targetId,
     parentCommentId: row.parent_comment_id ?? null,
     rootCommentId: row.root_comment_id ?? null,
     authUserId: row.auth_user_id,
@@ -57,10 +72,12 @@ export function hydrateComment(row) {
  * Insert a comment. For a reply, `parentCommentId` is the comment the user
  * clicked reply on; the real thread root is resolved here (a reply-to-a-reply
  * attaches to the root). Returns { comment } or { error } if the parent is
- * missing / on another post.
+ * missing / on another target.
  */
 export async function createComment({
   postId,
+  targetType = 'news',
+  targetId = null,
   parentCommentId = null,
   authUserId,
   discordUserId,
@@ -71,15 +88,23 @@ export async function createComment({
   flagReason = null,
   autoApproveAt = null,
 }) {
+  const target = commentTarget({ postId, targetType, targetId });
+  if (!target) return { error: 'target-not-found' };
+
   return transaction(async (tx) => {
     let parentId = null;
     let rootId = null;
     if (parentCommentId) {
       const parent = await tx.get(
-        'SELECT id, post_id, root_comment_id, status, discord_user_id FROM post_comments WHERE id = $1',
+        `SELECT id, target_type, target_id, root_comment_id, status, discord_user_id
+           FROM post_comments WHERE id = $1`,
         [parentCommentId],
       );
-      if (!parent || Number(parent.post_id) !== Number(postId)) {
+      if (
+        !parent
+        || parent.target_type !== target.type
+        || Number(parent.target_id) !== target.id
+      ) {
         return { error: 'parent-not-found' };
       }
       // One level: attach under the parent's root (or the parent itself if it is a root).
@@ -104,12 +129,14 @@ export async function createComment({
     const now = nowText();
     const inserted = await tx.get(
       `INSERT INTO post_comments
-         (post_id, parent_comment_id, root_comment_id, auth_user_id, discord_user_id,
+         (post_id, target_type, target_id, parent_comment_id, root_comment_id, auth_user_id, discord_user_id,
           author_name, author_avatar_url, body, status, flag_reason_json, auto_approve_at, created_at, updated_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $12)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $14)
        RETURNING id`,
       [
-        postId,
+        target.type === 'news' ? target.id : null,
+        target.type,
+        target.id,
         parentId,
         rootId,
         authUserId,
@@ -127,12 +154,14 @@ export async function createComment({
   });
 }
 
-// Comments shown on the public post page: the latest `limit` root threads
+// Comments shown on a public target page: the latest `limit` root threads
 // (default 100, hard max 200) plus all their replies.
 // Deleted roots are included so the service can keep a placeholder for threads
 // that still have live replies. `includeAllStatuses` widens the set to hidden +
 // rejected too — the moderator inline view, which shows and can act on those.
-export async function listCommentsForPost(postId, limit = 100, { includeAllStatuses = false } = {}) {
+export async function listCommentsForTarget(targetType, targetId, limit = 100, { includeAllStatuses = false } = {}) {
+  const target = commentTarget({ targetType, targetId });
+  if (!target) return [];
   const cap = Math.max(1, Math.min(200, Number(limit) || 100));
   const statuses = includeAllStatuses
     ? "('visible','pending','hidden','rejected','deleted')"
@@ -140,23 +169,32 @@ export async function listCommentsForPost(postId, limit = 100, { includeAllStatu
   // Fetch the most recent N root comments first.
   const roots = await all(
     `SELECT * FROM post_comments
-     WHERE post_id = $1 AND root_comment_id IS NULL AND status IN ${statuses}
+     WHERE target_type = $1 AND target_id = $2 AND root_comment_id IS NULL AND status IN ${statuses}
      ORDER BY created_at DESC, id DESC
-     LIMIT $2`,
-    [postId, cap],
+     LIMIT $3`,
+    [target.type, target.id, cap],
   );
   if (roots.length === 0) return [];
   // Fetch all replies for those roots.
   const rootIds = roots.map((r) => r.id);
-  const placeholders = rootIds.map((_, i) => `$${i + 2}`).join(',');
+  const placeholders = rootIds.map((_, i) => `$${i + 3}`).join(',');
   const replies = await all(
     `SELECT * FROM post_comments
-     WHERE post_id = $1 AND root_comment_id IN (${placeholders}) AND status IN ${statuses}
+     WHERE target_type = $1 AND target_id = $2 AND root_comment_id IN (${placeholders}) AND status IN ${statuses}
      ORDER BY created_at ASC, id ASC`,
-    [postId, ...rootIds],
+    [target.type, target.id, ...rootIds],
   );
   // Return roots oldest-first within the returned window, then replies.
   return [...roots.reverse(), ...replies].map(hydrate);
+}
+
+// Compatibility entry point for the established news comment callers.
+export function listCommentsForPost(postId, limit = 100, opts = {}) {
+  return listCommentsForTarget('news', postId, limit, opts);
+}
+
+export function listCommentsForMatch(matchId, limit = 100, opts = {}) {
+  return listCommentsForTarget('match', matchId, limit, opts);
 }
 
 // Edit an author's own comment. The caller re-runs moderation and passes the
