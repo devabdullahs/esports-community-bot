@@ -15,6 +15,7 @@ export async function SiteFooter({ analyticsConsentEnabled = false }: { analytic
   const year = new Date().getFullYear();
 
   const explore = [
+    { href: "/live", label: text.common.live },
     { href: "/games", label: text.common.games },
     { href: "/news", label: text.common.news },
     { href: "/media", label: text.common.media },

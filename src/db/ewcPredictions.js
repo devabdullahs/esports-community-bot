@@ -373,6 +373,82 @@ export async function listWeeklyPredictions(weekId) {
   return (await all('SELECT * FROM ewc_weekly_predictions WHERE week_id = $1', [weekId])).map(hydratePrediction);
 }
 
+function emptyWeeklyPickDistribution() {
+  return { locked: false, totalPicks: 0, games: [] };
+}
+
+function weeklyPickDistributionAvailable(week, nowSec) {
+  if (!week) return false;
+  if (week.status === 'closed' || week.status === 'scored') return true;
+  const closeAt = Number(week.close_at);
+  return week.close_at != null && Number.isFinite(closeAt) && nowSec >= closeAt;
+}
+
+// Aggregate output intentionally has no member identifiers. Keeping the lock check
+// here protects every future web/API caller, rather than relying on a UI boundary.
+export async function getWeeklyPickDistribution(guildId, weekId, nowSec = Math.floor(Date.now() / 1000)) {
+  const week = hydrateWeek(
+    await get('SELECT * FROM ewc_prediction_weeks WHERE guild_id = $1 AND id = $2', [guildId, weekId]),
+  );
+  const now = Math.floor(Number(nowSec));
+  if (!weeklyPickDistributionAvailable(week, Number.isFinite(now) ? now : Math.floor(Date.now() / 1000))) {
+    return emptyWeeklyPickDistribution();
+  }
+
+  const games = new Map(
+    (Array.isArray(week.games) ? week.games : [])
+      .filter((game) => game?.key)
+      .map((game) => [
+        String(game.key),
+        {
+          gameKey: String(game.key),
+          game: game.game || String(game.key),
+          event: game.event || null,
+          totalPicks: 0,
+          picks: new Map(),
+        },
+      ]),
+  );
+  const rows = await all('SELECT picks_json FROM ewc_weekly_predictions WHERE guild_id = $1 AND week_id = $2', [
+    guildId,
+    weekId,
+  ]);
+
+  for (const row of rows) {
+    const picks = parseJson(row.picks_json, []);
+    if (!Array.isArray(picks)) continue;
+    for (const entry of picks) {
+      if (!entry || typeof entry !== 'object') continue;
+      const gameKey = String(entry.gameKey || '');
+      const pick = String(entry.pick || '').replace(/\s+/g, ' ').trim();
+      const game = games.get(gameKey);
+      if (!game || !pick) continue;
+      game.totalPicks += 1;
+      game.picks.set(pick, (game.picks.get(pick) || 0) + 1);
+    }
+  }
+
+  const distributionGames = [...games.values()].map((game) => ({
+    gameKey: game.gameKey,
+    game: game.game,
+    event: game.event,
+    totalPicks: game.totalPicks,
+    picks: [...game.picks.entries()]
+      .map(([pick, count]) => ({
+        pick,
+        count,
+        percentage: game.totalPicks ? Math.round((count / game.totalPicks) * 100) : 0,
+      }))
+      .sort((a, b) => b.count - a.count || a.pick.localeCompare(b.pick)),
+  }));
+
+  return {
+    locked: true,
+    totalPicks: distributionGames.reduce((sum, game) => sum + game.totalPicks, 0),
+    games: distributionGames,
+  };
+}
+
 export async function saveWeeklyPredictionScore(guildId, weekId, userId, score, details, client = null) {
   await runWith(
     client,
@@ -694,6 +770,44 @@ export async function overallRankForUser(guildId, season = '2026', userId) {
      FROM ranked_totals
      WHERE user_id = $6`,
     [guildId, season, k, guildId, season, userId],
+  );
+}
+
+// Keep comparison data aggregate-only: callers receive their own competition
+// rank and the participant count, never the other leaderboard rows.
+export async function overallComparisonForUser(guildId, season = '2026', userId) {
+  const k = await overallBestWeekCount(guildId, season);
+  return get(
+    `${overallRankedCte}
+     SELECT COUNT(*) AS total,
+            MAX(CASE WHEN user_id = $6 THEN rank END) AS rank,
+            MAX(CASE WHEN user_id = $6 THEN score END) AS score
+     FROM ranked_totals`,
+    [guildId, season, k, guildId, season, userId],
+  );
+}
+
+export async function latestScoredWeeklyComparisonForUser(guildId, season = '2026', userId) {
+  return get(
+    `WITH latest_week AS (
+       SELECT id, week_key, label
+       FROM ewc_prediction_weeks
+       WHERE guild_id = $1 AND season = $2 AND status = 'scored'
+       ORDER BY scored_at DESC, id DESC
+       LIMIT 1
+     ),
+     ranked AS (
+       SELECT wp.user_id, wp.score, RANK() OVER (ORDER BY wp.score DESC) AS rank
+       FROM ewc_weekly_predictions wp
+       JOIN latest_week w ON w.id = wp.week_id
+       WHERE wp.guild_id = $1 AND wp.score IS NOT NULL
+     )
+     SELECT w.week_key,
+            w.label,
+            (SELECT COUNT(*) FROM ranked) AS total,
+            (SELECT rank FROM ranked WHERE user_id = $3) AS rank
+     FROM latest_week w`,
+    [guildId, season, userId],
   );
 }
 

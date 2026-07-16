@@ -33,6 +33,7 @@ import {
 import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Progress, ProgressLabel, ProgressValue } from "@/components/ui/progress";
+import { PredictionComparisonWidget, type PredictionComparison } from "@/components/dashboard/prediction-comparison-widget";
 import { WebPredictionPicker } from "@/components/predictions/web-prediction-picker";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
@@ -74,6 +75,7 @@ type MePayload = {
     seasonPicks: string[];
     seasonScore: number | null;
     seasonBreakdown: PredictionBreakdown | null;
+    comparison: PredictionComparison;
     showcaseUsername: string;
     recentWeekly: Array<{
       weekKey: string;
@@ -334,6 +336,8 @@ export function ProfileDashboard({
             />
             <StatCard label={text.weeklyWins} value={formatNumber(stats.weeklyWins, locale)} icon={MedalIcon} />
           </section> : null}
+
+          {section !== "predictions" ? <PredictionComparisonWidget comparison={stats.comparison} locale={locale} /> : null}
 
           {section !== "overview" ? <>{actionableRounds.length ? (
             <div className="flex flex-col gap-4">

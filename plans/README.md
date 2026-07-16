@@ -115,7 +115,6 @@ or optimize for guild counts.
 | 090  | Add a secure admin prediction operations center | P3 | L | 082, 084 | DONE (`69d9eb2`) |
 | 091  | Add opt-in public predictor identities | P3 | M | 086 | DONE (`97f91c7`) |
 | 092  | Add Liquipedia match details pages | P2 | L | - | DONE (PR #207) |
-Status values: TODO | IN PROGRESS | DONE | BLOCKED (reason) | REJECTED (rationale) | SUPERSEDED.
 
 ## Prediction-system audit (2026-07-10 @ `2301227`)
 
@@ -211,6 +210,104 @@ and live visual acceptance inside Discord clients. The full repo test/build
 matrix was not rerun because this was a read-only planning audit; every plan
 requires it during execution. Existing untracked Discord image assets were left
 untouched.
+| 093  | Add a safe, responsive 1-9 stream co-stream multiview | P1 | L | 057 | DONE - executor worktree reviewed/APPROVED at `9545779`; 557 bot tests, 604 web tests, lint, build, diff check, repeated seed (9 rows / 9 creator groups), and EN/AR responsive QA passed. Physical Esc-key automation was infrastructure-limited; fullscreen enter/exit and state transitions passed through the on-page control. |
+| 094  | Add browser E2E coverage and a read-only production smoke suite | P1 | L | - | TODO |
+| 095  | Add consent-aware, privacy-safe product analytics | P1 | M-L | 094 | TODO |
+| 096  | Add unified global public search | P2 | M-L | 094 (095 recommended) | TODO |
+| 097  | Add a personalized Today for you overview | P2 | M-L | 094 (095 recommended) | TODO |
+| 098  | Add Discord follow management | P2 | M-L | 094 recommended | TODO |
+| 099  | Add quiet hours, digest delivery, and per-follow notification controls | P2 | L | 098 | TODO |
+| 100  | Show tournament data freshness and source health | P2 | L | 094 (095 recommended) | TODO |
+| 101  | Redesign the login page as a first-class public-site surface | P1 | M | - | DONE - merged in PR #254 (`b272848`); deployed successfully to CranL and production-smoked in EN/AR. |
+| 102  | Add a live match center | P1 | M-L | 094 recommended | DONE |
+| 103  | Add a personal match calendar with iCal export | P1 | M | 097 recommended | TODO |
+| 104  | Add opt-in web push notifications | P1 | L | 099 | TODO |
+| 105  | Show community pick distribution after lock | P1 | M | - | DONE |
+| 106  | Add interactive playoff bracket views | P1 | L | 102 optional | TODO |
+| 107  | Add private prediction mini-leagues | P1 | L | - | TODO |
+| 108  | Add predictor achievements and streak badges | P2 | M | - | TODO |
+| 109  | Add match discussion threads | P2 | M-L | - | TODO |
+| 110  | Add PWA install support and an offline shell | P2 | M | 104 optional | TODO |
+| 111  | Add team and player comparison pages | P2 | M-L | - | TODO |
+| 112  | Add Club Championship standings history charts | P2 | M | 080 | TODO |
+| 113  | Add downloadable web share cards | P2 | M | - | TODO |
+| 114  | Add language and game filters to co-streams | P2 | S-M | 093 | DONE |
+| 115  | Add one-tap match reminders | P2 | M | 099 recommended | TODO |
+| 116  | Add MVP of the day voting | P3 | M-L | - | TODO |
+| 117  | Add moderated highlight and clip submissions | P3 | L | - | TODO |
+| 118  | Add public predictor profile pages | P2 | M | 108 optional | TODO |
+| 119  | Add a compare-me prediction widget | P3 | S-M | - | DONE |
+| 120  | Add scheduled publishing and an editorial calendar | P1 | L | - | TODO |
+| 121  | Add per-post analytics for media channels | P1 | M-L | 095 | TODO |
+| 122  | Add branded graphics generator for admins and media channels | P2 | L | - | TODO |
+| 123  | Add keyword auto-flagging and bulk moderation | P2 | M-L | - | TODO |
+| 124  | Add a cross-post composer for site, Discord, and social drafts | P2 | L | 120 recommended | TODO |
+Status values: TODO | IN PROGRESS | DONE | BLOCKED (reason) | REJECTED (rationale) | SUPERSEDED.
+
+## Feature roadmap dependency notes (plans 102-124)
+
+Recommended first execution batch: **102 Live Match Center**, **105 pick
+distribution**, **120 scheduled publishing**, **121 media analytics** after plan
+095, and **114 co-stream filters**. These are high audience/admin value and
+compose from existing data.
+
+- 104 depends on 099 because push notifications must respect quiet hours and
+  notification controls.
+- 103 is stronger after 097 because the personalized overview should share the
+  same followed-match projection.
+- 106 can ship independently, but 102 gives it a natural entry point.
+- 118 can ship before 108, but the public predictor pages are richer after
+  achievements exist.
+- 124 should follow or at least coordinate with 120 so scheduled publishing and
+  cross-post copy do not create conflicting post lifecycle states.
+
+## Login experience plan (2026-07-15 @ `fe7beec`)
+
+Plan 101 removes the generic standalone login-demo treatment without changing
+the one-provider auth model. It keeps the shared public header/footer, composes
+one responsive shadcn auth card with the real EC mark, localizes every visible
+state for EN/AR, and fail-closes query-provided callback paths before handing
+them to Better Auth. Unit, Playwright, full workspace, PR, and CranL production
+gates are included because this page sits on every protected-route entry path.
+
+## End-user experience roadmap (2026-07-14 @ `1530ee8`)
+
+The operator selected all seven grounded opportunities from the latest website
+and Discord experience review. They are split into independently reviewable
+plans with explicit privacy, authorization, provider-rate, and production-safety
+boundaries. No application source was changed while preparing these plans.
+
+Recommended execution order:
+
+1. **Testing foundation**: execute 094 first. It establishes deterministic
+   browser coverage and a non-mutating production smoke check for every later
+   user-facing change.
+2. **Measurement contract**: execute 095 next. Its closed event allowlist,
+   consent boundary, and admin aggregates make later product decisions
+   measurable without collecting arbitrary metadata or personal data.
+3. **Parallel product work**: 096, 097, 098, and 100 can proceed in parallel
+   after 094. Landing 095 first is recommended so each surface is instrumented
+   through the approved event contract from its first release.
+4. **Notification delivery controls**: execute 099 after 098 because both touch
+   follow identity, Discord command UX, and notification fan-out semantics.
+
+The seven plans are:
+
+- **094**: Playwright desktop/mobile EN/AR journeys, disposable seeded data,
+  CI coverage, and an opt-in read-only production smoke workflow.
+- **095**: consent-aware product events with a closed schema, abuse controls,
+  retention, and aggregate-only admin reporting.
+- **096**: one keyboard/mobile global search across public stored entities,
+  with bounded groups, localized URLs, and no upstream fetches.
+- **097**: a bounded account overview for followed live/upcoming matches,
+  unread notifications, actionable prediction rounds, and relevant co-streams.
+- **098**: ephemeral `/follow` management using canonical local entities and
+  the existing single-guild follow quota/authorization model.
+- **099**: immediate/digest modes, quiet hours, per-follow overrides, paced
+  retryable Discord delivery, and an always-immediate website inbox.
+- **100**: durable sanitized schedule-sync health, coarse public freshness,
+  tournament status UI, and a super-admin operational view without manual
+  provider refresh controls.
 
 ## End-user, predictions, notifications, standings, and public MCP audit (2026-07-10 @ `ba288a1`)
 

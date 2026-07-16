@@ -22,6 +22,7 @@ const {
 const {
   EWC_ROLE_CONNECTION_METADATA,
   buildDiscordRoleConnectionPayload,
+  comparisonPercentile,
   formatShowcaseUsername,
   getEwcRoleConnectionPayload,
   getEwcUserProfileStats,
@@ -109,6 +110,10 @@ test('builds ranked profile stats and Discord role connection payload', async ()
   assert.equal(stats.weeklyWins, 1);
   assert.equal(stats.top3Sweeps, 1);
   assert.deepEqual(stats.topTeams, ['Team Falcons', 'T1', 'Team Vitality']);
+  assert.deepEqual(stats.comparison, {
+    overall: { rank: 1, total: 2, percentile: 50 },
+    latestWeek: { weekKey: 'week-2', label: 'Week 2', rank: 2, total: 2, percentile: 0 },
+  });
 
   const payload = buildDiscordRoleConnectionPayload(stats);
   assert.equal(payload.platform_name, 'EWC Predictions');
@@ -120,6 +125,14 @@ test('builds ranked profile stats and Discord role connection payload', async ()
 
   const activityMetadata = EWC_ROLE_CONNECTION_METADATA.find((entry) => entry.key === 'weeks_scored');
   assert.equal(activityMetadata?.name, 'Weeks Predicted');
+});
+
+test('comparison percentile handles first, middle, last, unranked, and empty leaderboards', () => {
+  assert.equal(comparisonPercentile(1, 5), 80);
+  assert.equal(comparisonPercentile(3, 5), 40);
+  assert.equal(comparisonPercentile(5, 5), 0);
+  assert.equal(comparisonPercentile(null, 5), null);
+  assert.equal(comparisonPercentile(1, 0), null);
 });
 
 test('rolling event points count overall without granting finalized-week achievements', async () => {

@@ -2,8 +2,9 @@ import { all, get } from '../db/client.js';
 import {
   countOverallScored,
   getEwcSeason,
+  latestScoredWeeklyComparisonForUser,
   overallLeaderboard,
-  overallRankForUser,
+  overallComparisonForUser,
   userPredictionProfile,
 } from '../db/ewcPredictions.js';
 import { WEEKLY_TOP_THREE_SWEEP_BONUS } from './ewcPredictions.js';
@@ -75,10 +76,22 @@ async function leaderboardRows(guildId, season, limit = 50, offset = 0) {
   return overallLeaderboard(guildId, season, clampLimit(limit), Math.max(0, Math.floor(Number(offset)) || 0));
 }
 
-async function rankForUser(guildId, season, userId) {
-  const row = await overallRankForUser(guildId, season, userId);
-  if (!row) return { rank: null, score: 0 };
-  return { rank: Number(row.rank), score: Number(row.score || 0) };
+export function comparisonPercentile(rank, total) {
+  const normalizedRank = Math.floor(Number(rank));
+  const normalizedTotal = Math.floor(Number(total));
+  if (!Number.isFinite(normalizedRank) || !Number.isFinite(normalizedTotal)) return null;
+  if (normalizedRank < 1 || normalizedTotal < 1 || normalizedRank > normalizedTotal) return null;
+  return Math.round(((normalizedTotal - normalizedRank) / normalizedTotal) * 100);
+}
+
+function comparisonFromRow(row) {
+  const total = Math.max(0, Math.floor(Number(row?.total || 0)));
+  const rank = row?.rank == null ? null : Number(row.rank);
+  return {
+    rank: Number.isFinite(rank) ? rank : null,
+    total,
+    percentile: comparisonPercentile(rank, total),
+  };
 }
 
 async function weeklyAggregateStats(guildId, season, userId) {
@@ -245,10 +258,14 @@ export function formatShowcaseUsername(stats) {
 }
 
 export async function getEwcUserProfileStats(guildId, season = DEFAULT_EWC_PROFILE_SEASON, userId, { includeHiddenPicks = false } = {}) {
-  const rank = await rankForUser(guildId, season, userId);
-  const weekly = await weeklyAggregateStats(guildId, season, userId);
-  const profile = await userPredictionProfile(guildId, season, userId);
-  const round = await getEwcSeason(guildId, season);
+  const [overallComparison, latestWeeklyComparison, weekly, profile, round] = await Promise.all([
+    overallComparisonForUser(guildId, season, userId),
+    latestScoredWeeklyComparisonForUser(guildId, season, userId),
+    weeklyAggregateStats(guildId, season, userId),
+    userPredictionProfile(guildId, season, userId),
+    getEwcSeason(guildId, season),
+  ]);
+  const overall = comparisonFromRow(overallComparison);
   const hasSeasonPicks = Boolean(profile.season?.picks?.length);
   const canShowSeasonPicks = includeHiddenPicks || seasonPicksVisible(round, profile.season?.score);
   const topTeams = canShowSeasonPicks ? seasonPickTeams(profile) : [];
@@ -257,8 +274,18 @@ export async function getEwcUserProfileStats(guildId, season = DEFAULT_EWC_PROFI
     season,
     userId,
     displayName: memberLabel(userId),
-    rank: rank.rank,
-    overallPoints: rank.score,
+    rank: overall.rank,
+    overallPoints: Number(overallComparison?.score || 0),
+    comparison: {
+      overall,
+      latestWeek: latestWeeklyComparison
+        ? {
+            weekKey: latestWeeklyComparison.week_key,
+            label: latestWeeklyComparison.label || latestWeeklyComparison.week_key,
+            ...comparisonFromRow(latestWeeklyComparison),
+          }
+        : null,
+    },
     weeksPredicted: weekly.weeksPredicted,
     weeksScored: weekly.weeksScored,
     weeklyWins: weekly.weeklyWins,
