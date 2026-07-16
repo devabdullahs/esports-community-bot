@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { ProfileAvatar } from "@/components/profiles/profile-avatar";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -9,7 +10,9 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import type { EwcClubStandingRow } from "@/lib/ewc-club-standings";
+import { clubKeys } from "@/lib/ewc-club-regions";
 import { copy, directionForLocale, formatNumber, type Locale } from "@/lib/i18n";
+import { cn } from "@/lib/utils";
 
 function EligibilityBadge({ row, locale }: { row: EwcClubStandingRow; locale: Locale }) {
   const text = copy[locale].ewcClubStandings.eligibility;
@@ -25,12 +28,17 @@ function EligibilityBadge({ row, locale }: { row: EwcClubStandingRow; locale: Lo
 export function EwcClubStandingsTable({
   rows,
   locale,
+  selectedClub = "",
+  clubHref,
 }: {
   rows: EwcClubStandingRow[];
   locale: Locale;
+  selectedClub?: string;
+  clubHref?: (row: EwcClubStandingRow) => string;
 }) {
   const text = copy[locale].ewcClubStandings;
   const clubsText = copy[locale].ewcClubs;
+  const selectedKeys = new Set(clubKeys(selectedClub));
 
   return (
     <div
@@ -59,8 +67,13 @@ export function EwcClubStandingsTable({
           </TableRow>
         </TableHeader>
         <TableBody>
-          {rows.map((row) => (
-            <TableRow key={`${row.rank ?? "unranked"}-${row.name}`}>
+          {rows.map((row) => {
+            const selected = clubKeys(row.name).some((key) => selectedKeys.has(key));
+            return (
+            <TableRow
+              key={`${row.rank ?? "unranked"}-${row.name}`}
+              className={cn(selected && "bg-muted/50")}
+            >
               <TableCell className="px-4 text-center font-semibold tabular-nums">
                 {row.rank == null ? "-" : formatNumber(row.rank, locale)}
               </TableCell>
@@ -73,9 +86,20 @@ export function EwcClubStandingsTable({
                     fit="contain"
                     className="size-8 shrink-0 border border-border"
                   />
-                  <span className="min-w-0 truncate font-medium" dir="auto">
-                    {row.name}
-                  </span>
+                  {clubHref ? (
+                    <Link
+                      href={clubHref(row)}
+                      aria-current={selected ? "true" : undefined}
+                      className="min-w-0 truncate font-medium hover:underline"
+                      dir="auto"
+                    >
+                      {row.name}
+                    </Link>
+                  ) : (
+                    <span className="min-w-0 truncate font-medium" dir="auto">
+                      {row.name}
+                    </span>
+                  )}
                 </div>
               </TableCell>
               <TableCell className="px-4 text-center font-semibold tabular-nums">
@@ -94,7 +118,8 @@ export function EwcClubStandingsTable({
                 <p className="truncate text-sm">{clubsText.regions[row.region]}</p>
               </TableCell>
             </TableRow>
-          ))}
+            );
+          })}
         </TableBody>
       </Table>
     </div>

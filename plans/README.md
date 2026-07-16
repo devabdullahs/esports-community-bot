@@ -220,16 +220,16 @@ untouched.
 | 100  | Show tournament data freshness and source health | P2 | L | 094 (095 recommended) | TODO |
 | 101  | Redesign the login page as a first-class public-site surface | P1 | M | - | DONE - merged in PR #254 (`b272848`); deployed successfully to CranL and production-smoked in EN/AR. |
 | 102  | Add a live match center | P1 | M-L | 094 recommended | DONE |
-| 103  | Add a personal match calendar with iCal export | P1 | M | 097 recommended | TODO |
+| 103  | Add a personal match calendar with iCal export | P1 | M | 097 recommended | DONE |
 | 104  | Add opt-in web push notifications | P1 | L | 099 | TODO |
 | 105  | Show community pick distribution after lock | P1 | M | - | DONE |
-| 106  | Add interactive playoff bracket views | P1 | L | 102 optional | TODO |
+| 106  | Add interactive playoff bracket views | P1 | L | 102 optional | DONE |
 | 107  | Add private prediction mini-leagues | P1 | L | - | TODO |
 | 108  | Add predictor achievements and streak badges | P2 | M | - | TODO |
 | 109  | Add match discussion threads | P2 | M-L | - | TODO |
 | 110  | Add PWA install support and an offline shell | P2 | M | 104 optional | TODO |
-| 111  | Add team and player comparison pages | P2 | M-L | - | TODO |
-| 112  | Add Club Championship standings history charts | P2 | M | 080 | TODO |
+| 111  | Add team and player comparison pages | P2 | M-L | - | DONE |
+| 112  | Add Club Championship standings history charts | P2 | M | 080 | DONE |
 | 113  | Add downloadable web share cards | P2 | M | - | TODO |
 | 114  | Add language and game filters to co-streams | P2 | S-M | 093 | DONE |
 | 115  | Add one-tap match reminders | P2 | M | 099 recommended | TODO |

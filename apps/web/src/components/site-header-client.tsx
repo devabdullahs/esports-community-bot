@@ -2,6 +2,7 @@
 
 import {
   BellIcon,
+  ArrowLeftRightIcon,
   ChevronDownIcon,
   CrownIcon,
   Gamepad2Icon,
@@ -140,6 +141,7 @@ export function SiteHeaderClient({
     { href: "/tournaments", label: text.common.tournaments, icon: TrophyIcon },
     { href: "/teams", label: text.common.teams, icon: UsersIcon },
     { href: "/players", label: text.common.players, icon: UserRoundIcon },
+    { href: "/compare", label: text.profiles.compare, icon: ArrowLeftRightIcon },
   ];
   const liveLink: Destination = { href: "/live", label: text.common.live, icon: RadioIcon };
   // Co-streams stays top-level because it spans every tracked event and carries

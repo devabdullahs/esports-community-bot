@@ -447,6 +447,13 @@ db.exec(`
     updated_at      TEXT NOT NULL DEFAULT (datetime('now'))
   );
 
+  CREATE TABLE IF NOT EXISTS ewc_club_championship_snapshot_history (
+    season          TEXT NOT NULL,
+    fetched_at      TEXT NOT NULL,
+    standings_json  TEXT NOT NULL,
+    PRIMARY KEY (season, fetched_at)
+  );
+
   CREATE INDEX IF NOT EXISTS idx_ewc_weekly_predictions_week
     ON ewc_weekly_predictions(week_id, score DESC);
   CREATE INDEX IF NOT EXISTS idx_ewc_prediction_reminders_claim
@@ -457,6 +464,8 @@ db.exec(`
     ON ewc_season_predictions(guild_id, season, score DESC);
   CREATE INDEX IF NOT EXISTS idx_ewc_club_championship_snapshots_fetched
     ON ewc_club_championship_snapshots(fetched_at DESC);
+  CREATE INDEX IF NOT EXISTS idx_ewc_club_championship_snapshot_history_season_fetched
+    ON ewc_club_championship_snapshot_history(season, fetched_at DESC);
 
   CREATE TABLE IF NOT EXISTS ewc_profile_links (
     auth_user_id     TEXT NOT NULL,

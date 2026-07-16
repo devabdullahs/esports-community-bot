@@ -14,8 +14,10 @@ process.env.LOG_LEVEL = 'error';
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const { db, closeDb } = await import('../src/db/index.js');
 const {
+  EWC_CLUB_CHAMPIONSHIP_HISTORY_MAX_SNAPSHOTS,
   getEwcClubChampionshipSnapshot,
   getLatestEwcClubChampionshipSnapshot,
+  listEwcClubChampionshipSnapshotHistory,
   upsertEwcClubChampionshipSnapshot,
 } = await import('../src/db/ewcClubChampionshipSnapshots.js');
 
@@ -57,6 +59,10 @@ test('schema is mirrored in SQLite and Postgres', () => {
   const sqliteColumns = db.prepare('PRAGMA table_info(ewc_club_championship_snapshots)').all().map((row) => row.name);
   assert.deepEqual(sqliteColumns, expected);
 
+  const historyExpected = ['season', 'fetched_at', 'standings_json'];
+  const sqliteHistoryColumns = db.prepare('PRAGMA table_info(ewc_club_championship_snapshot_history)').all().map((row) => row.name);
+  assert.deepEqual(sqliteHistoryColumns, historyExpected);
+
   const postgresSchema = readFileSync(join(root, 'scripts/postgres/schema.sql'), 'utf8');
   const create = postgresSchema.match(
     /CREATE TABLE IF NOT EXISTS ewc_club_championship_snapshots\s*\(([\s\S]*?)\);/i,
@@ -64,6 +70,13 @@ test('schema is mirrored in SQLite and Postgres', () => {
   assert.ok(create, 'Postgres snapshot table exists');
   for (const column of expected) assert.match(create[1], new RegExp(`\\b${column}\\b`, 'i'));
   assert.match(postgresSchema, /idx_ewc_club_championship_snapshots_fetched/i);
+
+  const historyCreate = postgresSchema.match(
+    /CREATE TABLE IF NOT EXISTS ewc_club_championship_snapshot_history\s*\(([\s\S]*?)\);/i,
+  );
+  assert.ok(historyCreate, 'Postgres snapshot history table exists');
+  for (const column of historyExpected) assert.match(historyCreate[1], new RegExp(`\\b${column}\\b`, 'i'));
+  assert.match(postgresSchema, /idx_ewc_club_championship_snapshot_history_season_fetched/i);
 });
 
 test('inserts, atomically replaces, and keeps seasons independent', async () => {
@@ -82,6 +95,31 @@ test('inserts, atomically replaces, and keeps seasons independent', async () => 
   assert.equal(current.fetchedAt, '2026-07-10T13:00:00.000Z');
   assert.equal(previous.standings[0].team, 'Old Guard');
   assert.equal((await getLatestEwcClubChampionshipSnapshot()).season, '2026');
+});
+
+test('keeps a bounded, chronologically ordered history from stored snapshots', async () => {
+  const season = '2040';
+  const total = EWC_CLUB_CHAMPIONSHIP_HISTORY_MAX_SNAPSHOTS + 2;
+  for (let index = 0; index < total; index += 1) {
+    await upsertEwcClubChampionshipSnapshot(
+      snapshot(season, 'Team Falcons', index, new Date(Date.UTC(2040, 0, 1, 0, index)).toISOString()),
+    );
+  }
+
+  const history = await listEwcClubChampionshipSnapshotHistory(season, {
+    limit: EWC_CLUB_CHAMPIONSHIP_HISTORY_MAX_SNAPSHOTS,
+  });
+  assert.equal(history.length, EWC_CLUB_CHAMPIONSHIP_HISTORY_MAX_SNAPSHOTS);
+  assert.equal(history[0].standings[0].points, 2);
+  assert.equal(history.at(-1).standings[0].points, total - 1);
+
+  await upsertEwcClubChampionshipSnapshot(
+    snapshot(season, 'Falcons', total, history.at(-1).fetchedAt),
+  );
+  const duplicateTimestamp = await listEwcClubChampionshipSnapshotHistory(season, { limit: 1 });
+  assert.equal(duplicateTimestamp.length, 1);
+  assert.equal(duplicateTimestamp[0].standings[0].team, 'Falcons');
+  assert.equal(duplicateTimestamp[0].standings[0].points, total);
 });
 
 test('round-trips the authoritative clubs directory and preserves it across standings-only refreshes', async () => {

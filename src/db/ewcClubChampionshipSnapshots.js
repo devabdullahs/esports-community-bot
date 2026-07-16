@@ -1,6 +1,8 @@
-import { get, run } from './client.js';
+import { all, get, transaction } from './client.js';
 
 const VALID_ELIGIBILITY = new Set(['champion', 'prize']);
+export const EWC_CLUB_CHAMPIONSHIP_HISTORY_MAX_SNAPSHOTS = 180;
+export const EWC_CLUB_CHAMPIONSHIP_HISTORY_DEFAULT_LIMIT = 60;
 
 function cleanSeason(value) {
   const season = String(value ?? '').trim();
@@ -132,6 +134,30 @@ function toSnapshot(row) {
   };
 }
 
+function toHistorySnapshot(row) {
+  if (!row) return null;
+  const standings = parseJsonArray(row.standings_json);
+  if (!standings?.length) return null;
+  return {
+    season: row.season,
+    standings,
+    fetchedAt: row.fetched_at,
+  };
+}
+
+function cleanHistoryLimit(value) {
+  const limit = Number(value ?? EWC_CLUB_CHAMPIONSHIP_HISTORY_DEFAULT_LIMIT);
+  if (!Number.isInteger(limit) || limit < 1) {
+    throw new TypeError('Club Championship history limit must be a positive integer.');
+  }
+  return Math.min(limit, EWC_CLUB_CHAMPIONSHIP_HISTORY_MAX_SNAPSHOTS);
+}
+
+function cleanHistorySince(value) {
+  if (value == null || value === '') return null;
+  return cleanTimestamp(value, 'history since');
+}
+
 export function validateEwcClubChampionshipSnapshot(input) {
   if (!input || typeof input !== 'object') {
     throw new TypeError('Club Championship snapshot input is required.');
@@ -157,32 +183,52 @@ export async function upsertEwcClubChampionshipSnapshot(input) {
   const prizepoolJson = JSON.stringify(snapshot.prizepool);
   const clubsJson = snapshot.clubs ? JSON.stringify(snapshot.clubs) : null;
   const updatedAt = new Date().toISOString();
-  await run(
-    `INSERT INTO ewc_club_championship_snapshots
-       (season, source_url, standings_json, prizepool_json, clubs_source_url, clubs_json,
-        clubs_fetched_at, fetched_at, updated_at)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-     ON CONFLICT (season) DO UPDATE SET
-       source_url = excluded.source_url,
-       standings_json = excluded.standings_json,
-       prizepool_json = excluded.prizepool_json,
-       clubs_source_url = COALESCE(excluded.clubs_source_url, ewc_club_championship_snapshots.clubs_source_url),
-       clubs_json = COALESCE(excluded.clubs_json, ewc_club_championship_snapshots.clubs_json),
-       clubs_fetched_at = COALESCE(excluded.clubs_fetched_at, ewc_club_championship_snapshots.clubs_fetched_at),
-       fetched_at = excluded.fetched_at,
-       updated_at = excluded.updated_at`,
-    [
-      snapshot.season,
-      snapshot.sourceUrl,
-      standingsJson,
-      prizepoolJson,
-      snapshot.clubsSourceUrl,
-      clubsJson,
-      snapshot.clubsFetchedAt,
-      snapshot.fetchedAt,
-      updatedAt,
-    ],
-  );
+  await transaction(async (tx) => {
+    await tx.run(
+      `INSERT INTO ewc_club_championship_snapshots
+         (season, source_url, standings_json, prizepool_json, clubs_source_url, clubs_json,
+          clubs_fetched_at, fetched_at, updated_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+       ON CONFLICT (season) DO UPDATE SET
+         source_url = excluded.source_url,
+         standings_json = excluded.standings_json,
+         prizepool_json = excluded.prizepool_json,
+         clubs_source_url = COALESCE(excluded.clubs_source_url, ewc_club_championship_snapshots.clubs_source_url),
+         clubs_json = COALESCE(excluded.clubs_json, ewc_club_championship_snapshots.clubs_json),
+         clubs_fetched_at = COALESCE(excluded.clubs_fetched_at, ewc_club_championship_snapshots.clubs_fetched_at),
+         fetched_at = excluded.fetched_at,
+         updated_at = excluded.updated_at`,
+      [
+        snapshot.season,
+        snapshot.sourceUrl,
+        standingsJson,
+        prizepoolJson,
+        snapshot.clubsSourceUrl,
+        clubsJson,
+        snapshot.clubsFetchedAt,
+        snapshot.fetchedAt,
+        updatedAt,
+      ],
+    );
+    await tx.run(
+      `INSERT INTO ewc_club_championship_snapshot_history (season, fetched_at, standings_json)
+       VALUES ($1, $2, $3)
+       ON CONFLICT (season, fetched_at) DO UPDATE SET standings_json = excluded.standings_json`,
+      [snapshot.season, snapshot.fetchedAt, standingsJson],
+    );
+    await tx.run(
+      `DELETE FROM ewc_club_championship_snapshot_history
+        WHERE season = $1
+          AND fetched_at NOT IN (
+            SELECT fetched_at
+              FROM ewc_club_championship_snapshot_history
+             WHERE season = $1
+             ORDER BY fetched_at DESC
+             LIMIT $2
+          )`,
+      [snapshot.season, EWC_CLUB_CHAMPIONSHIP_HISTORY_MAX_SNAPSHOTS],
+    );
+  });
   return getEwcClubChampionshipSnapshot(snapshot.season);
 }
 
@@ -209,4 +255,24 @@ export async function getLatestEwcClubChampionshipSnapshot() {
     [],
   );
   return toSnapshot(row);
+}
+
+/**
+ * @param {string} season
+ * @param {{ since?: string | Date | null, limit?: number }} [options]
+ */
+export async function listEwcClubChampionshipSnapshotHistory(
+  season,
+  { since = null, limit = EWC_CLUB_CHAMPIONSHIP_HISTORY_DEFAULT_LIMIT } = {},
+) {
+  const rows = await all(
+    `SELECT season, standings_json, fetched_at
+       FROM ewc_club_championship_snapshot_history
+      WHERE season = $1
+        AND ($2 IS NULL OR fetched_at >= $2)
+      ORDER BY fetched_at DESC
+      LIMIT $3`,
+    [cleanSeason(season), cleanHistorySince(since), cleanHistoryLimit(limit)],
+  );
+  return rows.map(toHistorySnapshot).filter(Boolean).reverse();
 }

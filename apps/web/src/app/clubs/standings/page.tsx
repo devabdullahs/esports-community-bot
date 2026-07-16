@@ -7,6 +7,7 @@ import {
   SearchIcon,
   TrophyIcon,
 } from "lucide-react";
+import { EwcClubHistoryChart } from "@/components/clubs/ewc-club-history-chart";
 import { EwcClubStandingsTable } from "@/components/clubs/ewc-club-standings-table";
 import { EwcClubViewSwitcher } from "@/components/clubs/ewc-club-view-switcher";
 import { LocalDateTime } from "@/components/local-date-time";
@@ -25,8 +26,12 @@ import {
 import { Input } from "@/components/ui/input";
 import {
   filterEwcClubStandings,
-  getEwcClubStandingsCached,
+  getStoredEwcClubStandingsCached,
 } from "@/lib/ewc-club-standings";
+import {
+  cleanEwcClubHistorySelection,
+  getEwcClubHistoryCached,
+} from "@/lib/ewc-club-history";
 import {
   CLUB_REGION_IDS,
   type ClubRegionId,
@@ -51,10 +56,14 @@ function cleanRegion(value: string | string[] | undefined): ClubRegionId {
     : "all";
 }
 
-function standingsHref(locale: Locale, { region, q }: { region: ClubRegionId; q: string }) {
+function standingsHref(
+  locale: Locale,
+  { region, q, club }: { region: ClubRegionId; q: string; club: string },
+) {
   const params = new URLSearchParams();
   if (region !== "all") params.set("region", region);
   if (q) params.set("q", q);
+  if (club) params.set("club", club);
   const query = params.toString();
   return `${localizedPath("/clubs/standings", locale)}${query ? `?${query}` : ""}`;
 }
@@ -79,15 +88,17 @@ export async function generateMetadata({
 export default async function EwcClubStandingsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ region?: string | string[]; q?: string | string[] }>;
+  searchParams: Promise<{ region?: string | string[]; q?: string | string[]; club?: string | string[] }>;
 }) {
   const [params, locale, data] = await Promise.all([
     searchParams,
     getRequestLocale(),
-    getEwcClubStandingsCached(),
+    getStoredEwcClubStandingsCached(),
   ]);
   const region = cleanRegion(params.region);
   const q = cleanQuery(params.q);
+  const club = cleanEwcClubHistorySelection(params.club);
+  const history = await getEwcClubHistoryCached(data.season, club);
   const rows = filterEwcClubStandings(data.rows, { region, q });
   const text = copy[locale].ewcClubStandings;
   const clubsText = copy[locale].ewcClubs;
@@ -171,6 +182,7 @@ export default async function EwcClubStandingsPage({
                 />
               </div>
               {region !== "all" ? <input type="hidden" name="region" value={region} /> : null}
+              {club ? <input type="hidden" name="club" value={club} /> : null}
               <Button type="submit" variant="outline" className="h-10">
                 <SearchIcon data-icon="inline-start" />
                 {text.searchAction}
@@ -181,7 +193,7 @@ export default async function EwcClubStandingsPage({
               {CLUB_REGION_IDS.map((id) => (
                 <Button
                   key={id}
-                  render={<Link href={standingsHref(locale, { region: id, q })} />}
+                  render={<Link href={standingsHref(locale, { region: id, q, club })} />}
                   nativeButton={false}
                   variant={region === id ? "default" : "outline"}
                   size="sm"
@@ -201,7 +213,15 @@ export default async function EwcClubStandingsPage({
           </section>
 
           {rows.length ? (
-            <EwcClubStandingsTable rows={rows} locale={locale} />
+            <>
+              <EwcClubStandingsTable
+                rows={rows}
+                locale={locale}
+                selectedClub={club}
+                clubHref={(row) => standingsHref(locale, { region, q, club: row.name })}
+              />
+              <EwcClubHistoryChart history={history} locale={locale} />
+            </>
           ) : (
             <Empty className="border border-dashed border-border">
               <EmptyHeader>

@@ -17,7 +17,10 @@ import {
   markNotificationRead as _markRead,
   upsertNotificationPrefs as _upsertPrefs,
 } from "@bot/db/userNotifications.js";
-import { listPersonalizedMatchesForUser as _listPersonalizedMatches } from "@bot/db/userFollows.js";
+import {
+  listPersonalizedMatchesForUser as _listPersonalizedMatches,
+  listUpcomingFollowedMatchesForUser as _listUpcomingFollowedMatches,
+} from "@bot/db/userFollows.js";
 import { getDiscordAccountForAuthUser } from "@/lib/auth-database";
 import { getOptionalSession } from "@/lib/session";
 
@@ -76,6 +79,17 @@ export type PersonalizedMatchRow = {
   scheduledAt: number | null;
 };
 
+export type CalendarMatchRow = {
+  id: number;
+  tournamentId: number;
+  tournamentName: string;
+  game: string;
+  teamA: string;
+  teamB: string;
+  status: "scheduled";
+  scheduledAt: number;
+};
+
 const upsertFollow = _upsertFollow as unknown as (input: {
   discordUserId: string;
   entityType: FollowEntityType;
@@ -116,6 +130,10 @@ const listPersonalizedMatches = _listPersonalizedMatches as unknown as (
   discordUserId: string,
   opts: { nowSec: number; liveLimit?: number; upcomingLimit?: number; upcomingWindowSec?: number },
 ) => Promise<{ live: PersonalizedMatchRow[]; upcoming: PersonalizedMatchRow[] }>;
+const listUpcomingFollowedMatches = _listUpcomingFollowedMatches as unknown as (
+  discordUserId: string,
+  opts: { nowSec: number; limit?: number },
+) => Promise<CalendarMatchRow[]>;
 const countUnread = _countUnread as unknown as (discordUserId: string) => Promise<number>;
 const markRead = _markRead as unknown as (discordUserId: string, id: number) => Promise<number>;
 const markAllRead = _markAllRead as unknown as (discordUserId: string) => Promise<number>;
@@ -144,6 +162,7 @@ export {
   listNotifications,
   listUnreadNotifications,
   listPersonalizedMatches,
+  listUpcomingFollowedMatches,
   countUnread,
   markRead,
   markAllRead,

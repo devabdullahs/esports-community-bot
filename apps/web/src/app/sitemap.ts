@@ -29,6 +29,7 @@ const STATIC_PATHS = [
   "/tournaments/archive",
   "/teams",
   "/players",
+  "/compare",
   "/clubs",
   "/clubs/standings",
   "/predictions",

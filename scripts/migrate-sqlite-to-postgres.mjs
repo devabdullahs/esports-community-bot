@@ -38,6 +38,7 @@ const appTables = [
   'ewc_prediction_seasons',
   'ewc_season_predictions',
   'ewc_club_championship_snapshots',
+  'ewc_club_championship_snapshot_history',
   'ewc_profile_links',
   'ewc_public_predictor_identities',
   'ewc_news_posts',
