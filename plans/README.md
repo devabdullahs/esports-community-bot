@@ -224,18 +224,18 @@ untouched.
 | 104  | Add opt-in web push notifications | P1 | L | 099 | TODO |
 | 105  | Show community pick distribution after lock | P1 | M | - | DONE |
 | 106  | Add interactive playoff bracket views | P1 | L | 102 optional | DONE |
-| 107  | Add private prediction mini-leagues | P1 | L | - | TODO |
-| 108  | Add predictor achievements and streak badges | P2 | M | - | TODO |
+| 107  | Add private prediction mini-leagues | P1 | L | - | DONE |
+| 108  | Add predictor achievements and streak badges | P2 | M | - | DONE |
 | 109  | Add match discussion threads | P2 | M-L | - | TODO |
 | 110  | Add PWA install support and an offline shell | P2 | M | 104 optional | TODO |
 | 111  | Add team and player comparison pages | P2 | M-L | - | DONE |
 | 112  | Add Club Championship standings history charts | P2 | M | 080 | DONE |
-| 113  | Add downloadable web share cards | P2 | M | - | TODO |
+| 113  | Add downloadable web share cards | P2 | M | - | DONE |
 | 114  | Add language and game filters to co-streams | P2 | S-M | 093 | DONE |
 | 115  | Add one-tap match reminders | P2 | M | 099 recommended | TODO |
 | 116  | Add MVP of the day voting | P3 | M-L | - | TODO |
 | 117  | Add moderated highlight and clip submissions | P3 | L | - | TODO |
-| 118  | Add public predictor profile pages | P2 | M | 108 optional | TODO |
+| 118  | Add public predictor profile pages | P2 | M | 108 optional | DONE |
 | 119  | Add a compare-me prediction widget | P3 | S-M | - | DONE |
 | 120  | Add scheduled publishing and an editorial calendar | P1 | L | - | TODO |
 | 121  | Add per-post analytics for media channels | P1 | M-L | 095 | TODO |

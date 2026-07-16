@@ -12,11 +12,13 @@ import {
   useReactTable,
 } from "@tanstack/react-table";
 import { ArrowDownUpIcon, SearchIcon } from "lucide-react";
+import Link from "next/link";
 import { useMemo, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { PredictionAchievementBadges } from "@/components/predictions/prediction-achievement-badges";
 import {
   Table,
   TableBody,
@@ -28,6 +30,7 @@ import {
 import {
   copy,
   formatNumber,
+  localizedPath,
   type Locale,
 } from "@/lib/i18n";
 
@@ -35,10 +38,12 @@ export type LeaderboardRow = {
   rank: number;
   displayName: string;
   avatarUrl?: string | null;
+  profileHref?: string | null;
   overallPoints: number;
   weeksScored: number;
   weeklyWins: number;
   top3Sweeps: number;
+  achievementIds?: string[];
   topTeams: string[];
 };
 
@@ -78,15 +83,28 @@ export function LeaderboardTable({
       {
         accessorKey: "displayName",
         header: text.common.member,
-        cell: ({ row }) => (
-          <div className="flex min-w-0 items-center gap-2 sm:min-w-44">
+        cell: ({ row }) => {
+          const member = (
+            <div className="flex min-w-0 items-center gap-2 sm:min-w-44">
             <Avatar size="sm">
               <AvatarImage src={row.original.avatarUrl || undefined} alt="" />
               <AvatarFallback>{row.original.displayName.slice(0, 2).toUpperCase()}</AvatarFallback>
             </Avatar>
-            <span className="min-w-0 truncate font-medium">{row.original.displayName}</span>
-          </div>
-        ),
+            <div className="min-w-0">
+              <span className="block truncate font-medium">{row.original.displayName}</span>
+              <PredictionAchievementBadges achievementIds={row.original.achievementIds} locale={locale} className="mt-1" />
+            </div>
+            </div>
+          );
+          return row.original.profileHref ? (
+            <Link
+              href={localizedPath(row.original.profileHref, locale)}
+              className="block rounded-sm outline-none transition-colors hover:text-primary focus-visible:ring-2 focus-visible:ring-ring"
+            >
+              {member}
+            </Link>
+          ) : member;
+        },
       },
       {
         accessorKey: "overallPoints",

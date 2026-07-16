@@ -2,6 +2,8 @@ import { randomUUID } from 'node:crypto';
 
 import { all, get, run } from './client.js';
 
+const PUBLIC_PREDICTOR_ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 function hydrate(row) {
   if (!row) return null;
   return {
@@ -111,6 +113,14 @@ function publicDiscordAvatarUrl(value) {
   }
 }
 
+function fallbackPublicDisplayName(discordUserId) {
+  return `Member ${String(discordUserId).slice(-4)}`;
+}
+
+export function isPublicEwcPredictorId(value) {
+  return typeof value === 'string' && PUBLIC_PREDICTOR_ID_PATTERN.test(value);
+}
+
 export async function upsertPublicEwcPredictorIdentity({ discordUserId, displayName, avatarUrl = null }) {
   const safeName = publicDisplayName(displayName);
   if (!discordUserId || !safeName) return null;
@@ -119,7 +129,9 @@ export async function upsertPublicEwcPredictorIdentity({ discordUserId, displayN
     'SELECT avatar_token FROM ewc_public_predictor_identities WHERE discord_user_id = $1',
     [discordUserId],
   );
-  const avatarToken = safeAvatar ? String(existing?.avatar_token || randomUUID()) : null;
+  // This opaque UUID is also the stable public predictor route id. Keep it
+  // when an avatar is removed so old profile links do not break.
+  const avatarToken = String(existing?.avatar_token || randomUUID());
   const now = nowText();
   await run(
     `INSERT INTO ewc_public_predictor_identities
@@ -132,7 +144,29 @@ export async function upsertPublicEwcPredictorIdentity({ discordUserId, displayN
        updated_at = excluded.updated_at`,
     [discordUserId, safeName, safeAvatar, avatarToken, now],
   );
-  return { displayName: safeName, avatarToken };
+  return { displayName: safeName, avatarToken, hasAvatar: Boolean(safeAvatar) };
+}
+
+// Internal lookup only: callers use the returned Discord id to build a
+// separately projected public response and must not serialize it directly.
+export async function getEwcPredictorDiscordUserIdByPublicId(publicId) {
+  if (!isPublicEwcPredictorId(publicId)) return null;
+  const row = await get(
+    `SELECT discord_user_id
+     FROM (
+       SELECT discord_user_id, 1 AS priority
+       FROM ewc_profile_links
+       WHERE public_avatar_token = $1
+       UNION ALL
+       SELECT discord_user_id, 2 AS priority
+       FROM ewc_public_predictor_identities
+       WHERE avatar_token = $2
+     ) identities
+     ORDER BY priority
+     LIMIT 1`,
+    [publicId, publicId],
+  );
+  return typeof row?.discord_user_id === 'string' ? row.discord_user_id : null;
 }
 
 // Internal-only batch lookup for a leaderboard page. Callers must never pass
@@ -142,7 +176,7 @@ export async function publicEwcProfileIdentitiesByDiscordUserIds(discordUserIds)
   if (!ids.length) return new Map();
   const placeholders = ids.map((_id, index) => `$${index + 1}`).join(', ');
   const publicRows = await all(
-    `SELECT discord_user_id, display_name, avatar_token
+    `SELECT discord_user_id, display_name, avatar_url, avatar_token
      FROM ewc_public_predictor_identities
      WHERE discord_user_id IN (${placeholders})`,
     ids,
@@ -173,14 +207,19 @@ export async function publicEwcProfileIdentitiesByDiscordUserIds(discordUserIds)
   const identities = new Map(
     publicRows.map((row) => [
       row.discord_user_id,
-      { displayName: publicDisplayName(row.display_name), avatarToken: row.avatar_token ? String(row.avatar_token) : null },
+      {
+        displayName: publicDisplayName(row.display_name),
+        avatarToken: row.avatar_token ? String(row.avatar_token) : null,
+        hasAvatar: Boolean(publicDiscordAvatarUrl(row.avatar_url)),
+      },
     ]),
   );
+  const publicRowsByDiscordUserId = new Map(publicRows.map((row) => [row.discord_user_id, row]));
   for (const row of rows) {
     const displayName = publicDisplayName(row.auth_display_name) || publicDisplayName(row.public_display_name);
     if (!displayName) continue;
     const avatarUrl = publicDiscordAvatarUrl(row.auth_avatar_url) || publicDiscordAvatarUrl(row.public_avatar_url);
-    const avatarToken = avatarUrl ? String(row.public_avatar_token || randomUUID()) : null;
+    const avatarToken = String(row.public_avatar_token || randomUUID());
     if (!row.public_identity_enabled || row.public_display_name !== displayName || row.public_avatar_url !== avatarUrl || row.public_avatar_token !== avatarToken) {
       const now = nowText();
       await run(
@@ -195,7 +234,18 @@ export async function publicEwcProfileIdentitiesByDiscordUserIds(discordUserIds)
         [displayName, avatarUrl, avatarToken, now, row.discord_user_id],
       );
     }
-    identities.set(row.discord_user_id, { displayName, avatarToken });
+    identities.set(row.discord_user_id, { displayName, avatarToken, hasAvatar: Boolean(avatarUrl) });
+  }
+  for (const discordUserId of ids) {
+    const existing = identities.get(discordUserId);
+    if (existing?.avatarToken) continue;
+    const publicRow = publicRowsByDiscordUserId.get(discordUserId);
+    const identity = await upsertPublicEwcPredictorIdentity({
+      discordUserId,
+      displayName: existing?.displayName || fallbackPublicDisplayName(discordUserId),
+      avatarUrl: publicRow?.avatar_url || null,
+    });
+    if (identity) identities.set(discordUserId, identity);
   }
   return identities;
 }

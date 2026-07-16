@@ -13,6 +13,7 @@ import { DateTime } from "@/components/date-time";
 import { PartnerPlacement } from "@/components/partners/partner-placement";
 import { PickDistributionPanel } from "@/components/predictions/pick-distribution";
 import { PredictionPickerEntry } from "@/components/predictions/prediction-picker-entry";
+import { PredictionMiniLeagues } from "@/components/predictions/prediction-mini-leagues";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -216,6 +217,8 @@ export default async function PredictionsPage() {
       </Card>
 
       <PredictionPickerEntry locale={locale} />
+
+      <PredictionMiniLeagues locale={locale} compact />
 
       {status.upcomingRounds.length || status.awaitingRounds.length ? (
         <section className="flex flex-col gap-4" aria-label={t.currentRound}>

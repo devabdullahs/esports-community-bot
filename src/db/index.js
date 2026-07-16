@@ -435,6 +435,26 @@ db.exec(`
     PRIMARY KEY (guild_id, season, user_id)
   );
 
+  -- Private, member-scoped views of the official prediction leaderboard.
+  -- Invite codes are high-entropy random values and are only exposed to owners.
+  CREATE TABLE IF NOT EXISTS ewc_prediction_leagues (
+    id              TEXT PRIMARY KEY,
+    guild_id        TEXT NOT NULL,
+    season          TEXT NOT NULL,
+    name            TEXT NOT NULL,
+    owner_user_id   TEXT NOT NULL,
+    invite_code     TEXT NOT NULL UNIQUE,
+    created_at      TEXT NOT NULL DEFAULT (datetime('now')),
+    archived_at     TEXT
+  );
+
+  CREATE TABLE IF NOT EXISTS ewc_prediction_league_members (
+    league_id       TEXT NOT NULL REFERENCES ewc_prediction_leagues(id) ON DELETE CASCADE,
+    user_id         TEXT NOT NULL,
+    joined_at       TEXT NOT NULL DEFAULT (datetime('now')),
+    PRIMARY KEY (league_id, user_id)
+  );
+
   CREATE TABLE IF NOT EXISTS ewc_club_championship_snapshots (
     season          TEXT PRIMARY KEY,
     source_url      TEXT NOT NULL,
@@ -462,6 +482,10 @@ db.exec(`
     ON ewc_prediction_operations(status, lease_expires_at, requested_at);
   CREATE INDEX IF NOT EXISTS idx_ewc_season_predictions_season
     ON ewc_season_predictions(guild_id, season, score DESC);
+  CREATE INDEX IF NOT EXISTS idx_ewc_prediction_leagues_scope
+    ON ewc_prediction_leagues(guild_id, season, archived_at, created_at DESC);
+  CREATE INDEX IF NOT EXISTS idx_ewc_prediction_league_members_user
+    ON ewc_prediction_league_members(user_id, league_id);
   CREATE INDEX IF NOT EXISTS idx_ewc_club_championship_snapshots_fetched
     ON ewc_club_championship_snapshots(fetched_at DESC);
   CREATE INDEX IF NOT EXISTS idx_ewc_club_championship_snapshot_history_season_fetched

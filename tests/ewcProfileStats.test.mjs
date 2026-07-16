@@ -109,6 +109,14 @@ test('builds ranked profile stats and Discord role connection payload', async ()
   assert.equal(stats.weeksScored, 2);
   assert.equal(stats.weeklyWins, 1);
   assert.equal(stats.top3Sweeps, 1);
+  assert.deepEqual(stats.achievementIds, ['weekly-winner', 'top-ten']);
+  assert.deepEqual(stats.achievementStats, {
+    currentScoringStreak: 2,
+    longestScoringStreak: 2,
+    specialistGame: null,
+    specialistCorrectWinners: 0,
+    scoredWeeks: 2,
+  });
   assert.deepEqual(stats.topTeams, ['Team Falcons', 'T1', 'Team Vitality']);
   assert.deepEqual(stats.comparison, {
     overall: { rank: 1, total: 2, percentile: 50 },
@@ -163,6 +171,7 @@ test('shapes public leaderboard rows', async () => {
   assert.equal(leaderboard.rows[1].userId, undefined);
   assert.equal(leaderboard.rows[1].rank, 2);
   assert.equal(leaderboard.rows[1].weeklyWins, 1);
+  assert.deepEqual(leaderboard.rows[0].achievementIds, ['weekly-winner', 'top-ten']);
 });
 
 test('truncates showcase username to Discord limits', () => {

@@ -38,7 +38,7 @@ const securityHeaders = [
 ];
 
 const nextConfig: NextConfig = {
-  serverExternalPackages: ["better-sqlite3", "pg", "@aws-sdk/client-s3"],
+  serverExternalPackages: ["better-sqlite3", "pg", "@aws-sdk/client-s3", "@napi-rs/canvas"],
   async headers() {
     return [{ source: "/:path*", headers: securityHeaders }];
   },

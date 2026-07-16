@@ -1,4 +1,5 @@
 import type { MetadataRoute } from "next";
+import { listPublicEwcPredictorRouteIds } from "@bot/lib/ewcProfileStats.js";
 import { absoluteUrl } from "@/lib/metadata";
 import { dateTimeIso, localizedPath, type Locale } from "@/lib/i18n";
 import { listGamesCached } from "@/lib/games";
@@ -141,6 +142,18 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
         0.6,
         safeLastModified(board.updatedAt),
       ));
+      const predictorIds = await listPublicEwcPredictorRouteIds({
+        guildId: board.guildId,
+        season: board.season,
+      });
+      for (const predictorId of predictorIds) {
+        entries.push(...localizedEntries(
+          `/predictors/${encodeURIComponent(predictorId)}`,
+          "weekly",
+          0.4,
+          safeLastModified(board.updatedAt),
+        ));
+      }
     }
   } catch {
     // DB unavailable — still serve the static routes.

@@ -762,6 +762,23 @@ export async function overallLeaderboard(guildId, season = '2026', limit = 20, o
   );
 }
 
+// Member-scoped consumers (such as private mini-leagues) must use the exact
+// official overall-score projection above, not reimplement its best-week rule.
+export async function overallLeaderboardForUsers(guildId, season = '2026', userIds = []) {
+  const ids = [...new Set((Array.isArray(userIds) ? userIds : []).filter((id) => typeof id === 'string' && id))].slice(0, 100);
+  if (!ids.length) return [];
+  const k = await overallBestWeekCount(guildId, season);
+  const placeholders = ids.map((_id, index) => `$${index + 6}`).join(', ');
+  return all(
+    `${overallRankedCte}
+     SELECT user_id, score, rank
+     FROM ranked_totals
+     WHERE user_id IN (${placeholders})
+     ORDER BY score DESC, user_id ASC`,
+    [guildId, season, k, guildId, season, ...ids],
+  );
+}
+
 export async function overallRankForUser(guildId, season = '2026', userId) {
   const k = await overallBestWeekCount(guildId, season);
   return get(
