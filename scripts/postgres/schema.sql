@@ -840,6 +840,16 @@ CREATE TABLE IF NOT EXISTS user_follows (
 CREATE INDEX IF NOT EXISTS idx_user_follows_entity ON user_follows(entity_type, entity_key);
 CREATE INDEX IF NOT EXISTS idx_user_follows_user   ON user_follows(discord_user_id);
 
+CREATE TABLE IF NOT EXISTS user_match_reminders (
+  discord_user_id TEXT   NOT NULL,
+  match_id        BIGINT NOT NULL REFERENCES matches(id) ON DELETE CASCADE,
+  created_at      TEXT   NOT NULL DEFAULT (to_char(now() AT TIME ZONE 'UTC', 'YYYY-MM-DD HH24:MI:SS')),
+  canceled_at     TEXT,
+  PRIMARY KEY (discord_user_id, match_id)
+);
+CREATE INDEX IF NOT EXISTS idx_user_match_reminders_active_match
+  ON user_match_reminders(match_id, discord_user_id) WHERE canceled_at IS NULL;
+
 CREATE TABLE IF NOT EXISTS user_notification_prefs (
   discord_user_id     TEXT PRIMARY KEY,
   dm_enabled          INTEGER NOT NULL DEFAULT 1,

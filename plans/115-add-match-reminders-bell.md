@@ -77,10 +77,10 @@ with error rollback.
 
 ## Done criteria
 
-- [ ] Match reminders notify without broad follows.
-- [ ] Duplicate notifications are deduped.
-- [ ] UI is accessible and localized.
-- [ ] Full verification passes.
+- [x] Match reminders notify without broad follows.
+- [x] Duplicate notifications are deduped.
+- [x] UI is accessible and localized.
+- [x] Full verification passes.
 
 ## STOP conditions
 

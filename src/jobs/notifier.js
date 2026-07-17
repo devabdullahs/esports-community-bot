@@ -2,6 +2,7 @@ import { config } from '../config.js';
 import { logger } from '../lib/logger.js';
 import { getTournamentById } from '../db/tournaments.js';
 import { listFollowersForMatch } from '../db/userFollows.js';
+import { listActiveReminderUserIdsForMatch } from '../db/userMatchReminders.js';
 import {
   enqueueNotifications,
   listPendingDmNotifications,
@@ -46,12 +47,24 @@ export async function notifyMatchEvent(client, type, match) {
   const tournament = await getTournamentById(match.tournament_id);
   if (!tournament || tournament.archived_at) return null;
 
-  const recipients = await listFollowersForMatch({
-    game: tournament.game,
-    tournamentId: tournament.id,
-    teamA: match.team_a,
-    teamB: match.team_b,
-  });
+  const [followers, reminderUserIds] = await Promise.all([
+    listFollowersForMatch({
+      game: tournament.game,
+      tournamentId: tournament.id,
+      teamA: match.team_a,
+      teamB: match.team_b,
+    }),
+    match.id == null ? [] : listActiveReminderUserIdsForMatch(Number(match.id)),
+  ]);
+  const recipientsByUser = new Map(
+    followers.map((recipient) => [recipient.discordUserId, { ...recipient, matchReminder: false }]),
+  );
+  for (const discordUserId of reminderUserIds) {
+    const existing = recipientsByUser.get(discordUserId);
+    if (existing) existing.matchReminder = true;
+    else recipientsByUser.set(discordUserId, { discordUserId, follows: [], matchReminder: true });
+  }
+  const recipients = [...recipientsByUser.values()];
   if (!recipients.length) return { notified: 0 };
 
   const notificationType = type === 'started' ? 'match_start' : 'match_result';

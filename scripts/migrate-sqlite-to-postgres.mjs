@@ -70,6 +70,7 @@ const appTables = [
   'stream_channel_status',
   'stream_creator_announce_state',
   'user_follows',
+  'user_match_reminders',
   'user_notification_prefs',
   'user_notifications',
   'web_analytics_events',
