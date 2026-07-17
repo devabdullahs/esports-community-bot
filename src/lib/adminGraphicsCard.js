@@ -1,4 +1,5 @@
 import { createCanvas, GlobalFonts } from '@napi-rs/canvas';
+import { resolve } from 'node:path';
 import { loadLogoImage } from './logoCache.js';
 
 function registerFont(paths, family) {
@@ -13,12 +14,32 @@ function registerFont(paths, family) {
   return null;
 }
 
-function systemFont(name) {
-  return GlobalFonts.families.some((font) => font.family === name) ? name : null;
+function registerFontFamily(paths, family) {
+  let registered = false;
+  for (const path of paths) {
+    try {
+      GlobalFonts.registerFromPath(path, family);
+      registered = true;
+    } catch {
+      // Optional platform fallback.
+    }
+  }
+  return registered ? family : null;
 }
+
+function bundledFontPaths(fileName) {
+  return [
+    resolve(process.cwd(), 'src/assets/fonts', fileName),
+    resolve(process.cwd(), '../../src/assets/fonts', fileName),
+  ];
+}
+
+const THMANYAH_REGULAR = bundledFontPaths('thmanyahsans-Regular.otf');
+const THMANYAH_BOLD = bundledFontPaths('thmanyahsans-Bold.otf');
 
 const HEAD = registerFont(
   [
+    ...THMANYAH_BOLD,
     'C:/Windows/Fonts/segoeuib.ttf',
     'C:/Windows/Fonts/arialbd.ttf',
     '/usr/share/fonts/opentype/inter/Inter-Bold.otf',
@@ -28,6 +49,7 @@ const HEAD = registerFont(
 ) || 'sans-serif';
 const BODY = registerFont(
   [
+    ...THMANYAH_REGULAR,
     'C:/Windows/Fonts/segoeui.ttf',
     'C:/Windows/Fonts/arial.ttf',
     '/usr/share/fonts/opentype/inter/Inter-Regular.otf',
@@ -35,18 +57,21 @@ const BODY = registerFont(
   ],
   'AdminGraphicsBody',
 ) || 'sans-serif';
-const ARABIC = systemFont('Noto Sans Arabic') || registerFont(
+// Use one face that covers both Arabic and Latin. Canvas font fallback is not
+// reliable inside a mixed-direction run, so an Arabic-only Noto face can turn
+// embedded English names into missing-glyph boxes.
+const ARABIC = registerFontFamily(
   [
-    '/usr/share/fonts/truetype/noto/NotoSansArabic-Bold.ttf',
-    '/usr/share/fonts/truetype/noto/NotoSansArabic-Regular.ttf',
-    '/usr/share/fonts/opentype/noto/NotoSansArabic-Regular.ttf',
-    'C:/Windows/Fonts/arabtype.ttf',
+    ...THMANYAH_REGULAR,
+    ...THMANYAH_BOLD,
     'C:/Windows/Fonts/tahoma.ttf',
     'C:/Windows/Fonts/segoeui.ttf',
     'C:/Windows/Fonts/arial.ttf',
     '/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf',
+    '/usr/share/fonts/truetype/noto/NotoSansArabic-Regular.ttf',
+    '/usr/share/fonts/opentype/noto/NotoSansArabic-Regular.ttf',
   ],
-  'AdminGraphicsArabic',
+  'AdminGraphicsUniversal',
 ) || BODY;
 
 const WIDTH = 1600;
