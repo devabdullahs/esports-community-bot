@@ -63,7 +63,13 @@ test("server resolution ignores spoofed match names and scores", async () => {
     scoreA: 99,
     scoreB: 0,
   });
-  expect(parsed).toEqual({ template: "match-result", resourceId: match.id });
+  expect(parsed).toMatchObject({
+    template: "match-result",
+    resourceId: match.id,
+    format: "16:9",
+    style: "ewc-teal",
+    scale: 2,
+  });
 
   const resolved = await resolveGraphicsRenderRequest(parsed!);
   expect(resolved).toMatchObject({
@@ -124,4 +130,30 @@ test("request parser accepts only the finite template ids and positive numeric r
   expect(parseGraphicsRenderRequest({ template: "custom", resourceId: 1 })).toBeNull();
   expect(parseGraphicsRenderRequest({ template: "news-promo", resourceId: "1" })).toBeNull();
   expect(parseGraphicsRenderRequest({ template: "standings", resourceId: 0 })).toBeNull();
+  expect(parseGraphicsRenderRequest({ template: "standings", resourceId: 1, format: "3:2" })).toBeNull();
+  expect(parseGraphicsRenderRequest({ template: "standings", resourceId: 1, scale: 4 })).toBeNull();
+  expect(parseGraphicsRenderRequest({ template: "news-promo", resourceId: 1, brandX: -1 })).toBeNull();
+  expect(parseGraphicsRenderRequest({
+    template: "news-promo",
+    resourceId: 1,
+    format: "9:16",
+    language: "ar",
+    alignment: "right",
+    style: "carbon",
+    scale: 3,
+    brandPlacement: "custom",
+    brandX: 42.25,
+    brandY: 63.75,
+    brandSize: 16.25,
+  })).toMatchObject({
+    format: "9:16",
+    language: "ar",
+    alignment: "right",
+    style: "carbon",
+    scale: 3,
+    brandPlacement: "custom",
+    brandX: 42.3,
+    brandY: 63.8,
+    brandSize: 16.3,
+  });
 });

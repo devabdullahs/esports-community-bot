@@ -19,6 +19,7 @@ const maxWidthClasses = {
   "4xl": "max-w-4xl",
   "5xl": "max-w-5xl",
   "6xl": "max-w-6xl",
+  full: "max-w-none",
 } as const;
 
 // Page-owned hierarchy: each server page supplies its real entity labels.
