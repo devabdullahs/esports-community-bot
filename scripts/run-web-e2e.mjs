@@ -189,7 +189,7 @@ async function main() {
     }
   } finally {
     await stopServer(server);
-    await rm(tempRoot, { recursive: true, force: true });
+    await rm(tempRoot, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
   }
 }
 

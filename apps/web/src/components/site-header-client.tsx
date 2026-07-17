@@ -232,7 +232,7 @@ export function SiteHeaderClient({
         </Link>
 
         {/* Desktop (lg+): grouped general links + a dedicated EWC dropdown. */}
-        <NavigationMenu className="ms-2 hidden lg:flex">
+        <NavigationMenu className="ms-2 hidden flex-none lg:flex">
           <NavigationMenuList className="gap-0.5">
             {desktopGroups.map(({ label, icon: Icon, links }) => {
               const groupActive = links.some((destination) => linkActive(destination.href));
