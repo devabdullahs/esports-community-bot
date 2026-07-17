@@ -23,7 +23,11 @@ const RATE_LIMIT_BACKOFF_MS = Math.max(60_000, Number(process.env.LOGO_RATE_LIMI
 const MAX_LOGO_BYTES = Math.max(64_000, Number(process.env.LOGO_MAX_BYTES || 4 * 1024 * 1024));
 const RATE_STATE_PATH = process.env.LOGO_RATE_STATE_PATH || join(/* turbopackIgnore: true */ process.cwd(), 'data', 'logo-rate-limit.json');
 
-const ALLOWED_LOGO_HOSTS = new Set(['liquipedia.net']);
+const LIQUIPEDIA_LOGO_HOST = 'liquipedia.net';
+// Media-channel logos uploaded through the dashboard live on our first-party
+// asset host. Keep this explicit: accepting arbitrary admin-entered logo URLs
+// here would turn server-side graphic rendering into an SSRF primitive.
+const ALLOWED_LOGO_HOSTS = new Set([LIQUIPEDIA_LOGO_HOST, 'assets.esportscommunity.net']);
 
 const queue = [];
 let activeDownloads = 0;
@@ -92,6 +96,14 @@ export function isAllowedLogoUrl(url) {
     const parsed = new URL(url);
     if (parsed.protocol !== 'https:') return false;
     return ALLOWED_LOGO_HOSTS.has(parsed.hostname.toLowerCase());
+  } catch {
+    return false;
+  }
+}
+
+function isLiquipediaLogoUrl(url) {
+  try {
+    return new URL(url).hostname.toLowerCase() === LIQUIPEDIA_LOGO_HOST;
   } catch {
     return false;
   }
@@ -225,7 +237,8 @@ async function readCached(file) {
 async function downloadLogo(url, file, channel) {
   const state = channelState(channel);
   const globalState = channelState('global');
-  await waitForLogoSlot(state, globalState);
+  const liquipediaLogo = isLiquipediaLogoUrl(url);
+  if (liquipediaLogo) await waitForLogoSlot(state, globalState);
 
   const { data, headers } = await http.get(url, {
     responseType: 'arraybuffer',
@@ -239,7 +252,7 @@ async function downloadLogo(url, file, channel) {
     },
   }).catch(async (err) => {
     const status = err.response?.status;
-    if (status === 403 || status === 429 || status === 503) {
+    if (liquipediaLogo && (status === 403 || status === 429 || status === 503)) {
       state.blockedUntil = Math.max(state.blockedUntil, Date.now() + RATE_LIMIT_BACKOFF_MS);
       const globalState = channelState('global');
       loadRateState(globalState, { force: true });

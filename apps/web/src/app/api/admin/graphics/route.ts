@@ -15,7 +15,9 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 const CACHE_CONTROL = "private, no-store";
-const RATE_LIMIT = { limit: 20, windowSec: 600 };
+// The workspace auto-renders the preview (debounced) as controls change, so
+// the budget covers an active editing session, not just explicit exports.
+const RATE_LIMIT = { limit: 60, windowSec: 600 };
 const MAX_BODY_BYTES = 4 * 1024;
 
 function privateJson(body: unknown, status: number) {

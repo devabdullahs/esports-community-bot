@@ -118,7 +118,7 @@ describe("admin graphics render API", () => {
     expect(response.headers.get("cache-control")).toBe("private, no-store");
     expect(mockRateLimit).toHaveBeenCalledWith({
       key: "admin:graphics:123456789012345679",
-      limit: 20,
+      limit: 60,
       windowSec: 600,
     });
     expect(mockResolve).not.toHaveBeenCalled();

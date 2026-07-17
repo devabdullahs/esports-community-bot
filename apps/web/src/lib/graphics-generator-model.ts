@@ -5,18 +5,40 @@ export const GRAPHICS_TEMPLATES = [
 ] as const;
 
 export const GRAPHICS_FORMATS = [
-  { id: "16:9", label: "16:9", width: 1600, height: 900, hint: "Broadcast / YouTube" },
+  { id: "16:9", label: "16:9", width: 1920, height: 1080, hint: "Broadcast / YouTube" },
   { id: "1:1", label: "1:1", width: 1080, height: 1080, hint: "Square feed" },
   { id: "9:16", label: "9:16", width: 1080, height: 1920, hint: "Stories / Reels" },
   { id: "4:5", label: "4:5", width: 1080, height: 1350, hint: "Portrait feed" },
 ] as const;
 
+// Theme metadata mirrors the server renderer palettes (src/lib/adminGraphicsCard.js)
+// so the picker cards and canvas overlays preview the real output colors.
 export const GRAPHICS_STYLES = [
-  { id: "ewc-teal", label: "EWC Teal" },
-  { id: "midnight", label: "Midnight Blue" },
-  { id: "carbon", label: "Carbon" },
-  { id: "slate", label: "Slate" },
-  { id: "light", label: "Light" },
+  {
+    id: "ewc-teal", label: "EWC Teal", accent: "#2dd4bf", dark: true,
+    gradient: ["#071412", "#0a1a18", "#061110"],
+    description: "Signature broadcast look — deep teal field with a glowing accent edge. Default for match results.",
+  },
+  {
+    id: "midnight", label: "Midnight Blue", accent: "#60a5fa", dark: true,
+    gradient: ["#080d20", "#0d1530", "#070b1a"],
+    description: "Cool navy field with silver-blue type — for international broadcast and partner co-branding.",
+  },
+  {
+    id: "carbon", label: "Carbon", accent: "#e4e4e7", dark: true,
+    gradient: ["#0e0e10", "#17171a", "#0c0c0e"],
+    description: "Neutral monochrome with no team bias — use when team brand colors clash with the accent.",
+  },
+  {
+    id: "slate", label: "Slate", accent: "#94a3b8", dark: true,
+    gradient: ["#141a1e", "#1f272c", "#11171a"],
+    description: "Soft blue-grey editorial tone — recaps, standings, and long-form news promos.",
+  },
+  {
+    id: "light", label: "Light", accent: "#0f766e", dark: false,
+    gradient: ["#eef1f0", "#ffffff", "#e7ecea"],
+    description: "Press and print friendly — white field, deep-teal accents, dark type. For articles and light feeds.",
+  },
 ] as const;
 
 export const GRAPHICS_LANGUAGES = ["en", "ar", "both"] as const;

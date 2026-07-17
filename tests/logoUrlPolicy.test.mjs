@@ -26,12 +26,14 @@ test('normalizeImageUrl resolves relative + protocol-relative URLs to liquipedia
   assert.equal(normalizeImageUrl(''), null);
 });
 
-test('isAllowedLogoUrl admits only https liquipedia.net', () => {
+test('isAllowedLogoUrl admits only approved https logo hosts', () => {
   assert.equal(isAllowedLogoUrl('https://liquipedia.net/commons/images/foo.png'), true);
+  assert.equal(isAllowedLogoUrl('https://assets.esportscommunity.net/media/channel.png'), true);
   // wrong scheme
   assert.equal(isAllowedLogoUrl('http://liquipedia.net/commons/images/foo.png'), false);
   // wrong host
   assert.equal(isAllowedLogoUrl('https://example.com/logo.png'), false);
+  assert.equal(isAllowedLogoUrl('https://assets.esportscommunity.net.attacker.com/logo.png'), false);
   // look-alike host must not be treated as a subdomain match
   assert.equal(isAllowedLogoUrl('https://liquipedia.net.attacker.com/x.png'), false);
   assert.equal(isAllowedLogoUrl('https://evil-liquipedia.net/x.png'), false);
@@ -41,8 +43,9 @@ test('isAllowedLogoUrl admits only https liquipedia.net', () => {
   assert.equal(isAllowedLogoUrl(null), false);
 });
 
-test('isAllowedLogoRedirect admits only https liquipedia.net redirect hops', () => {
+test('isAllowedLogoRedirect admits only approved https redirect hops', () => {
   assert.equal(isAllowedLogoRedirect({ protocol: 'https:', hostname: 'liquipedia.net' }), true);
+  assert.equal(isAllowedLogoRedirect({ protocol: 'https:', hostname: 'assets.esportscommunity.net' }), true);
   assert.equal(isAllowedLogoRedirect({ protocol: 'https:', hostname: '169.254.169.254' }), false);
   assert.equal(isAllowedLogoRedirect({ protocol: 'http:', hostname: 'liquipedia.net' }), false);
   assert.equal(isAllowedLogoRedirect({ protocol: 'https:', hostname: 'evil.example' }), false);

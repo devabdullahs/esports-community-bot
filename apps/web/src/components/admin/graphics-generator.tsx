@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import Image from "next/image";
 import {
   ArrowDownLeftIcon,
@@ -73,14 +73,6 @@ type RecentGeneration = {
   options: GraphicsRenderOptions;
 };
 
-const STYLE_SWATCHES: Record<GraphicsStyleId, string> = {
-  "ewc-teal": "from-[#071412] to-[#134e4a]",
-  midnight: "from-[#0b1026] to-[#1e3a8a]",
-  carbon: "from-[#111113] to-[#2b2b30]",
-  slate: "from-[#1c2226] to-[#3a444b]",
-  light: "from-[#e9eceb] to-white",
-};
-
 const BRAND_ICONS = {
   "top-left": ArrowUpLeftIcon,
   "top-right": ArrowUpRightIcon,
@@ -133,7 +125,10 @@ export function GraphicsGenerator({ data }: { data: GraphicsGeneratorData }) {
   const [rendering, setRendering] = useState(false);
   const [renderedAt, setRenderedAt] = useState<number | null>(null);
   const workspaceRef = useRef<HTMLDivElement>(null);
+  const searchRef = useRef<HTMLInputElement>(null);
+  const abortRef = useRef<AbortController | null>(null);
   const objectUrls = useRef(new Set<string>());
+  const recentRef = useRef<RecentGeneration[]>([]);
 
   const options = useMemo(() => graphicsOptionsForTemplate(data, template), [data, template]);
   const selectedOption = useMemo(() => options.find((option) => option.id === resourceId) ?? null, [options, resourceId]);
@@ -153,9 +148,31 @@ export function GraphicsGenerator({ data }: { data: GraphicsGeneratorData }) {
   const currentSignature = resourceId ? JSON.stringify({ template, resourceId, ...renderOptions }) : "";
   const previewStale = Boolean(previewUrl && generatedSignature !== currentSignature);
   const canConfigureBrand = data.brands.length > 0 || selectedOption?.owner.kind === "media";
+  const selectedStyle = GRAPHICS_STYLES.find((item) => item.id === style) ?? GRAPHICS_STYLES[0];
 
   useEffect(() => () => {
+    abortRef.current?.abort();
     for (const url of objectUrls.current) URL.revokeObjectURL(url);
+  }, []);
+
+  const releaseUnusedObjectUrls = useCallback((nextPreview: string | null, nextRecent: RecentGeneration[]) => {
+    const retained = new Set([nextPreview, ...nextRecent.map((item) => item.url)].filter(Boolean));
+    for (const url of objectUrls.current) {
+      if (retained.has(url)) continue;
+      URL.revokeObjectURL(url);
+      objectUrls.current.delete(url);
+    }
+  }, []);
+
+  useEffect(() => {
+    function onKeyDown(event: KeyboardEvent) {
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
+        event.preventDefault();
+        searchRef.current?.focus();
+      }
+    }
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
   }, []);
 
   function selectTemplate(value: string | null) {
@@ -196,8 +213,11 @@ export function GraphicsGenerator({ data }: { data: GraphicsGeneratorData }) {
     setRenderedAt(item.createdAt);
   }
 
-  async function generatePreview() {
+  const generatePreview = useCallback(async (auto = false) => {
     if (resourceId === null) return;
+    abortRef.current?.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
     setRendering(true);
     setError(null);
     const signature = JSON.stringify({ template, resourceId, ...renderOptions });
@@ -206,6 +226,7 @@ export function GraphicsGenerator({ data }: { data: GraphicsGeneratorData }) {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: signature,
+        signal: controller.signal,
       });
       if (!response.ok) {
         const body = await response.json().catch(() => null) as { error?: string } | null;
@@ -215,25 +236,41 @@ export function GraphicsGenerator({ data }: { data: GraphicsGeneratorData }) {
       const url = URL.createObjectURL(image);
       objectUrls.current.add(url);
       const createdAt = Date.now();
+      let nextRecent = recentRef.current;
+      if (!auto) {
+        nextRecent = [{
+          id: `${createdAt}-${resourceId}`,
+          url,
+          title: selectedOption?.label || "Generated graphic",
+          meta: `${GRAPHICS_TEMPLATES.find((item) => item.id === template)?.label} - ${dimensions.label}`,
+          createdAt,
+          template,
+          resourceId,
+          options: renderOptions,
+        }, ...recentRef.current].slice(0, 4);
+        recentRef.current = nextRecent;
+        setRecent(nextRecent);
+      }
       setPreviewUrl(url);
       setGeneratedSignature(signature);
       setRenderedAt(createdAt);
-      setRecent((items) => [{
-        id: `${createdAt}-${resourceId}`,
-        url,
-        title: selectedOption?.label || "Generated graphic",
-        meta: `${GRAPHICS_TEMPLATES.find((item) => item.id === template)?.label} - ${dimensions.label}`,
-        createdAt,
-        template,
-        resourceId,
-        options: renderOptions,
-      }, ...items].slice(0, 4));
+      releaseUnusedObjectUrls(url, nextRecent);
     } catch (cause) {
+      if (controller.signal.aborted) return;
       setError(cause instanceof Error ? cause.message : "Unable to generate graphic");
     } finally {
-      setRendering(false);
+      if (abortRef.current === controller) setRendering(false);
     }
-  }
+  }, [dimensions.label, releaseUnusedObjectUrls, renderOptions, resourceId, selectedOption, template]);
+
+  // The preview keeps itself in sync with the controls (spec: "preview
+  // updates instantly"): any change re-renders after a short debounce.
+  // Failures (e.g. rate limit) do not retry until the controls change again.
+  useEffect(() => {
+    if (resourceId === null || !currentSignature || currentSignature === generatedSignature) return;
+    const timer = window.setTimeout(() => void generatePreview(true), 700);
+    return () => window.clearTimeout(timer);
+  }, [currentSignature, generatedSignature, generatePreview, resourceId]);
 
   function download(url = previewUrl) {
     if (!url) return;
@@ -251,7 +288,7 @@ export function GraphicsGenerator({ data }: { data: GraphicsGeneratorData }) {
 
   function moveBrand(event: ReactPointerEvent<HTMLElement>) {
     if (brandPlacement !== "custom") return;
-    const frame = event.currentTarget.parentElement?.getBoundingClientRect();
+    const frame = event.currentTarget.closest<HTMLElement>("[data-graphics-preview-frame]")?.getBoundingClientRect();
     if (!frame) return;
     const x = Math.min(95, Math.max(5, ((event.clientX - frame.left) / frame.width) * 100));
     const y = Math.min(95, Math.max(5, ((event.clientY - frame.top) / frame.height) * 100));
@@ -261,8 +298,8 @@ export function GraphicsGenerator({ data }: { data: GraphicsGeneratorData }) {
 
   return (
     <TooltipProvider>
-      <div ref={workspaceRef} className="overflow-hidden rounded-lg border border-border bg-background shadow-sm xl:grid xl:min-h-[760px] xl:grid-cols-[340px_minmax(0,1fr)]">
-        <aside className="flex min-h-0 flex-col border-b border-border bg-card/45 xl:border-b-0 xl:border-e">
+      <div ref={workspaceRef} className="flex flex-col overflow-hidden rounded-lg border border-border bg-background shadow-sm xl:grid xl:min-h-[760px] xl:grid-cols-[340px_minmax(0,1fr)]">
+        <aside className="order-2 flex min-h-0 flex-col border-t border-border bg-card/45 xl:order-1 xl:border-t-0 xl:border-e">
           <div className="grid gap-6 p-4 xl:max-h-[calc(100vh-15rem)] xl:overflow-y-auto xl:p-5">
             <div>
               <h2 className="text-lg font-semibold">Graphics generator</h2>
@@ -273,7 +310,12 @@ export function GraphicsGenerator({ data }: { data: GraphicsGeneratorData }) {
               <FieldLabel>Template</FieldLabel>
               <Tabs value={template} onValueChange={selectTemplate}>
                 <TabsList className="grid w-full grid-cols-3">
-                  {GRAPHICS_TEMPLATES.map((item) => <TabsTrigger key={item.id} value={item.id} className="px-2 text-xs">{item.label}</TabsTrigger>)}
+                  {GRAPHICS_TEMPLATES.map((item) => (
+                    <TabsTrigger key={item.id} value={item.id} className="px-2 text-xs max-sm:h-9">
+                      <span className="sm:hidden">{item.label.split(" ")[0]}</span>
+                      <span className="max-sm:hidden">{item.label}</span>
+                    </TabsTrigger>
+                  ))}
                 </TabsList>
               </Tabs>
             </Field>
@@ -285,7 +327,8 @@ export function GraphicsGenerator({ data }: { data: GraphicsGeneratorData }) {
               </div>
               <div className="relative">
                 <SearchIcon className="pointer-events-none absolute start-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-                <Input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search sources" className="ps-9" />
+                <Input ref={searchRef} value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search sources" className="pe-11 ps-9" />
+                <kbd className="pointer-events-none absolute end-2.5 top-1/2 -translate-y-1/2 rounded border border-border bg-muted px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground max-sm:hidden">⌘K</kbd>
               </div>
               <div className="max-h-60 overflow-y-auto rounded-lg border border-border bg-background/50 p-1" role="listbox" aria-label="Graphics sources">
                 {filteredOptions.map((option) => {
@@ -297,7 +340,7 @@ export function GraphicsGenerator({ data }: { data: GraphicsGeneratorData }) {
                       role="option"
                       aria-selected={resourceId === option.id}
                       onClick={() => selectResource(option)}
-                      className={cn("flex min-h-10 w-full items-center gap-2 rounded-md border border-transparent px-2 text-start text-sm transition-colors hover:bg-muted/70", resourceId === option.id && "border-primary/35 bg-primary/10")}
+                      className={cn("flex min-h-10 w-full items-center gap-2 rounded-md border border-transparent px-2 text-start text-sm transition-colors hover:bg-muted/70 max-sm:min-h-12", resourceId === option.id && "border-primary/35 bg-primary/10")}
                     >
                       <span className={cn("size-2 shrink-0 rounded-full", status.dot)} />
                       <span className="w-7 shrink-0 font-mono text-[11px] text-muted-foreground">{option.id}</span>
@@ -331,14 +374,14 @@ export function GraphicsGenerator({ data }: { data: GraphicsGeneratorData }) {
               </ToggleGroup>
             </Field>
 
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-2 gap-3 max-sm:grid-cols-1">
               <Field>
                 <FieldLabel>Language</FieldLabel>
                 <ToggleGroup value={[language]} onValueChange={(values) => values[0] && setLanguage(values[0] as GraphicsLanguageId)} variant="outline" spacing={0} className="grid w-full grid-cols-3">
-                  {GRAPHICS_LANGUAGES.map((item) => <ToggleGroupItem key={item} value={item} className="w-full px-2 text-xs uppercase">{item === "ar" ? "Arabic" : item}</ToggleGroupItem>)}
+                  {GRAPHICS_LANGUAGES.map((item) => <ToggleGroupItem key={item} value={item} className="w-full px-2 text-xs">{item === "ar" ? "عربي" : item === "both" ? "Both" : "EN"}</ToggleGroupItem>)}
                 </ToggleGroup>
               </Field>
-              <Field>
+              <Field className="max-sm:hidden">
                 <FieldLabel>Alignment</FieldLabel>
                 <Select value={alignment} onValueChange={(value) => value && setAlignment(value as GraphicsAlignmentId)}>
                   <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
@@ -350,17 +393,29 @@ export function GraphicsGenerator({ data }: { data: GraphicsGeneratorData }) {
             </div>
 
             <Field>
-              <div className="flex items-center justify-between gap-2"><FieldLabel>Visual style</FieldLabel><span className="text-xs font-medium text-primary">{GRAPHICS_STYLES.find((item) => item.id === style)?.label}</span></div>
-              <div className="grid grid-cols-5 gap-1.5">
+              <div className="flex items-center justify-between gap-2"><FieldLabel>Visual style</FieldLabel><span className="text-xs font-medium text-primary">{selectedStyle.label}</span></div>
+              <div className="grid grid-cols-2 gap-1.5" role="radiogroup" aria-label="Visual style">
                 {GRAPHICS_STYLES.map((item) => (
-                  <Tooltip key={item.id}>
-                    <TooltipTrigger render={<button type="button" aria-pressed={style === item.id} onClick={() => setStyle(item.id)} className={cn("relative h-12 rounded-lg border bg-gradient-to-br transition-all", STYLE_SWATCHES[item.id], style === item.id ? "border-primary ring-1 ring-primary" : "border-border hover:border-muted-foreground")} />}>
-                      {style === item.id ? <span className="absolute inset-0 flex items-center justify-center"><span className="flex size-4 items-center justify-center rounded-full bg-primary text-primary-foreground"><CheckIcon className="size-3" /></span></span> : null}
-                    </TooltipTrigger>
-                    <TooltipContent>{item.label}</TooltipContent>
-                  </Tooltip>
+                  <button
+                    key={item.id}
+                    type="button"
+                    role="radio"
+                    aria-checked={style === item.id}
+                    onClick={() => setStyle(item.id)}
+                    className={cn("rounded-lg border p-1.5 text-start transition-colors", style === item.id ? "border-primary/40 bg-primary/10" : "border-border bg-card hover:border-muted-foreground")}
+                  >
+                    <span className="relative block h-10 overflow-hidden rounded-md" style={{ background: `linear-gradient(160deg, ${item.gradient[0]} 0%, ${item.gradient[1]} 45%, ${item.gradient[2]} 100%)` }}>
+                      <span className="absolute inset-y-0 start-0 w-[3px]" style={{ background: item.accent }} />
+                      <span className="absolute start-2.5 top-2 h-[3px] w-6 rounded-full" style={{ background: item.accent }} />
+                      <span className="absolute start-2.5 top-4 h-[5px] w-11 rounded-full" style={{ background: item.dark ? "rgba(255,255,255,.82)" : "rgba(12,21,19,.82)" }} />
+                      <span className="absolute bottom-2 start-2.5 h-[3px] w-4 rounded-full" style={{ background: item.dark ? "rgba(255,255,255,.32)" : "rgba(0,0,0,.25)" }} />
+                      {style === item.id ? <span className="absolute end-1.5 top-1.5 flex size-3.5 items-center justify-center rounded-full bg-primary text-primary-foreground"><CheckIcon className="size-2.5" /></span> : null}
+                    </span>
+                    <span className="mt-1 block px-0.5 text-[11px] font-semibold">{item.label}</span>
+                  </button>
                 ))}
               </div>
+              <p className="text-xs leading-5 text-muted-foreground">{selectedStyle.description}</p>
             </Field>
 
             {canConfigureBrand ? (
@@ -372,7 +427,7 @@ export function GraphicsGenerator({ data }: { data: GraphicsGeneratorData }) {
                   ) : null}
                   <div className="min-w-0">
                     <p className="text-sm font-medium">Media branding</p>
-                    <p className="text-xs text-muted-foreground">Choose an authorized channel logo, then use a corner preset or drag it anywhere inside the preview.</p>
+                    <p className="text-xs text-muted-foreground">Choose an authorized channel logo. Use a corner preset, or choose custom and click or drag its position directly on the preview.</p>
                   </div>
                 </div>
                 {data.brands.length ? (
@@ -389,11 +444,12 @@ export function GraphicsGenerator({ data }: { data: GraphicsGeneratorData }) {
                     <ToggleGroup value={[brandPlacement]} onValueChange={(values) => values[0] && setBrandPlacement(values[0] as GraphicsBrandPlacement)} variant="outline" spacing={0} className="grid w-full grid-cols-5">
                       {GRAPHICS_BRAND_PLACEMENTS.map((item) => {
                         const Icon = BRAND_ICONS[item];
-                        return <ToggleGroupItem key={item} value={item} className="w-full px-2" aria-label={item}><Icon /></ToggleGroupItem>;
+                        return <ToggleGroupItem key={item} value={item} className="w-full px-2 max-sm:h-11" aria-label={item}><Icon /></ToggleGroupItem>;
                       })}
                     </ToggleGroup>
                     {brandPlacement === "custom" ? (
                       <div className="grid gap-3">
+                        <p className="rounded-md border border-dashed border-border bg-muted/20 px-2.5 py-2 text-xs text-muted-foreground">Click anywhere in the preview to place the logo. Drag the outlined marker for precise positioning; the exported PNG uses these exact coordinates.</p>
                         <label className="grid grid-cols-[48px_1fr_34px] items-center gap-2 text-xs"><span>X</span><Slider value={brandX} min={5} max={95} onValueChange={(value) => typeof value === "number" && setBrandX(value)} /><span className="text-end font-mono">{brandX}%</span></label>
                         <label className="grid grid-cols-[48px_1fr_34px] items-center gap-2 text-xs"><span>Y</span><Slider value={brandY} min={5} max={95} onValueChange={(value) => typeof value === "number" && setBrandY(value)} /><span className="text-end font-mono">{brandY}%</span></label>
                       </div>
@@ -409,82 +465,98 @@ export function GraphicsGenerator({ data }: { data: GraphicsGeneratorData }) {
             {error ? <p className="text-sm text-destructive" role="alert">{error}</p> : null}
           </div>
 
-          <div className="mt-auto grid gap-2 border-t border-border p-4 xl:p-5">
-            <Button disabled={resourceId === null || rendering} onClick={() => void generatePreview()} className="w-full">
+          <div className="sticky bottom-0 z-20 mt-auto grid gap-2 border-t border-border bg-background/90 p-4 backdrop-blur xl:static xl:bg-transparent xl:p-5 xl:backdrop-blur-none">
+            <Button disabled={resourceId === null || rendering} onClick={() => void generatePreview()} className="w-full max-sm:h-12">
               {rendering ? <LoaderCircleIcon className="animate-spin" data-icon="inline-start" /> : <SparklesIcon data-icon="inline-start" />}
               {rendering ? "Generating..." : "Generate preview"}
             </Button>
-            <div className="grid grid-cols-[1fr_72px] gap-2">
-              <Button variant="outline" disabled={!previewUrl} onClick={() => download()}><DownloadIcon data-icon="inline-start" />Download PNG</Button>
+            <div className="grid grid-cols-[1fr_auto] gap-2">
+              <Button variant="outline" disabled={!previewUrl} onClick={() => download()} className="max-sm:h-12"><DownloadIcon data-icon="inline-start" />Download PNG</Button>
               <Select value={String(scale)} onValueChange={(value) => value && setScale(Number(value) as GraphicsExportScale)}>
-                <SelectTrigger className="w-full font-mono"><SelectValue /></SelectTrigger>
-                <SelectContent>{GRAPHICS_EXPORT_SCALES.map((item) => <SelectItem key={item} value={String(item)}>{item}x</SelectItem>)}</SelectContent>
+                <SelectTrigger className="w-full font-mono text-xs" aria-label="Export size">
+                  <span>{scale}× · {dimensions.width * scale}×{dimensions.height * scale}</span>
+                </SelectTrigger>
+                <SelectContent align="end">
+                  {GRAPHICS_EXPORT_SCALES.map((item) => (
+                    <SelectItem key={item} value={String(item)} className="font-mono text-xs">
+                      {item}× · {dimensions.width * item}×{dimensions.height * item}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
               </Select>
             </div>
+            <p className="text-[11px] leading-4 text-muted-foreground">Export size: the PNG is saved at the format resolution times the multiplier.</p>
           </div>
         </aside>
 
-        <section className="flex min-h-[620px] min-w-0 flex-col bg-background">
-          <div className="flex min-h-13 items-center gap-2 overflow-x-auto border-b border-border px-3 py-2">
-            <div className="flex shrink-0 items-center rounded-lg border border-border bg-card">
+        <section className="order-1 flex min-w-0 flex-col bg-background xl:order-2 xl:min-h-[620px]">
+          <div className="order-2 flex min-h-13 items-center gap-2 overflow-x-auto border-b border-border px-3 py-2 max-xl:border-t xl:order-1">
+            <div className="flex shrink-0 items-center rounded-lg border border-border bg-card max-sm:hidden">
               <Button variant="ghost" size="icon-sm" onClick={() => setZoom((value) => Math.max(30, value - 10))} aria-label="Zoom out"><MinusIcon /></Button>
               <span className="w-14 text-center font-mono text-xs">{zoom}%</span>
               <Button variant="ghost" size="icon-sm" onClick={() => setZoom((value) => Math.min(200, value + 10))} aria-label="Zoom in"><PlusIcon /></Button>
             </div>
-            <Button variant="outline" size="sm" onClick={() => setZoom(100)}><MaximizeIcon data-icon="inline-start" />Fit</Button>
-            <span className="mx-1 h-6 w-px shrink-0 bg-border" />
+            <Button variant="outline" size="sm" className="max-sm:hidden" onClick={() => setZoom(100)}><MaximizeIcon data-icon="inline-start" />Fit</Button>
+            <span className="mx-1 h-6 w-px shrink-0 bg-border max-sm:hidden" />
             <label className="flex h-8 shrink-0 items-center gap-2 rounded-lg border border-border bg-card px-2.5 text-xs"><span>Safe area</span><Switch checked={safeArea} onCheckedChange={setSafeArea} size="sm" /></label>
             <Button variant={showGrid ? "secondary" : "outline"} size="sm" onClick={() => setShowGrid((value) => !value)}><Grid3X3Icon data-icon="inline-start" />Grid</Button>
             <div className="ms-auto flex shrink-0 items-center gap-2">
               <span className="font-mono text-xs text-muted-foreground">{dimensions.width}x{dimensions.height}</span>
-              <Button variant="outline" size="sm" disabled={resourceId === null || rendering} onClick={() => void generatePreview()}><RefreshCwIcon data-icon="inline-start" className={cn(rendering && "animate-spin")} />Refresh</Button>
-              <Button variant="outline" size="icon-sm" onClick={() => void toggleFullscreen()} aria-label="Toggle fullscreen"><ExpandIcon /></Button>
+              <Button variant="outline" size="sm" disabled={resourceId === null || rendering} onClick={() => void generatePreview(true)}><RefreshCwIcon data-icon="inline-start" className={cn(rendering && "animate-spin")} />Refresh</Button>
+              <Button variant="outline" size="icon-sm" className="max-sm:hidden" onClick={() => void toggleFullscreen()} aria-label="Toggle fullscreen"><ExpandIcon /></Button>
             </div>
           </div>
 
-          <div className="relative flex min-h-[470px] flex-1 items-center justify-center overflow-auto bg-[radial-gradient(ellipse_at_50%_0%,color-mix(in_oklab,var(--muted)_25%,transparent),transparent_62%)] p-5 sm:p-8">
-            <div className={cn("relative max-h-[68vh] w-full max-w-[940px] overflow-hidden rounded-lg border border-border bg-card shadow-2xl transition-[aspect-ratio,transform]", formatAspectClass(format), (format === "9:16" || format === "4:5") && "w-auto max-w-none")} style={{ transform: `scale(${zoom / 100})`, height: format === "9:16" ? "min(68vh,760px)" : format === "4:5" ? "min(68vh,700px)" : undefined }}>
-              {previewUrl ? <Image src={previewUrl} alt="Generated social graphic" fill unoptimized className="object-contain" /> : <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 text-muted-foreground"><ImageIcon className="size-8" /><p className="text-sm">Generate a preview to see the final graphic.</p></div>}
-              {previewStale ? <div className="absolute inset-x-3 top-3 z-20 rounded-md border border-amber-400/25 bg-background/90 px-3 py-2 text-center text-xs text-amber-300 backdrop-blur">Controls changed. Refresh the preview before download.</div> : null}
-              {safeArea ? <div className="pointer-events-none absolute inset-[4%] z-10 border border-dashed border-teal-400/45"><span className="absolute -bottom-px start-0 bg-teal-950/80 px-1.5 py-0.5 font-mono text-[8px] text-teal-300">SAFE AREA</span></div> : null}
-              {showGrid ? <div className="pointer-events-none absolute inset-0 z-10 opacity-40" style={{ backgroundImage: "linear-gradient(to right, rgba(45,212,191,.22) 1px, transparent 1px), linear-gradient(to bottom, rgba(45,212,191,.22) 1px, transparent 1px)", backgroundSize: "8.333% 16.666%" }} /> : null}
+          <div className="relative order-1 flex min-h-[320px] flex-1 items-center justify-center overflow-auto bg-[radial-gradient(ellipse_at_50%_0%,color-mix(in_oklab,var(--muted)_25%,transparent),transparent_62%)] p-4 sm:min-h-[470px] sm:p-8 xl:order-2">
+            <div data-graphics-preview-frame className={cn("relative max-h-[68vh] w-full max-w-[940px] overflow-hidden rounded-lg border border-border bg-card shadow-2xl transition-[aspect-ratio,transform]", formatAspectClass(format), (format === "9:16" || format === "4:5") && "w-auto max-w-none")} style={{ transform: `scale(${zoom / 100})`, height: format === "9:16" ? "min(68vh,760px)" : format === "4:5" ? "min(68vh,700px)" : undefined }}>
+              {previewUrl ? <Image src={previewUrl} alt="Generated social graphic" fill unoptimized className="object-contain" /> : <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 text-muted-foreground"><ImageIcon className="size-8" /><p className="text-sm">{resourceId === null ? "Select a source to render a preview." : "Rendering preview…"}</p></div>}
+              {previewStale && !rendering ? <div className="absolute inset-x-3 top-3 z-40 rounded-md border border-amber-400/25 bg-background/90 px-3 py-2 text-center text-xs text-amber-300 backdrop-blur">Preview out of date — updating…</div> : null}
+              {safeArea ? <div className="pointer-events-none absolute inset-[4%] z-10 border border-dashed" style={{ borderColor: `${selectedStyle.accent}73` }}><span className="absolute -bottom-px start-0 px-1.5 py-0.5 font-mono text-[8px]" style={{ background: selectedStyle.dark ? "rgba(0,0,0,.8)" : "rgba(255,255,255,.85)", color: selectedStyle.accent }}>SAFE AREA</span></div> : null}
+              {showGrid ? <div className="pointer-events-none absolute inset-0 z-10 opacity-40" style={{ backgroundImage: `linear-gradient(to right, ${selectedStyle.accent}38 1px, transparent 1px), linear-gradient(to bottom, ${selectedStyle.accent}38 1px, transparent 1px)`, backgroundSize: "8.333% 16.666%" }} /> : null}
               {selectedBrand && brandPlacement === "custom" ? (
-                <button
-                  type="button"
-                  aria-label="Drag media logo position"
-                  title="Drag to position the media logo"
-                  onPointerDown={(event) => {
-                    event.currentTarget.setPointerCapture(event.pointerId);
-                    moveBrand(event);
-                  }}
-                  onPointerMove={(event) => {
-                    if (event.currentTarget.hasPointerCapture(event.pointerId)) moveBrand(event);
-                  }}
-                  className="absolute z-30 flex touch-none items-center justify-center rounded-lg border border-dashed border-primary bg-primary/10 text-primary shadow-sm backdrop-blur-sm"
-                  style={{
-                    left: `${brandX}%`,
-                    top: `${brandY}%`,
-                    width: `${brandSize * 1.3}%`,
-                    maxWidth: "28%",
-                    aspectRatio: "1",
-                    transform: "translate(-50%, -50%)",
-                  }}
-                >
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={selectedBrand.logoUrl} alt="" className="size-[72%] object-contain" draggable={false} />
-                  <span className="absolute -bottom-2 -end-2 flex size-6 items-center justify-center rounded-full border border-primary bg-background shadow"><MoveIcon className="size-3.5" aria-hidden="true" /></span>
-                </button>
+                <>
+                  <button
+                    type="button"
+                    aria-label="Set media logo position"
+                    title="Click to place the media logo"
+                    onPointerDown={moveBrand}
+                    className="absolute inset-0 z-20 cursor-crosshair touch-none bg-transparent"
+                  />
+                  <button
+                    type="button"
+                    aria-label="Drag media logo position"
+                    title="Drag to position the media logo"
+                    onPointerDown={(event) => {
+                      event.currentTarget.setPointerCapture(event.pointerId);
+                      moveBrand(event);
+                    }}
+                    onPointerMove={(event) => {
+                      if (event.currentTarget.hasPointerCapture(event.pointerId)) moveBrand(event);
+                    }}
+                    className="absolute z-30 flex cursor-grab touch-none items-center justify-center rounded-lg border-2 border-dashed border-primary bg-transparent text-primary shadow-[0_0_0_1px_rgba(0,0,0,.45)] active:cursor-grabbing"
+                    style={{
+                      left: `${brandX}%`,
+                      top: `${brandY}%`,
+                      width: `${brandSize * 1.3}%`,
+                      maxWidth: "28%",
+                      aspectRatio: "1",
+                      transform: "translate(-50%, -50%)",
+                    }}
+                  >
+                    <span className="absolute -bottom-2 -end-2 flex size-7 items-center justify-center rounded-full border border-primary bg-background shadow"><MoveIcon className="size-4" aria-hidden="true" /></span>
+                  </button>
+                </>
               ) : null}
             </div>
           </div>
 
-          <div className="flex min-h-8 flex-wrap items-center gap-x-4 gap-y-1 border-t border-border px-4 py-2 font-mono text-[11px] text-muted-foreground">
+          <div className="order-3 flex min-h-8 flex-wrap items-center gap-x-4 gap-y-1 border-t border-border px-4 py-2 font-mono text-[11px] text-muted-foreground">
             <span className="flex items-center gap-2"><span className={cn("size-1.5 rounded-full", rendering ? "animate-pulse bg-amber-400" : "bg-teal-400")} />{rendering ? "Rendering..." : renderedAt ? `Rendered ${new Date(renderedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}` : "Ready"}</span>
             <span>{dimensions.width * scale}x{dimensions.height * scale} @ {scale}x export</span>
             <span className="ms-auto">{selectedOption ? `source #${selectedOption.id} - ${selectedOption.detail}` : "No source selected"}</span>
           </div>
 
-          <div className="border-t border-border bg-card/35 p-4">
+          <div className="order-4 border-t border-border bg-card/35 p-4">
             <div className="mb-3 flex items-center justify-between"><h3 className="text-sm font-semibold">Recent generations</h3><span className="text-xs text-muted-foreground">This session</span></div>
             {recent.length ? <div className="grid gap-2 sm:grid-cols-2 2xl:grid-cols-4">{recent.map((item) => (
               <button key={item.id} type="button" onClick={() => applyRecent(item)} className="group flex min-w-0 items-center gap-3 rounded-lg border border-border bg-background/65 p-2 text-start transition-colors hover:border-muted-foreground">
