@@ -5,14 +5,15 @@ import Image from "next/image";
 import { DownloadIcon, ImageIcon, LoaderCircleIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Field, FieldLabel } from "@/components/ui/field";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+  Combobox,
+  ComboboxContent,
+  ComboboxEmpty,
+  ComboboxInput,
+  ComboboxItem,
+  ComboboxList,
+} from "@/components/ui/combobox";
+import { Field, FieldLabel } from "@/components/ui/field";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   GRAPHICS_TEMPLATES,
@@ -32,6 +33,10 @@ export function GraphicsGenerator({ data }: { data: GraphicsGeneratorData }) {
   const [error, setError] = useState<string | null>(null);
   const [rendering, setRendering] = useState(false);
   const options = useMemo(() => graphicsOptionsForTemplate(data, template), [data, template]);
+  const selectedOption = useMemo(
+    () => options.find((option) => option.id === resourceId) ?? null,
+    [options, resourceId],
+  );
 
   useEffect(() => () => {
     if (previewUrl) URL.revokeObjectURL(previewUrl);
@@ -94,22 +99,35 @@ export function GraphicsGenerator({ data }: { data: GraphicsGeneratorData }) {
 
           <Field>
             <FieldLabel htmlFor="graphics-source">Source</FieldLabel>
-            <Select
-              value={resourceId === null ? undefined : String(resourceId)}
-              onValueChange={(value) => setResourceId(value ? Number(value) : null)}
+            <Combobox
+              items={options}
+              value={selectedOption}
+              onValueChange={(option) => setResourceId(option?.id ?? null)}
+              itemToStringLabel={(option) => option.label}
+              itemToStringValue={(option) => String(option.id)}
+              isItemEqualToValue={(option, value) => option.id === value.id}
+              autoHighlight
             >
-              <SelectTrigger id="graphics-source" className="h-10 w-full">
-                <SelectValue placeholder="Choose a source" />
-              </SelectTrigger>
-              <SelectContent>
-                {options.map((option) => (
-                  <SelectItem key={option.id} value={String(option.id)}>
-                    <span className="min-w-0 truncate">{option.label}</span>
-                    <span className="text-xs text-muted-foreground">{option.detail}</span>
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+              <ComboboxInput
+                id="graphics-source"
+                className="w-full"
+                placeholder="Search sources"
+                showClear
+              />
+              <ComboboxContent>
+                <ComboboxEmpty>No matching sources.</ComboboxEmpty>
+                <ComboboxList>
+                  {(option) => (
+                    <ComboboxItem key={option.id} value={option}>
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate font-medium">{option.label}</span>
+                        <span className="block truncate text-xs text-muted-foreground">{option.detail}</span>
+                      </span>
+                    </ComboboxItem>
+                  )}
+                </ComboboxList>
+              </ComboboxContent>
+            </Combobox>
           </Field>
 
           {options.length === 0 ? (

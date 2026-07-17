@@ -24,6 +24,14 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
 type KeywordRule = {
@@ -66,6 +74,20 @@ type ModComment = {
 type RuleDraft = Pick<KeywordRule, "phrase" | "locale" | "scope" | "action">;
 
 const EMPTY_RULE: RuleDraft = { phrase: "", locale: "all", scope: "global", action: "hold" };
+const LOCALE_OPTIONS: Array<{ value: RuleDraft["locale"]; label: string }> = [
+  { value: "all", label: "All locales" },
+  { value: "en", label: "English" },
+  { value: "ar", label: "Arabic" },
+];
+const SCOPE_OPTIONS: Array<{ value: RuleDraft["scope"]; label: string }> = [
+  { value: "global", label: "Global" },
+  { value: "news", label: "News" },
+  { value: "match", label: "Matches" },
+];
+const RULE_ACTION_OPTIONS: Array<{ value: RuleDraft["action"]; label: string }> = [
+  { value: "hold", label: "Hold" },
+  { value: "flag", label: "Flag" },
+];
 const FILTERS = ["pending", "reported", "flagged", "visible", "hidden", "rejected", "deleted"] as const;
 type Filter = (typeof FILTERS)[number];
 type ModerationAction = "approve" | "reject" | "hold" | "hide" | "restore" | "delete";
@@ -90,6 +112,39 @@ const ACTION_META: Record<ModerationAction, { icon: typeof CheckIcon; variant?: 
 
 function actionPastTense(action: BulkAction) {
   return action === "approve" ? "approved" : action === "reject" ? "rejected" : "held";
+}
+
+function RuleSelect<T extends string>({
+  label,
+  value,
+  options,
+  onValueChange,
+  className,
+}: {
+  label: string;
+  value: T;
+  options: Array<{ value: T; label: string }>;
+  onValueChange: (value: T) => void;
+  className?: string;
+}) {
+  return (
+    <Select value={value} onValueChange={(next) => {
+      if (typeof next === "string" && options.some((option) => option.value === next)) {
+        onValueChange(next as T);
+      }
+    }}>
+      <SelectTrigger aria-label={label} className={className}>
+        <SelectValue />
+      </SelectTrigger>
+      <SelectContent alignItemWithTrigger={false}>
+        <SelectGroup>
+          {options.map((option) => (
+            <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
+          ))}
+        </SelectGroup>
+      </SelectContent>
+    </Select>
+  );
 }
 
 export function CommentModeration({
@@ -274,35 +329,27 @@ export function CommentModeration({
               onChange={(event) => setRuleDraft((current) => ({ ...current, phrase: event.target.value }))}
               placeholder="Keyword phrase"
             />
-            <select
-              aria-label="Keyword locale"
-              className="h-8 rounded-lg border border-input bg-transparent px-2 text-sm"
+            <RuleSelect
+              label="Keyword locale"
+              className="w-full"
               value={ruleDraft.locale}
-              onChange={(event) => setRuleDraft((current) => ({ ...current, locale: event.target.value as RuleDraft["locale"] }))}
-            >
-              <option value="all">All locales</option>
-              <option value="en">English</option>
-              <option value="ar">Arabic</option>
-            </select>
-            <select
-              aria-label="Keyword scope"
-              className="h-8 rounded-lg border border-input bg-transparent px-2 text-sm"
+              options={LOCALE_OPTIONS}
+              onValueChange={(locale) => setRuleDraft((current) => ({ ...current, locale }))}
+            />
+            <RuleSelect
+              label="Keyword scope"
+              className="w-full"
               value={ruleDraft.scope}
-              onChange={(event) => setRuleDraft((current) => ({ ...current, scope: event.target.value as RuleDraft["scope"] }))}
-            >
-              <option value="global">Global</option>
-              <option value="news">News</option>
-              <option value="match">Matches</option>
-            </select>
-            <select
-              aria-label="Keyword action"
-              className="h-8 rounded-lg border border-input bg-transparent px-2 text-sm"
+              options={SCOPE_OPTIONS}
+              onValueChange={(scope) => setRuleDraft((current) => ({ ...current, scope }))}
+            />
+            <RuleSelect
+              label="Keyword action"
+              className="w-full"
               value={ruleDraft.action}
-              onChange={(event) => setRuleDraft((current) => ({ ...current, action: event.target.value as RuleDraft["action"] }))}
-            >
-              <option value="hold">Hold</option>
-              <option value="flag">Flag</option>
-            </select>
+              options={RULE_ACTION_OPTIONS}
+              onValueChange={(action) => setRuleDraft((current) => ({ ...current, action }))}
+            />
             <Button size="sm" disabled={ruleBusy !== null || !ruleDraft.phrase.trim()} onClick={() => void createRule()}>
               {ruleBusy === "create" ? <Loader2Icon data-icon="inline-start" className="animate-spin" /> : <PlusIcon data-icon="inline-start" />}
               Add rule
@@ -324,35 +371,27 @@ export function CommentModeration({
                           className="min-w-44 flex-1"
                           onChange={(event) => setEditingRule((current) => ({ ...current, phrase: event.target.value }))}
                         />
-                        <select
-                          aria-label={`Keyword locale ${rule.id}`}
-                          className="h-8 rounded-lg border border-input bg-transparent px-2 text-sm"
+                        <RuleSelect
+                          label={`Keyword locale ${rule.id}`}
+                          className="w-28"
                           value={editingRule.locale}
-                          onChange={(event) => setEditingRule((current) => ({ ...current, locale: event.target.value as RuleDraft["locale"] }))}
-                        >
-                          <option value="all">All locales</option>
-                          <option value="en">English</option>
-                          <option value="ar">Arabic</option>
-                        </select>
-                        <select
-                          aria-label={`Keyword scope ${rule.id}`}
-                          className="h-8 rounded-lg border border-input bg-transparent px-2 text-sm"
+                          options={LOCALE_OPTIONS}
+                          onValueChange={(locale) => setEditingRule((current) => ({ ...current, locale }))}
+                        />
+                        <RuleSelect
+                          label={`Keyword scope ${rule.id}`}
+                          className="w-28"
                           value={editingRule.scope}
-                          onChange={(event) => setEditingRule((current) => ({ ...current, scope: event.target.value as RuleDraft["scope"] }))}
-                        >
-                          <option value="global">Global</option>
-                          <option value="news">News</option>
-                          <option value="match">Matches</option>
-                        </select>
-                        <select
-                          aria-label={`Keyword action ${rule.id}`}
-                          className="h-8 rounded-lg border border-input bg-transparent px-2 text-sm"
+                          options={SCOPE_OPTIONS}
+                          onValueChange={(scope) => setEditingRule((current) => ({ ...current, scope }))}
+                        />
+                        <RuleSelect
+                          label={`Keyword action ${rule.id}`}
+                          className="w-28"
                           value={editingRule.action}
-                          onChange={(event) => setEditingRule((current) => ({ ...current, action: event.target.value as RuleDraft["action"] }))}
-                        >
-                          <option value="hold">Hold</option>
-                          <option value="flag">Flag</option>
-                        </select>
+                          options={RULE_ACTION_OPTIONS}
+                          onValueChange={(action) => setEditingRule((current) => ({ ...current, action }))}
+                        />
                         <Tooltip>
                           <TooltipTrigger
                             render={

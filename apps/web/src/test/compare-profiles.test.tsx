@@ -127,6 +127,9 @@ test("comparison input parsing and public search are bounded", async () => {
   const results = await searchComparisonProfiles("team", `Bounded Comparison ${suffix}`);
   expect(results).toHaveLength(MAX_COMPARISON_SEARCH_RESULTS);
   expect(JSON.stringify(results)).not.toContain("private-");
+  const initialOptions = await searchComparisonProfiles("team", "");
+  expect(initialOptions.length).toBeGreaterThan(0);
+  expect(initialOptions.length).toBeLessThanOrEqual(MAX_COMPARISON_SEARCH_RESULTS);
 
   const { GET } = await import("@/app/api/compare/search/route");
   const oversizedResponse = await GET(new NextRequest(

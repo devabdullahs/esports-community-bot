@@ -33,7 +33,24 @@ import { NotificationInbox } from "@/components/follows/notification-inbox";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Combobox,
+  ComboboxContent,
+  ComboboxEmpty,
+  ComboboxInput,
+  ComboboxItem,
+  ComboboxList,
+} from "@/components/ui/combobox";
+import { Field, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Toggle } from "@/components/ui/toggle";
 import { copy, localizedPath, type Locale } from "@/lib/i18n";
 import { trackProductEvent } from "@/lib/product-analytics";
@@ -81,7 +98,6 @@ export function FollowCenter({ locale, section = "all" }: { locale: Locale; sect
   const queryClient = useQueryClient();
   const [followError, setFollowError] = useState<string | null>(null);
   const [prefsError, setPrefsError] = useState<string | null>(null);
-  const [timezoneSearch, setTimezoneSearch] = useState("");
   const [pendingFollowIds, setPendingFollowIds] = useState<Set<number>>(() => new Set());
   const [pendingOverrideIds, setPendingOverrideIds] = useState<Set<number>>(() => new Set());
   const [pendingPrefKeys, setPendingPrefKeys] = useState<Set<PreferenceKey>>(() => new Set());
@@ -177,7 +193,9 @@ export function FollowCenter({ locale, section = "all" }: { locale: Locale; sect
   const prefs = prefsQuery.data;
   const visibleFollowError = followError ?? (followsQuery.isError ? text.loadFailed : null);
   const visiblePrefsError = prefsError ?? (prefsQuery.isError ? text.loadFailed : null);
-  const filteredTimezones = availableTimezones.filter((zone) => zone.toLowerCase().includes(timezoneSearch.trim().toLowerCase()));
+  const timezoneOptions = prefs && !availableTimezones.includes(prefs.timezone)
+    ? [prefs.timezone, ...availableTimezones]
+    : availableTimezones;
   const dmEnabled = Boolean(prefs?.dm_enabled);
   const quietOff = !prefs || prefs.quiet_start_minute === null || prefs.quiet_end_minute === null || prefs.quiet_start_minute === prefs.quiet_end_minute;
   const deliveryPreview = prefs ? formatDeliveryPreview(prefs, locale) : "";
@@ -233,11 +251,32 @@ export function FollowCenter({ locale, section = "all" }: { locale: Locale; sect
                 </div>
               </div>
               {!dmEnabled && <p className="text-xs text-muted-foreground">{text.dmDisabledHelp}</p>}
-              <label className="grid gap-1 text-sm"><span>{text.timezone}</span><Input value={timezoneSearch} disabled={!dmEnabled} placeholder={text.timezoneSearch} onChange={(event) => setTimezoneSearch(event.target.value)} /></label>
-              <select className="h-9 w-full rounded-md border border-input bg-transparent px-2 text-sm disabled:cursor-not-allowed disabled:opacity-50" value={prefs.timezone} disabled={!dmEnabled || pendingPrefKeys.has("timezone")} onChange={(event) => updatePrefs({ keys: ["timezone"], patch: { timezone: event.target.value }, optimistic: { timezone: event.target.value } })} aria-label={text.timezone}>
-                {!filteredTimezones.includes(prefs.timezone) && <option value={prefs.timezone}>{prefs.timezone}</option>}
-                {filteredTimezones.slice(0, 250).map((zone) => <option key={zone} value={zone}>{zone}</option>)}
-              </select>
+              <Field>
+                <FieldLabel htmlFor="notification-timezone">{text.timezone}</FieldLabel>
+                <Combobox
+                  items={timezoneOptions}
+                  value={prefs.timezone}
+                  onValueChange={(timezone) => {
+                    if (timezone && timezone !== prefs.timezone) {
+                      updatePrefs({ keys: ["timezone"], patch: { timezone }, optimistic: { timezone } });
+                    }
+                  }}
+                  autoHighlight
+                >
+                  <ComboboxInput
+                    id="notification-timezone"
+                    className="w-full"
+                    placeholder={text.timezoneSearch}
+                    disabled={!dmEnabled || pendingPrefKeys.has("timezone")}
+                  />
+                  <ComboboxContent>
+                    <ComboboxEmpty>{text.timezoneSearch}</ComboboxEmpty>
+                    <ComboboxList>
+                      {(zone) => <ComboboxItem key={zone} value={zone}>{zone}</ComboboxItem>}
+                    </ComboboxList>
+                  </ComboboxContent>
+                </Combobox>
+              </Field>
               <div className="grid gap-2 sm:grid-cols-[1fr_1fr_auto] sm:items-end">
                 <label className="grid gap-1 text-sm"><span>{text.quietStart}</span><Input type="time" value={minuteToTime(prefs.quiet_start_minute)} disabled={!dmEnabled || quietOff || pendingPrefKeys.has("quiet_start_minute")} onChange={(event) => { const minute = timeToMinute(event.target.value); if (minute !== null) updatePrefs({ keys: ["quiet_start_minute", "quiet_end_minute"], patch: { quietStartMinute: minute, quietEndMinute: prefs.quiet_end_minute }, optimistic: { quiet_start_minute: minute } }); }} /></label>
                 <label className="grid gap-1 text-sm"><span>{text.quietEnd}</span><Input type="time" value={minuteToTime(prefs.quiet_end_minute)} disabled={!dmEnabled || quietOff || pendingPrefKeys.has("quiet_end_minute")} onChange={(event) => { const minute = timeToMinute(event.target.value); if (minute !== null) updatePrefs({ keys: ["quiet_start_minute", "quiet_end_minute"], patch: { quietStartMinute: prefs.quiet_start_minute, quietEndMinute: minute }, optimistic: { quiet_end_minute: minute } }); }} /></label>
@@ -268,17 +307,36 @@ function formatDeliveryPreview(prefs: NotificationPrefs, locale: Locale) {
 function FollowRowControl({ follow, locale, text, pending, pendingOverride, onRemove, onOverride }: { follow: FollowRow; locale: Locale; text: FollowsCopy; pending: boolean; pendingOverride: boolean; onRemove: () => void; onOverride: (patch: { notifyMatchStart?: FollowOverride; notifyMatchResult?: FollowOverride }) => void }) {
   const Icon = TYPE_ICONS[follow.entity_type] ?? BellIcon;
   const label = follow.entity_label || follow.entity_key;
-  return <div className="grid gap-2 rounded-lg border border-border/50 px-3 py-2 sm:grid-cols-[auto_auto_minmax(0,1fr)_auto_auto] sm:items-center">
+  return <div className="grid gap-2 rounded-lg border border-border/50 px-3 py-2 sm:grid-cols-[auto_auto_minmax(8rem,1fr)_auto] sm:items-center">
     <Icon className="size-3.5 shrink-0 text-primary" />
     <Badge variant="outline">{text.entityTypes[follow.entity_type]}</Badge>
     <span className="min-w-0 truncate text-sm font-medium" dir="auto">{follow.entity_ref ? <Link href={localizedPath(follow.entity_ref, locale)} className="hover:underline">{label}</Link> : label}</span>
-    <div className="flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground"><span className="shrink-0">{text.perFollow}</span><OverrideSelect label={text.matchStartShort} value={overrideLabel(follow.notify_match_start)} disabled={pendingOverride} onChange={(value) => onOverride({ notifyMatchStart: value })} text={text} /><OverrideSelect label={text.matchResultShort} value={overrideLabel(follow.notify_match_result)} disabled={pendingOverride} onChange={(value) => onOverride({ notifyMatchResult: value })} text={text} /></div>
-    <Button variant="ghost" size="icon-xs" disabled={pending || pendingOverride} onClick={onRemove} title={text.unfollow} aria-label={`${text.unfollow}: ${label}`}>{pending ? <Loader2Icon className="animate-spin" /> : <XIcon />}</Button>
+    <div className="flex min-w-0 flex-wrap items-center justify-end gap-1.5 text-xs text-muted-foreground sm:col-start-4">
+      <span className="shrink-0">{text.perFollow}</span>
+      <OverrideSelect label={text.matchStartShort} value={overrideLabel(follow.notify_match_start)} disabled={pendingOverride} onChange={(value) => onOverride({ notifyMatchStart: value })} text={text} />
+      <OverrideSelect label={text.matchResultShort} value={overrideLabel(follow.notify_match_result)} disabled={pendingOverride} onChange={(value) => onOverride({ notifyMatchResult: value })} text={text} />
+      <Button variant="ghost" size="icon-xs" disabled={pending || pendingOverride} onClick={onRemove} title={text.unfollow} aria-label={`${text.unfollow}: ${label}`}>{pending ? <Loader2Icon className="animate-spin" /> : <XIcon />}</Button>
+    </div>
   </div>;
 }
 
 function OverrideSelect({ label, value, disabled, onChange, text }: { label: string; value: FollowOverride; disabled: boolean; onChange: (value: FollowOverride) => void; text: FollowsCopy }) {
-  return <label className="flex min-w-0 items-center gap-1"><span className="sr-only">{label}</span><select aria-label={label} value={value} disabled={disabled} onChange={(event) => onChange(event.target.value as FollowOverride)} className="h-7 max-w-24 rounded-md border border-input bg-transparent px-1 text-xs disabled:opacity-50"><option value="inherit">{label}: {text.inherit}</option><option value="on">{label}: {text.on}</option><option value="off">{label}: {text.off}</option></select></label>;
+  const options: Array<{ value: FollowOverride; label: string }> = [
+    { value: "inherit", label: `${label}: ${text.inherit}` },
+    { value: "on", label: `${label}: ${text.on}` },
+    { value: "off", label: `${label}: ${text.off}` },
+  ];
+
+  return <Select items={options} value={value} disabled={disabled} onValueChange={(next) => onChange(next as FollowOverride)}>
+    <SelectTrigger size="sm" className="max-w-32" aria-label={label}>
+      <SelectValue />
+    </SelectTrigger>
+    <SelectContent alignItemWithTrigger={false}>
+      <SelectGroup>
+        {options.map((option) => <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>)}
+      </SelectGroup>
+    </SelectContent>
+  </Select>;
 }
 
 function PrefRow({ label, help, on, disabled, onToggle }: { label: string; help: string; on: boolean; disabled: boolean; onToggle: (next: boolean) => void }) {

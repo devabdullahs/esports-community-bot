@@ -333,7 +333,7 @@ export async function getProfileComparison(selection: ComparisonSelection) {
 
 export async function searchComparisonProfiles(kind: ComparisonKind, query: string) {
   const parsedQuery = parseComparisonSearchQuery(query);
-  if (!parsedQuery || parsedQuery.length < 2) return [];
+  if (parsedQuery === null) return [];
 
   const like = `%${parsedQuery.toLowerCase()}%`;
   const rows = kind === "team"

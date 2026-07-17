@@ -23,6 +23,8 @@ type MatchGraphic = {
     game: string;
     teamA: string;
     teamB: string;
+    logoA: string | null;
+    logoB: string | null;
     scoreA: number;
     scoreB: number;
   };
@@ -36,7 +38,7 @@ type StandingsGraphic = {
     template: "standings";
     tournament: string;
     section: string;
-    entries: Array<{ rank: number; team: string; points: string; extra: string }>;
+    entries: Array<{ rank: number; team: string; logo: string | null; points: string; extra: string }>;
   };
 };
 
@@ -58,6 +60,7 @@ type StandingsRow = {
   section: string;
   rank: number;
   team: string;
+  logo: string | null;
   points: string;
   extra: string;
 };
@@ -112,7 +115,7 @@ export async function listGraphicsGeneratorData(access: AdminAccess): Promise<Gr
 
   const [matchRows, standingsRows, posts] = await Promise.all([
     all(
-      `SELECT m.id, m.team_a, m.team_b, m.score_a, m.score_b, t.game, t.name AS tournament_name
+      `SELECT m.id, m.team_a, m.team_b, m.logo_a, m.logo_b, m.score_a, m.score_b, t.game, t.name AS tournament_name
        FROM matches m
        JOIN tournaments t ON t.id = m.tournament_id
        WHERE t.guild_id = $1
@@ -182,7 +185,7 @@ export async function resolveGraphicsRenderRequest(
 
   if (request.template === "match-result") {
     const row = (await all(
-      `SELECT m.id, m.team_a, m.team_b, m.score_a, m.score_b, t.game, t.name AS tournament_name
+      `SELECT m.id, m.team_a, m.team_b, m.logo_a, m.logo_b, m.score_a, m.score_b, t.game, t.name AS tournament_name
        FROM matches m
        JOIN tournaments t ON t.id = m.tournament_id
        WHERE m.id = $1
@@ -207,6 +210,8 @@ export async function resolveGraphicsRenderRequest(
         game: cleanText(row.game, owner.slug, 80),
         teamA: cleanText(row.team_a, "TBD", 70),
         teamB: cleanText(row.team_b, "TBD", 70),
+        logoA: cleanText(row.logo_a, "", 1000) || null,
+        logoB: cleanText(row.logo_b, "", 1000) || null,
         scoreA: Number(row.score_a),
         scoreB: Number(row.score_b),
       },
@@ -235,6 +240,7 @@ export async function resolveGraphicsRenderRequest(
           ? Number(candidate.rank)
           : index + 1,
         team: cleanText(candidate.team, "TBD", 80),
+        logo: cleanText(candidate.logo, "", 1000) || null,
         points: cleanText(candidate.points, "", 32),
         extra: cleanText(candidate.extra, "", 32),
       }));

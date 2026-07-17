@@ -38,7 +38,6 @@ import type {
 } from "@/lib/profile-comparison";
 
 const MAX_QUERY_LENGTH = 80;
-const EMPTY_OPTIONS: ComparisonSearchOption[] = [];
 
 function comparisonHref(
   locale: Locale,
@@ -74,16 +73,11 @@ function ProfileSelector({
   const [options, setOptions] = useState<ComparisonSearchOption[]>([]);
   const [loading, setLoading] = useState(false);
   const [failed, setFailed] = useState(false);
-  const searchEnabled = query.trim().length >= 2;
-  const visibleOptions = searchEnabled ? options : EMPTY_OPTIONS;
+  const visibleOptions = options;
   const optionIds = visibleOptions.map((option) => String(option.id));
 
   useEffect(() => {
     const trimmed = query.trim();
-    if (trimmed.length < 2) {
-      return;
-    }
-
     const controller = new AbortController();
     let active = true;
     const timeout = window.setTimeout(() => {
