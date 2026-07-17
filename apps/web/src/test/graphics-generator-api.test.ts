@@ -77,6 +77,17 @@ describe("admin graphics render API", () => {
     expect(mockRateLimit).toHaveBeenCalledOnce();
   });
 
+  test("rejects media branding outside the admin channel scope", async () => {
+    const response = await POST(request({
+      template: "match-result",
+      resourceId: 77,
+      brandMediaSlug: "outside-channel",
+    }));
+    expect(response.status).toBe(403);
+    expect(mockResolve).not.toHaveBeenCalled();
+    expect(mockRender).not.toHaveBeenCalled();
+  });
+
   test("renders canonical server data, audits it, and never caches the PNG", async () => {
     const response = await POST(request({
       template: "match-result",
@@ -96,7 +107,7 @@ describe("admin graphics render API", () => {
       gamesAdmin(["valorant"]),
       "graphics.render",
       "match-result:77",
-      { template: "match-result", ownerType: "game", ownerSlug: "valorant" },
+      { template: "match-result", ownerType: "game", ownerSlug: "valorant", brandMediaSlug: null },
     );
   });
 

@@ -94,6 +94,7 @@ test("template selection exposes only its corresponding source type", () => {
     matches: [{ id: 1, label: "Match", detail: "valorant", owner: { kind: "game", slug: "valorant" } }],
     standings: [{ id: 2, label: "Standings", detail: "valorant", owner: { kind: "game", slug: "valorant" } }],
     news: [{ id: 3, label: "News", detail: "channel", owner: { kind: "media", slug: "channel" } }],
+    brands: [],
   };
 
   expect(graphicsOptionsForTemplate(data, "match-result").map((option) => option.id)).toEqual([1]);
@@ -113,17 +114,23 @@ test("scoped admins only receive graphics sources they manage", () => {
     news: [
       { id: 4, label: "Channel post", detail: "alpha", owner: { kind: "media", slug: "alpha" } },
     ],
+    brands: [
+      { slug: "alpha", label: "Alpha", logoUrl: "https://example.test/alpha.svg" },
+      { slug: "bravo", label: "Bravo", logoUrl: "https://example.test/bravo.svg" },
+    ],
   };
 
   const gameScoped = filterGraphicsGeneratorData(gamesAdmin(["valorant"]), data);
   expect(gameScoped.matches.map((option) => option.id)).toEqual([1]);
   expect(gameScoped.standings.map((option) => option.id)).toEqual([3]);
   expect(gameScoped.news).toEqual([]);
+  expect(gameScoped.brands).toEqual([]);
 
   const mediaScoped = filterGraphicsGeneratorData(mediaAdmin(["alpha"]), data);
   expect(mediaScoped.matches).toEqual([]);
   expect(mediaScoped.standings).toEqual([]);
   expect(mediaScoped.news.map((option) => option.id)).toEqual([4]);
+  expect(mediaScoped.brands.map((brand) => brand.slug)).toEqual(["alpha"]);
 });
 
 test("request parser accepts only the finite template ids and positive numeric resource ids", () => {
@@ -133,6 +140,7 @@ test("request parser accepts only the finite template ids and positive numeric r
   expect(parseGraphicsRenderRequest({ template: "standings", resourceId: 1, format: "3:2" })).toBeNull();
   expect(parseGraphicsRenderRequest({ template: "standings", resourceId: 1, scale: 4 })).toBeNull();
   expect(parseGraphicsRenderRequest({ template: "news-promo", resourceId: 1, brandX: -1 })).toBeNull();
+  expect(parseGraphicsRenderRequest({ template: "news-promo", resourceId: 1, brandMediaSlug: "../alpha" })).toBeNull();
   expect(parseGraphicsRenderRequest({
     template: "news-promo",
     resourceId: 1,
@@ -145,6 +153,7 @@ test("request parser accepts only the finite template ids and positive numeric r
     brandX: 42.25,
     brandY: 63.75,
     brandSize: 16.25,
+    brandMediaSlug: "alpha-media",
   })).toMatchObject({
     format: "9:16",
     language: "ar",
@@ -155,5 +164,31 @@ test("request parser accepts only the finite template ids and positive numeric r
     brandX: 42.3,
     brandY: 63.8,
     brandSize: 16.3,
+    brandMediaSlug: "alpha-media",
   });
+});
+
+test("standings graphics collapse duplicate historical rows for the same team", async () => {
+  const suffix = `${Date.now()}-${Math.random()}`;
+  const tournamentId = await seedGraphicsTournament("graphics-crossfire", suffix);
+  for (const row of [
+    [1, "Alpha", "3-0"],
+    [1, "Alpha", "3-0"],
+    [2, "Bravo", "2-1"],
+    [2, "Bravo", "2-1"],
+  ] as const) {
+    await run(
+      `INSERT INTO tournament_standings
+         (tournament_id, section, section_order, rank, team, points, extra, updated_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+      [tournamentId, "Group Stage", 1, row[0], row[1], row[2], "", "2026-07-17 00:00:00"],
+    );
+  }
+
+  const parsed = parseGraphicsRenderRequest({ template: "standings", resourceId: tournamentId });
+  const resolved = await resolveGraphicsRenderRequest(parsed!);
+
+  expect(resolved?.template).toBe("standings");
+  if (resolved?.template !== "standings") throw new Error("Expected standings graphic");
+  expect(resolved.input.entries.map((entry) => entry.team)).toEqual(["Alpha", "Bravo"]);
 });
