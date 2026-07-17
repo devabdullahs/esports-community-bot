@@ -29,8 +29,8 @@ async function seedGraphicsTournament(game: string, suffix: string) {
 async function seedMatch(tournamentId: number, suffix: string) {
   await run(
     `INSERT INTO matches
-       (tournament_id, source, external_id, name, team_a, team_b, score_a, score_b, status, scheduled_at, updated_at)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
+       (tournament_id, source, external_id, name, team_a, team_b, logo_a, logo_b, score_a, score_b, status, scheduled_at, updated_at)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
     [
       tournamentId,
       "liquipedia",
@@ -38,6 +38,8 @@ async function seedMatch(tournamentId: number, suffix: string) {
       `Canonical match ${suffix}`,
       "Canonical Alpha",
       "Canonical Bravo",
+      "https://example.test/alpha.png",
+      "https://example.test/bravo.png",
       3,
       1,
       "finished",
@@ -70,6 +72,8 @@ test("server resolution ignores spoofed match names and scores", async () => {
     input: {
       teamA: "Canonical Alpha",
       teamB: "Canonical Bravo",
+      logoA: "https://example.test/alpha.png",
+      logoB: "https://example.test/bravo.png",
       scoreA: 3,
       scoreB: 1,
     },

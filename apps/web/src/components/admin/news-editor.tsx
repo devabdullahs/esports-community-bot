@@ -66,6 +66,7 @@ import {
   NEWS_TITLE_MAX_LENGTH,
 } from "@/lib/news-validation";
 import { useAdminNavigationGuard } from "@/components/admin/admin-navigation-guard";
+import { DateTimePicker } from "@/components/admin/date-time-picker";
 import { ImageCropDialog } from "@/components/admin/image-crop-dialog";
 import { AuthorAvatar } from "@/components/news/author-avatar";
 import { PostBody } from "@/components/news/post-body";
@@ -1108,12 +1109,11 @@ export function NewsEditor({
 
               <Field>
                 <FieldLabel>{scheduleCopy.label}</FieldLabel>
-                <Input
-                  type="datetime-local"
+                <DateTimePicker
                   value={scheduledPublishAt}
                   min={toRiyadhDateTimeInput(new Date().toISOString())}
-                  onChange={(event) => setScheduledPublishAt(event.target.value)}
-                  className="w-full sm:max-w-sm"
+                  locale={locale}
+                  onChange={setScheduledPublishAt}
                 />
                 <FieldDescription>{scheduleCopy.hint}</FieldDescription>
               </Field>

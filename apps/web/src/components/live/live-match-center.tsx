@@ -5,6 +5,8 @@ import { CalendarClockIcon, RadioIcon, RefreshCwIcon, TrophyIcon } from "lucide-
 import Link from "next/link";
 import { LocalDateTime } from "@/components/local-date-time";
 import { PlatformIcon } from "@/components/platform-icon";
+import { ProfileAvatar } from "@/components/profiles/profile-avatar";
+import { GameIcon } from "@/components/tournaments/tournament-directory";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -31,7 +33,10 @@ function MatchTeams({ item, locale }: { item: LiveMatchCenterItem; locale: Local
 
   return (
     <div className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-3" dir={locale === "ar" ? "rtl" : "ltr"}>
-      <bdi className="min-w-0 truncate text-start text-sm font-semibold">{a}</bdi>
+      <div className="flex min-w-0 items-center gap-2">
+        <ProfileAvatar src={item.logoA} name={a} shape="rounded" fit="contain" className="size-7 shrink-0 border border-border/70" />
+        <bdi className="min-w-0 truncate text-start text-sm font-semibold">{a}</bdi>
+      </div>
       <span className="shrink-0 tabular-nums text-sm font-semibold">
         {hasScore ? (
           <>{item.scoreA} <span className="text-muted-foreground">-</span> {item.scoreB}</>
@@ -39,7 +44,10 @@ function MatchTeams({ item, locale }: { item: LiveMatchCenterItem; locale: Local
           <span className="text-muted-foreground">{text.vs}</span>
         )}
       </span>
-      <bdi className="min-w-0 truncate text-end text-sm font-semibold">{b}</bdi>
+      <div className="flex min-w-0 items-center justify-end gap-2">
+        <bdi className="min-w-0 truncate text-end text-sm font-semibold">{b}</bdi>
+        <ProfileAvatar src={item.logoB} name={b} shape="rounded" fit="contain" className="size-7 shrink-0 border border-border/70" />
+      </div>
     </div>
   );
 }
@@ -94,12 +102,19 @@ function MatchCard({ item, locale, live }: { item: LiveMatchCenterItem; locale: 
   return (
     <Card size="sm" className="gap-3">
       <CardHeader className="gap-2">
-        <div className="flex min-w-0 flex-wrap items-center gap-2">
-          {live ? <Badge variant="destructive">{text.liveNow}</Badge> : <Badge variant="secondary">{text.upcoming}</Badge>}
-          {item.game ? <Badge variant="outline"><bdi>{item.game}</bdi></Badge> : null}
-          <span className="text-xs text-muted-foreground">
-            <MatchTime value={item.scheduledAt} locale={locale} fallback={text.timeTbd} />
-          </span>
+        <div className="flex min-w-0 items-start justify-between gap-3">
+          <div className="flex min-w-0 flex-wrap items-center gap-2">
+            {live ? <Badge variant="destructive">{text.liveNow}</Badge> : <Badge variant="secondary">{text.upcoming}</Badge>}
+            {item.game ? <Badge variant="outline"><bdi>{item.game}</bdi></Badge> : null}
+            <span className="text-xs text-muted-foreground">
+              <MatchTime value={item.scheduledAt} locale={locale} fallback={text.timeTbd} />
+            </span>
+          </div>
+          {item.game ? (
+            <span className="grid size-9 shrink-0 place-items-center rounded-lg border bg-background/50 text-primary" aria-hidden>
+              <GameIcon slug={item.game} size="mark" />
+            </span>
+          ) : null}
         </div>
         <Link
           href={localizedPath(item.tournamentHref, locale)}
