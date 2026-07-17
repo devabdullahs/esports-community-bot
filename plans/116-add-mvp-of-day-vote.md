@@ -7,6 +7,7 @@
 
 ## Status
 
+- **State**: Completed
 - **Priority**: P3
 - **Effort**: M-L
 - **Risk**: MED
@@ -76,10 +77,10 @@ small and link to the full vote page.
 
 ## Done criteria
 
-- [ ] One vote per verified member per session.
-- [ ] Voting does not affect prediction scores.
-- [ ] Abuse controls and moderation copy are clear.
-- [ ] Full verification passes.
+- [x] One vote per verified member per session.
+- [x] Voting does not affect prediction scores.
+- [x] Abuse controls and moderation copy are clear.
+- [x] Full verification passes.
 
 ## STOP conditions
 

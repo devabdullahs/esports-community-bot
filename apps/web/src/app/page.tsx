@@ -23,6 +23,7 @@ import {
 } from "@/components/ui/card";
 import { DateTime } from "@/components/date-time";
 import { GameLogoMark } from "@/components/game-logo-mark";
+import { ProfileAvatar } from "@/components/profiles/profile-avatar";
 import { PartnerPlacement } from "@/components/partners/partner-placement";
 import { LiveCoStreamsStrip } from "@/components/streams/live-co-streams-strip";
 import { localizeText } from "@/lib/community-content";
@@ -39,6 +40,7 @@ import {
 } from "@/lib/i18n";
 import { getRequestLocale } from "@/lib/request-locale";
 import { buildPageMetadata, siteDescription, siteName } from "@/lib/metadata";
+import { getLatestMvpResult } from "@/lib/mvp";
 import { displayImageUrl } from "@/lib/logo-url";
 import { safeUrlOrUndefined } from "@/lib/safe-url";
 
@@ -64,10 +66,11 @@ export default async function Home() {
   const tournamentsHref = localizedPath("/tournaments", locale);
   const newsHref = localizedPath("/news", locale);
 
-  const [games, latestPosts, summaries] = await Promise.all([
+  const [games, latestPosts, summaries, latestMvp] = await Promise.all([
     listGamesCached(),
     listLatestPublishedNewsPostsCached(locale, 4),
     listTournamentSummariesCached(),
+    getLatestMvpResult(),
   ]);
   const gameTitleOf = (slug: string) => gameTitleForSlug(slug, games, locale);
   const featuredPost = latestPosts[0] ?? null;
@@ -179,6 +182,37 @@ export default async function Home() {
       </section>
 
       <LiveCoStreamsStrip locale={locale} />
+
+      {latestMvp ? (
+        <section className="border-t">
+          <div className="mx-auto max-w-6xl px-4 py-6 sm:px-8">
+            <Card className="border-primary/30 bg-primary/5">
+              <CardContent className="flex flex-col gap-4 py-5 sm:flex-row sm:items-center">
+                <ProfileAvatar
+                  src={latestMvp.winner.imageUrl}
+                  name={latestMvp.winner.displayName}
+                  className="size-14 shrink-0 border border-primary/30"
+                  focus="top"
+                />
+                <div className="min-w-0 flex-1">
+                  <Badge variant="outline" className="mb-1 border-primary/30 text-primary">
+                    <TrophyIcon data-icon="inline-start" />
+                    {locale === "ar" ? "أفضل لاعب في اليوم" : "MVP of the day"}
+                  </Badge>
+                  <p className="truncate text-lg font-semibold" dir="auto">{latestMvp.winner.displayName}</p>
+                  <p className="truncate text-sm text-muted-foreground" dir="auto">
+                    {[latestMvp.winner.teamName, latestMvp.winner.game].filter(Boolean).join(" · ")}
+                  </p>
+                </div>
+                <Button render={<Link href={localizedPath("/mvp", locale)} />} nativeButton={false} variant="outline">
+                  {locale === "ar" ? "عرض التصويت" : "View vote"}
+                  <ArrowRightIcon data-icon="inline-end" className="rtl:rotate-180" />
+                </Button>
+              </CardContent>
+            </Card>
+          </div>
+        </section>
+      ) : null}
 
       <section className="border-t">
         <div className="mx-auto flex max-w-6xl flex-col gap-8 px-4 py-10 sm:px-8">

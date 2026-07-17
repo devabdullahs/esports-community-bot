@@ -34,6 +34,7 @@ const STATIC_PATHS = [
   "/clubs",
   "/clubs/standings",
   "/predictions",
+  "/mvp",
   "/docs/mcp",
   "/docs/admin-mcp",
   "/partners",

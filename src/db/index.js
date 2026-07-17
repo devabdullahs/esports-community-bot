@@ -109,6 +109,44 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_players_current_team ON players(current_team_id);
   CREATE UNIQUE INDEX IF NOT EXISTS idx_players_game_slug ON players(game, slug) WHERE slug IS NOT NULL;
 
+  CREATE TABLE IF NOT EXISTS mvp_vote_sessions (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    vote_date  TEXT    NOT NULL UNIQUE,
+    opens_at   INTEGER NOT NULL,
+    closes_at  INTEGER NOT NULL,
+    created_at TEXT    NOT NULL DEFAULT (datetime('now')),
+    CHECK (closes_at > opens_at)
+  );
+
+  CREATE TABLE IF NOT EXISTS mvp_vote_nominees (
+    id                INTEGER PRIMARY KEY AUTOINCREMENT,
+    session_id        INTEGER NOT NULL REFERENCES mvp_vote_sessions(id) ON DELETE CASCADE,
+    player_id         INTEGER REFERENCES players(id) ON DELETE SET NULL,
+    source_match_id   INTEGER REFERENCES matches(id) ON DELETE SET NULL,
+    nominee_key       TEXT    NOT NULL,
+    display_name      TEXT    NOT NULL,
+    team_name         TEXT,
+    game              TEXT    NOT NULL,
+    image_url         TEXT,
+    performance_score REAL    NOT NULL DEFAULT 0,
+    created_at        TEXT    NOT NULL DEFAULT (datetime('now')),
+    UNIQUE (session_id, nominee_key),
+    UNIQUE (session_id, id)
+  );
+  CREATE INDEX IF NOT EXISTS idx_mvp_nominees_player ON mvp_vote_nominees(player_id);
+
+  CREATE TABLE IF NOT EXISTS mvp_votes (
+    session_id     INTEGER NOT NULL REFERENCES mvp_vote_sessions(id) ON DELETE CASCADE,
+    nominee_id     INTEGER NOT NULL,
+    discord_user_id TEXT   NOT NULL,
+    created_at     TEXT    NOT NULL DEFAULT (datetime('now')),
+    updated_at     TEXT    NOT NULL DEFAULT (datetime('now')),
+    PRIMARY KEY (session_id, discord_user_id),
+    FOREIGN KEY (session_id, nominee_id)
+      REFERENCES mvp_vote_nominees(session_id, id) ON DELETE CASCADE
+  );
+  CREATE INDEX IF NOT EXISTS idx_mvp_votes_nominee ON mvp_votes(session_id, nominee_id);
+
   CREATE TABLE IF NOT EXISTS guild_settings (
     guild_id               TEXT PRIMARY KEY,
     schedule_channel_id    TEXT,

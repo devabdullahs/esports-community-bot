@@ -141,6 +141,7 @@ export function SiteHeaderClient({
     { href: "/tournaments", label: text.common.tournaments, icon: TrophyIcon },
     { href: "/teams", label: text.common.teams, icon: UsersIcon },
     { href: "/players", label: text.common.players, icon: UserRoundIcon },
+    { href: "/mvp", label: locale === "ar" ? "أفضل لاعب اليوم" : "MVP of the day", icon: MedalIcon },
     { href: "/compare", label: text.profiles.compare, icon: ArrowLeftRightIcon },
   ];
   const liveLink: Destination = { href: "/live", label: text.common.live, icon: RadioIcon };

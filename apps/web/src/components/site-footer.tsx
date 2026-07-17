@@ -20,6 +20,7 @@ export async function SiteFooter({ analyticsConsentEnabled = false }: { analytic
     { href: "/news", label: text.common.news },
     { href: "/media", label: text.common.media },
     { href: "/predictions", label: text.common.predictions },
+    { href: "/mvp", label: locale === "ar" ? "أفضل لاعب اليوم" : "MVP of the day" },
   ];
   const about = [
     { href: "/partners", label: text.common.partners },

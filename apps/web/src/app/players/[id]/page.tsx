@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import type { ReactNode } from "react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeftIcon, ArrowRightIcon, MapPinIcon, ShieldIcon, UserIcon } from "lucide-react";
+import { ArrowLeftIcon, ArrowRightIcon, MapPinIcon, MedalIcon, ShieldIcon, UserIcon } from "lucide-react";
 import { DateTime } from "@/components/date-time";
 import { FollowButton } from "@/components/follows/follow-button";
 import { PageBreadcrumb } from "@/components/page-breadcrumb";
@@ -18,6 +18,7 @@ import { gameTitleForSlug, listGamesCached } from "@/lib/games";
 import { copy, localizedPath } from "@/lib/i18n";
 import { liquipediaPlayerDetails } from "@/lib/liquipedia-profile-details";
 import { buildPageMetadata } from "@/lib/metadata";
+import { getPlayerMvpWin } from "@/lib/mvp";
 import { getPlayerProfile, type PlayerProfile } from "@/lib/pandascore-profiles";
 import { getProfileMatchesForTeamNamesCached } from "@/lib/profile-matches";
 import {
@@ -162,6 +163,7 @@ export default async function PlayerProfilePage({
     game: player.game,
     names: [teamName, player.current_team_name, liquipedia.team],
   });
+  const mvpWin = await getPlayerMvpWin(player.id);
 
   return (
     <main className="mx-auto flex w-full max-w-5xl flex-1 flex-col gap-6 px-4 py-8 sm:px-8 sm:py-10">
@@ -198,6 +200,12 @@ export default async function PlayerProfilePage({
               <h1 dir="auto" className="max-w-full break-normal text-3xl font-semibold leading-tight sm:text-4xl">
                 {player.name}
               </h1>
+              {mvpWin ? (
+                <Badge className="w-fit">
+                  <MedalIcon data-icon="inline-start" />
+                  {locale === "ar" ? "أفضل لاعب في اليوم" : "MVP of the day"} · {mvpWin.voteDate}
+                </Badge>
+              ) : null}
               {secondaryName ? (
                 <p dir="auto" className="text-sm text-muted-foreground">
                   {secondaryName}
