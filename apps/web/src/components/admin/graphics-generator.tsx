@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type PointerEvent as ReactPointerEvent } from "react";
 import Image from "next/image";
 import {
   ArrowDownLeftIcon,
@@ -25,6 +25,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Field, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
+import { Kbd, KbdGroup } from "@/components/ui/kbd";
 import {
   Select,
   SelectContent,
@@ -101,6 +102,15 @@ function formatIconStyle(format: GraphicsFormatId) {
   return { width: 20, height: 12 };
 }
 
+function subscribeToPlatform() {
+  return () => {};
+}
+
+function isMacPlatform() {
+  if (typeof navigator === "undefined") return false;
+  return /Mac|iPhone|iPad|iPod/i.test(navigator.platform || navigator.userAgent);
+}
+
 export function GraphicsGenerator({ data }: { data: GraphicsGeneratorData }) {
   const [template, setTemplate] = useState<GraphicsTemplateId>("match-result");
   const [resourceId, setResourceId] = useState<number | null>(() => initialGraphicsSelection(data, "match-result"));
@@ -123,6 +133,7 @@ export function GraphicsGenerator({ data }: { data: GraphicsGeneratorData }) {
   const [recent, setRecent] = useState<RecentGeneration[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [rendering, setRendering] = useState(false);
+  const isMac = useSyncExternalStore(subscribeToPlatform, isMacPlatform, () => false);
   const [renderedAt, setRenderedAt] = useState<number | null>(null);
   const workspaceRef = useRef<HTMLDivElement>(null);
   const searchRef = useRef<HTMLInputElement>(null);
@@ -165,14 +176,18 @@ export function GraphicsGenerator({ data }: { data: GraphicsGeneratorData }) {
   }, []);
 
   useEffect(() => {
+    const macPlatform = isMacPlatform();
+
     function onKeyDown(event: KeyboardEvent) {
-      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
+      const commandKey = macPlatform ? event.metaKey : event.ctrlKey;
+      if (commandKey && event.shiftKey && !event.altKey && event.key.toLowerCase() === "k") {
         event.preventDefault();
+        event.stopPropagation();
         searchRef.current?.focus();
       }
     }
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
+    window.addEventListener("keydown", onKeyDown, true);
+    return () => window.removeEventListener("keydown", onKeyDown, true);
   }, []);
 
   function selectTemplate(value: string | null) {
@@ -328,7 +343,13 @@ export function GraphicsGenerator({ data }: { data: GraphicsGeneratorData }) {
               <div className="relative">
                 <SearchIcon className="pointer-events-none absolute start-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
                 <Input ref={searchRef} value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search sources" className="pe-11 ps-9" />
-                <kbd className="pointer-events-none absolute end-2.5 top-1/2 -translate-y-1/2 rounded border border-border bg-muted px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground max-sm:hidden">⌘K</kbd>
+                <KbdGroup className="pointer-events-none absolute end-2.5 top-1/2 -translate-y-1/2 max-sm:hidden" aria-label={isMac ? "Command Shift K" : "Control Shift K"}>
+                  <Kbd>{isMac ? "⌘" : "Ctrl"}</Kbd>
+                  <span className="text-[10px] text-muted-foreground">+</span>
+                  <Kbd>{isMac ? "⇧" : "Shift"}</Kbd>
+                  <span className="text-[10px] text-muted-foreground">+</span>
+                  <Kbd>K</Kbd>
+                </KbdGroup>
               </div>
               <div className="max-h-60 overflow-y-auto rounded-lg border border-border bg-background/50 p-1" role="listbox" aria-label="Graphics sources">
                 {filteredOptions.map((option) => {
