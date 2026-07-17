@@ -16,8 +16,17 @@ const {
   upsertPublicEwcPredictorIdentity,
   upsertEwcProfileLink,
 } = await import('../src/db/ewcProfileLinks.js');
-const { getPublicEwcLeaderboard } = await import('../src/lib/ewcProfileStats.js');
-const { saveWeeklyPredictionScore, upsertEwcWeek, upsertWeeklyPrediction } = await import('../src/db/ewcPredictions.js');
+const {
+  getPublicEwcLeaderboard,
+  getPublicEwcPredictorProfile,
+  listPublicEwcPredictorRouteIds,
+} = await import('../src/lib/ewcProfileStats.js');
+const {
+  markEwcWeekScored,
+  saveWeeklyPredictionScore,
+  upsertEwcWeek,
+  upsertWeeklyPrediction,
+} = await import('../src/db/ewcPredictions.js');
 
 db.exec('CREATE TABLE IF NOT EXISTS "user" (id TEXT PRIMARY KEY, name TEXT, image TEXT)');
 
@@ -42,6 +51,18 @@ test('profile links are public and resolve the current auth name through an opaq
   const updated = await getEwcProfileLinkByDiscordUser(base.discordUserId);
   assert.equal(updated.publicIdentityEnabled, true);
   assert.equal(updated.publicDisplayName, 'Falcons fan');
+});
+
+test('unlinked predictors receive a stable opaque public route id without an avatar', async () => {
+  const discordUserId = '200000000000000506';
+  const created = await upsertPublicEwcPredictorIdentity({
+    discordUserId,
+    displayName: 'Avatarless Predictor',
+  });
+  const identities = await publicEwcProfileIdentitiesByDiscordUserIds([discordUserId]);
+  assert.match(created?.avatarToken || '', /^[0-9a-f-]{36}$/);
+  assert.equal(identities.get(discordUserId)?.avatarToken, created?.avatarToken);
+  assert.equal(identities.get(discordUserId)?.hasAvatar, false);
 });
 
 test('public leaderboard publishes linked and Discord-snapshotted names without serializing internal IDs', async () => {
@@ -81,10 +102,81 @@ test('public leaderboard publishes linked and Discord-snapshotted names without 
   assert.equal(lookups, 1);
   assert.deepEqual(board.rows.map((row) => row.displayName), ['Shared Name (1)', 'Shared Name (2)', 'Third Predictor']);
   assert.equal(board.rows.every((row) => /^\/api\/ewc\/public-avatar\/[0-9a-f-]{36}$/.test(row.avatarUrl)), true);
+  assert.equal(board.rows.every((row) => /^\/predictors\/[0-9a-f-]{36}$/.test(row.profileHref)), true);
   const serialized = JSON.stringify(board);
   for (const user of users) {
     assert.equal(serialized.includes(user.id), false);
     assert.equal(serialized.includes(user.auth), false);
   }
   assert.equal(serialized.includes('cdn.discordapp.com'), false);
+});
+
+function assertNoPrivateFields(value) {
+  if (Array.isArray(value)) {
+    for (const item of value) assertNoPrivateFields(item);
+    return;
+  }
+  if (!value || typeof value !== 'object') return;
+  for (const [key, nested] of Object.entries(value)) {
+    assert.doesNotMatch(key, /(?:auth|discord|user.?id|token|session|setting|pick|detail|season)/i);
+    assertNoPrivateFields(nested);
+  }
+}
+
+test('public predictor projection returns only finalized performance and no private fields', async () => {
+  const guildId = '900000000000000503';
+  const season = '2026';
+  const discordUserId = '200000000000000505';
+  const authUserId = 'auth-public-profile-505';
+  authUser(authUserId, 'Safe Predictor', `https://cdn.discordapp.com/avatars/${discordUserId}/avatar.png`);
+  await upsertEwcProfileLink({ authUserId, discordUserId, guildId, season });
+
+  const finalized = await upsertEwcWeek({ guildId, season, weekKey: 'final-week', label: 'Final week', createdBy: 'test' });
+  await upsertWeeklyPrediction({ guildId, weekId: finalized.id, userId: discordUserId, picks: ['Private finalized pick'] });
+  await saveWeeklyPredictionScore(guildId, finalized.id, discordUserId, 420, {
+    bonus: 50,
+    picks: ['Private finalized pick'],
+    secretToken: 'do-not-publish',
+  });
+  await markEwcWeekScored(finalized.id, []);
+
+  const unscored = await upsertEwcWeek({ guildId, season, weekKey: 'open-week', label: 'Open week', createdBy: 'test' });
+  await upsertWeeklyPrediction({ guildId, weekId: unscored.id, userId: discordUserId, picks: ['Pre-lock private pick'] });
+
+  const board = await getPublicEwcLeaderboard({ guildId, season });
+  const publicId = board.rows.find((row) => row.displayName === 'Safe Predictor')?.profileHref?.split('/').at(-1);
+  assert.match(publicId || '', /^[0-9a-f-]{36}$/);
+
+  const profile = await getPublicEwcPredictorProfile({ publicId, guildId, season });
+  assert.deepEqual(Object.keys(profile || {}).sort(), [
+    'achievements',
+    'avatarUrl',
+    'displayName',
+    'points',
+    'rank',
+    'recentFinalizedResults',
+    'sweeps',
+    'weeks',
+    'wins',
+  ]);
+  assert.deepEqual(profile?.recentFinalizedResults, [
+    { weekKey: 'final-week', label: 'Final week', score: 420, bonus: 50 },
+  ]);
+  assertNoPrivateFields(profile);
+
+  const serialized = JSON.stringify(profile);
+  for (const hiddenValue of [discordUserId, authUserId, 'Private finalized pick', 'Pre-lock private pick', 'do-not-publish']) {
+    assert.equal(serialized.includes(hiddenValue), false);
+  }
+
+  assert.deepEqual(await listPublicEwcPredictorRouteIds({ guildId, season }), [publicId]);
+});
+
+test('unknown public predictor ids are not found', async () => {
+  const profile = await getPublicEwcPredictorProfile({
+    publicId: '00000000-0000-4000-8000-000000000000',
+    guildId: '900000000000000503',
+    season: '2026',
+  });
+  assert.equal(profile, null);
 });

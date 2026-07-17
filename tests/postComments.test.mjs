@@ -13,6 +13,7 @@ const { createEwcNewsPost } = await import('../src/db/ewcNewsPosts.js');
 const {
   createComment,
   getComment,
+  listCommentsForMatch,
   listCommentsForPost,
   editComment,
   setCommentStatus,
@@ -65,6 +66,43 @@ test('root comment + one-level reply; reply-to-reply attaches to the root', asyn
   const nested = (await createComment({ postId, parentCommentId: reply.id, authUserId: 'u3', discordUserId: 'd3', body: 'nested' })).comment;
   assert.equal(Number(nested.rootCommentId), Number(root.id));
   assert.equal(Number(nested.parentCommentId), Number(root.id));
+});
+
+test('match comments use the shared table without crossing into news threads', async () => {
+  const matchId = 987654;
+  const root = (await createComment({
+    targetType: 'match',
+    targetId: matchId,
+    authUserId: 'match-u1',
+    discordUserId: 'match-d1',
+    body: 'match root',
+  })).comment;
+  assert.equal(root.postId, null);
+  assert.equal(root.targetType, 'match');
+  assert.equal(Number(root.targetId), matchId);
+
+  const reply = (await createComment({
+    targetType: 'match',
+    targetId: matchId,
+    parentCommentId: root.id,
+    authUserId: 'match-u2',
+    discordUserId: 'match-d2',
+    body: 'match reply',
+  })).comment;
+  assert.equal(Number(reply.rootCommentId), Number(root.id));
+
+  const crossTargetReply = await createComment({
+    postId,
+    parentCommentId: root.id,
+    authUserId: 'news-u',
+    discordUserId: 'news-d',
+    body: 'wrong target',
+  });
+  assert.equal(crossTargetReply.error, 'parent-not-found');
+
+  const matchComments = await listCommentsForMatch(matchId);
+  assert.deepEqual(matchComments.map((comment) => Number(comment.id)), [Number(root.id), Number(reply.id)]);
+  assert.ok(!(await listCommentsForPost(postId)).some((comment) => Number(comment.id) === Number(root.id)));
 });
 
 test('reply to a non-existent / cross-post parent is rejected', async () => {

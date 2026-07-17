@@ -6,10 +6,12 @@ import { usePathname } from "next/navigation";
 import {
   ActivityIcon,
   BarChart3Icon,
+  CalendarDaysIcon,
   ClipboardListIcon,
   Gamepad2Icon,
   HandshakeIcon,
   HomeIcon,
+  ImageIcon,
   KeyRoundIcon,
   LayoutDashboardIcon,
   MessagesSquareIcon,
@@ -60,6 +62,8 @@ const NAV_ICONS: Record<AdminNavIcon, LucideIcon> = {
   shield: ShieldIcon,
   clipboard: ClipboardListIcon,
   activity: ActivityIcon,
+  image: ImageIcon,
+  calendar: CalendarDaysIcon,
 };
 
 export function AdminDashboardShell({

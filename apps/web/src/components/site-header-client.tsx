@@ -2,6 +2,7 @@
 
 import {
   BellIcon,
+  ArrowLeftRightIcon,
   ChevronDownIcon,
   CrownIcon,
   Gamepad2Icon,
@@ -140,7 +141,10 @@ export function SiteHeaderClient({
     { href: "/tournaments", label: text.common.tournaments, icon: TrophyIcon },
     { href: "/teams", label: text.common.teams, icon: UsersIcon },
     { href: "/players", label: text.common.players, icon: UserRoundIcon },
+    { href: "/mvp", label: locale === "ar" ? "أفضل لاعب اليوم" : "MVP of the day", icon: MedalIcon },
+    { href: "/compare", label: text.profiles.compare, icon: ArrowLeftRightIcon },
   ];
+  const liveLink: Destination = { href: "/live", label: text.common.live, icon: RadioIcon };
   // Co-streams stays top-level because it spans every tracked event and carries
   // a live indicator when any co-streamer is on air.
   const coStreamsLink: Destination = { href: "/co-streams", label: text.common.coStreams, icon: RadioIcon };
@@ -149,7 +153,7 @@ export function SiteHeaderClient({
     label: text.follows.notificationsTitle,
     icon: BellIcon,
   };
-  const primary: Destination[] = [...contentLinks, ...competitionLinks, coStreamsLink];
+  const primary: Destination[] = [...contentLinks, ...competitionLinks, liveLink, coStreamsLink];
   const desktopGroups = [
     { label: text.common.content, icon: NewspaperIcon, links: contentLinks },
     { label: text.common.competition, icon: TrophyIcon, links: competitionLinks },
@@ -228,7 +232,7 @@ export function SiteHeaderClient({
         </Link>
 
         {/* Desktop (lg+): grouped general links + a dedicated EWC dropdown. */}
-        <NavigationMenu className="ms-2 hidden lg:flex">
+        <NavigationMenu className="ms-2 hidden flex-none lg:flex">
           <NavigationMenuList className="gap-0.5">
             {desktopGroups.map(({ label, icon: Icon, links }) => {
               const groupActive = links.some((destination) => linkActive(destination.href));
@@ -262,6 +266,17 @@ export function SiteHeaderClient({
                 </NavigationMenuItem>
               );
             })}
+            <NavigationMenuItem>
+              <NavigationMenuLink
+                data-active={linkActive(liveLink.href) || undefined}
+                aria-current={linkActive(liveLink.href) ? "page" : undefined}
+                render={<Link href={localizedPath(liveLink.href, locale)} />}
+                className={navigationMenuTriggerStyle()}
+              >
+                <RadioIcon />
+                {liveLink.label}
+              </NavigationMenuLink>
+            </NavigationMenuItem>
             <NavigationMenuItem>
               <NavigationMenuLink
                 data-active={linkActive(coStreamsLink.href) || undefined}

@@ -77,6 +77,15 @@ export function isEventEnabledForFollows(prefs, follows, type) {
   });
 }
 
+// A one-match reminder deliberately uses the member's global event preference
+// rather than a follow-level override. When a member has both, either an
+// enabled reminder/default or an enabled follow can admit the same deduped row.
+export function isEventEnabledForRecipient(prefs, recipient, type) {
+  const globalColumn = type === 'match_start' ? 'notify_match_start' : 'notify_match_result';
+  if (recipient?.matchReminder && Boolean(prefs?.[globalColumn])) return true;
+  return isEventEnabledForFollows(prefs, recipient?.follows || [], type);
+}
+
 // Bulk prefs for a follower fan-out. Users without a row get the defaults.
 export async function getPrefsForUsers(discordUserIds) {
   const map = new Map();
@@ -110,19 +119,20 @@ export async function enqueueNotifications({
   const byUser = new Map();
   for (const recipient of recipients || []) {
     if (!recipient?.discordUserId) continue;
-    const follows = byUser.get(recipient.discordUserId) || [];
-    follows.push(...(recipient.follows || []));
-    byUser.set(recipient.discordUserId, follows);
+    const current = byUser.get(recipient.discordUserId) || { follows: [], matchReminder: false };
+    current.follows.push(...(recipient.follows || []));
+    current.matchReminder ||= Boolean(recipient.matchReminder);
+    byUser.set(recipient.discordUserId, current);
   }
   for (const userId of userIds || []) {
-    if (!byUser.has(userId)) byUser.set(userId, []);
+    if (!byUser.has(userId)) byUser.set(userId, { follows: [], matchReminder: false });
   }
   const ids = [...byUser.keys()];
   const prefs = await getPrefsForUsers(ids);
   let inserted = 0;
   for (const userId of ids) {
     const p = prefs.get(userId);
-    if (!p || !isEventEnabledForFollows(p, byUser.get(userId), type)) continue;
+    if (!p || !isEventEnabledForRecipient(p, byUser.get(userId), type)) continue;
     const dmStatus = p.dm_enabled ? 'pending' : 'skipped';
     const schedule = normalizeNotificationSchedule(p);
     const deliveryMode = schedule.dmDeliveryMode;

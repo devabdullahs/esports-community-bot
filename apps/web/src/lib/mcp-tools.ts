@@ -393,6 +393,8 @@ export function createAdminMcpServer(access: McpAccess) {
       const comments = (await listReportedModerationComments(limit, 0)).map((comment) => ({
         id: comment.id,
         postId: comment.postId,
+        targetType: comment.targetType,
+        targetId: comment.targetId,
         authorName: comment.authorName,
         status: comment.status,
         reportOpenCount: comment.reportOpenCount,

@@ -109,6 +109,44 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_players_current_team ON players(current_team_id);
   CREATE UNIQUE INDEX IF NOT EXISTS idx_players_game_slug ON players(game, slug) WHERE slug IS NOT NULL;
 
+  CREATE TABLE IF NOT EXISTS mvp_vote_sessions (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    vote_date  TEXT    NOT NULL UNIQUE,
+    opens_at   INTEGER NOT NULL,
+    closes_at  INTEGER NOT NULL,
+    created_at TEXT    NOT NULL DEFAULT (datetime('now')),
+    CHECK (closes_at > opens_at)
+  );
+
+  CREATE TABLE IF NOT EXISTS mvp_vote_nominees (
+    id                INTEGER PRIMARY KEY AUTOINCREMENT,
+    session_id        INTEGER NOT NULL REFERENCES mvp_vote_sessions(id) ON DELETE CASCADE,
+    player_id         INTEGER REFERENCES players(id) ON DELETE SET NULL,
+    source_match_id   INTEGER REFERENCES matches(id) ON DELETE SET NULL,
+    nominee_key       TEXT    NOT NULL,
+    display_name      TEXT    NOT NULL,
+    team_name         TEXT,
+    game              TEXT    NOT NULL,
+    image_url         TEXT,
+    performance_score REAL    NOT NULL DEFAULT 0,
+    created_at        TEXT    NOT NULL DEFAULT (datetime('now')),
+    UNIQUE (session_id, nominee_key),
+    UNIQUE (session_id, id)
+  );
+  CREATE INDEX IF NOT EXISTS idx_mvp_nominees_player ON mvp_vote_nominees(player_id);
+
+  CREATE TABLE IF NOT EXISTS mvp_votes (
+    session_id     INTEGER NOT NULL REFERENCES mvp_vote_sessions(id) ON DELETE CASCADE,
+    nominee_id     INTEGER NOT NULL,
+    discord_user_id TEXT   NOT NULL,
+    created_at     TEXT    NOT NULL DEFAULT (datetime('now')),
+    updated_at     TEXT    NOT NULL DEFAULT (datetime('now')),
+    PRIMARY KEY (session_id, discord_user_id),
+    FOREIGN KEY (session_id, nominee_id)
+      REFERENCES mvp_vote_nominees(session_id, id) ON DELETE CASCADE
+  );
+  CREATE INDEX IF NOT EXISTS idx_mvp_votes_nominee ON mvp_votes(session_id, nominee_id);
+
   CREATE TABLE IF NOT EXISTS guild_settings (
     guild_id               TEXT PRIMARY KEY,
     schedule_channel_id    TEXT,
@@ -130,6 +168,68 @@ function ensureColumns(table, defs) {
         if (!/duplicate column name/i.test(e.message)) throw e;
       }
     }
+  }
+}
+
+// SQLite cannot alter a CHECK constraint in place. The temporary table is
+// copied before the old parent is dropped, so child foreign-key definitions
+// continue to refer to ewc_news_posts after the replacement is renamed.
+function migrateEwcNewsPostStatusConstraint() {
+  const row = db
+    .prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'ewc_news_posts'")
+    .get();
+  const statusDefinition = row?.sql?.match(/status\s+[\s\S]*?CHECK\s*\([^)]*\)/i)?.[0] || '';
+  if (!row?.sql || /scheduled/i.test(statusDefinition)) return;
+
+  db.pragma('foreign_keys = OFF');
+  try {
+    db.exec('BEGIN');
+    db.exec(`
+      CREATE TABLE ewc_news_posts_scheduled (
+        id                   INTEGER PRIMARY KEY AUTOINCREMENT,
+        game_slug            TEXT,
+        media_slug           TEXT,
+        locale               TEXT NOT NULL DEFAULT 'en' CHECK (locale IN ('en','ar')),
+        content_mode         TEXT NOT NULL DEFAULT 'shared' CHECK (content_mode IN ('shared','translated')),
+        default_locale       TEXT NOT NULL DEFAULT 'en' CHECK (default_locale IN ('en','ar')),
+        title                TEXT NOT NULL,
+        summary              TEXT NOT NULL DEFAULT '',
+        body                 TEXT NOT NULL DEFAULT '',
+        status               TEXT NOT NULL DEFAULT 'draft' CHECK (status IN ('draft','scheduled','published')),
+        author_discord_id    TEXT,
+        author_name          TEXT,
+        cover_image_url      TEXT,
+        cover_placement      TEXT,
+        ewc                  INTEGER NOT NULL DEFAULT 0,
+        created_at           TEXT NOT NULL DEFAULT (datetime('now')),
+        updated_at           TEXT NOT NULL DEFAULT (datetime('now')),
+        published_at         TEXT,
+        scheduled_publish_at TEXT
+      );
+      INSERT INTO ewc_news_posts_scheduled
+        (id, game_slug, media_slug, locale, content_mode, default_locale, title, summary, body,
+         status, author_discord_id, author_name, cover_image_url, cover_placement, ewc,
+         created_at, updated_at, published_at, scheduled_publish_at)
+      SELECT id, game_slug, media_slug, locale, content_mode, default_locale, title, summary, body,
+             status, author_discord_id, author_name, cover_image_url, cover_placement, ewc,
+             created_at, updated_at, published_at, scheduled_publish_at
+        FROM ewc_news_posts;
+      DROP TABLE ewc_news_posts;
+      ALTER TABLE ewc_news_posts_scheduled RENAME TO ewc_news_posts;
+      CREATE INDEX IF NOT EXISTS idx_ewc_news_posts_game_status
+        ON ewc_news_posts(game_slug, status, published_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_ewc_news_posts_status_updated
+        ON ewc_news_posts(status, updated_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_ewc_news_posts_media_status
+        ON ewc_news_posts(media_slug, status, published_at DESC);
+    `);
+    db.exec('COMMIT');
+    logger.info('[db] expanded ewc_news_posts.status to include scheduled');
+  } catch (error) {
+    db.exec('ROLLBACK');
+    throw error;
+  } finally {
+    db.pragma('foreign_keys = ON');
   }
 }
 
@@ -435,6 +535,26 @@ db.exec(`
     PRIMARY KEY (guild_id, season, user_id)
   );
 
+  -- Private, member-scoped views of the official prediction leaderboard.
+  -- Invite codes are high-entropy random values and are only exposed to owners.
+  CREATE TABLE IF NOT EXISTS ewc_prediction_leagues (
+    id              TEXT PRIMARY KEY,
+    guild_id        TEXT NOT NULL,
+    season          TEXT NOT NULL,
+    name            TEXT NOT NULL,
+    owner_user_id   TEXT NOT NULL,
+    invite_code     TEXT NOT NULL UNIQUE,
+    created_at      TEXT NOT NULL DEFAULT (datetime('now')),
+    archived_at     TEXT
+  );
+
+  CREATE TABLE IF NOT EXISTS ewc_prediction_league_members (
+    league_id       TEXT NOT NULL REFERENCES ewc_prediction_leagues(id) ON DELETE CASCADE,
+    user_id         TEXT NOT NULL,
+    joined_at       TEXT NOT NULL DEFAULT (datetime('now')),
+    PRIMARY KEY (league_id, user_id)
+  );
+
   CREATE TABLE IF NOT EXISTS ewc_club_championship_snapshots (
     season          TEXT PRIMARY KEY,
     source_url      TEXT NOT NULL,
@@ -447,6 +567,13 @@ db.exec(`
     updated_at      TEXT NOT NULL DEFAULT (datetime('now'))
   );
 
+  CREATE TABLE IF NOT EXISTS ewc_club_championship_snapshot_history (
+    season          TEXT NOT NULL,
+    fetched_at      TEXT NOT NULL,
+    standings_json  TEXT NOT NULL,
+    PRIMARY KEY (season, fetched_at)
+  );
+
   CREATE INDEX IF NOT EXISTS idx_ewc_weekly_predictions_week
     ON ewc_weekly_predictions(week_id, score DESC);
   CREATE INDEX IF NOT EXISTS idx_ewc_prediction_reminders_claim
@@ -455,8 +582,14 @@ db.exec(`
     ON ewc_prediction_operations(status, lease_expires_at, requested_at);
   CREATE INDEX IF NOT EXISTS idx_ewc_season_predictions_season
     ON ewc_season_predictions(guild_id, season, score DESC);
+  CREATE INDEX IF NOT EXISTS idx_ewc_prediction_leagues_scope
+    ON ewc_prediction_leagues(guild_id, season, archived_at, created_at DESC);
+  CREATE INDEX IF NOT EXISTS idx_ewc_prediction_league_members_user
+    ON ewc_prediction_league_members(user_id, league_id);
   CREATE INDEX IF NOT EXISTS idx_ewc_club_championship_snapshots_fetched
     ON ewc_club_championship_snapshots(fetched_at DESC);
+  CREATE INDEX IF NOT EXISTS idx_ewc_club_championship_snapshot_history_season_fetched
+    ON ewc_club_championship_snapshot_history(season, fetched_at DESC);
 
   CREATE TABLE IF NOT EXISTS ewc_profile_links (
     auth_user_id     TEXT NOT NULL,
@@ -486,13 +619,14 @@ db.exec(`
     title             TEXT NOT NULL,
     summary           TEXT NOT NULL DEFAULT '',
     body              TEXT NOT NULL DEFAULT '',
-    status            TEXT NOT NULL DEFAULT 'draft' CHECK (status IN ('draft','published')),
+    status            TEXT NOT NULL DEFAULT 'draft' CHECK (status IN ('draft','scheduled','published')),
     author_discord_id TEXT,
     author_name       TEXT,
     cover_image_url   TEXT,
     created_at        TEXT NOT NULL DEFAULT (datetime('now')),
     updated_at        TEXT NOT NULL DEFAULT (datetime('now')),
-    published_at      TEXT
+    published_at      TEXT,
+    scheduled_publish_at TEXT
   );
 
   CREATE INDEX IF NOT EXISTS idx_ewc_news_posts_game_status
@@ -577,13 +711,16 @@ db.exec(`
     amount        INTEGER NOT NULL
   );
 
-  -- Community comments on news posts. One-level threads: a reply's parent/root
+  -- Community comments on durable targets. One-level threads: a reply's parent/root
   -- both point at the ROOT comment (replies to replies are re-targeted to the
   -- root in createComment). Soft delete (status='deleted') keeps reply threads
-  -- intact; a hard-deleted POST cascades its comments away.
+  -- intact; a hard-deleted news post cascades its comments away. post_id is
+  -- retained for that news FK while target_type/target_id identify every target.
   CREATE TABLE IF NOT EXISTS post_comments (
     id                INTEGER PRIMARY KEY AUTOINCREMENT,
-    post_id           INTEGER NOT NULL REFERENCES ewc_news_posts(id) ON DELETE CASCADE,
+    post_id           INTEGER REFERENCES ewc_news_posts(id) ON DELETE CASCADE,
+    target_type       TEXT    NOT NULL DEFAULT 'news' CHECK (target_type IN ('news','match')),
+    target_id         INTEGER NOT NULL,
     parent_comment_id INTEGER REFERENCES post_comments(id) ON DELETE SET NULL,
     root_comment_id   INTEGER REFERENCES post_comments(id) ON DELETE SET NULL,
     auth_user_id      TEXT NOT NULL,
@@ -599,11 +736,12 @@ db.exec(`
     updated_at        TEXT NOT NULL DEFAULT (datetime('now')),
     edited_at         TEXT,
     deleted_at        TEXT,
-    deleted_by        TEXT
+    deleted_by        TEXT,
+    CHECK (
+      (target_type = 'news' AND post_id = target_id)
+      OR (target_type = 'match' AND post_id IS NULL)
+    )
   );
-  CREATE INDEX IF NOT EXISTS idx_post_comments_post ON post_comments(post_id, status, created_at);
-  CREATE INDEX IF NOT EXISTS idx_post_comments_root ON post_comments(root_comment_id, created_at);
-  CREATE INDEX IF NOT EXISTS idx_post_comments_autoapprove ON post_comments(status, auto_approve_at);
 
   CREATE TABLE IF NOT EXISTS post_likes (
     post_id         INTEGER NOT NULL REFERENCES ewc_news_posts(id) ON DELETE CASCADE,
@@ -629,6 +767,24 @@ db.exec(`
     created_at           TEXT NOT NULL DEFAULT (datetime('now'))
   );
   CREATE INDEX IF NOT EXISTS idx_comment_mod_actions ON comment_moderation_actions(comment_id, created_at);
+
+  -- Global and target-specific literal watchlist rules. Display text remains
+  -- untouched while phrase_normalized enforces case-insensitive uniqueness.
+  CREATE TABLE IF NOT EXISTS comment_keyword_rules (
+    id                INTEGER PRIMARY KEY AUTOINCREMENT,
+    phrase            TEXT NOT NULL CHECK (length(phrase) BETWEEN 1 AND 160),
+    phrase_normalized TEXT NOT NULL CHECK (length(phrase_normalized) BETWEEN 1 AND 160),
+    locale            TEXT NOT NULL DEFAULT 'all' CHECK (locale IN ('all','en','ar')),
+    scope             TEXT NOT NULL DEFAULT 'global' CHECK (scope IN ('global','news','match')),
+    action            TEXT NOT NULL CHECK (action IN ('hold','flag')),
+    enabled           INTEGER NOT NULL DEFAULT 1 CHECK (enabled IN (0,1)),
+    created_by        TEXT NOT NULL,
+    created_at        TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at        TEXT NOT NULL DEFAULT (datetime('now')),
+    UNIQUE (phrase_normalized, locale, scope)
+  );
+  CREATE INDEX IF NOT EXISTS idx_comment_keyword_rules_enabled
+    ON comment_keyword_rules(enabled, scope, locale, id);
 
   CREATE TABLE IF NOT EXISTS comment_reports (
     id                    INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -861,7 +1017,103 @@ db.exec(`
     updated_at      TEXT NOT NULL DEFAULT (datetime('now'))
   );
 `);
-ensureColumns('post_comments', [['author_avatar_url', 'TEXT']]);
+
+// SQLite cannot relax post_comments.post_id from NOT NULL in place. Rebuild
+// only legacy/partial tables, preserving ids so every existing reply, like,
+// report, and moderation action keeps pointing at the same comment row.
+function ensurePostCommentTargetSchema() {
+  const columns = db.prepare('PRAGMA table_info(post_comments)').all();
+  const names = new Set(columns.map((column) => column.name));
+  const postId = columns.find((column) => column.name === 'post_id');
+  const needsRebuild = !names.has('target_type') || !names.has('target_id') || postId?.notnull === 1;
+
+  if (needsRebuild) {
+    const value = (name, fallback) => (names.has(name) ? name : fallback);
+    const oldPostId = value('post_id', 'NULL');
+    const oldTargetType = names.has('target_type')
+      ? "CASE WHEN target_type IN ('news','match') THEN target_type ELSE 'news' END"
+      : "'news'";
+    const oldTargetId = names.has('target_id') ? `COALESCE(target_id, ${oldPostId})` : oldPostId;
+
+    db.pragma('foreign_keys = OFF');
+    try {
+      db.exec(`
+        BEGIN IMMEDIATE;
+        DROP TRIGGER IF EXISTS delete_match_comments;
+        DROP TABLE IF EXISTS post_comments_target_migration;
+        CREATE TABLE post_comments_target_migration (
+          id                INTEGER PRIMARY KEY AUTOINCREMENT,
+          post_id           INTEGER REFERENCES ewc_news_posts(id) ON DELETE CASCADE,
+          target_type       TEXT    NOT NULL DEFAULT 'news' CHECK (target_type IN ('news','match')),
+          target_id         INTEGER NOT NULL,
+          parent_comment_id INTEGER REFERENCES post_comments_target_migration(id) ON DELETE SET NULL,
+          root_comment_id   INTEGER REFERENCES post_comments_target_migration(id) ON DELETE SET NULL,
+          auth_user_id      TEXT NOT NULL,
+          discord_user_id   TEXT NOT NULL,
+          author_name       TEXT NOT NULL DEFAULT '',
+          author_avatar_url TEXT,
+          body              TEXT NOT NULL,
+          status            TEXT NOT NULL DEFAULT 'visible'
+                            CHECK (status IN ('visible','pending','hidden','rejected','deleted')),
+          flag_reason_json  TEXT,
+          auto_approve_at   INTEGER,
+          created_at        TEXT NOT NULL DEFAULT (datetime('now')),
+          updated_at        TEXT NOT NULL DEFAULT (datetime('now')),
+          edited_at         TEXT,
+          deleted_at        TEXT,
+          deleted_by        TEXT,
+          CHECK (
+            (target_type = 'news' AND post_id = target_id)
+            OR (target_type = 'match' AND post_id IS NULL)
+          )
+        );
+        INSERT INTO post_comments_target_migration
+          (id, post_id, target_type, target_id, parent_comment_id, root_comment_id,
+           auth_user_id, discord_user_id, author_name, author_avatar_url, body,
+           status, flag_reason_json, auto_approve_at, created_at, updated_at,
+           edited_at, deleted_at, deleted_by)
+        SELECT ${value('id', 'NULL')}, ${oldPostId}, ${oldTargetType}, ${oldTargetId},
+               ${value('parent_comment_id', 'NULL')}, ${value('root_comment_id', 'NULL')},
+               ${value('auth_user_id', "''")}, ${value('discord_user_id', "''")},
+               ${value('author_name', "''")}, ${value('author_avatar_url', 'NULL')}, ${value('body', "''")},
+               ${value('status', "'visible'")}, ${value('flag_reason_json', 'NULL')}, ${value('auto_approve_at', 'NULL')},
+               ${value('created_at', "datetime('now')")}, ${value('updated_at', "datetime('now')")},
+               ${value('edited_at', 'NULL')}, ${value('deleted_at', 'NULL')}, ${value('deleted_by', 'NULL')}
+          FROM post_comments;
+        DROP TABLE post_comments;
+        ALTER TABLE post_comments_target_migration RENAME TO post_comments;
+        COMMIT;
+      `);
+    } catch (error) {
+      try {
+        db.exec('ROLLBACK;');
+      } catch {
+        // The migration did not reach BEGIN; surface the original error below.
+      }
+      throw error;
+    } finally {
+      db.pragma('foreign_keys = ON');
+    }
+  }
+
+  db.exec(`
+    CREATE INDEX IF NOT EXISTS idx_post_comments_target
+      ON post_comments(target_type, target_id, status, created_at, id);
+    CREATE INDEX IF NOT EXISTS idx_post_comments_target_root
+      ON post_comments(target_type, target_id, root_comment_id, status, created_at, id);
+    CREATE INDEX IF NOT EXISTS idx_post_comments_autoapprove
+      ON post_comments(status, auto_approve_at);
+    CREATE INDEX IF NOT EXISTS idx_post_comments_moderation
+      ON post_comments(status, created_at, id);
+    CREATE TRIGGER IF NOT EXISTS delete_match_comments
+      AFTER DELETE ON matches
+      BEGIN
+        DELETE FROM post_comments WHERE target_type = 'match' AND target_id = OLD.id;
+      END;
+  `);
+}
+
+ensurePostCommentTargetSchema();
 ensureColumns('stream_channels', [
   ['creator_key', "TEXT NOT NULL DEFAULT ''"],
   ['game_slugs', "TEXT NOT NULL DEFAULT '[]'"],
@@ -882,12 +1134,17 @@ ensureColumns('ewc_news_posts', [
   // Media-channel ownership: when set, the post belongs to a media channel (game_slug
   // becomes an optional related-game tag). NULL = a normal game post.
   ['media_slug', 'TEXT'],
+  // UTC timestamp used only while status is scheduled.
+  ['scheduled_publish_at', 'TEXT'],
 ]);
+migrateEwcNewsPostStatusConstraint();
 // Must run AFTER the media_slug ensureColumns above: on a DB created before the
 // media feature the table exists without the column, so creating this index in
 // the main schema exec would fail the whole boot ("no such column: media_slug").
 db.exec(`CREATE INDEX IF NOT EXISTS idx_ewc_news_posts_media_status
   ON ewc_news_posts(media_slug, status, published_at DESC)`);
+db.exec(`CREATE INDEX IF NOT EXISTS idx_ewc_news_posts_scheduled_publish
+  ON ewc_news_posts(status, scheduled_publish_at)`);
 // Per-game Discord news channel (nullable; falls back to the guild-level news channel).
 ensureColumns('ewc_games', [['discord_channel_id', 'TEXT']]);
 // Media channels: optional Discord channel to auto-announce the entry to, and an
@@ -967,6 +1224,16 @@ db.exec(`
   );
   CREATE INDEX IF NOT EXISTS idx_user_follows_entity ON user_follows(entity_type, entity_key);
   CREATE INDEX IF NOT EXISTS idx_user_follows_user   ON user_follows(discord_user_id);
+
+  CREATE TABLE IF NOT EXISTS user_match_reminders (
+    discord_user_id TEXT    NOT NULL,
+    match_id        INTEGER NOT NULL REFERENCES matches(id) ON DELETE CASCADE,
+    created_at      TEXT    NOT NULL DEFAULT (datetime('now')),
+    canceled_at     TEXT,
+    PRIMARY KEY (discord_user_id, match_id)
+  );
+  CREATE INDEX IF NOT EXISTS idx_user_match_reminders_active_match
+    ON user_match_reminders(match_id, discord_user_id) WHERE canceled_at IS NULL;
 
   CREATE TABLE IF NOT EXISTS user_notification_prefs (
     discord_user_id     TEXT PRIMARY KEY,

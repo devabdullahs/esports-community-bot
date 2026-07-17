@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import {
   BarChart3Icon,
@@ -12,6 +13,7 @@ import {
 import { AdminPageShell } from "@/components/admin/admin-page-shell";
 import { AnalyticsTrendChart, ProductEventsTrendChart } from "@/components/admin/analytics-trend-chart";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import {
   Card,
   CardAction,
@@ -207,6 +209,12 @@ export default async function AdminAnalyticsPage() {
       title={t.title}
       description={t.description}
       badge={data.timezone}
+      actions={
+        <Button variant="outline" render={<Link href="/admin/analytics/posts" />} nativeButton={false}>
+          <BarChart3Icon data-icon="inline-start" />
+          {locale === "ar" ? "تحليلات المنشورات" : "Post analytics"}
+        </Button>
+      }
     >
       <section className="grid min-w-0 gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <MetricCard

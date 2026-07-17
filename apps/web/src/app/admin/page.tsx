@@ -49,7 +49,7 @@ export default async function AdminPage() {
   );
   const games = access.allowed ? await listGames() : [];
   const publishedPosts = posts.filter((post) => post.status === "published").length;
-  const draftPosts = posts.length - publishedPosts;
+  const draftPosts = posts.filter((post) => post.status === "draft").length;
   const managedGames = access.allowed
     ? access.games === "ALL"
       ? games.length

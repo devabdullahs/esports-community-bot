@@ -11,7 +11,9 @@ import {
 } from "lucide-react";
 import { DateTime } from "@/components/date-time";
 import { PartnerPlacement } from "@/components/partners/partner-placement";
+import { PickDistributionPanel } from "@/components/predictions/pick-distribution";
 import { PredictionPickerEntry } from "@/components/predictions/prediction-picker-entry";
+import { PredictionMiniLeagues } from "@/components/predictions/prediction-mini-leagues";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -32,6 +34,7 @@ import {
 import { Progress, ProgressLabel, ProgressValue } from "@/components/ui/progress";
 import { localizedPath } from "@/lib/i18n";
 import { buildPageMetadata } from "@/lib/metadata";
+import { getPredictionPickDistributions } from "@/lib/prediction-pick-distribution";
 import { getPublicPredictionStatus } from "@/lib/public-prediction-status";
 import { getRequestLocale } from "@/lib/request-locale";
 
@@ -119,6 +122,7 @@ export default async function PredictionsPage() {
     awaitingRounds: [],
   }));
   const leaderboardHref = localizedPath("/leaderboard", locale);
+  const pickDistributions = await getPredictionPickDistributions(status.guildId, status.awaitingRounds).catch(() => new Map());
   const round = status.round;
   const stateLabel =
     status.state === "open"
@@ -214,6 +218,8 @@ export default async function PredictionsPage() {
 
       <PredictionPickerEntry locale={locale} />
 
+      <PredictionMiniLeagues locale={locale} compact />
+
       {status.upcomingRounds.length || status.awaitingRounds.length ? (
         <section className="flex flex-col gap-4" aria-label={t.currentRound}>
           {status.upcomingRounds.map((upcomingRound) => (
@@ -226,13 +232,16 @@ export default async function PredictionsPage() {
             </div>
           ))}
           {status.awaitingRounds.map((awaitingRound) => (
-            <div key={awaitingRound.weekKey} className="flex flex-wrap items-center justify-between gap-2 border-b pb-4 last:border-b-0">
-              <div>
-                <p className="font-medium">{awaitingRound.label}</p>
-                <p className="text-sm text-muted-foreground">{t.awaiting}</p>
+            <section key={awaitingRound.weekKey} className="flex flex-col gap-4 border-b pb-4 last:border-b-0">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div>
+                  <p className="font-medium">{awaitingRound.label}</p>
+                  <p className="text-sm text-muted-foreground">{t.awaiting}</p>
+                </div>
+                <Badge variant="outline">{t.scoring}</Badge>
               </div>
-              <Badge variant="outline">{t.scoring}</Badge>
-            </div>
+              <PickDistributionPanel distribution={pickDistributions.get(awaitingRound.id)} locale={locale} />
+            </section>
           ))}
         </section>
       ) : null}

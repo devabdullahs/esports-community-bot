@@ -24,6 +24,7 @@ import { unstable_cache } from "next/cache";
 import { resolveDefaultGuildId } from "@/lib/guild";
 import { liveCoStreamsByMatch, type MatchCoStream } from "@/lib/match-co-streams";
 import { ewcPlacementPointsForRank, finalTournamentStandingSection } from "@/lib/tournament-standings";
+import { bracketRoundFromStoredMatch } from "@/lib/tournament-brackets";
 
 // ---------------------------------------------------------------------------
 // Typed boundary over the bot's tournament/match read helpers (see games.ts).
@@ -110,6 +111,8 @@ export type MatchRow = {
   score_a: number | null;
   score_b: number | null;
   status: MatchStatus;
+  /** Public stage label derived from saved match data; never exposes provider IDs. */
+  round?: string | null;
   scheduled_at: number | null;
   updated_at: string | null;
   has_details?: boolean;
@@ -208,6 +211,7 @@ function publicMatch(row: MatchRow): MatchRow {
     score_a: row.score_a,
     score_b: row.score_b,
     status: row.status,
+    round: bracketRoundFromStoredMatch(row),
     scheduled_at: row.scheduled_at,
     updated_at: row.updated_at,
     has_details: matchHasDetails(row.has_details),

@@ -344,6 +344,22 @@ describe("news scope-crossing (real DB seed)", () => {
     expect(res.status).toBe(200);
   });
 
+  test("status POST: scheduled transition validates time and scope", async () => {
+    mockAccess.mockResolvedValue(gamesAdmin([POST_GAME]));
+    const invalid = await newsIdStatusPOST(
+      req("POST", { status: "scheduled", scheduledPublishAt: "2000-01-01T00:00:00.000Z" }),
+      ctx({ id: String(postId) }),
+    );
+    expect(invalid.status).toBe(400);
+
+    const scheduled = await newsIdStatusPOST(
+      req("POST", { status: "scheduled", scheduledPublishAt: "2099-01-01T12:00:00.000Z" }),
+      ctx({ id: String(postId) }),
+    );
+    expect(scheduled.status).toBe(200);
+    expect((await scheduled.json() as { status: string }).status).toBe("scheduled");
+  });
+
   // news/[id] PATCH scope check
   test("news PATCH: wrong game → 403 with 'not assigned'", async () => {
     mockAccess.mockResolvedValue(gamesAdmin([OTHER_GAME]));
@@ -384,6 +400,43 @@ describe("news scope-crossing (real DB seed)", () => {
     mockAccess.mockResolvedValue(gamesAdmin([POST_GAME]));
     const res = await newsIdDELETE(req("DELETE"), ctx({ id: String(postId) }));
     expect(res.status).toBe(200);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Scheduled news listing keeps game-scoped administrators inside their scope.
+// ---------------------------------------------------------------------------
+
+describe("scheduled news list scope", () => {
+  const ALLOWED_GAME = "calendar-scope-allowed";
+  const OTHER_GAME = "calendar-scope-other";
+  let allowedPostId: number;
+  let otherPostId: number;
+
+  beforeAll(async () => {
+    await seedGame(ALLOWED_GAME);
+    await seedGame(OTHER_GAME);
+    const { createEwcNewsPost } = await import("@bot/db/ewcNewsPosts.js");
+    const create = createEwcNewsPost as (input: unknown) => Promise<{ id: number }>;
+    const input = (gameSlug: string, title: string) => ({
+      gameSlug,
+      status: "scheduled",
+      scheduledPublishAt: "2099-01-01T12:00:00.000Z",
+      contentMode: "shared",
+      defaultLocale: "en",
+      translations: { en: { title, summary: "", body: "Body" } },
+    });
+    allowedPostId = (await create(input(ALLOWED_GAME, "Allowed schedule"))).id;
+    otherPostId = (await create(input(OTHER_GAME, "Other schedule"))).id;
+  });
+
+  test("GET returns only scheduled posts owned by the administrator's games", async () => {
+    mockAccess.mockResolvedValue(gamesAdmin([ALLOWED_GAME]));
+    const res = await newsGET(new Request("http://localhost/api/admin/news?status=scheduled"));
+    expect(res.status).toBe(200);
+    const body = await res.json() as { posts: Array<{ id: number }> };
+    expect(body.posts.some((post) => post.id === allowedPostId)).toBe(true);
+    expect(body.posts.some((post) => post.id === otherPostId)).toBe(false);
   });
 });
 

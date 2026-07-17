@@ -150,7 +150,12 @@ describe("EWC profile routes", () => {
       overallPoints: 420,
       weeksPredicted: 1,
       weeksScored: 1,
+      comparison: {
+        overall: { rank: 1, total: 1, percentile: 0 },
+        latestWeek: { rank: 1, total: 1, percentile: 0 },
+      },
     });
+    expect(JSON.stringify(body.stats.comparison)).not.toContain(user.discordUserId);
   });
 
   test("GET /api/me/ewc is read-only and does not create a profile link from query params", async () => {

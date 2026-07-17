@@ -85,7 +85,10 @@ export async function PATCH(
   });
   if (!updated) return NextResponse.json({ error: "Not found" }, { status: 404 });
   revalidateTag("cms-news", { expire: 0 });
-  recordAdminAudit(access, "news.update", String(postId));
+  recordAdminAudit(access, "news.update", String(postId), {
+    status: v.status ?? "draft",
+    scheduledPublishAt: v.scheduledPublishAt,
+  });
   scheduleIndexNowUrls([
       ...indexNowUrlsForPost(existing),
       ...indexNowUrlsForPost(updated),

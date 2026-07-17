@@ -8,6 +8,7 @@ import { appTables, identityColumns } from '../scripts/migrate-sqlite-to-postgre
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const schema = readFileSync(join(root, 'scripts/postgres/schema.sql'), 'utf8');
+const sqliteSchema = readFileSync(join(root, 'src/db/index.js'), 'utf8');
 
 function schemaTables() {
   return [...schema.matchAll(/CREATE TABLE IF NOT EXISTS\s+([a-z_][a-z0-9_]*)/gi)].map((m) => m[1]);
@@ -44,4 +45,19 @@ test('every identity table has a sequence-reset entry', () => {
   const mapped = new Set(identityColumns.keys());
   const missing = schemaIdentityTables().filter((t) => !mapped.has(t));
   assert.deepEqual(missing, [], `add these to identityColumns: ${missing.join(', ')}`);
+});
+
+test('comment targets stay aligned across SQLite, Postgres, and the copy migration', () => {
+  for (const source of [sqliteSchema, schema]) {
+    assert.match(source, /CREATE TABLE IF NOT EXISTS post_comments[\s\S]*?target_type/i);
+    assert.match(source, /CREATE TABLE IF NOT EXISTS post_comments[\s\S]*?target_id/i);
+    assert.match(source, /target_type IN \('news','match'\)/i);
+  }
+  assert.match(schema, /ALTER TABLE post_comments ALTER COLUMN post_id DROP NOT NULL/i);
+  assert.match(schema, /post_comments_target_shape_check/i);
+  assert.match(schema, /delete_match_comments/i);
+  assert.match(
+    readFileSync(join(root, 'scripts/migrate-sqlite-to-postgres.mjs'), 'utf8'),
+    /historical post_comments row is a news target/i,
+  );
 });

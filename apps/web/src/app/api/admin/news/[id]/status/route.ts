@@ -28,7 +28,7 @@ export async function POST(
 
   const body = await request.json().catch(() => ({}));
   const status = body.status;
-  if (status !== "draft" && status !== "published") {
+  if (status !== "draft" && status !== "scheduled" && status !== "published") {
     return NextResponse.json({ error: "Invalid status" }, { status: 400 });
   }
 
@@ -42,15 +42,21 @@ export async function POST(
   if (!canManage) {
     return NextResponse.json({ error: "You are not assigned to this post" }, { status: 403 });
   }
-  if (status === "published") {
-    const validated = validateNewsContentInput({ ...existing, status });
-    if (!validated.ok) return NextResponse.json({ error: validated.error }, { status: 400 });
-  }
+  const validated = validateNewsContentInput({
+    ...existing,
+    status,
+    scheduledPublishAt: body.scheduledPublishAt,
+  });
+  if (!validated.ok) return NextResponse.json({ error: validated.error }, { status: 400 });
+  const scheduledPublishAt = validated.value?.scheduledPublishAt ?? null;
 
-  const post = await setNewsPostStatus(postId, status);
+  const post = await setNewsPostStatus(postId, status, scheduledPublishAt);
   if (!post) return NextResponse.json({ error: "Not found" }, { status: 404 });
   revalidateTag("cms-news", { expire: 0 });
-  recordAdminAudit(access, "news.status", String(postId), { status });
+  recordAdminAudit(access, "news.status", String(postId), {
+    status,
+    scheduledPublishAt,
+  });
   scheduleIndexNowUrls([
       ...indexNowUrlsForPost(existing),
       ...indexNowUrlsForPost(post),

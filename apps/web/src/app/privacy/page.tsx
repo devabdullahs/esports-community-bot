@@ -67,7 +67,8 @@ const CONTENT = {
           "Your accumulated prediction scores and week-by-week history.",
         ],
         after: [
-          "Prediction leaderboard entries use the current display name and Discord avatar from the linked account on public leaderboard pages and public MCP clients. Full Discord and account IDs are never published.",
+          "Public predictor pages and leaderboards publish the current display name, an avatar proxy URL, rank, points, finalized-week totals, wins, sweeps, achievements, and recent finalized scores. The shareable profile URL uses an opaque identifier; full Discord and account IDs are never published.",
+          "Pre-lock picks, account controls, session data, settings, OAuth credentials, and raw account or Discord identifiers never appear on public predictor pages.",
         ],
       },
       {

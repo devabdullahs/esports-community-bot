@@ -2,14 +2,20 @@ import { all, get } from '../db/client.js';
 import {
   countOverallScored,
   getEwcSeason,
+  latestScoredWeeklyComparisonForUser,
   overallLeaderboard,
+  overallComparisonForUser,
   overallRankForUser,
   userPredictionProfile,
 } from '../db/ewcPredictions.js';
 import { WEEKLY_TOP_THREE_SWEEP_BONUS } from './ewcPredictions.js';
+import { deriveEwcPredictionAchievements } from './ewcPredictionAchievements.js';
 import { projectSeasonScoreBreakdown, projectWeeklyScoreBreakdown } from './ewcPredictionBreakdown.js';
 import { scoreBreakdownVisible, seasonPicksVisible } from './ewcPredictionVisibility.js';
-import { publicEwcProfileIdentitiesByDiscordUserIds } from '../db/ewcProfileLinks.js';
+import {
+  getEwcPredictorDiscordUserIdByPublicId,
+  publicEwcProfileIdentitiesByDiscordUserIds,
+} from '../db/ewcProfileLinks.js';
 
 export const DEFAULT_EWC_PROFILE_SEASON = '2026';
 const MAX_SHOWCASE_USERNAME = 100;
@@ -75,10 +81,22 @@ async function leaderboardRows(guildId, season, limit = 50, offset = 0) {
   return overallLeaderboard(guildId, season, clampLimit(limit), Math.max(0, Math.floor(Number(offset)) || 0));
 }
 
-async function rankForUser(guildId, season, userId) {
-  const row = await overallRankForUser(guildId, season, userId);
-  if (!row) return { rank: null, score: 0 };
-  return { rank: Number(row.rank), score: Number(row.score || 0) };
+export function comparisonPercentile(rank, total) {
+  const normalizedRank = Math.floor(Number(rank));
+  const normalizedTotal = Math.floor(Number(total));
+  if (!Number.isFinite(normalizedRank) || !Number.isFinite(normalizedTotal)) return null;
+  if (normalizedRank < 1 || normalizedTotal < 1 || normalizedRank > normalizedTotal) return null;
+  return Math.round(((normalizedTotal - normalizedRank) / normalizedTotal) * 100);
+}
+
+function comparisonFromRow(row) {
+  const total = Math.max(0, Math.floor(Number(row?.total || 0)));
+  const rank = row?.rank == null ? null : Number(row.rank);
+  return {
+    rank: Number.isFinite(rank) ? rank : null,
+    total,
+    percentile: comparisonPercentile(rank, total),
+  };
 }
 
 async function weeklyAggregateStats(guildId, season, userId) {
@@ -126,7 +144,7 @@ async function weeklyAggregateStats(guildId, season, userId) {
 }
 
 function emptyWeeklyAggregate() {
-  return { weeksPredicted: 0, weeksScored: 0, weeklyWins: 0, top3Sweeps: 0 };
+  return { weeksPredicted: 0, weeksScored: 0, weeklyWins: 0, top3Sweeps: 0, achievementRows: [] };
 }
 
 async function weeklyAggregateStatsForUsers(guildId, season, userIds) {
@@ -143,6 +161,13 @@ async function weeklyAggregateStatsForUsers(guildId, season, userIds) {
        AND wp.user_id IN (${placeholders(3, uniqueIds.length)})`,
     [guildId, season, ...uniqueIds],
   );
+  const scoredWeeks = await all(
+    `SELECT id
+     FROM ewc_prediction_weeks
+     WHERE guild_id = $1 AND season = $2 AND status = 'scored'
+     ORDER BY COALESCE(open_at, id), id`,
+    [guildId, season],
+  );
 
   const winningRows = await all(
     `SELECT wp.week_id, MAX(wp.score) AS max_score
@@ -156,6 +181,7 @@ async function weeklyAggregateStatsForUsers(guildId, season, userIds) {
     [guildId, season],
   );
   const winningScoreByWeek = new Map(winningRows.map((row) => [row.week_id, Number(row.max_score || 0)]));
+  const scoredPredictionByUser = new Map(uniqueIds.map((userId) => [userId, new Map()]));
 
   for (const row of weeklyRows) {
     const current = stats.get(row.user_id) || emptyWeeklyAggregate();
@@ -166,11 +192,29 @@ async function weeklyAggregateStatsForUsers(guildId, season, userIds) {
     }
     const score = Number(row.score || 0);
     current.weeksScored += 1;
+    scoredPredictionByUser.get(row.user_id)?.set(row.week_id, {
+      score,
+      details: parseJson(row.details_json, null),
+    });
     if (score > 0 && score === winningScoreByWeek.get(row.week_id)) current.weeklyWins += 1;
     if (Number(parseJson(row.details_json, {})?.bonus || 0) >= WEEKLY_TOP_THREE_SWEEP_BONUS) {
       current.top3Sweeps += 1;
     }
     stats.set(row.user_id, current);
+  }
+
+  for (const userId of uniqueIds) {
+    const current = stats.get(userId) || emptyWeeklyAggregate();
+    const predictions = scoredPredictionByUser.get(userId);
+    current.achievementRows = scoredWeeks.map((week) => {
+      const prediction = predictions?.get(week.id);
+      return {
+        status: 'scored',
+        score: prediction?.score ?? null,
+        details: prediction?.details ?? null,
+      };
+    });
+    stats.set(userId, current);
   }
 
   return stats;
@@ -232,6 +276,93 @@ function recentWeekly(profile) {
     }));
 }
 
+async function recentFinalizedPerformance(guildId, season, userId) {
+  const rows = await all(
+    `SELECT w.week_key, w.label, wp.score, wp.details_json
+     FROM ewc_weekly_predictions wp
+     JOIN ewc_prediction_weeks w ON w.id = wp.week_id
+     WHERE wp.guild_id = $1
+       AND w.season = $2
+       AND w.status = 'scored'
+       AND wp.user_id = $3
+       AND wp.score IS NOT NULL
+     ORDER BY COALESCE(w.scored_at, w.close_at, w.id) DESC, w.id DESC
+     LIMIT 6`,
+    [guildId, season, userId],
+  );
+  return rows.map((row) => ({
+    weekKey: String(row.week_key || '').slice(0, 100),
+    label: String(row.label || row.week_key || '').slice(0, 160),
+    score: Number(row.score || 0),
+    bonus: Number(parseJson(row.details_json, {})?.bonus || 0),
+  }));
+}
+
+function publicAvatarProxyUrl(identity) {
+  return identity?.hasAvatar && identity.avatarToken
+    ? `/api/ewc/public-avatar/${identity.avatarToken}`
+    : null;
+}
+
+// This is intentionally a fresh, narrow projection. Do not derive it from the
+// private profile object: that object includes picks and account-scoped fields.
+export async function getPublicEwcPredictorProfile({
+  publicId,
+  guildId,
+  season = DEFAULT_EWC_PROFILE_SEASON,
+}) {
+  const userId = await getEwcPredictorDiscordUserIdByPublicId(publicId);
+  if (!userId) return null;
+
+  const [overall, weeklyByUser, identitiesByUser, recentFinalizedResults] = await Promise.all([
+    overallRankForUser(guildId, season, userId),
+    weeklyAggregateStatsForUsers(guildId, season, [userId]),
+    publicEwcProfileIdentitiesByDiscordUserIds([userId]),
+    recentFinalizedPerformance(guildId, season, userId),
+  ]);
+  if (!overall) return null;
+
+  const weekly = weeklyByUser.get(userId) || emptyWeeklyAggregate();
+  const identity = identitiesByUser.get(userId);
+  const achievements = deriveEwcPredictionAchievements({
+    rank: Number(overall.rank),
+    weeklyWins: weekly.weeklyWins,
+    weeksScored: weekly.weeksScored,
+    weeklyRows: weekly.achievementRows,
+  });
+
+  return {
+    displayName: identity?.displayName || memberLabel(userId),
+    avatarUrl: publicAvatarProxyUrl(identity),
+    rank: Number(overall.rank),
+    points: Number(overall.score || 0),
+    weeks: weekly.weeksScored,
+    wins: weekly.weeklyWins,
+    sweeps: weekly.top3Sweeps,
+    achievements: achievements.ids,
+    recentFinalizedResults,
+  };
+}
+
+export async function listPublicEwcPredictorRouteIds({
+  guildId,
+  season = DEFAULT_EWC_PROFILE_SEASON,
+  limit = 5000,
+}) {
+  const safeLimit = Math.max(1, Math.min(Math.floor(Number(limit)) || 5000, 5000));
+  const rows = await overallLeaderboard(guildId, season, safeLimit, 0);
+  const routeIds = [];
+  for (let index = 0; index < rows.length; index += 100) {
+    const userIds = rows.slice(index, index + 100).map((row) => row.user_id);
+    const identities = await publicEwcProfileIdentitiesByDiscordUserIds(userIds);
+    for (const userId of userIds) {
+      const routeId = identities.get(userId)?.avatarToken;
+      if (routeId) routeIds.push(routeId);
+    }
+  }
+  return [...new Set(routeIds)];
+}
+
 export function formatShowcaseUsername(stats) {
   const rank = stats.rank ? `#${stats.rank} overall` : 'Unranked';
   const points = `${Number(stats.overallPoints || 0).toLocaleString()} pts`;
@@ -245,24 +376,46 @@ export function formatShowcaseUsername(stats) {
 }
 
 export async function getEwcUserProfileStats(guildId, season = DEFAULT_EWC_PROFILE_SEASON, userId, { includeHiddenPicks = false } = {}) {
-  const rank = await rankForUser(guildId, season, userId);
-  const weekly = await weeklyAggregateStats(guildId, season, userId);
-  const profile = await userPredictionProfile(guildId, season, userId);
-  const round = await getEwcSeason(guildId, season);
+  const [overallComparison, latestWeeklyComparison, weekly, profile, round] = await Promise.all([
+    overallComparisonForUser(guildId, season, userId),
+    latestScoredWeeklyComparisonForUser(guildId, season, userId),
+    weeklyAggregateStats(guildId, season, userId),
+    userPredictionProfile(guildId, season, userId),
+    getEwcSeason(guildId, season),
+  ]);
+  const overall = comparisonFromRow(overallComparison);
   const hasSeasonPicks = Boolean(profile.season?.picks?.length);
   const canShowSeasonPicks = includeHiddenPicks || seasonPicksVisible(round, profile.season?.score);
   const topTeams = canShowSeasonPicks ? seasonPickTeams(profile) : [];
+  const achievements = deriveEwcPredictionAchievements({
+    rank: overall.rank,
+    weeklyWins: weekly.weeklyWins,
+    weeksScored: weekly.weeksScored,
+    weeklyRows: profile.weekly,
+  });
   const stats = {
     guildId,
     season,
     userId,
     displayName: memberLabel(userId),
-    rank: rank.rank,
-    overallPoints: rank.score,
+    rank: overall.rank,
+    overallPoints: Number(overallComparison?.score || 0),
+    comparison: {
+      overall,
+      latestWeek: latestWeeklyComparison
+        ? {
+            weekKey: latestWeeklyComparison.week_key,
+            label: latestWeeklyComparison.label || latestWeeklyComparison.week_key,
+            ...comparisonFromRow(latestWeeklyComparison),
+          }
+        : null,
+    },
     weeksPredicted: weekly.weeksPredicted,
     weeksScored: weekly.weeksScored,
     weeklyWins: weekly.weeklyWins,
     top3Sweeps: weekly.top3Sweeps,
+    achievementIds: achievements.ids,
+    achievementStats: achievements.stats,
     topTeams,
     seasonPicks: canShowSeasonPicks ? profile.season?.picks || [] : [],
     seasonPicksHidden: hasSeasonPicks && !canShowSeasonPicks,
@@ -313,15 +466,23 @@ export async function getPublicEwcLeaderboard({
       // A simple occurrence marker disambiguates coincident public names without
       // deriving or encoding any part of a Discord/account identifier.
       const displayName = nameCounts.get(baseName) > 1 ? `${baseName} (${seen})` : baseName;
+      const achievements = deriveEwcPredictionAchievements({
+        rank: Number(row.rank),
+        weeklyWins: weekly.weeklyWins,
+        weeksScored: weekly.weeksScored,
+        weeklyRows: weekly.achievementRows,
+      });
       return {
         rank: Number(row.rank),
         displayName,
-        avatarUrl: identity?.avatarToken ? `/api/ewc/public-avatar/${identity.avatarToken}` : null,
+        avatarUrl: publicAvatarProxyUrl(identity),
+        profileHref: identity?.avatarToken ? `/predictors/${identity.avatarToken}` : null,
         overallPoints: Number(row.score || 0),
         weeksPredicted: weekly.weeksPredicted,
         weeksScored: weekly.weeksScored,
         weeklyWins: weekly.weeklyWins,
         top3Sweeps: weekly.top3Sweeps,
+        achievementIds: achievements.ids,
         topTeams: topTeamsByUser.get(userId) || [],
       };
     }),

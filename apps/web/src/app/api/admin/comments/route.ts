@@ -43,9 +43,13 @@ export async function GET(request: Request) {
         )
       : await reportCountsForComments(comments.map((c) => Number(c.id)));
 
-  // Resolve post titles once per unique post (small page size).
+  // Resolve news titles once per unique news target (small page size). Match
+  // comments deliberately stay in this same queue and use their match link in
+  // the client; no second moderation surface is introduced.
   const titles = new Map<number, string>();
-  for (const postId of new Set(comments.map((c) => Number(c.postId)))) {
+  for (const postId of new Set(
+    comments.filter((c) => c.targetType === "news").map((c) => Number(c.targetId)),
+  )) {
     const post = await getNewsPost(postId);
     if (post) titles.set(postId, post.title);
   }
@@ -54,8 +58,9 @@ export async function GET(request: Request) {
     counts: { ...counts, reported },
     comments: comments.map((c) => ({
       id: Number(c.id),
-      postId: Number(c.postId),
-      postTitle: titles.get(Number(c.postId)) ?? null,
+      targetType: c.targetType,
+      targetId: Number(c.targetId),
+      targetTitle: c.targetType === "news" ? titles.get(Number(c.targetId)) ?? null : null,
       parentCommentId: c.parentCommentId == null ? null : Number(c.parentCommentId),
       authorName: c.authorName,
       authorAvatarUrl: c.authorAvatarUrl,

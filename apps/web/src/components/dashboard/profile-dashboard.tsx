@@ -1,15 +1,18 @@
 "use client";
 
+import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   CalendarDaysIcon,
   Clock3Icon,
+  DownloadIcon,
   ExternalLinkIcon,
   ListChecksIcon,
   MessageCircleIcon,
   type LucideIcon,
   MedalIcon,
   RefreshCcwIcon,
+  Share2Icon,
   SparklesIcon,
   TrophyIcon,
   UnlinkIcon,
@@ -33,7 +36,10 @@ import {
 import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Progress, ProgressLabel, ProgressValue } from "@/components/ui/progress";
+import { PredictionComparisonWidget, type PredictionComparison } from "@/components/dashboard/prediction-comparison-widget";
+import { PredictionAchievementBadges } from "@/components/predictions/prediction-achievement-badges";
 import { WebPredictionPicker } from "@/components/predictions/web-prediction-picker";
+import { PredictionMiniLeagues } from "@/components/predictions/prediction-mini-leagues";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   copy,
@@ -70,10 +76,19 @@ type MePayload = {
     weeksScored: number;
     weeklyWins: number;
     top3Sweeps: number;
+    achievementIds: string[];
+    achievementStats: {
+      currentScoringStreak: number;
+      longestScoringStreak: number;
+      specialistGame: string | null;
+      specialistCorrectWinners: number;
+      scoredWeeks: number;
+    };
     topTeams: string[];
     seasonPicks: string[];
     seasonScore: number | null;
     seasonBreakdown: PredictionBreakdown | null;
+    comparison: PredictionComparison;
     showcaseUsername: string;
     recentWeekly: Array<{
       weekKey: string;
@@ -288,6 +303,7 @@ export function ProfileDashboard({
               <UnlinkIcon data-icon="inline-start" />
               {text.unlink}
             </Button>
+            {stats ? <ShareCardActions locale={locale} /> : null}
           </CardAction>
         </CardHeader>
         <CardContent className="flex flex-col gap-4">
@@ -334,6 +350,22 @@ export function ProfileDashboard({
             />
             <StatCard label={text.weeklyWins} value={formatNumber(stats.weeklyWins, locale)} icon={MedalIcon} />
           </section> : null}
+
+          <Card size="sm">
+            <CardHeader>
+              <CardTitle>{text.achievements}</CardTitle>
+              <CardDescription>{text.achievementSummary(stats.achievementStats.longestScoringStreak, stats.achievementStats.scoredWeeks, locale)}</CardDescription>
+            </CardHeader>
+            <CardContent>
+              {stats.achievementIds.length ? (
+                <PredictionAchievementBadges achievementIds={stats.achievementIds} locale={locale} showLabels />
+              ) : (
+                <p className="text-sm text-muted-foreground">{text.noAchievements}</p>
+              )}
+            </CardContent>
+          </Card>
+
+          {section !== "predictions" ? <PredictionComparisonWidget comparison={stats.comparison} locale={locale} /> : null}
 
           {section !== "overview" ? <>{actionableRounds.length ? (
             <div className="flex flex-col gap-4">
@@ -397,6 +429,8 @@ export function ProfileDashboard({
               <AlertDescription>{text.noCurrentRoundDescription}</AlertDescription>
             </Alert>
           )}
+
+          <PredictionMiniLeagues locale={locale} />
 
           <Tabs defaultValue="showcase">
             <TabsList>
@@ -500,6 +534,88 @@ export function ProfileDashboard({
           <AlertDescription>{text.noProfileDescription}</AlertDescription>
         </Alert>
       ) : null}
+    </div>
+  );
+}
+
+async function fetchShareCard() {
+  const response = await fetch("/api/me/share-card?variant=prediction", {
+    headers: { Accept: "image/png" },
+  });
+  if (!response.ok || !response.headers.get("content-type")?.startsWith("image/png")) {
+    const data = await response.json().catch(() => ({}));
+    throw new Error(data.error || "Unable to create the share card.");
+  }
+  return response.blob();
+}
+
+function downloadShareCard(blob: Blob) {
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = "ewc-prediction-card.png";
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  window.setTimeout(() => URL.revokeObjectURL(url), 0);
+}
+
+function ShareCardActions({ locale }: { locale: Locale }) {
+  const text = copy[locale].profile;
+  const [action, setAction] = useState<"download" | "share" | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  async function run(actionName: "download" | "share") {
+    setAction(actionName);
+    setError(null);
+    try {
+      const blob = await fetchShareCard();
+      if (actionName === "download") {
+        downloadShareCard(blob);
+        return;
+      }
+
+      const file = new File([blob], "ewc-prediction-card.png", { type: "image/png" });
+      if (typeof navigator.share !== "function" || (navigator.canShare && !navigator.canShare({ files: [file] }))) {
+        downloadShareCard(blob);
+        return;
+      }
+      try {
+        await navigator.share({ files: [file], title: text.shareCard });
+      } catch (shareError) {
+        if (shareError instanceof DOMException && shareError.name === "AbortError") return;
+        throw shareError;
+      }
+    } catch {
+      setError(text.shareCardFailed);
+    } finally {
+      setAction(null);
+    }
+  }
+
+  return (
+    <div className="flex flex-col items-start gap-2 sm:items-end">
+      <div className="flex flex-wrap gap-2">
+        <Button
+          type="button"
+          variant="outline"
+          onClick={() => run("share")}
+          disabled={action !== null}
+        >
+          <Share2Icon data-icon="inline-start" />
+          {action === "share" ? text.shareCardLoading : text.shareCard}
+        </Button>
+        <Button
+          type="button"
+          variant="outline"
+          onClick={() => run("download")}
+          disabled={action !== null}
+        >
+          <DownloadIcon data-icon="inline-start" />
+          {action === "download" ? text.downloadCardLoading : text.downloadCard}
+        </Button>
+      </div>
+      {error ? <p className="max-w-xs text-sm text-destructive" role="alert">{error}</p> : null}
     </div>
   );
 }

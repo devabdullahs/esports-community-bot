@@ -15,10 +15,12 @@ export async function SiteFooter({ analyticsConsentEnabled = false }: { analytic
   const year = new Date().getFullYear();
 
   const explore = [
+    { href: "/live", label: text.common.live },
     { href: "/games", label: text.common.games },
     { href: "/news", label: text.common.news },
     { href: "/media", label: text.common.media },
     { href: "/predictions", label: text.common.predictions },
+    { href: "/mvp", label: locale === "ar" ? "أفضل لاعب اليوم" : "MVP of the day" },
   ];
   const about = [
     { href: "/partners", label: text.common.partners },

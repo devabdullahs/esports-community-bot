@@ -17,7 +17,9 @@ export type AdminNavIcon =
   | "key"
   | "shield"
   | "clipboard"
-  | "activity";
+  | "activity"
+  | "image"
+  | "calendar";
 
 export type AdminNavItem = {
   href: string;
@@ -50,6 +52,18 @@ export function adminNavSections(
       label: t.quickNewMediaPost,
       icon: "tv",
       exact: true,
+    });
+  }
+  if (canManageGamePosts || canManageMediaPosts) {
+    workspaceItems.push({
+      href: "/admin/graphics",
+      label: locale === "ar" ? "\u0645\u0648\u0644\u062f \u0627\u0644\u0631\u0633\u0648\u0645" : "Graphics generator",
+      icon: "image",
+    });
+    workspaceItems.push({
+      href: "/admin/calendar",
+      label: t.links.calendarTitle,
+      icon: "calendar",
     });
   }
   workspaceItems.push({ href: "/admin/comments", label: t.links.commentsTitle, icon: "messages" });

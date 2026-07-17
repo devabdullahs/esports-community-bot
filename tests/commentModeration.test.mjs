@@ -7,6 +7,7 @@ import {
   isAllowedLinkHost,
   allowedLinkHosts,
   extractLinks,
+  findKeywordRules,
   analyzeCommentText,
 } from '../src/lib/commentModeration.js';
 
@@ -211,4 +212,33 @@ test('analyze: backward-compatible fields are still present', () => {
   for (const key of ['profanity', 'hasProfanity', 'links', 'externalLinks', 'hasExternalLinks']) {
     assert.ok(key in r, `missing legacy field ${key}`);
   }
+});
+
+// --- admin keyword watchlist ------------------------------------------------
+
+test('keyword watchlist: global and locale/scope-specific literal rules match conservatively', () => {
+  const rules = [
+    { id: 1, phrase: 'spoiler', phraseNormalized: 'spoiler', locale: 'all', scope: 'global', action: 'flag', enabled: true },
+    { id: 2, phrase: 'leak', phraseNormalized: 'leak', locale: 'en', scope: 'news', action: 'hold', enabled: true },
+    { id: 3, phrase: 'disabled', phraseNormalized: 'disabled', locale: 'all', scope: 'global', action: 'hold', enabled: false },
+  ];
+  const newsEnglish = findKeywordRules('SPOILER and leak', rules, { locales: ['en'], scope: 'news' });
+  assert.deepEqual(newsEnglish.map((rule) => rule.id), [1, 2]);
+
+  const matchEnglish = findKeywordRules('spoiler and leak', rules, { locales: ['en'], scope: 'match' });
+  assert.deepEqual(matchEnglish.map((rule) => rule.id), [1]);
+
+  const newsArabic = findKeywordRules('spoiler and leak', rules, { locales: ['ar'], scope: 'news' });
+  assert.deepEqual(newsArabic.map((rule) => rule.id), [1]);
+});
+
+test('keyword watchlist: analysis reports flag and hold matches separately', () => {
+  const rules = [
+    { id: 1, phrase: 'spoiler', locale: 'all', scope: 'global', action: 'flag', enabled: true },
+    { id: 2, phrase: 'leak', locale: 'en', scope: 'news', action: 'hold', enabled: true },
+  ];
+  const r = analyzeCommentText('spoiler leak', { keywordRules: rules, locales: ['en'], scope: 'news' });
+  assert.equal(r.hasKeywordFlag, true);
+  assert.equal(r.hasKeywordHold, true);
+  assert.deepEqual(r.keywordRules.map((rule) => rule.phrase), ['spoiler', 'leak']);
 });

@@ -33,6 +33,16 @@ import {
   streamSelectionSearchParams,
   toggleSelectedStreamId,
 } from "@/lib/co-stream-multiview";
+import {
+  ALL_CO_STREAM_FILTER,
+  DEFAULT_CO_STREAM_FILTERS,
+  coStreamGames,
+  coStreamLanguages,
+  filterCoStreams,
+  hasActiveCoStreamFilters,
+  normalizeCoStreamLanguage,
+  selectedCoStreamIdAfterFiltering,
+} from "@/lib/co-stream-filtering";
 import { trackProductEvent } from "@/lib/product-analytics";
 import type { CoStream, CoStreamChannel, StreamPlatform } from "@/lib/stream-types";
 
@@ -113,12 +123,52 @@ const STR = {
   },
 } as const;
 
+type FilterCopy = {
+  platform: string;
+  game: string;
+  language: string;
+  allLanguages: string;
+  arabic: string;
+  english: string;
+  activeFilters: string;
+  clearFilters: string;
+};
+
+const FILTER_STR: Record<Locale, FilterCopy> = {
+  en: {
+    platform: "Platform",
+    game: "Game",
+    language: "Language",
+    allLanguages: "All languages",
+    arabic: "Arabic",
+    english: "English",
+    activeFilters: "Active filters",
+    clearFilters: "Clear filters",
+  },
+  ar: {
+    platform: "المنصة",
+    game: "اللعبة",
+    language: "اللغة",
+    allLanguages: "كل اللغات",
+    arabic: "العربية",
+    english: "الإنجليزية",
+    activeFilters: "الفلاتر النشطة",
+    clearFilters: "مسح الفلاتر",
+  },
+};
+
 function displaySlug(slug: string) {
   return slug.replace(/-/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
 function channelLabel(channel: CoStreamChannel) {
   return PLATFORM_LABELS[channel.platform] ?? channel.platform;
+}
+
+function languageLabel(language: string, copy: FilterCopy) {
+  if (language === "ar") return copy.arabic;
+  if (language === "en") return copy.english;
+  return language.toUpperCase();
 }
 
 function selectionUrl(ids: string[]) {
@@ -173,10 +223,12 @@ export function CoStreamsView({
   hasExplicitSelection: boolean;
 }) {
   const t = STR[locale] ?? STR.en;
+  const filterText = FILTER_STR[locale] ?? FILTER_STR.en;
   const [streams, setStreams] = useState<CoStream[]>(initialStreams);
-  const [platform, setPlatform] = useState<"all" | StreamPlatform>("all");
-  const [game, setGame] = useState("all");
-  const [liveOnly, setLiveOnly] = useState(false);
+  const [platform, setPlatform] = useState<"all" | StreamPlatform>(DEFAULT_CO_STREAM_FILTERS.platform);
+  const [game, setGame] = useState(DEFAULT_CO_STREAM_FILTERS.game);
+  const [language, setLanguage] = useState(DEFAULT_CO_STREAM_FILTERS.language);
+  const [liveOnly, setLiveOnly] = useState(DEFAULT_CO_STREAM_FILTERS.liveOnly);
   const [selectedIds, setSelectedIds] = useState(() =>
     initialSelectedStreamIds(requestedStreamIds, initialStreams, hasExplicitSelection),
   );
@@ -186,6 +238,7 @@ export function CoStreamsView({
   const twitchEmbedsSupported = useSyncExternalStore(subscribeTwitchEmbedWidth, twitchEmbedWidthSnapshot, () => false);
   const shareStatusTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const didMountSelection = useRef(false);
+  const selectionBeforeMobileFilter = useRef<string[] | null>(null);
 
   const applyPolledStreams = useEffectEvent((nextStreams: CoStream[]) => {
     const nextSelected = reconcileSelectedStreamIds(selectedIds, nextStreams);
@@ -252,7 +305,8 @@ export function CoStreamsView({
     for (const stream of streams) for (const channel of stream.channels) values.add(channel.platform);
     return [...values];
   }, [streams]);
-  const games = useMemo(() => [...new Set(streams.flatMap((stream) => stream.gameSlugs))], [streams]);
+  const games = useMemo(() => coStreamGames(streams), [streams]);
+  const languages = useMemo(() => coStreamLanguages(streams), [streams]);
   const displaySelectedIds = useMemo(
     () => (singleMobilePlayer ? singlePlayerSelectionIds(selectedIds, loadedIds) : selectedIds),
     [loadedIds, selectedIds, singleMobilePlayer],
@@ -271,16 +325,40 @@ export function CoStreamsView({
   );
   const selectedSet = useMemo(() => new Set(displaySelectedIds), [displaySelectedIds]);
   const atLimit = selectedIds.length >= MAX_MULTI_STREAMS;
-  const filtered = useMemo(
-    () =>
-      streams.filter(
-        (stream) =>
-          (platform === "all" || stream.channels.some((channel) => channel.platform === platform)) &&
-          (game === "all" || stream.gameSlugs.includes(game)) &&
-          (!liveOnly || stream.isLive),
-      ),
-    [streams, platform, game, liveOnly],
-  );
+  const filters = useMemo(() => ({ platform, game, language, liveOnly }), [game, language, liveOnly, platform]);
+  const filtered = useMemo(() => filterCoStreams(streams, filters), [filters, streams]);
+  const filtersActive = hasActiveCoStreamFilters(filters);
+  const activeFilters = useMemo(() => {
+    const values: string[] = [];
+    if (platform !== ALL_CO_STREAM_FILTER) values.push(`${filterText.platform}: ${PLATFORM_LABELS[platform]}`);
+    if (game !== ALL_CO_STREAM_FILTER) values.push(`${filterText.game}: ${displaySlug(game)}`);
+    if (language !== ALL_CO_STREAM_FILTER) values.push(`${filterText.language}: ${languageLabel(language, filterText)}`);
+    if (liveOnly) values.push(t.liveOnly);
+    return values;
+  }, [filterText, game, language, liveOnly, platform, t.liveOnly]);
+
+  useEffect(() => {
+    if (!singleMobilePlayer) return;
+
+    if (!filtersActive) {
+      const previousSelection = selectionBeforeMobileFilter.current;
+      if (!previousSelection) return;
+
+      const restoredSelection = reconcileSelectedStreamIds(previousSelection, streams);
+      setSelectedIds(restoredSelection);
+      setLoadedIds(initialLoadedStreamIds(restoredSelection, streams));
+      selectionBeforeMobileFilter.current = null;
+      return;
+    }
+
+    const activeId = singlePlayerSelectionIds(selectedIds, loadedIds)[0] ?? null;
+    const nextId = selectedCoStreamIdAfterFiltering(activeId, streams, filters);
+    if (nextId === activeId) return;
+
+    if (!selectionBeforeMobileFilter.current) selectionBeforeMobileFilter.current = selectedIds;
+    setSelectedIds(nextId ? [nextId] : []);
+    setLoadedIds(nextId ? [nextId] : []);
+  }, [filters, filtersActive, loadedIds, selectedIds, singleMobilePlayer, streams]);
 
   const toggleStream = (id: string) => {
     if (singleMobilePlayer) {
@@ -453,10 +531,10 @@ export function CoStreamsView({
         <p className="text-xs text-muted-foreground md:hidden">{t.mobilePlaybackHint}</p>
       ) : null}
 
-      <div className="flex flex-wrap items-center gap-2">
+      <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
         {platforms.length > 1 ? (
           <Select value={platform} onValueChange={(value) => setPlatform((value as "all" | StreamPlatform) ?? "all")}>
-            <SelectTrigger size="sm" className="w-36">
+            <SelectTrigger size="sm" className="w-full sm:w-36" aria-label={filterText.platform}>
               <SelectValue>
                 {(value) => (value === "all" ? t.allPlatforms : PLATFORM_LABELS[value as StreamPlatform])}
               </SelectValue>
@@ -475,7 +553,7 @@ export function CoStreamsView({
         ) : null}
         {games.length ? (
           <Select value={game} onValueChange={(value) => setGame(value ?? "all")}>
-            <SelectTrigger size="sm" className="w-44">
+            <SelectTrigger size="sm" className="w-full sm:w-44" aria-label={filterText.game}>
               <SelectValue>{(value) => (value === "all" ? t.allGames : displaySlug(String(value)))}</SelectValue>
             </SelectTrigger>
             <SelectContent>
@@ -490,11 +568,66 @@ export function CoStreamsView({
             </SelectContent>
           </Select>
         ) : null}
-        <Button variant={liveOnly ? "default" : "outline"} size="sm" onClick={() => setLiveOnly((value) => !value)}>
+        {languages.length ? (
+          <Select value={language} onValueChange={(value) => setLanguage(normalizeCoStreamLanguage(value) ?? ALL_CO_STREAM_FILTER)}>
+            <SelectTrigger size="sm" className="w-full sm:w-40" aria-label={filterText.language}>
+              <SelectValue>
+                {(value) =>
+                  value === ALL_CO_STREAM_FILTER
+                    ? filterText.allLanguages
+                    : languageLabel(String(value), filterText)
+                }
+              </SelectValue>
+            </SelectTrigger>
+            <SelectContent>
+              <SelectGroup>
+                <SelectItem value={ALL_CO_STREAM_FILTER}>{filterText.allLanguages}</SelectItem>
+                {languages.map((value) => (
+                  <SelectItem key={value} value={value}>
+                    {languageLabel(value, filterText)}
+                  </SelectItem>
+                ))}
+              </SelectGroup>
+            </SelectContent>
+          </Select>
+        ) : null}
+        <Button
+          variant={liveOnly ? "default" : "outline"}
+          size="sm"
+          className="w-full sm:w-auto"
+          onClick={() => setLiveOnly((value) => !value)}
+        >
           <RadioIcon data-icon="inline-start" />
           {t.liveOnly}
         </Button>
       </div>
+
+      {filtersActive ? (
+        <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
+          <div className="flex flex-wrap items-center gap-1.5" aria-label={filterText.activeFilters}>
+            {activeFilters.map((label) => (
+              <Badge key={label} variant="secondary" className="max-w-full truncate">
+                {label}
+              </Badge>
+            ))}
+          </div>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="w-full sm:w-auto"
+            onClick={() => {
+              setPlatform(DEFAULT_CO_STREAM_FILTERS.platform);
+              setGame(DEFAULT_CO_STREAM_FILTERS.game);
+              setLanguage(DEFAULT_CO_STREAM_FILTERS.language);
+              setLiveOnly(DEFAULT_CO_STREAM_FILTERS.liveOnly);
+            }}
+          >
+            <X data-icon="inline-start" />
+            {filterText.clearFilters}
+          </Button>
+        </div>
+      ) : null}
 
       {filtered.length ? (
         <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">

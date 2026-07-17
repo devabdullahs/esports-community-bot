@@ -182,7 +182,7 @@ export default async function MediaNewsPostPage({
 
       <PostShare url={canonicalUrl} title={post.title} locale={locale} />
 
-      <CommentsSection postId={Number(post.id)} locale={locale} />
+      <CommentsSection target={{ type: "news", id: Number(post.id) }} locale={locale} />
     </main>
   );
 }

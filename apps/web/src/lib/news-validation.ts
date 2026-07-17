@@ -31,7 +31,7 @@ type NewsContentValidationResult =
       ok: true;
       value: Pick<
         NewsPostInput,
-        "contentMode" | "defaultLocale" | "status" | "translations"
+        "contentMode" | "defaultLocale" | "status" | "scheduledPublishAt" | "translations"
       >;
     }
   | { ok: false; error: string };

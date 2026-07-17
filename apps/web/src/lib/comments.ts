@@ -3,9 +3,10 @@ import "server-only";
 import {
   createComment as _create,
   getComment as _get,
-  listCommentsForPost as _list,
+  listCommentsForTarget as _listTarget,
   editComment as _edit,
   setCommentStatus as _setStatus,
+  applyCommentModerationDecision as _applyModerationDecision,
   autoApproveDueComments as _autoApprove,
   listCommentsForModeration as _listMod,
   countCommentsByStatus as _counts,
@@ -32,12 +33,15 @@ import {
   resolveReportsForComment as _resolveReports,
 } from "@bot/db/commentReports.js";
 import { analyzeCommentText as _analyze } from "@bot/lib/commentModeration.js";
+import { listEnabledCommentKeywordRules as _listEnabledKeywordRules } from "@bot/db/commentKeywordRules.js";
 import { authDatabase, isPostgresAuthDatabase } from "@/lib/auth-database";
 import type { CommentReportReason, CommentStatus } from "@/lib/comment-validation";
 
 export type CommentRecord = {
   id: number;
-  postId: number;
+  postId: number | null;
+  targetType: "news" | "match";
+  targetId: number;
   parentCommentId: number | null;
   rootCommentId: number | null;
   authUserId: string;
@@ -56,7 +60,9 @@ export type CommentRecord = {
 };
 
 type CreateInput = {
-  postId: number;
+  postId?: number;
+  targetType?: "news" | "match";
+  targetId?: number;
   parentCommentId?: number | null;
   authUserId: string;
   discordUserId: string;
@@ -70,8 +76,9 @@ type CreateInput = {
 
 const createComment = _create as (i: CreateInput) => Promise<{ comment: CommentRecord } | { error: string }>;
 const getComment = _get as (id: number) => Promise<CommentRecord | null>;
-const listForPost = _list as (
-  postId: number,
+const listForTarget = _listTarget as (
+  targetType: "news" | "match",
+  targetId: number,
   limit?: number,
   opts?: { includeAllStatuses?: boolean },
 ) => Promise<CommentRecord[]>;
@@ -84,6 +91,14 @@ const setCommentStatus = _setStatus as (
   status: CommentStatus,
   opts?: { deletedBy?: string | null },
 ) => Promise<CommentRecord | null>;
+const applyModerationDecision = _applyModerationDecision as (input: {
+  id: number;
+  status: CommentStatus;
+  action: string;
+  moderatorDiscordId: string;
+  moderatorName?: string | null;
+  reason?: string | null;
+}) => Promise<CommentRecord | null>;
 const autoApproveDue = _autoApprove as () => Promise<{ approved: number; ids: number[] }>;
 const listMod = _listMod as (q: {
   status?: CommentStatus | null;
@@ -118,8 +133,25 @@ const listReported = _listReported as (q: {
 }) => Promise<(CommentRecord & { reportOpenCount: number })[]>;
 const countReported = _countReported as () => Promise<number>;
 
+type KeywordRule = {
+  id: number;
+  phrase: string;
+  phraseNormalized?: string;
+  locale: "all" | "en" | "ar";
+  scope: "global" | "news" | "match";
+  action: "hold" | "flag";
+  enabled: boolean;
+};
+
+const listEnabledKeywordRules = _listEnabledKeywordRules as () => Promise<KeywordRule[]>;
+
 const analyze = _analyze as (
   body: string,
+  options?: {
+    keywordRules?: KeywordRule[];
+    locales?: Array<"en" | "ar">;
+    scope?: "global" | "news" | "match";
+  },
 ) => {
   profanity: string[];
   hasProfanity: boolean;
@@ -128,6 +160,9 @@ const analyze = _analyze as (
   links: string[];
   externalLinks: string[];
   hasExternalLinks: boolean;
+  keywordRules: Array<Pick<KeywordRule, "id" | "phrase" | "locale" | "scope" | "action">>;
+  hasKeywordHold: boolean;
+  hasKeywordFlag: boolean;
   needsReview: boolean;
 };
 
@@ -172,16 +207,28 @@ function autoApproveHours(): number {
  *    should glance, but it isn't held indefinitely like hard profanity).
  *  - otherwise -> visible immediately.
  */
-export function moderationFor(body: string): {
+export function moderationFor(
+  body: string,
+  options: {
+    keywordRules?: KeywordRule[];
+    locales?: Array<"en" | "ar">;
+    scope?: "global" | "news" | "match";
+  } = {},
+): {
   status: CommentStatus;
   flagReason: Record<string, unknown> | null;
   autoApproveAt: number | null;
 } {
-  const a = analyze(body);
-  if (a.hasProfanity) {
+  const a = analyze(body, options);
+  const keywordReasons = a.keywordRules.length ? { keywordRules: a.keywordRules } : {};
+  if (a.hasProfanity || a.hasKeywordHold) {
     return {
       status: "pending",
-      flagReason: { profanity: a.profanity, ...(a.hasExternalLinks ? { links: a.externalLinks } : {}) },
+      flagReason: {
+        ...(a.hasProfanity ? { profanity: a.profanity } : {}),
+        ...(a.hasExternalLinks ? { links: a.externalLinks } : {}),
+        ...keywordReasons,
+      },
       autoApproveAt: null,
     };
   }
@@ -191,11 +238,33 @@ export function moderationFor(body: string): {
       flagReason: {
         ...(a.hasReviewTerms ? { reviewTerms: a.reviewTerms } : {}),
         ...(a.hasExternalLinks ? { links: a.externalLinks } : {}),
+        ...keywordReasons,
       },
       autoApproveAt: Math.floor(Date.now() / 1000) + Math.round(autoApproveHours() * 3600),
     };
   }
+  if (a.hasKeywordFlag) {
+    return { status: "visible", flagReason: keywordReasons, autoApproveAt: null };
+  }
   return { status: "visible", flagReason: null, autoApproveAt: null };
+}
+
+export function detectCommentKeywordLocales(body: string): Array<"en" | "ar"> {
+  const locales: Array<"en" | "ar"> = [];
+  if (/[a-z]/i.test(body)) locales.push("en");
+  if (/[\u0600-\u06ff]/.test(body)) locales.push("ar");
+  // Punctuation/numeric-only comments should not become a bypass for a
+  // locale-specific rule that intentionally contains those characters.
+  return locales.length ? locales : ["en", "ar"];
+}
+
+async function moderationForTarget(body: string, targetType: "news" | "match") {
+  const keywordRules = await listEnabledKeywordRules();
+  return moderationFor(body, {
+    keywordRules,
+    locales: detectCommentKeywordLocales(body),
+    scope: targetType,
+  });
 }
 
 // Throttle the lazy auto-approval sweep on the public read path to at most once
@@ -203,7 +272,7 @@ export function moderationFor(body: string): {
 // via autoApproveDueCommentsForModeration() and is unaffected.
 let lastReadSweepAt = 0;
 
-// --- public (post-page) view ------------------------------------------------
+// --- public target-page view -------------------------------------------------
 
 export type PublicComment = {
   id: number;
@@ -278,14 +347,15 @@ function replyRenders(c: CommentRecord, viewer: string | null, moderator: boolea
 }
 
 /**
- * Build the threaded comment tree for a post as seen by `viewer`. Runs the lazy
+ * Build the threaded comment tree for a target as seen by `viewer`. Runs the lazy
  * auto-approval sweep first (no cron needed). Visibility:
  *  - visible -> shown to all
  *  - pending -> shown only to its author (with a pending badge client-side)
  *  - deleted / pending-not-yours root WITH replies -> placeholder so the thread holds
  */
-export async function getPostCommentsView(
-  postId: number,
+export async function getTargetCommentsView(
+  targetType: "news" | "match",
+  targetId: number,
   viewer: string | null,
   { moderator = false }: { moderator?: boolean } = {},
 ): Promise<PublicComment[]> {
@@ -294,7 +364,7 @@ export async function getPostCommentsView(
     await autoApproveDue().catch(() => {});
   }
   const rows = await fillMissingAuthorAvatars(
-    await listForPost(postId, 100, { includeAllStatuses: moderator }),
+    await listForTarget(targetType, targetId, 100, { includeAllStatuses: moderator }),
   );
   const ids = rows.map((c) => Number(c.id));
   const [counts, viewerLikes, reportCounts] = await Promise.all([
@@ -339,17 +409,40 @@ export async function getPostCommentsView(
   return out;
 }
 
+// Compatibility entry point for existing news routes.
+export function getPostCommentsView(
+  postId: number,
+  viewer: string | null,
+  options: { moderator?: boolean } = {},
+): Promise<PublicComment[]> {
+  return getTargetCommentsView("news", postId, viewer, options);
+}
+
 // --- mutations + moderation -------------------------------------------------
 
 export type CreateResult = { comment: CommentRecord } | { error: string };
 
-export async function createPostComment(input: Omit<CreateInput, "status" | "flagReason" | "autoApproveAt">): Promise<CreateResult> {
-  const mod = moderationFor(input.body);
+type UserCreateInput = Omit<CreateInput, "status" | "flagReason" | "autoApproveAt">;
+
+export async function createTargetComment(input: UserCreateInput): Promise<CreateResult> {
+  const mod = await moderationForTarget(input.body, input.targetType ?? "news");
   return createComment({ ...input, status: mod.status, flagReason: mod.flagReason, autoApproveAt: mod.autoApproveAt });
 }
 
+export function createPostComment(input: Omit<UserCreateInput, "targetType" | "targetId"> & { postId: number }): Promise<CreateResult> {
+  return createTargetComment({ ...input, targetType: "news", targetId: input.postId });
+}
+
+export function createMatchComment(
+  input: Omit<UserCreateInput, "postId" | "targetType" | "targetId"> & { matchId: number },
+): Promise<CreateResult> {
+  return createTargetComment({ ...input, targetType: "match", targetId: input.matchId });
+}
+
 export async function editOwnComment(id: number, body: string): Promise<CommentRecord | null> {
-  const mod = moderationFor(body);
+  const existing = await getComment(id);
+  if (!existing) return null;
+  const mod = await moderationForTarget(body, existing.targetType);
   return editComment(id, { body, status: mod.status, flagReason: mod.flagReason, autoApproveAt: mod.autoApproveAt });
 }
 
@@ -372,6 +465,7 @@ export async function softDeleteComment(
 const ACTION_TO_STATUS: Record<string, CommentStatus> = {
   approve: "visible",
   reject: "rejected",
+  hold: "pending",
   hide: "hidden",
   restore: "visible",
   delete: "deleted",
@@ -384,22 +478,14 @@ export async function moderateComment(
   reason?: string | null,
 ): Promise<CommentRecord | null> {
   const status = ACTION_TO_STATUS[action];
-  const updated = await setCommentStatus(id, status, {
-    deletedBy: action === "delete" ? moderator.discordUserId : null,
-  });
-  if (!updated) return null;
-  await recordModeration({
-    commentId: id,
+  return applyModerationDecision({
+    id,
+    status,
+    action,
     moderatorDiscordId: moderator.discordUserId,
     moderatorName: moderator.displayName,
-    action,
     reason: reason ?? null,
   });
-  // A moderator decision closes out the comment's open reports. Restoring a
-  // comment dismisses them (the reports were not actionable); every other action
-  // resolves them.
-  await resolveReports(id, action === "restore" ? "dismissed" : "resolved").catch(() => {});
-  return updated;
 }
 
 // --- reporting --------------------------------------------------------------

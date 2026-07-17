@@ -75,6 +75,15 @@ test('zero-point weekly ties retain leaderboard ranks but do not grant weekly wi
 
   const stats = await getEwcUserProfileStats(guildId, season, users[0]);
   assert.equal(stats.weeklyWins, 0);
+  assert.deepEqual(stats.comparison.latestWeek, {
+    weekKey: 'week-zero',
+    label: 'week-zero',
+    rank: 1,
+    total: 2,
+    percentile: 50,
+  });
+  const tiedStats = await getEwcUserProfileStats(guildId, season, users[1]);
+  assert.deepEqual(tiedStats.comparison.latestWeek, stats.comparison.latestWeek);
 
   const positiveWeek = await seedRankedRound({ guildId, season, weekKey: 'week-positive', scoreValues: [10, 10] });
   assert.deepEqual((await weeklyLeaderboard(positiveWeek.id, 10, 0)).map((row) => Number(row.rank)), [1, 1]);

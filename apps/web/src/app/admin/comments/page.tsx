@@ -25,7 +25,7 @@ export default async function AdminCommentsPage() {
       title={t.comments.title}
       description={t.comments.description}
     >
-      <CommentModeration locale={locale} />
+      <CommentModeration locale={locale} canManageGlobalModeration={access.isSuper} />
     </AdminPageShell>
   );
 }

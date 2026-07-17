@@ -26,10 +26,13 @@ import {
 } from "@/components/ui/table";
 import { LocalDateTime } from "@/components/local-date-time";
 import { PlatformIcon } from "@/components/platform-icon";
+import { BracketView } from "@/components/tournaments/bracket-view";
+import { MatchReminderButton } from "@/components/tournaments/match-reminder-button";
 import { copy, directionForLocale, formatNumber, localizedPath, type Locale } from "@/lib/i18n";
 import { logoProxyUrl } from "@/lib/logo-url";
 import { withProfileReturn, type ProfileReturnContext } from "@/lib/profile-navigation";
 import { safeUrlOrUndefined } from "@/lib/safe-url";
+import { projectTournamentBracket } from "@/lib/tournament-brackets";
 
 type MatchStatus = "running" | "scheduled" | "finished";
 type Winner = "a" | "b" | "draw" | null;
@@ -52,6 +55,7 @@ type MatchRow = {
   score_a: number | null;
   score_b: number | null;
   status: MatchStatus;
+  round?: string | null;
   scheduled_at: number | null;
   updated_at: string | null;
   has_details?: boolean;
@@ -348,10 +352,12 @@ export function TournamentMatchList({
   tournamentId,
   locale,
   initialData,
+  reminderState = { signedIn: false, reminderMatchIds: [] },
 }: {
   tournamentId: number;
   locale: Locale;
   initialData: TournamentMatchesPayload;
+  reminderState?: { signedIn: boolean; reminderMatchIds: number[] };
 }) {
   const hasHydrated = useHasHydrated();
   const text = copy[locale].tournaments;
@@ -375,7 +381,10 @@ export function TournamentMatchList({
   };
   const scheduledGroups = groupMatchesByLocalDay(scheduled, locale, text, hasHydrated);
   const finishedGroups = groupMatchesByLocalDay(finished, locale, text, hasHydrated);
+  const bracket = projectTournamentBracket([...running, ...scheduled, ...finished]);
   const tbd = text.tbd;
+  const reminderMatchIds = new Set(reminderState.reminderMatchIds);
+  const reminderCallbackPath = localizedPath(`/tournaments/${query.data.tournament.id}`, locale);
   // Standings-format events (battle royale, TFT groups) often have zero
   // head-to-head matches; the standings ARE the tournament, so skip the empty
   // match sections instead of stacking three "no matches" placeholders.
@@ -397,6 +406,12 @@ export function TournamentMatchList({
       {standingsOnly ? null : (
         <>
       {standings.length ? <Separator /> : null}
+      {bracket ? (
+        <>
+          <BracketView bracket={bracket} locale={locale} />
+          <Separator />
+        </>
+      ) : null}
       <section className="flex flex-col gap-3">
         <h2 className="flex items-center gap-2 text-lg font-semibold">
           <RadioIcon className="size-4 text-primary" />
@@ -405,16 +420,25 @@ export function TournamentMatchList({
         {running.length ? (
           <div className="grid gap-3 sm:grid-cols-2">
             {running.map((m) => (
-              <Card key={m.id} size="sm" className="flex flex-col">
+              <Card id={`tournament-match-${m.id}`} key={m.id} size="sm" className="flex flex-col">
                 {isLobbySchedule(m) ? (
                   <CardContent className="flex items-center justify-between gap-3 py-2">
                     <LobbyScheduleText match={m} fallback={tbd} locale={locale} />
-                    <span className="shrink-0 text-xs text-muted-foreground">
-                      <MatchTime value={m.scheduled_at} locale={locale} fallback={text.timeTbd} />
-                    </span>
+                    <div className="flex shrink-0 items-center gap-1.5">
+                      <span className="text-xs text-muted-foreground">
+                        <MatchTime value={m.scheduled_at} locale={locale} fallback={text.timeTbd} />
+                      </span>
+                      <MatchReminderButton
+                        matchId={m.id}
+                        signedIn={reminderState.signedIn}
+                        initialReminded={reminderMatchIds.has(m.id)}
+                        locale={locale}
+                        callbackPath={reminderCallbackPath}
+                      />
+                    </div>
                   </CardContent>
                 ) : (
-                  <CardContent className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-3 py-1">
+                  <CardContent className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)_auto] items-center gap-3 py-1">
                     <div
                       className="flex min-w-0 items-center gap-2 text-start text-sm font-medium"
                       dir={directionForLocale(locale)}
@@ -440,6 +464,13 @@ export function TournamentMatchList({
                       />
                       <Logo url={m.logo_b} alt={teamLabel(m.team_b, tbd)} />
                     </div>
+                    <MatchReminderButton
+                      matchId={m.id}
+                      signedIn={reminderState.signedIn}
+                      initialReminded={reminderMatchIds.has(m.id)}
+                      locale={locale}
+                      callbackPath={reminderCallbackPath}
+                    />
                   </CardContent>
                 )}
                 <MatchDetailsLink match={m} locale={locale} text={text} />
@@ -492,14 +523,15 @@ export function TournamentMatchList({
               <TableRow>
                 <TableHead>{text.time}</TableHead>
                 <TableHead>{text.match}</TableHead>
+                <TableHead className="w-8 px-1 text-end"><span className="sr-only">{text.reminder}</span></TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {scheduledGroups.map((group) => (
                 <Fragment key={group.key}>
-                  <DayHeadingRow label={group.label} columns={2} />
+                  <DayHeadingRow label={group.label} columns={3} />
                   {group.matches.map((m) => (
-                    <TableRow key={m.id}>
+                    <TableRow id={`tournament-match-${m.id}`} key={m.id}>
                       <TableCell className="text-muted-foreground tabular-nums">
                         <MatchTime value={m.scheduled_at} locale={locale} fallback={text.timeTbd} />
                       </TableCell>
@@ -521,6 +553,15 @@ export function TournamentMatchList({
                           />
                         )}
                         <MatchDetailsLink match={m} locale={locale} text={text} />
+                      </TableCell>
+                      <TableCell className="px-1 text-end">
+                        <MatchReminderButton
+                          matchId={m.id}
+                          signedIn={reminderState.signedIn}
+                          initialReminded={reminderMatchIds.has(m.id)}
+                          locale={locale}
+                          callbackPath={reminderCallbackPath}
+                        />
                       </TableCell>
                     </TableRow>
                   ))}
@@ -553,7 +594,7 @@ export function TournamentMatchList({
                   {group.matches.map((m) => {
                     const winner = resultWinner(m);
                     return (
-                      <TableRow key={m.id}>
+                      <TableRow id={`tournament-match-${m.id}`} key={m.id}>
                         <TableCell className="text-muted-foreground tabular-nums">
                           <MatchTime value={m.scheduled_at} locale={locale} fallback={text.timeTbd} />
                         </TableCell>

@@ -6,6 +6,7 @@ import {
 import {
   getWebAnalyticsDashboard as _getWebAnalyticsDashboard,
   getWebProductAnalytics as _getWebProductAnalytics,
+  getNewsPostAnalytics as _getNewsPostAnalytics,
   recordWebAnalyticsEvent as _recordWebAnalyticsEvent,
   recordWebProductEvent as _recordWebProductEvent,
 } from "@bot/db/webAnalytics.js";
@@ -74,6 +75,33 @@ export type AnalyticsProductEvents = {
   daily: AnalyticsProductEventDay[];
 };
 
+export type PostAnalyticsTotals = {
+  pageviews: number;
+  visitors: number;
+  sessions: number;
+  engagementSeconds: number;
+  avgSecondsPerSession: number;
+  avgSecondsPerPageview: number;
+};
+
+export type AnalyticsPost = PostAnalyticsTotals & {
+  postId: number;
+  publishedAt: string | null;
+};
+
+export type PostAnalyticsDashboard = {
+  generatedAt: number;
+  timezone: string;
+  days: number;
+  since: number;
+  totals: PostAnalyticsTotals;
+  posts: AnalyticsPost[];
+  countries: AnalyticsCountry[];
+  acquisition: AnalyticsAcquisition[];
+  campaigns: AnalyticsCampaign[];
+  daily: AnalyticsDay[];
+};
+
 export type AnalyticsDashboard = {
   generatedAt: number;
   timezone: string;
@@ -121,6 +149,12 @@ const getWebProductAnalytics = _getWebProductAnalytics as unknown as (input?: {
   days?: number;
   sessionCount?: number;
 }) => Promise<AnalyticsProductEvents>;
+const getNewsPostAnalytics = _getNewsPostAnalytics as unknown as (input?: {
+  gameSlug?: string | null;
+  mediaSlug?: string | null;
+  nowSec?: number;
+  days?: number;
+}) => Promise<PostAnalyticsDashboard>;
 
 let schemaPromise: Promise<void> | null = null;
 
@@ -155,4 +189,14 @@ export async function getProductAnalytics(input?: {
 export async function getAnalyticsDashboard(input?: { nowSec?: number; days?: number }): Promise<AnalyticsDashboard> {
   await ensureSchemaOnce();
   return getWebAnalyticsDashboard(input);
+}
+
+export async function getPostAnalytics(input?: {
+  gameSlug?: string | null;
+  mediaSlug?: string | null;
+  nowSec?: number;
+  days?: number;
+}): Promise<PostAnalyticsDashboard> {
+  await ensureSchemaOnce();
+  return getNewsPostAnalytics(input);
 }

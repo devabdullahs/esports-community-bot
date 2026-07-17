@@ -22,7 +22,7 @@ import {
 import type { Locale } from "@/lib/i18n";
 import { unstable_cache } from "next/cache";
 
-export type NewsStatus = "draft" | "published";
+export type NewsStatus = "draft" | "scheduled" | "published";
 export type NewsContentMode = "shared" | "translated";
 export type NewsCoverPlacement = "top" | "bottom" | "card-only";
 
@@ -60,6 +60,7 @@ export type NewsPost = {
   createdAt: string;
   updatedAt: string;
   publishedAt: string | null;
+  scheduledPublishAt: string | null;
 };
 
 export type NewsPostInput = {
@@ -69,6 +70,7 @@ export type NewsPostInput = {
   defaultLocale: Locale;
   translations: Partial<Record<Locale, Omit<NewsTranslation, "locale">>>;
   status?: NewsStatus;
+  scheduledPublishAt?: string | null;
   authorDiscordId?: string | null;
   authorName?: string | null;
   coverImageUrl?: string | null;
@@ -112,7 +114,11 @@ const searchPublished = _searchPublished as (args: {
 const create = _create as (input: NewsPostInput) => Promise<NewsPost>;
 const createInTx = _createInTx as (tx: unknown, input: NewsPostInput) => Promise<number>;
 const update = _update as (id: number, input: NewsPostInput) => Promise<NewsPost | null>;
-const setStatus = _setStatus as (id: number, status: NewsStatus) => Promise<NewsPost | null>;
+const setStatus = _setStatus as (
+  id: number,
+  status: NewsStatus,
+  scheduledPublishAt?: string | null,
+) => Promise<NewsPost | null>;
 const remove = _delete as (id: number) => Promise<{ changes: number }>;
 
 export function getNewsPost(id: number): Promise<NewsPost | null> {
@@ -176,8 +182,12 @@ export function updateNewsPost(id: number, input: NewsPostInput): Promise<NewsPo
   return update(id, input);
 }
 
-export function setNewsPostStatus(id: number, status: NewsStatus): Promise<NewsPost | null> {
-  return setStatus(id, status);
+export function setNewsPostStatus(
+  id: number,
+  status: NewsStatus,
+  scheduledPublishAt?: string | null,
+): Promise<NewsPost | null> {
+  return setStatus(id, status, scheduledPublishAt);
 }
 
 export function deleteNewsPost(id: number): Promise<{ changes: number }> {

@@ -168,6 +168,10 @@ const DEFAULT_PERSONALIZED_UPCOMING_LIMIT = 5;
 const DEFAULT_PERSONALIZED_WINDOW_SECONDS = 7 * 24 * 60 * 60;
 const MAX_PERSONALIZED_MATCH_CANDIDATES = 500;
 
+export const PERSONAL_CALENDAR_WINDOW_SECONDS = 30 * 24 * 60 * 60;
+export const MAX_PERSONAL_CALENDAR_MATCHES = 200;
+const MAX_PERSONAL_CALENDAR_CANDIDATES = 2000;
+
 function boundedPositiveInteger(value, fallback, maximum) {
   const parsed = Math.trunc(Number(value));
   if (!Number.isFinite(parsed) || parsed < 1) return fallback;
@@ -277,4 +281,89 @@ export async function listPersonalizedMatchesForUser(
     if (live.length === safeLiveLimit && upcoming.length === safeUpcomingLimit) break;
   }
   return { live, upcoming };
+}
+
+// A calendar needs a wider look-ahead than the compact dashboard overview.
+// Team and player follows still match in JS so this stays consistent with the
+// notification fan-out matcher, while the candidate query remains bounded.
+export async function listUpcomingFollowedMatchesForUser(
+  discordUserId,
+  { nowSec, limit = MAX_PERSONAL_CALENDAR_MATCHES } = {},
+) {
+  const now = Math.trunc(Number(nowSec));
+  if (!discordUserId || !Number.isFinite(now)) {
+    throw new Error('listUpcomingFollowedMatchesForUser requires discordUserId and nowSec.');
+  }
+  const safeLimit = boundedPositiveInteger(limit, MAX_PERSONAL_CALENDAR_MATCHES, MAX_PERSONAL_CALENDAR_MATCHES);
+  const [follows, candidates] = await Promise.all([
+    listFollowsForUser(discordUserId),
+    all(
+      `SELECT m.id, m.tournament_id, m.team_a, m.team_b, m.status, m.scheduled_at,
+              t.game, t.name AS tournament_name
+       FROM matches m
+       JOIN tournaments t ON t.id = m.tournament_id
+       WHERE t.active = 1
+         AND t.archived_at IS NULL
+         AND m.status = 'scheduled'
+         AND m.scheduled_at >= $1
+         AND m.scheduled_at <= $2
+         AND NOT (m.source = 'startgg' AND m.external_id LIKE 'sgg:preview_%')
+       ORDER BY m.scheduled_at ASC, m.id ASC
+       LIMIT $3`,
+      [now, now + PERSONAL_CALENDAR_WINDOW_SECONDS, MAX_PERSONAL_CALENDAR_CANDIDATES],
+    ),
+  ]);
+  if (!follows.length) return [];
+
+  const gameKeys = new Set(
+    follows.filter((follow) => follow.entity_type === 'game').map((follow) => follow.entity_key),
+  );
+  const tournamentKeys = new Set(
+    follows.filter((follow) => follow.entity_type === 'tournament').map((follow) => follow.entity_key),
+  );
+  const teamKeys = new Set(
+    follows.filter((follow) => follow.entity_type === 'team').map((follow) => follow.entity_key),
+  );
+  const playerTeams = await all(
+    `SELECT p.game, p.current_team_name
+     FROM user_follows f
+     JOIN players p ON CAST(p.id AS TEXT) = f.entity_key
+     WHERE f.discord_user_id = $1
+       AND f.entity_type = 'player'
+       AND p.current_team_name IS NOT NULL`,
+    [discordUserId],
+  );
+
+  const matchesFollow = (row) => {
+    const matchGame = textOrEmpty(row.game).toLowerCase();
+    if (gameKeys.has(matchGame) || tournamentKeys.has(String(row.tournament_id))) return true;
+
+    const matchTeams = [normalizeTeamName(row.team_a), normalizeTeamName(row.team_b)].filter(Boolean);
+    if (matchTeams.some((team) => teamKeys.has(team))) return true;
+
+    return playerTeams.some((player) => {
+      if (!matchTeams.includes(normalizeTeamName(player.current_team_name))) return false;
+      const playerGame = textOrEmpty(player.game).toLowerCase();
+      return !matchGame || !playerGame || playerGame === matchGame;
+    });
+  };
+
+  const seen = new Set();
+  const matches = [];
+  for (const row of candidates) {
+    if (!matchesFollow(row) || seen.has(row.id)) continue;
+    seen.add(row.id);
+    matches.push({
+      id: Number(row.id),
+      tournamentId: Number(row.tournament_id),
+      tournamentName: textOrEmpty(row.tournament_name),
+      game: textOrEmpty(row.game),
+      teamA: textOrEmpty(row.team_a),
+      teamB: textOrEmpty(row.team_b),
+      status: 'scheduled',
+      scheduledAt: Number(row.scheduled_at),
+    });
+    if (matches.length === safeLimit) break;
+  }
+  return matches;
 }

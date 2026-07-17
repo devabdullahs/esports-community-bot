@@ -12,15 +12,9 @@ import {
   resolveNewsChannelId,
   touchDiscordNewsPost,
 } from '../db/ewcNewsDiscordPosts.js';
-import { getTranslationForLocale } from '../lib/ewcNewsContent.js';
-import {
-  clampText,
-  prepareBodyForDiscord,
-  DISCORD_AUTHOR_CAP,
-  DISCORD_FOOTER_CAP,
-  DISCORD_TITLE_CAP,
-} from '../lib/discordContent.js';
+import { buildNewsDiscordAnnouncementPreview } from '../lib/newsCrossPost.js';
 import { logger } from '../lib/logger.js';
+import { runScheduledNewsPublisher } from './scheduledNewsPublisher.js';
 
 // Auto-posts published news to Discord. Lifecycle per design doc, with ONE documented v1
 // deviation on delete-propagation: ewc_news_discord_posts.post_id has ON DELETE CASCADE, so
@@ -29,79 +23,35 @@ import { logger } from '../lib/logger.js';
 // Unpublish (status -> draft) keeps the post+row alive, so that path DOES delete the message.
 // Acceptable for v1; a future version could soft-capture message ids before deletion.
 
-function isSafeHttpUrl(value) {
-  if (typeof value !== 'string' || !value) return false;
-  try {
-    const url = new URL(value);
-    return url.protocol === 'http:' || url.protocol === 'https:';
-  } catch {
-    return false;
-  }
-}
-
-function readMoreUrl(post, locale = post.defaultLocale) {
-  const publicUrl = config.dashboard.publicUrl;
-  if (!publicUrl) return null;
-  const base = publicUrl.replace(/\/$/, '');
-  // Media posts live under the media channel; game posts under the game.
-  const path = post.mediaSlug
-    ? `/media/${post.mediaSlug}/news/${post.id}`
-    : `/games/${post.gameSlug}/news/${post.id}`;
-  try {
-    const localizedPath = locale === 'ar' ? `/ar${path}` : path;
-    const url = new URL(`${base}${localizedPath}`);
-    url.searchParams.set('utm_source', 'discord');
-    url.searchParams.set('utm_medium', 'community');
-    url.searchParams.set('utm_campaign', 'news_announcement');
-    return isSafeHttpUrl(url.toString()) ? url.toString() : null;
-  } catch {
-    return null;
-  }
-}
-
 // AR primary, EN fallback (community is Arabic-first). getTranslationForLocale already
 // falls back: requested -> defaultLocale -> en -> ar -> null. Discord receives a
 // concise preview; the website remains the authoritative home of the full article.
 export function buildNewsPayload(post, game = null) {
-  const translation = getTranslationForLocale(post, 'ar') || getTranslationForLocale(post, 'en');
-  const title = clampText(translation?.title || post.title || 'News update', DISCORD_TITLE_CAP);
-  const summary = prepareBodyForDiscord(translation?.summary || post.summary || '');
-  const bodyLead = prepareBodyForDiscord(translation?.body || '');
-  const description = clampText(summary || bodyLead, 600);
-  const url = readMoreUrl(post, translation?.locale);
-
-  const embed = new EmbedBuilder().setColor(0x5865f2).setTitle(title);
-  if (url) embed.setURL(url);
-  if (description) embed.setDescription(description);
-  if (isSafeHttpUrl(post.coverImageUrl)) embed.setImage(post.coverImageUrl);
-
-  // Byline: list every author, use the first available avatar as the icon.
-  const authors = Array.isArray(post.authors) ? post.authors.filter((a) => a?.name) : [];
-  const bylineName = authors.length
-    ? authors.map((a) => a.name).join(', ')
-    : post.authorName || null;
-  if (bylineName) {
-    const iconURL = authors.find((a) => isSafeHttpUrl(a.avatarUrl))?.avatarUrl;
-    embed.setAuthor({ name: clampText(bylineName, DISCORD_AUTHOR_CAP), ...(iconURL ? { iconURL } : {}) });
+  const preview = buildNewsDiscordAnnouncementPreview(post, {
+    baseUrl: config.dashboard.publicUrl,
+    game,
+  });
+  const embed = new EmbedBuilder().setColor(0x5865f2).setTitle(preview.title);
+  if (preview.url) embed.setURL(preview.url);
+  if (preview.description) embed.setDescription(preview.description);
+  if (preview.imageUrl) embed.setImage(preview.imageUrl);
+  if (preview.byline) {
+    embed.setAuthor({
+      name: preview.byline,
+      ...(preview.authorIconUrl ? { iconURL: preview.authorIconUrl } : {}),
+    });
   }
-
-  // Footer: the game name (AR-first) so readers see context at a glance.
-  const gameName = game?.title?.ar || game?.title?.en || null;
-  if (gameName) embed.setFooter({ text: clampText(gameName, DISCORD_FOOTER_CAP) });
-
-  const publishedMs =
-    typeof post.publishedAt === 'number'
-      ? post.publishedAt * 1000
-      : post.publishedAt
-        ? Date.parse(`${post.publishedAt}Z`.replace(/Z+$/, 'Z'))
-        : NaN;
-  if (Number.isFinite(publishedMs)) embed.setTimestamp(publishedMs);
+  if (preview.footer) embed.setFooter({ text: preview.footer });
+  if (preview.timestamp !== null) embed.setTimestamp(preview.timestamp);
 
   const payload = { embeds: [embed], allowedMentions: { parse: [] } };
-  if (url) {
+  if (preview.url) {
     payload.components = [
       new ActionRowBuilder().addComponents(
-        new ButtonBuilder().setStyle(ButtonStyle.Link).setLabel('Read more').setURL(url),
+        new ButtonBuilder()
+          .setStyle(ButtonStyle.Link)
+          .setLabel(preview.readMoreLabel)
+          .setURL(preview.url),
       ),
     ];
   }
@@ -137,20 +87,28 @@ async function resolveChannel(client, { gameSlug, mediaSlug }) {
   return { channel, guildId };
 }
 
-async function postNewPublished(client) {
-  for (const { post_id: postId, game_slug: gameSlug, media_slug: mediaSlug } of await listUnpostedPublishedNewsPosts()) {
+export async function postNewPublished(client, {
+  listCandidates = listUnpostedPublishedNewsPosts,
+  resolvePostChannel = resolveChannel,
+  getPost = getEwcNewsPostById,
+  getGame = getEwcGame,
+  recordPost = recordDiscordNewsPost,
+} = {}) {
+  for (const { post_id: postId, game_slug: gameSlug, media_slug: mediaSlug } of await listCandidates()) {
     try {
-      const resolved = await resolveChannel(client, { gameSlug, mediaSlug });
+      const resolved = await resolvePostChannel(client, { gameSlug, mediaSlug });
       if (!resolved) {
         logger.debug(`[news] no channel resolved for post ${postId} (${mediaSlug || gameSlug}); skipping`);
         continue;
       }
-      const post = await getEwcNewsPostById(postId);
-      if (!post) continue;
+      const post = await getPost(postId);
+      // The outbox candidate list is only a snapshot. Re-check after channel
+      // resolution so a concurrent unpublish/cancel cannot announce stale copy.
+      if (!post || post.status !== 'published') continue;
       // Footer uses the related game when present (media posts may omit it).
-      const game = await getEwcGame(gameSlug);
+      const game = await getGame(gameSlug);
       const sent = await resolved.channel.send(buildNewsPayload(post, game));
-      await recordDiscordNewsPost(postId, {
+      await recordPost(postId, {
         guildId: resolved.guildId,
         channelId: resolved.channel.id,
         messageId: sent.id,
@@ -204,6 +162,7 @@ async function syncExisting(client) {
 
 export async function runNewsAnnouncer(client = null) {
   if (!client) return;
+  await runScheduledNewsPublisher();
   // Unpublishes/edits first so corrections land before any fresh posts in the same tick.
   await syncExisting(client);
   await postNewPublished(client);

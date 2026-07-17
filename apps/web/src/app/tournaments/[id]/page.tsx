@@ -13,6 +13,7 @@ import { TournamentMatchList } from "@/components/tournaments/tournament-match-l
 import { TournamentSyncHealthStatus } from "@/components/tournaments/tournament-sync-health";
 import { copy, formatNumber, localizedPath } from "@/lib/i18n";
 import { getViewerFollowState } from "@/lib/follows";
+import { getViewerMatchReminderState } from "@/lib/match-reminders";
 import { gameTitleForSlug, listGamesCached } from "@/lib/games";
 import { getRequestLocale } from "@/lib/request-locale";
 import { safeUrlOrUndefined } from "@/lib/safe-url";
@@ -75,7 +76,11 @@ export default async function TournamentDetailPage({
   if (tournament.id !== tournamentId) {
     permanentRedirect(localizedPath(`/tournaments/${tournament.id}`, locale));
   }
-  const followState = await getViewerFollowState("tournament", String(tournament.id));
+  const reminderMatchIds = [...data.matches.running, ...data.matches.scheduled].map((match) => match.id);
+  const [followState, reminderState] = await Promise.all([
+    getViewerFollowState("tournament", String(tournament.id)),
+    getViewerMatchReminderState(reminderMatchIds),
+  ]);
   const sourceUrl = safeUrlOrUndefined(tournament.url);
   const isLive = data.matches.running.length > 0;
   // Standings-format events (battle royale, TFT groups) have no head-to-head
@@ -188,7 +193,12 @@ export default async function TournamentDetailPage({
 
       <PartnerPlacement kind="tournament" target={`tournament:${tournament.id}`} locale={locale} />
 
-      <TournamentMatchList tournamentId={tournament.id} locale={locale} initialData={data} />
+      <TournamentMatchList
+        tournamentId={tournament.id}
+        locale={locale}
+        initialData={data}
+        reminderState={reminderState}
+      />
 
       <LiquipediaAttribution locale={locale} />
     </main>

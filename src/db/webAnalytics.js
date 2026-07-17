@@ -214,6 +214,125 @@ function dailySeries(rows, nowSec, days) {
   }));
 }
 
+function summarizePostPeriod(rows) {
+  const visitors = new Set();
+  const sessions = new Set();
+  let pageviews = 0;
+  let engagementSeconds = 0;
+
+  for (const row of rows) {
+    if (row.visitor_id) visitors.add(row.visitor_id);
+    if (row.session_id) sessions.add(row.session_id);
+    if (row.event_type === 'pageview') pageviews += 1;
+    engagementSeconds += clampInt(row.duration_seconds, 0, 300);
+  }
+
+  return {
+    pageviews,
+    visitors: visitors.size,
+    sessions: sessions.size,
+    engagementSeconds,
+    avgSecondsPerSession: sessions.size ? Math.round(engagementSeconds / sessions.size) : 0,
+    avgSecondsPerPageview: pageviews ? Math.round(engagementSeconds / pageviews) : 0,
+  };
+}
+
+// Public news URLs carry a stable owner and post id. Keep the parser narrow so
+// arbitrary public paths cannot be associated with a post analytics bucket.
+function postTargetForPath(path) {
+  const parts = cleanPath(path).split('/').filter(Boolean);
+  if (parts[0] === 'en' || parts[0] === 'ar') parts.shift();
+  if (parts.length !== 4) return null;
+  const [ownerType, ownerSlug, newsSegment, rawId] = parts;
+  if ((ownerType !== 'games' && ownerType !== 'media') || newsSegment !== 'news' || !/^\d+$/.test(rawId)) {
+    return null;
+  }
+  const id = Number(rawId);
+  if (!Number.isSafeInteger(id) || id < 1) return null;
+  return `${ownerType}:${ownerSlug}:${id}`;
+}
+
+function newsPostScope({ gameSlug = null, mediaSlug = null } = {}) {
+  const game = cleanString(gameSlug, 80);
+  const media = cleanString(mediaSlug, 80);
+  if (game && media) throw new Error('Analytics scope must be a game or media channel, not both');
+  if (media) {
+    return {
+      where: ['status = \'published\'', `media_slug = $1`],
+      params: [media],
+    };
+  }
+  if (game) {
+    return {
+      where: ['status = \'published\'', `game_slug = $1`, 'media_slug IS NULL'],
+      params: [game],
+    };
+  }
+  return { where: ['status = \'published\''], params: [] };
+}
+
+export async function getNewsPostAnalytics({
+  gameSlug = null,
+  mediaSlug = null,
+  nowSec = Math.floor(Date.now() / 1000),
+  days = 30,
+} = {}) {
+  const safeDays = clampInt(days, 7, 120);
+  const since = startOfRiyadhDay(nowSec) - (safeDays - 1) * 86400;
+  const scope = newsPostScope({ gameSlug, mediaSlug });
+  const postRows = await all(
+    `SELECT id, game_slug, media_slug, published_at
+       FROM ewc_news_posts
+      WHERE ${scope.where.join(' AND ')}
+      ORDER BY published_at DESC, id DESC`,
+    scope.params,
+  );
+  const postsByTarget = new Map(
+    postRows.map((post) => [
+      `${post.media_slug ? 'media' : 'games'}:${post.media_slug || post.game_slug}:${post.id}`,
+      post,
+    ]),
+  );
+  const rowsByPostId = new Map(postRows.map((post) => [Number(post.id), []]));
+
+  if (postsByTarget.size > 0) {
+    const rows = await all(
+      `SELECT visitor_id, session_id, event_type, acquisition_source, campaign, country, duration_seconds, occurred_at, path
+         FROM web_analytics_events
+        WHERE occurred_at >= $1
+        ORDER BY occurred_at ASC`,
+      [since],
+    );
+    for (const row of rows) {
+      const post = postsByTarget.get(postTargetForPath(row.path));
+      if (post) rowsByPostId.get(Number(post.id)).push(row);
+    }
+  }
+
+  const scopedRows = [...rowsByPostId.values()].flat();
+  const acquisition = acquisitionBreakdown(scopedRows, since);
+  const posts = postRows
+    .map((post) => ({
+      postId: Number(post.id),
+      publishedAt: post.published_at || null,
+      ...summarizePostPeriod(rowsByPostId.get(Number(post.id))),
+    }))
+    .sort((a, b) => b.pageviews - a.pageviews || b.visitors - a.visitors || b.postId - a.postId);
+
+  return {
+    generatedAt: nowSec,
+    timezone: 'Asia/Riyadh',
+    days: safeDays,
+    since,
+    totals: summarizePostPeriod(scopedRows),
+    posts,
+    countries: topCountries(scopedRows, since, 12),
+    acquisition: acquisition.acquisition,
+    campaigns: acquisition.campaigns,
+    daily: dailySeries(scopedRows, nowSec, safeDays),
+  };
+}
+
 function productEventSummary(rows, nowSec, days, sessionCount) {
   const byName = new Map();
   for (const row of rows) {
