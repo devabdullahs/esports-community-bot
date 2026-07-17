@@ -22,7 +22,7 @@ export default async function AdminGraphicsPage() {
 
   return (
     <AdminPageShell
-      maxWidth="6xl"
+      maxWidth="full"
       breadcrumbs={[
         { label: t.dashboard.title, href: "/admin" },
         { label: locale === "ar" ? "\u0645\u0648\u0644\u062f \u0627\u0644\u0631\u0633\u0648\u0645" : "Graphics generator" },

@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { loadImage } from '@napi-rs/canvas';
 
 const { renderAdminGraphic } = await import('../src/lib/adminGraphicsCard.js');
 
@@ -13,4 +14,26 @@ test('news promo renders mixed Arabic and Latin text with bundled fonts', async 
 
   assert.ok(Buffer.isBuffer(image) && image.length > 10_000, 'renders a non-empty image');
   assert.deepEqual([...image.subarray(0, 8)], [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+});
+
+test('graphics renderer honors portrait format, theme, alignment, and export scale', async () => {
+  const image = await renderAdminGraphic({
+    template: 'match-result',
+    tournament: 'Esports World Cup 2026',
+    game: 'Dota 2',
+    teamA: 'Team Falcons',
+    teamB: 'Vici Gaming',
+    logoA: null,
+    logoB: null,
+    scoreA: 2,
+    scoreB: 0,
+    format: '4:5',
+    language: 'both',
+    alignment: 'center',
+    style: 'light',
+    scale: 2,
+  });
+  const decoded = await loadImage(image);
+  assert.equal(decoded.width, 2160);
+  assert.equal(decoded.height, 2700);
 });

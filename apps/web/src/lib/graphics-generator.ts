@@ -4,6 +4,7 @@ import { all } from "@bot/db/client.js";
 import { listStandingsForTournament as _listStandings } from "@bot/db/tournamentStandings.js";
 import { renderAdminGraphic as _renderAdminGraphic } from "@bot/lib/adminGraphicsCard.js";
 import { canManageGame, canManageMedia, type AdminAccess } from "@/lib/admin";
+import { getMediaChannel, listMediaChannels } from "@/lib/media";
 import { getNewsPost, listAdminNewsPosts } from "@/lib/news";
 import { resolveDefaultGuildId } from "@/lib/guild";
 import {
@@ -11,13 +12,18 @@ import {
   type GraphicsOption,
   type GraphicsOwner,
   type GraphicsRenderRequest,
+  type GraphicsRenderOptions,
 } from "@/lib/graphics-generator-model";
+
+type RenderOptions = GraphicsRenderOptions & {
+  brandLogo: string | null;
+};
 
 type MatchGraphic = {
   template: "match-result";
   owner: GraphicsOwner;
   target: { id: number; label: string };
-  input: {
+  input: RenderOptions & {
     template: "match-result";
     tournament: string;
     game: string;
@@ -25,8 +31,9 @@ type MatchGraphic = {
     teamB: string;
     logoA: string | null;
     logoB: string | null;
-    scoreA: number;
-    scoreB: number;
+    scoreA: number | null;
+    scoreB: number | null;
+    status: "live" | "finished" | "upcoming";
   };
 };
 
@@ -34,7 +41,7 @@ type StandingsGraphic = {
   template: "standings";
   owner: GraphicsOwner;
   target: { id: number; label: string };
-  input: {
+  input: RenderOptions & {
     template: "standings";
     tournament: string;
     section: string;
@@ -46,7 +53,7 @@ type NewsGraphic = {
   template: "news-promo";
   owner: GraphicsOwner;
   target: { id: number; label: string };
-  input: {
+  input: RenderOptions & {
     template: "news-promo";
     owner: string;
     title: string;
@@ -113,16 +120,15 @@ export async function listGraphicsGeneratorData(access: AdminAccess): Promise<Gr
   const guildId = await resolveDefaultGuildId();
   if (!guildId) return { matches: [], standings: [], news: [] };
 
-  const [matchRows, standingsRows, posts] = await Promise.all([
+  const [matchRows, standingsRows, posts, mediaChannels] = await Promise.all([
     all(
-      `SELECT m.id, m.team_a, m.team_b, m.logo_a, m.logo_b, m.score_a, m.score_b, t.game, t.name AS tournament_name
+      `SELECT m.id, m.team_a, m.team_b, m.logo_a, m.logo_b, m.score_a, m.score_b,
+              m.status, t.game, t.name AS tournament_name
        FROM matches m
        JOIN tournaments t ON t.id = m.tournament_id
        WHERE t.guild_id = $1
          AND t.active = 1
-         AND m.status = 'finished'
-         AND m.score_a IS NOT NULL
-         AND m.score_b IS NOT NULL
+         AND m.status IN ('live', 'finished', 'upcoming')
        ORDER BY COALESCE(m.scheduled_at, 0) DESC, m.id DESC
        LIMIT 250`,
       [guildId],
@@ -137,7 +143,10 @@ export async function listGraphicsGeneratorData(access: AdminAccess): Promise<Gr
       [guildId],
     ) as Promise<Array<Record<string, unknown>>>,
     listAdminNewsPosts(),
+    listMediaChannels(),
   ]);
+
+  const mediaLogoBySlug = new Map(mediaChannels.map((channel) => [channel.slug, channel.logoUrl]));
 
   const matches = matchRows.flatMap((row): GraphicsOption[] => {
     const owner = ownerForRow(row);
@@ -145,11 +154,16 @@ export async function listGraphicsGeneratorData(access: AdminAccess): Promise<Gr
     if (!owner || !id) return [];
     const teamA = cleanText(row.team_a, "TBD", 70);
     const teamB = cleanText(row.team_b, "TBD", 70);
+    const hasScore = row.score_a !== null && row.score_a !== undefined
+      && row.score_b !== null && row.score_b !== undefined;
     return [{
       id,
-      label: `${teamA} ${cleanText(row.score_a, "-", 8)} - ${cleanText(row.score_b, "-", 8)} ${teamB}`,
+      label: hasScore
+        ? `${teamA} ${cleanText(row.score_a, "-", 8)} - ${cleanText(row.score_b, "-", 8)} ${teamB}`
+        : `${teamA} vs ${teamB}`,
       detail: cleanText(row.tournament_name, owner.slug, 100),
       owner,
+      status: row.status === "live" ? "live" : row.status === "finished" ? "final" : "soon",
     }];
   });
   const standings = standingsRows.flatMap((row): GraphicsOption[] => {
@@ -161,6 +175,7 @@ export async function listGraphicsGeneratorData(access: AdminAccess): Promise<Gr
       label: cleanText(row.name, "Tournament", 120),
       detail: owner.slug,
       owner,
+      status: "soon",
     }];
   });
   const news = posts.flatMap((post): GraphicsOption[] => {
@@ -171,6 +186,8 @@ export async function listGraphicsGeneratorData(access: AdminAccess): Promise<Gr
       label: cleanText(post.title, "Untitled post", 120),
       detail: owner.slug,
       owner,
+      status: "final",
+      brandLogoUrl: owner.kind === "media" ? mediaLogoBySlug.get(owner.slug) ?? null : null,
     }];
   });
 
@@ -182,18 +199,28 @@ export async function resolveGraphicsRenderRequest(
 ): Promise<ResolvedGraphicsRender | null> {
   const guildId = await resolveDefaultGuildId();
   if (!guildId) return null;
+  const options: GraphicsRenderOptions = {
+    format: request.format,
+    language: request.language,
+    alignment: request.alignment,
+    style: request.style,
+    scale: request.scale,
+    brandPlacement: request.brandPlacement,
+    brandX: request.brandX,
+    brandY: request.brandY,
+    brandSize: request.brandSize,
+  };
 
   if (request.template === "match-result") {
     const row = (await all(
-      `SELECT m.id, m.team_a, m.team_b, m.logo_a, m.logo_b, m.score_a, m.score_b, t.game, t.name AS tournament_name
+      `SELECT m.id, m.team_a, m.team_b, m.logo_a, m.logo_b, m.score_a, m.score_b,
+              m.status, t.game, t.name AS tournament_name
        FROM matches m
        JOIN tournaments t ON t.id = m.tournament_id
        WHERE m.id = $1
          AND t.guild_id = $2
          AND t.active = 1
-         AND m.status = 'finished'
-         AND m.score_a IS NOT NULL
-         AND m.score_b IS NOT NULL
+         AND m.status IN ('live', 'finished', 'upcoming')
        LIMIT 1`,
       [request.resourceId, guildId],
     ))[0] as Record<string, unknown> | undefined;
@@ -205,6 +232,8 @@ export async function resolveGraphicsRenderRequest(
       owner,
       target: { id, label: cleanText(row.tournament_name, "Tournament", 100) },
       input: {
+        ...options,
+        brandLogo: null,
         template: "match-result",
         tournament: cleanText(row.tournament_name, "Tournament", 100),
         game: cleanText(row.game, owner.slug, 80),
@@ -212,8 +241,9 @@ export async function resolveGraphicsRenderRequest(
         teamB: cleanText(row.team_b, "TBD", 70),
         logoA: cleanText(row.logo_a, "", 1000) || null,
         logoB: cleanText(row.logo_b, "", 1000) || null,
-        scoreA: Number(row.score_a),
-        scoreB: Number(row.score_b),
+        scoreA: row.score_a === null || row.score_a === undefined ? null : Number(row.score_a),
+        scoreB: row.score_b === null || row.score_b === undefined ? null : Number(row.score_b),
+        status: row.status === "live" ? "live" : row.status === "finished" ? "finished" : "upcoming",
       },
     };
   }
@@ -250,6 +280,8 @@ export async function resolveGraphicsRenderRequest(
       owner,
       target: { id, label: cleanText(row.name, "Tournament", 100) },
       input: {
+        ...options,
+        brandLogo: null,
         template: "standings",
         tournament: cleanText(row.name, "Tournament", 100),
         section: cleanText(sectionTitle, "Standings", 100),
@@ -262,11 +294,14 @@ export async function resolveGraphicsRenderRequest(
   if (!post) return null;
   const owner = ownerForRow({ mediaSlug: post.mediaSlug, gameSlug: post.gameSlug });
   if (!owner) return null;
+  const mediaChannel = owner.kind === "media" ? await getMediaChannel(owner.slug) : null;
   return {
     template: "news-promo",
     owner,
     target: { id: post.id, label: cleanText(post.title, "Untitled post", 100) },
     input: {
+      ...options,
+      brandLogo: mediaChannel?.logoUrl ?? null,
       template: "news-promo",
       owner: owner.slug,
       title: cleanText(post.title, "Community update", 150),
