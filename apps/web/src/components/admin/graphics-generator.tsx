@@ -122,6 +122,7 @@ export function GraphicsGenerator({ data }: { data: GraphicsGeneratorData }) {
   const [brandX, setBrandX] = useState(DEFAULT_GRAPHICS_RENDER_OPTIONS.brandX);
   const [brandY, setBrandY] = useState(DEFAULT_GRAPHICS_RENDER_OPTIONS.brandY);
   const [brandSize, setBrandSize] = useState(DEFAULT_GRAPHICS_RENDER_OPTIONS.brandSize);
+  const [brandMediaSlug, setBrandMediaSlug] = useState<string | null>(DEFAULT_GRAPHICS_RENDER_OPTIONS.brandMediaSlug);
   const [zoom, setZoom] = useState(100);
   const [safeArea, setSafeArea] = useState(true);
   const [showGrid, setShowGrid] = useState(false);
@@ -142,12 +143,16 @@ export function GraphicsGenerator({ data }: { data: GraphicsGeneratorData }) {
     return options.filter((option) => `${option.label} ${option.detail}`.toLocaleLowerCase().includes(needle));
   }, [options, query]);
   const dimensions = graphicsFormatDimensions(format);
+  const selectedBrand = useMemo(
+    () => data.brands.find((brand) => brand.slug === brandMediaSlug) ?? null,
+    [brandMediaSlug, data.brands],
+  );
   const renderOptions = useMemo<GraphicsRenderOptions>(() => ({
-    format, language, alignment, style, scale, brandPlacement, brandX, brandY, brandSize,
-  }), [alignment, brandPlacement, brandSize, brandX, brandY, format, language, scale, style]);
+    format, language, alignment, style, scale, brandPlacement, brandX, brandY, brandSize, brandMediaSlug,
+  }), [alignment, brandMediaSlug, brandPlacement, brandSize, brandX, brandY, format, language, scale, style]);
   const currentSignature = resourceId ? JSON.stringify({ template, resourceId, ...renderOptions }) : "";
   const previewStale = Boolean(previewUrl && generatedSignature !== currentSignature);
-  const hasMediaBrand = selectedOption?.owner.kind === "media" && Boolean(selectedOption.brandLogoUrl);
+  const canConfigureBrand = data.brands.length > 0 || selectedOption?.owner.kind === "media";
 
   useEffect(() => () => {
     for (const url of objectUrls.current) URL.revokeObjectURL(url);
@@ -155,10 +160,22 @@ export function GraphicsGenerator({ data }: { data: GraphicsGeneratorData }) {
 
   function selectTemplate(value: string | null) {
     if (!isGraphicsTemplateId(value)) return;
+    const nextId = initialGraphicsSelection(data, value);
+    const nextOption = graphicsOptionsForTemplate(data, value).find((option) => option.id === nextId);
     setTemplate(value);
-    setResourceId(initialGraphicsSelection(data, value));
+    setResourceId(nextId);
+    setBrandMediaSlug(nextOption?.owner.kind === "media" && data.brands.some((brand) => brand.slug === nextOption.owner.slug)
+      ? nextOption.owner.slug
+      : null);
     setQuery("");
     setError(null);
+  }
+
+  function selectResource(option: (typeof options)[number]) {
+    setResourceId(option.id);
+    if (option.owner.kind === "media") {
+      setBrandMediaSlug(data.brands.some((brand) => brand.slug === option.owner.slug) ? option.owner.slug : null);
+    }
   }
 
   function applyRecent(item: RecentGeneration) {
@@ -173,6 +190,7 @@ export function GraphicsGenerator({ data }: { data: GraphicsGeneratorData }) {
     setBrandX(item.options.brandX);
     setBrandY(item.options.brandY);
     setBrandSize(item.options.brandSize);
+    setBrandMediaSlug(item.options.brandMediaSlug);
     setPreviewUrl(item.url);
     setGeneratedSignature(JSON.stringify({ template: item.template, resourceId: item.resourceId, ...item.options }));
     setRenderedAt(item.createdAt);
@@ -278,7 +296,7 @@ export function GraphicsGenerator({ data }: { data: GraphicsGeneratorData }) {
                       type="button"
                       role="option"
                       aria-selected={resourceId === option.id}
-                      onClick={() => setResourceId(option.id)}
+                      onClick={() => selectResource(option)}
                       className={cn("flex min-h-10 w-full items-center gap-2 rounded-md border border-transparent px-2 text-start text-sm transition-colors hover:bg-muted/70", resourceId === option.id && "border-primary/35 bg-primary/10")}
                     >
                       <span className={cn("size-2 shrink-0 rounded-full", status.dot)} />
@@ -345,14 +363,29 @@ export function GraphicsGenerator({ data }: { data: GraphicsGeneratorData }) {
               </div>
             </Field>
 
-            {selectedOption?.owner.kind === "media" ? (
+            {canConfigureBrand ? (
               <section className="grid gap-3 rounded-lg border border-border bg-background/45 p-3">
-                <div>
-                  <p className="text-sm font-medium">Media logo</p>
-                  <p className="text-xs text-muted-foreground">{hasMediaBrand ? "Place your channel logo inside the output safe area." : "Add a logo to this media channel to enable branding."}</p>
+                <div className="flex items-start gap-3">
+                  {selectedBrand ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={selectedBrand.logoUrl} alt="" className="size-10 shrink-0 rounded-md border border-border bg-muted/30 object-contain p-1" />
+                  ) : null}
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium">Media branding</p>
+                    <p className="text-xs text-muted-foreground">Choose an authorized channel logo, then use a corner preset or drag it anywhere inside the preview.</p>
+                  </div>
                 </div>
-                {hasMediaBrand ? (
+                {data.brands.length ? (
                   <>
+                    <Select value={brandMediaSlug ?? "none"} onValueChange={(value) => setBrandMediaSlug(value && value !== "none" ? value : null)}>
+                      <SelectTrigger className="w-full"><SelectValue placeholder="No media logo" /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="none">No media logo</SelectItem>
+                        {data.brands.map((brand) => <SelectItem key={brand.slug} value={brand.slug}>{brand.label}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                    {selectedBrand ? (
+                      <>
                     <ToggleGroup value={[brandPlacement]} onValueChange={(values) => values[0] && setBrandPlacement(values[0] as GraphicsBrandPlacement)} variant="outline" spacing={0} className="grid w-full grid-cols-5">
                       {GRAPHICS_BRAND_PLACEMENTS.map((item) => {
                         const Icon = BRAND_ICONS[item];
@@ -366,8 +399,10 @@ export function GraphicsGenerator({ data }: { data: GraphicsGeneratorData }) {
                       </div>
                     ) : null}
                     <label className="grid grid-cols-[48px_1fr_34px] items-center gap-2 text-xs"><span>Size</span><Slider value={brandSize} min={5} max={24} onValueChange={(value) => typeof value === "number" && setBrandSize(value)} /><span className="text-end font-mono">{brandSize}%</span></label>
+                      </>
+                    ) : null}
                   </>
-                ) : null}
+                ) : <p className="text-xs text-muted-foreground">Add a logo to this media channel to enable branding.</p>}
               </section>
             ) : null}
 
@@ -413,7 +448,7 @@ export function GraphicsGenerator({ data }: { data: GraphicsGeneratorData }) {
               {previewStale ? <div className="absolute inset-x-3 top-3 z-20 rounded-md border border-amber-400/25 bg-background/90 px-3 py-2 text-center text-xs text-amber-300 backdrop-blur">Controls changed. Refresh the preview before download.</div> : null}
               {safeArea ? <div className="pointer-events-none absolute inset-[4%] z-10 border border-dashed border-teal-400/45"><span className="absolute -bottom-px start-0 bg-teal-950/80 px-1.5 py-0.5 font-mono text-[8px] text-teal-300">SAFE AREA</span></div> : null}
               {showGrid ? <div className="pointer-events-none absolute inset-0 z-10 opacity-40" style={{ backgroundImage: "linear-gradient(to right, rgba(45,212,191,.22) 1px, transparent 1px), linear-gradient(to bottom, rgba(45,212,191,.22) 1px, transparent 1px)", backgroundSize: "8.333% 16.666%" }} /> : null}
-              {hasMediaBrand && brandPlacement === "custom" ? (
+              {selectedBrand && brandPlacement === "custom" ? (
                 <button
                   type="button"
                   aria-label="Drag media logo position"
@@ -435,7 +470,9 @@ export function GraphicsGenerator({ data }: { data: GraphicsGeneratorData }) {
                     transform: "translate(-50%, -50%)",
                   }}
                 >
-                  <MoveIcon aria-hidden="true" />
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={selectedBrand.logoUrl} alt="" className="size-[72%] object-contain" draggable={false} />
+                  <span className="absolute -bottom-2 -end-2 flex size-6 items-center justify-center rounded-full border border-primary bg-background shadow"><MoveIcon className="size-3.5" aria-hidden="true" /></span>
                 </button>
               ) : null}
             </div>

@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getAdminAccess } from "@/lib/admin";
+import { canManageMedia, getAdminAccess } from "@/lib/admin";
 import { recordAdminAudit } from "@/lib/audit";
 import { sameOriginOr403 } from "@/lib/community";
 import {
@@ -50,6 +50,9 @@ export async function POST(request: Request) {
   }
   const parsed = parseGraphicsRenderRequest(body.value);
   if (!parsed) return privateJson({ error: "Invalid graphics request" }, 400);
+  if (parsed.brandMediaSlug && !canManageMedia(access, parsed.brandMediaSlug)) {
+    return privateJson({ error: "You are not assigned to this media channel" }, 403);
+  }
 
   const resolved = await resolveGraphicsRenderRequest(parsed);
   if (!resolved) return privateJson({ error: "Graphics source not found" }, 404);
@@ -63,6 +66,7 @@ export async function POST(request: Request) {
       template: parsed.template,
       ownerType: resolved.owner.kind,
       ownerSlug: resolved.owner.slug,
+      brandMediaSlug: parsed.brandMediaSlug,
     });
     return new NextResponse(new Uint8Array(image), {
       headers: {

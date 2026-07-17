@@ -97,6 +97,31 @@ function ownerForRow(row: { game?: unknown; mediaSlug?: unknown; gameSlug?: unkn
   return gameSlug ? { kind: "game", slug: gameSlug } : null;
 }
 
+function mediaChannelLabel(channel: Awaited<ReturnType<typeof listMediaChannels>>[number]): string {
+  return cleanText(channel.name?.en || channel.name?.ar || channel.slug, channel.slug, 100);
+}
+
+function standingsTeamKey(value: unknown): string {
+  return cleanText(value, "", 80).normalize("NFKC").toLocaleLowerCase().replace(/[^\p{L}\p{N}]+/gu, "");
+}
+
+function uniqueStandingsRows(rows: StandingsRow[], sectionTitle: string): StandingsRow[] {
+  const seen = new Set<string>();
+  return rows.filter((candidate) => {
+    if (cleanText(candidate.section, "", 120) !== sectionTitle) return false;
+    const key = standingsTeamKey(candidate.team);
+    if (!key || seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+async function resolveBrandLogo(request: GraphicsRenderRequest, owner: GraphicsOwner): Promise<string | null> {
+  const slug = request.brandMediaSlug || (owner.kind === "media" ? owner.slug : null);
+  if (!slug) return null;
+  return (await getMediaChannel(slug))?.logoUrl ?? null;
+}
+
 export function canManageGraphicsOwner(access: AdminAccess, owner: GraphicsOwner): boolean {
   return owner.kind === "game"
     ? canManageGame(access, owner.slug)
@@ -113,12 +138,13 @@ export function filterGraphicsGeneratorData(
     matches: scoped(data.matches),
     standings: scoped(data.standings),
     news: scoped(data.news),
+    brands: data.brands.filter((brand) => canManageMedia(access, brand.slug)),
   };
 }
 
 export async function listGraphicsGeneratorData(access: AdminAccess): Promise<GraphicsGeneratorData> {
   const guildId = await resolveDefaultGuildId();
-  if (!guildId) return { matches: [], standings: [], news: [] };
+  if (!guildId) return { matches: [], standings: [], news: [], brands: [] };
 
   const [matchRows, standingsRows, posts, mediaChannels] = await Promise.all([
     all(
@@ -147,6 +173,11 @@ export async function listGraphicsGeneratorData(access: AdminAccess): Promise<Gr
   ]);
 
   const mediaLogoBySlug = new Map(mediaChannels.map((channel) => [channel.slug, channel.logoUrl]));
+  const brands = mediaChannels.flatMap((channel) => channel.logoUrl ? [{
+    slug: channel.slug,
+    label: mediaChannelLabel(channel),
+    logoUrl: channel.logoUrl,
+  }] : []);
 
   const matches = matchRows.flatMap((row): GraphicsOption[] => {
     const owner = ownerForRow(row);
@@ -191,7 +222,7 @@ export async function listGraphicsGeneratorData(access: AdminAccess): Promise<Gr
     }];
   });
 
-  return filterGraphicsGeneratorData(access, { matches, standings, news });
+  return filterGraphicsGeneratorData(access, { matches, standings, news, brands });
 }
 
 export async function resolveGraphicsRenderRequest(
@@ -209,6 +240,7 @@ export async function resolveGraphicsRenderRequest(
     brandX: request.brandX,
     brandY: request.brandY,
     brandSize: request.brandSize,
+    brandMediaSlug: request.brandMediaSlug,
   };
 
   if (request.template === "match-result") {
@@ -233,7 +265,7 @@ export async function resolveGraphicsRenderRequest(
       target: { id, label: cleanText(row.tournament_name, "Tournament", 100) },
       input: {
         ...options,
-        brandLogo: null,
+        brandLogo: await resolveBrandLogo(request, owner),
         template: "match-result",
         tournament: cleanText(row.tournament_name, "Tournament", 100),
         game: cleanText(row.game, owner.slug, 80),
@@ -262,8 +294,7 @@ export async function resolveGraphicsRenderRequest(
     const rows = await listStandings(id);
     const sectionTitle = cleanText(rows.find((candidate) => cleanText(candidate.section, "", 120))?.section, "", 120);
     if (!sectionTitle) return null;
-    const entries = rows
-      .filter((candidate) => cleanText(candidate.section, "", 120) === sectionTitle)
+    const entries = uniqueStandingsRows(rows, sectionTitle)
       .slice(0, 6)
       .map((candidate, index) => ({
         rank: Number.isSafeInteger(Number(candidate.rank)) && Number(candidate.rank) > 0
@@ -281,7 +312,7 @@ export async function resolveGraphicsRenderRequest(
       target: { id, label: cleanText(row.name, "Tournament", 100) },
       input: {
         ...options,
-        brandLogo: null,
+        brandLogo: await resolveBrandLogo(request, owner),
         template: "standings",
         tournament: cleanText(row.name, "Tournament", 100),
         section: cleanText(sectionTitle, "Standings", 100),
@@ -301,7 +332,9 @@ export async function resolveGraphicsRenderRequest(
     target: { id: post.id, label: cleanText(post.title, "Untitled post", 100) },
     input: {
       ...options,
-      brandLogo: mediaChannel?.logoUrl ?? null,
+      brandLogo: request.brandMediaSlug
+        ? await resolveBrandLogo(request, owner)
+        : mediaChannel?.logoUrl ?? null,
       template: "news-promo",
       owner: owner.slug,
       title: cleanText(post.title, "Community update", 150),

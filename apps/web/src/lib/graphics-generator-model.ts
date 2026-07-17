@@ -52,10 +52,17 @@ export type GraphicsOption = {
   brandLogoUrl?: string | null;
 };
 
+export type GraphicsMediaBrand = {
+  slug: string;
+  label: string;
+  logoUrl: string;
+};
+
 export type GraphicsGeneratorData = {
   matches: GraphicsOption[];
   standings: GraphicsOption[];
   news: GraphicsOption[];
+  brands: GraphicsMediaBrand[];
 };
 
 export type GraphicsRenderOptions = {
@@ -68,6 +75,7 @@ export type GraphicsRenderOptions = {
   brandX: number;
   brandY: number;
   brandSize: number;
+  brandMediaSlug: string | null;
 };
 
 export type GraphicsRenderRequest = GraphicsRenderOptions & {
@@ -85,6 +93,7 @@ export const DEFAULT_GRAPHICS_RENDER_OPTIONS: GraphicsRenderOptions = {
   brandX: 88,
   brandY: 12,
   brandSize: 12,
+  brandMediaSlug: null,
 };
 
 function includesValue<T>(values: readonly T[], value: unknown): value is T {
@@ -130,6 +139,11 @@ export function parseGraphicsRenderRequest(value: unknown): GraphicsRenderReques
   const brandX = boundedNumber(body.brandX ?? DEFAULT_GRAPHICS_RENDER_OPTIONS.brandX, 5, 95);
   const brandY = boundedNumber(body.brandY ?? DEFAULT_GRAPHICS_RENDER_OPTIONS.brandY, 5, 95);
   const brandSize = boundedNumber(body.brandSize ?? DEFAULT_GRAPHICS_RENDER_OPTIONS.brandSize, 5, 24);
+  const brandMediaSlug = body.brandMediaSlug == null || body.brandMediaSlug === ""
+    ? null
+    : typeof body.brandMediaSlug === "string" && /^[a-z0-9][a-z0-9-]{0,79}$/.test(body.brandMediaSlug)
+      ? body.brandMediaSlug
+      : undefined;
 
   if (!isGraphicsFormatId(format)) return null;
   if (!includesValue(GRAPHICS_LANGUAGES, language)) return null;
@@ -138,6 +152,7 @@ export function parseGraphicsRenderRequest(value: unknown): GraphicsRenderReques
   if (!includesValue(GRAPHICS_EXPORT_SCALES, scale)) return null;
   if (!includesValue(GRAPHICS_BRAND_PLACEMENTS, brandPlacement)) return null;
   if (brandX === null || brandY === null || brandSize === null) return null;
+  if (brandMediaSlug === undefined) return null;
 
   return {
     template: body.template,
@@ -151,6 +166,7 @@ export function parseGraphicsRenderRequest(value: unknown): GraphicsRenderReques
     brandX,
     brandY,
     brandSize,
+    brandMediaSlug,
   };
 }
 
