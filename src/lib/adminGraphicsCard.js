@@ -318,7 +318,7 @@ function drawFooter(ctx, width, height, pad, theme) {
   });
 }
 
-async function drawBrand(ctx, input, width, height, pad, theme) {
+async function drawBrand(ctx, input, width, height, pad) {
   if (!input.brandLogo && !input.brandImage) return;
   const image = input.brandImage || await loadLogoImage(input.brandLogo);
   if (!image) return;
@@ -326,16 +326,16 @@ async function drawBrand(ctx, input, width, height, pad, theme) {
   const imageScale = Math.min(maxExtent / image.width, maxExtent / image.height);
   const imageWidth = Math.max(1, image.width * imageScale);
   const imageHeight = Math.max(1, image.height * imageScale);
-  const platePad = Math.max(8, maxExtent * 0.12);
-  const plateWidth = imageWidth + platePad * 2;
-  const plateHeight = imageHeight + platePad * 2;
-  const halfWidth = plateWidth / 2;
-  const halfHeight = plateHeight / 2;
+  const halfWidth = imageWidth / 2;
+  const halfHeight = imageHeight / 2;
+  const footerDividerY = height - pad * 0.78 - 34;
+  const footerGap = Math.max(12, pad * 0.12);
+  const bottomY = footerDividerY - footerGap - halfHeight;
   const positions = {
     'top-left': [pad + halfWidth, pad + halfHeight],
     'top-right': [width - pad - halfWidth, pad + halfHeight],
-    'bottom-left': [pad + halfWidth, height - pad - halfHeight],
-    'bottom-right': [width - pad - halfWidth, height - pad - halfHeight],
+    'bottom-left': [pad + halfWidth, bottomY],
+    'bottom-right': [width - pad - halfWidth, bottomY],
   };
   const chosen = positions[input.brandPlacement];
   let x = chosen ? chosen[0] : width * Math.min(95, Math.max(5, Number(input.brandX) || 88)) / 100;
@@ -349,21 +349,6 @@ async function drawBrand(ctx, input, width, height, pad, theme) {
   ctx.save();
   ctx.globalAlpha = 1;
   ctx.globalCompositeOperation = 'source-over';
-  ctx.shadowColor = theme.dark ? '#00000080' : '#00000030';
-  ctx.shadowBlur = Math.max(8, maxExtent * 0.12);
-  fillRoundRect(
-    ctx,
-    x - halfWidth,
-    y - halfHeight,
-    plateWidth,
-    plateHeight,
-    Math.min(18, plateHeight * 0.2),
-    alphaHex(theme.base, 92),
-    theme.hairline,
-    1,
-  );
-  ctx.shadowColor = 'transparent';
-  ctx.shadowBlur = 0;
   ctx.drawImage(image, x - imageWidth / 2, y - imageHeight / 2, imageWidth, imageHeight);
   ctx.restore();
 }
@@ -452,7 +437,7 @@ async function renderMatchResult(input) {
   }
 
   drawFooter(ctx, width, height, pad, theme);
-  await drawBrand(ctx, input, width, height, pad, theme);
+  await drawBrand(ctx, input, width, height, pad);
   return canvas.toBuffer('image/png');
 }
 
@@ -489,7 +474,7 @@ async function renderStandings(input) {
     });
   });
   drawFooter(ctx, width, height, pad, theme);
-  await drawBrand(ctx, input, width, height, pad, theme);
+  await drawBrand(ctx, input, width, height, pad);
   return canvas.toBuffer('image/png');
 }
 
@@ -529,7 +514,7 @@ async function renderNewsPromo(input) {
     });
   }
   drawFooter(ctx, width, height, pad, theme);
-  await drawBrand(ctx, input, width, height, pad, theme);
+  await drawBrand(ctx, input, width, height, pad);
   return canvas.toBuffer('image/png');
 }
 

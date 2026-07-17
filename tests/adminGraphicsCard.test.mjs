@@ -118,3 +118,64 @@ test('media branding is composited into the exported PNG above card content', as
   const center = outputContext.getImageData(decoded.width / 2, decoded.height / 2, 1, 1).data;
   assert.deepEqual([...center], [255, 0, 255, 255]);
 });
+
+test('bottom media branding stays transparent and above the footer divider', async () => {
+  const logoCanvas = createCanvas(80, 40);
+  const logoContext = logoCanvas.getContext('2d');
+  logoContext.fillStyle = '#ff00ff';
+  logoContext.fillRect(0, 0, 80, 40);
+  const baseInput = {
+    template: 'match-result',
+    tournament: 'Esports World Cup 2026',
+    game: 'Dota 2',
+    teamA: 'Team Falcons',
+    teamB: 'Vici Gaming',
+    logoA: null,
+    logoB: null,
+    scoreA: 2,
+    scoreB: 0,
+    format: '1:1',
+    language: 'en',
+    alignment: 'center',
+    style: 'ewc-teal',
+    scale: 1,
+  };
+  const [plainBuffer, brandedBuffer] = await Promise.all([
+    renderAdminGraphic(baseInput),
+    renderAdminGraphic({
+      ...baseInput,
+      brandPlacement: 'bottom-left',
+      brandSize: 12,
+      brandImage: await loadImage(logoCanvas.toBuffer('image/png')),
+    }),
+  ]);
+  const [plainImage, brandedImage] = await Promise.all([loadImage(plainBuffer), loadImage(brandedBuffer)]);
+  const plainCanvas = createCanvas(plainImage.width, plainImage.height);
+  const brandedCanvas = createCanvas(brandedImage.width, brandedImage.height);
+  const plainContext = plainCanvas.getContext('2d');
+  const brandedContext = brandedCanvas.getContext('2d');
+  plainContext.drawImage(plainImage, 0, 0);
+  brandedContext.drawImage(brandedImage, 0, 0);
+
+  // This point sat inside the old generated square but remains outside the
+  // actual transparent logo bounds. It must now match the unbranded card.
+  assert.deepEqual(
+    [...brandedContext.getImageData(50, 955, 1, 1).data],
+    [...plainContext.getImageData(50, 955, 1, 1).data],
+  );
+
+  const pixels = brandedContext.getImageData(0, 0, brandedImage.width, brandedImage.height).data;
+  let lastLogoRow = -1;
+  for (let y = 0; y < brandedImage.height; y += 1) {
+    for (let x = 0; x < brandedImage.width; x += 1) {
+      const offset = (y * brandedImage.width + x) * 4;
+      if (pixels[offset] === 255 && pixels[offset + 1] === 0 && pixels[offset + 2] === 255) {
+        lastLogoRow = y;
+      }
+    }
+  }
+  const pad = brandedImage.width * 0.055;
+  const footerDividerY = brandedImage.height - pad * 0.78 - 34;
+  assert.ok(lastLogoRow > 0);
+  assert.ok(lastLogoRow < footerDividerY - 8, `logo row ${lastLogoRow} must stay above divider ${footerDividerY}`);
+});

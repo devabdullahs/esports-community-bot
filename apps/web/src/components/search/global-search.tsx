@@ -93,7 +93,7 @@ export function GlobalSearch({
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.defaultPrevented || isEditableTarget(event.target)) return;
-      const isCommand = (event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "k";
+      const isCommand = (event.ctrlKey || event.metaKey) && !event.shiftKey && !event.altKey && event.key.toLowerCase() === "k";
       const isSlash = !event.ctrlKey && !event.metaKey && !event.altKey && event.key === "/";
       if (!open && (isCommand || isSlash)) {
         event.preventDefault();
