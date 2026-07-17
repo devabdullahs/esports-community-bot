@@ -7,6 +7,7 @@ import test from 'node:test';
 const dir = mkdtempSync(join(tmpdir(), 'match-reminders-'));
 process.env.DB_PATH = join(dir, 'bot.sqlite');
 process.env.DISCORD_TOKEN = 'test-token';
+process.env.DISCORD_CLIENT_ID = 'test-client-id';
 process.env.LOG_LEVEL = 'error';
 process.env.EWC_DASHBOARD_PUBLIC_URL = 'https://example.test';
 
