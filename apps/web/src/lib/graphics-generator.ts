@@ -4,6 +4,7 @@ import { all } from "@bot/db/client.js";
 import { listStandingsForTournament as _listStandings } from "@bot/db/tournamentStandings.js";
 import { renderAdminGraphic as _renderAdminGraphic } from "@bot/lib/adminGraphicsCard.js";
 import { canManageGame, canManageMedia, type AdminAccess } from "@/lib/admin";
+import { canonicalPublicAssetUrl } from "@/lib/safe-url";
 import { getMediaChannel, listMediaChannels } from "@/lib/media";
 import { getNewsPost, listAdminNewsPosts } from "@/lib/news";
 import { resolveDefaultGuildId } from "@/lib/guild";
@@ -119,7 +120,8 @@ function uniqueStandingsRows(rows: StandingsRow[], sectionTitle: string): Standi
 async function resolveBrandLogo(request: GraphicsRenderRequest, owner: GraphicsOwner): Promise<string | null> {
   const slug = request.brandMediaSlug || (owner.kind === "media" ? owner.slug : null);
   if (!slug) return null;
-  return (await getMediaChannel(slug))?.logoUrl ?? null;
+  const logoUrl = (await getMediaChannel(slug))?.logoUrl;
+  return logoUrl ? canonicalPublicAssetUrl(logoUrl) : null;
 }
 
 export function canManageGraphicsOwner(access: AdminAccess, owner: GraphicsOwner): boolean {

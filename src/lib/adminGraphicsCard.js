@@ -33,39 +33,82 @@ const UNIVERSAL = registerFontFamily(
 ) || 'sans-serif';
 
 const FORMATS = {
-  '16:9': { width: 1600, height: 900 },
+  '16:9': { width: 1920, height: 1080 },
   '1:1': { width: 1080, height: 1080 },
   '9:16': { width: 1080, height: 1920 },
   '4:5': { width: 1080, height: 1350 },
 };
 
-const THEMES = {
+// Base palettes per the graphics-generator design spec. Every color the
+// renderer uses is derived from these — nothing downstream hard-codes teal,
+// so each style restyles the entire graphic.
+const STYLES = {
   'ewc-teal': {
-    background: '#06110f', surface: '#0a1a18', raised: '#0d2521', row: '#0b201d',
-    border: '#1e4a43', softBorder: '#163a35', accent: '#2dd4bf', accentSoft: '#12332e',
-    text: '#f7fffd', muted: '#90aaa5', subtle: '#66827d', onAccent: '#042f2e', light: false,
+    accent: '#2dd4bf', accentSoft: '#5eead4',
+    stops: ['#071412', '#0a1a18', '#061110'], base: '#0a1a18',
+    text: '#fafafa', muted: '#8b9d9a', dark: true,
   },
   midnight: {
-    background: '#080d1d', surface: '#0d1630', raised: '#142044', row: '#111c3b',
-    border: '#29477e', softBorder: '#1d3563', accent: '#60a5fa', accentSoft: '#152d59',
-    text: '#f8fbff', muted: '#9eb3d7', subtle: '#6f83aa', onAccent: '#071b36', light: false,
+    accent: '#60a5fa', accentSoft: '#93c5fd',
+    stops: ['#080d20', '#0d1530', '#070b1a'], base: '#0d1530',
+    text: '#f8fbff', muted: '#8b96b8', dark: true,
   },
   carbon: {
-    background: '#09090b', surface: '#111113', raised: '#202024', row: '#18181b',
-    border: '#3f3f46', softBorder: '#2b2b30', accent: '#e4e4e7', accentSoft: '#29292e',
-    text: '#fafafa', muted: '#a1a1aa', subtle: '#71717a', onAccent: '#18181b', light: false,
+    accent: '#e4e4e7', accentSoft: '#fafafa',
+    stops: ['#0e0e10', '#17171a', '#0c0c0e'], base: '#17171a',
+    text: '#fafafa', muted: '#8f8f98', dark: true,
   },
   slate: {
-    background: '#101519', surface: '#1c2226', raised: '#293238', row: '#222b30',
-    border: '#52616b', softBorder: '#3a474f', accent: '#67e8f9', accentSoft: '#193943',
-    text: '#f8fafc', muted: '#a8b5bd', subtle: '#73838d', onAccent: '#083344', light: false,
+    accent: '#94a3b8', accentSoft: '#cbd5e1',
+    stops: ['#141a1e', '#1f272c', '#11171a'], base: '#1f272c',
+    text: '#f1f5f9', muted: '#8b9aa8', dark: true,
   },
   light: {
-    background: '#e9eceb', surface: '#ffffff', raised: '#f4f6f5', row: '#f7f8f8',
-    border: '#b7c4c0', softBorder: '#d9e0de', accent: '#0f766e', accentSoft: '#d8f3ee',
-    text: '#10201d', muted: '#526762', subtle: '#71837f', onAccent: '#ffffff', light: true,
+    accent: '#0f766e', accentSoft: '#115e59',
+    stops: ['#eef1f0', '#ffffff', '#e7ecea'], base: '#ffffff',
+    text: '#0c1513', muted: '#5b6b68', dark: false,
   },
 };
+
+function hexChannel(hex, index) {
+  return parseInt(hex.slice(1 + index * 2, 3 + index * 2), 16);
+}
+
+// color-mix(in srgb, color pct%, base) equivalent for solid hex colors.
+function mixHex(color, pct, base) {
+  const p = pct / 100;
+  const channel = (index) => Math.round(hexChannel(color, index) * p + hexChannel(base, index) * (1 - p));
+  return `#${[0, 1, 2].map((index) => channel(index).toString(16).padStart(2, '0')).join('')}`;
+}
+
+// color@pct — hex color with an alpha channel.
+function alphaHex(color, pct) {
+  return `${color}${Math.round((pct / 100) * 255).toString(16).padStart(2, '0')}`;
+}
+
+function buildTheme(styleId) {
+  const s = STYLES[styleId] || STYLES['ewc-teal'];
+  return {
+    ...s,
+    light: !s.dark,
+    glow: alphaHex(s.accent, 18),
+    edgeBarBottom: mixHex(s.accent, 55, s.base),
+    edgeLine: alphaHex(s.accent, 40),
+    hairline: s.dark ? '#ffffff14' : '#00000014',
+    divider: s.dark ? '#ffffff22' : '#00000022',
+    tileHomeBg: mixHex(s.accent, s.dark ? 14 : 10, s.base),
+    tileHomeBorder: alphaHex(s.accent, 35),
+    tileAwayBg: s.dark ? '#ffffff10' : '#00000008',
+    tileAwayBorder: s.dark ? '#ffffff1f' : '#00000015',
+    tileAwayText: s.dark ? '#d4d4d8' : '#3f4a48',
+    pillBg: alphaHex(s.accent, 10),
+    pillBorder: alphaHex(s.accent, 30),
+    pillText: s.dark ? s.accentSoft : s.accent,
+    rowBg: s.dark ? '#ffffff0a' : '#00000006',
+    logoBg: mixHex(s.accent, s.dark ? 16 : 10, s.base),
+    logoBorder: alphaHex(s.accent, 35),
+  };
+}
 
 function cleanText(value, fallback, maxLength = 180) {
   const text = String(value ?? '').replace(/\s+/g, ' ').trim().slice(0, maxLength);
@@ -80,9 +123,11 @@ function fontFor(size, bold = false) {
   return `${bold ? 'bold ' : ''}${Math.max(10, Math.round(size))}px "${UNIVERSAL}"`;
 }
 
-function prepareText(ctx, value, { size, bold = false, align = 'left', color } = {}) {
+function prepareText(ctx, value, { size, bold = false, align = 'left', color, tracking = 0 } = {}) {
   ctx.font = fontFor(size, bold);
   ctx.direction = hasArabic(value) ? 'rtl' : 'ltr';
+  // Tracking must be zero for Arabic — letter-spacing breaks script joining.
+  ctx.letterSpacing = hasArabic(value) ? '0px' : `${tracking}px`;
   ctx.textAlign = align;
   ctx.fillStyle = color;
 }
@@ -94,10 +139,10 @@ function fitText(ctx, value, maxWidth, options) {
   const chars = Array.from(text);
   while (chars.length > 1) {
     chars.pop();
-    text = `${chars.join('')}\u2026`;
+    text = `${chars.join('')}…`;
     if (ctx.measureText(text).width <= maxWidth) return text;
   }
-  return '\u2026';
+  return '…';
 }
 
 function drawText(ctx, value, x, y, maxWidth, options) {
@@ -164,9 +209,9 @@ function drawLogo(ctx, image, name, cx, cy, size, theme) {
   }
   ctx.beginPath();
   ctx.arc(cx, cy, size / 2, 0, Math.PI * 2);
-  ctx.fillStyle = theme.accentSoft;
+  ctx.fillStyle = theme.logoBg;
   ctx.fill();
-  ctx.strokeStyle = theme.border;
+  ctx.strokeStyle = theme.logoBorder;
   ctx.lineWidth = 2;
   ctx.stroke();
   drawText(ctx, initials(name), cx, cy + size * 0.1, size * 0.62, {
@@ -174,21 +219,26 @@ function drawLogo(ctx, image, name, cx, cy, size, theme) {
   });
 }
 
+const COMMUNITY_LABEL = {
+  en: 'ESPORTS COMMUNITY',
+  ar: 'مجتمع الرياضات الإلكترونية',
+};
+
 function staticLabel(kind, language) {
   const labels = {
-    'match-result': { en: 'MATCH RESULT', ar: '\u0627\u0644\u0646\u062a\u064a\u062c\u0629' },
-    standings: { en: 'STANDINGS', ar: '\u062c\u062f\u0648\u0644 \u0627\u0644\u062a\u0631\u062a\u064a\u0628' },
-    'news-promo': { en: 'NEWS', ar: '\u0623\u062e\u0628\u0627\u0631' },
-  }[kind] || { en: 'GRAPHIC', ar: '\u062a\u0635\u0645\u064a\u0645' };
+    'match-result': { en: 'MATCH RESULT', ar: 'نتيجة المباراة' },
+    standings: { en: 'STANDINGS', ar: 'جدول الترتيب' },
+    'news-promo': { en: 'NEWS', ar: 'أخبار' },
+  }[kind] || { en: 'GRAPHIC', ar: 'تصميم' };
   if (language === 'ar') return labels.ar;
-  if (language === 'both') return `${labels.en} / ${labels.ar}`;
+  if (language === 'both') return `${labels.en} • ${labels.ar}`;
   return labels.en;
 }
 
 function outputSettings(input) {
   const format = FORMATS[input?.format] || FORMATS['16:9'];
   const scale = [1, 2, 3].includes(Number(input?.scale)) ? Number(input.scale) : 2;
-  return { ...format, scale, theme: THEMES[input?.style] || THEMES['ewc-teal'] };
+  return { ...format, scale, theme: buildTheme(input?.style) };
 }
 
 function createBase(input) {
@@ -196,32 +246,56 @@ function createBase(input) {
   const canvas = createCanvas(width * scale, height * scale);
   const ctx = canvas.getContext('2d');
   ctx.scale(scale, scale);
+  const rtl = input.language === 'ar';
 
-  const gradient = ctx.createLinearGradient(0, 0, width, height);
-  gradient.addColorStop(0, theme.background);
-  gradient.addColorStop(0.5, theme.surface);
-  gradient.addColorStop(1, theme.background);
+  // 160deg three-stop field gradient (mid stop at 45%).
+  const gradient = ctx.createLinearGradient(width * 0.33, 0, width * 0.67, height);
+  gradient.addColorStop(0, theme.stops[0]);
+  gradient.addColorStop(theme.dark ? 0.45 : 0.55, theme.stops[1]);
+  gradient.addColorStop(1, theme.stops[2]);
   ctx.fillStyle = gradient;
   ctx.fillRect(0, 0, width, height);
 
-  const glow = ctx.createRadialGradient(width * 0.5, height, 0, width * 0.5, height, width * 0.8);
-  glow.addColorStop(0, `${theme.accent}2b`);
-  glow.addColorStop(1, `${theme.accent}00`);
+  // Accent glow rising from the bottom edge.
+  const glow = ctx.createRadialGradient(width * 0.5, height * 1.2, 0, width * 0.5, height * 1.2, height * 1.1);
+  glow.addColorStop(0, theme.glow);
+  glow.addColorStop(0.6, alphaHex(theme.accent, 0));
+  glow.addColorStop(1, alphaHex(theme.accent, 0));
   ctx.fillStyle = glow;
   ctx.fillRect(0, 0, width, height);
 
-  const edge = Math.max(5, width * 0.004);
-  ctx.fillStyle = theme.accent;
-  ctx.fillRect(0, 0, edge, height);
+  // Leading accent edge bar (gradient, not flat).
+  const edge = Math.max(5, Math.round(width * 0.003));
+  const bar = ctx.createLinearGradient(0, 0, 0, height);
+  bar.addColorStop(0, theme.accent);
+  bar.addColorStop(1, theme.edgeBarBottom);
+  ctx.fillStyle = bar;
+  const barX = rtl ? width - edge : 0;
+  ctx.fillRect(barX, 0, edge, height);
 
+  // Trailing hairline accent fade opposite the edge bar.
+  const lineX = rtl ? Math.max(18, width * 0.0125) : width - Math.max(18, width * 0.0125);
+  const line = ctx.createLinearGradient(0, height * 0.07, 0, height * 0.93);
+  line.addColorStop(0, alphaHex(theme.accent, 0));
+  line.addColorStop(0.5, theme.edgeLine);
+  line.addColorStop(1, alphaHex(theme.accent, 0));
+  ctx.fillStyle = line;
+  ctx.fillRect(lineX, height * 0.07, 2, height * 0.86);
+
+  // Header row. RTL mirrors the two labels: community label sits on the
+  // trailing side for Arabic, exactly like dir="rtl" flexbox would place it.
   const pad = Math.max(42, Math.min(width, height) * 0.055);
-  drawText(ctx, 'ESPORTS COMMUNITY', pad, pad * 1.05, width * 0.45, {
-    size: Math.max(18, Math.min(width, height) * 0.024), bold: true, align: 'left', color: theme.accent,
+  const headerY = pad * 1.05;
+  const community = rtl ? COMMUNITY_LABEL.ar : COMMUNITY_LABEL.en;
+  const headerSize = Math.max(18, Math.min(width, height) * 0.022);
+  const subSize = Math.max(15, Math.min(width, height) * 0.018);
+  drawText(ctx, community, rtl ? width - pad : pad, headerY, width * 0.45, {
+    size: headerSize, bold: true, align: rtl ? 'right' : 'left', color: theme.accent, tracking: headerSize * 0.18,
   });
-  drawText(ctx, staticLabel(input.template, input.language), width - pad, pad * 1.05, width * 0.46, {
-    size: Math.max(15, Math.min(width, height) * 0.019), bold: true, align: 'right', color: theme.muted,
+  drawText(ctx, staticLabel(input.template, input.language), rtl ? pad : width - pad, headerY, width * 0.46, {
+    size: subSize, bold: true, align: rtl ? 'left' : 'right', color: theme.muted, tracking: subSize * 0.14,
   });
-  return { canvas, ctx, width, height, theme, pad };
+  return { canvas, ctx, width, height, theme, pad, rtl };
 }
 
 function contentAlignment(input, width, pad) {
@@ -232,44 +306,103 @@ function contentAlignment(input, width, pad) {
 
 function drawFooter(ctx, width, height, pad, theme) {
   const y = height - pad * 0.78;
-  ctx.strokeStyle = theme.softBorder;
+  ctx.strokeStyle = theme.hairline;
   ctx.lineWidth = 1;
   ctx.beginPath();
   ctx.moveTo(pad, y - 34);
   ctx.lineTo(width - pad, y - 34);
   ctx.stroke();
+  const size = Math.max(15, Math.min(width, height) * 0.017);
   drawText(ctx, 'esportscommunity.net', width / 2, y, width * 0.7, {
-    size: Math.max(15, Math.min(width, height) * 0.018), bold: true, align: 'center', color: theme.muted,
+    size, bold: true, align: 'center', color: theme.muted, tracking: size * 0.1,
   });
 }
 
 async function drawBrand(ctx, input, width, height, pad, theme) {
-  if (!input.brandLogo) return;
-  const image = await loadLogoImage(input.brandLogo);
+  if (!input.brandLogo && !input.brandImage) return;
+  const image = input.brandImage || await loadLogoImage(input.brandLogo);
   if (!image) return;
-  const size = Math.min(width, height) * Math.min(24, Math.max(5, Number(input.brandSize) || 12)) / 100;
-  const half = size / 2;
+  const maxExtent = Math.min(width, height) * Math.min(24, Math.max(5, Number(input.brandSize) || 12)) / 100;
+  const imageScale = Math.min(maxExtent / image.width, maxExtent / image.height);
+  const imageWidth = Math.max(1, image.width * imageScale);
+  const imageHeight = Math.max(1, image.height * imageScale);
+  const platePad = Math.max(8, maxExtent * 0.12);
+  const plateWidth = imageWidth + platePad * 2;
+  const plateHeight = imageHeight + platePad * 2;
+  const halfWidth = plateWidth / 2;
+  const halfHeight = plateHeight / 2;
   const positions = {
-    'top-left': [pad + half, pad + half],
-    'top-right': [width - pad - half, pad + half],
-    'bottom-left': [pad + half, height - pad - half],
-    'bottom-right': [width - pad - half, height - pad - half],
+    'top-left': [pad + halfWidth, pad + halfHeight],
+    'top-right': [width - pad - halfWidth, pad + halfHeight],
+    'bottom-left': [pad + halfWidth, height - pad - halfHeight],
+    'bottom-right': [width - pad - halfWidth, height - pad - halfHeight],
   };
   const chosen = positions[input.brandPlacement];
   let x = chosen ? chosen[0] : width * Math.min(95, Math.max(5, Number(input.brandX) || 88)) / 100;
   let y = chosen ? chosen[1] : height * Math.min(95, Math.max(5, Number(input.brandY) || 12)) / 100;
-  x = Math.min(width - pad - half, Math.max(pad + half, x));
-  y = Math.min(height - pad - half, Math.max(pad + half, y));
-  const box = size * 1.3;
-  fillRoundRect(ctx, x - box / 2, y - box / 2, box, box, box * 0.18, `${theme.surface}e6`, theme.softBorder, 1);
-  drawLogo(ctx, image, 'Brand', x, y, size, theme);
+  x = Math.min(width - pad - halfWidth, Math.max(pad + halfWidth, x));
+  y = Math.min(height - pad - halfHeight, Math.max(pad + halfHeight, y));
+
+  // Branding is the final compositing pass for every template. Force normal
+  // source-over rendering here so no earlier clipping/composite state can put
+  // the channel logo behind the generated card.
+  ctx.save();
+  ctx.globalAlpha = 1;
+  ctx.globalCompositeOperation = 'source-over';
+  ctx.shadowColor = theme.dark ? '#00000080' : '#00000030';
+  ctx.shadowBlur = Math.max(8, maxExtent * 0.12);
+  fillRoundRect(
+    ctx,
+    x - halfWidth,
+    y - halfHeight,
+    plateWidth,
+    plateHeight,
+    Math.min(18, plateHeight * 0.2),
+    alphaHex(theme.base, 92),
+    theme.hairline,
+    1,
+  );
+  ctx.shadowColor = 'transparent';
+  ctx.shadowBlur = 0;
+  ctx.drawImage(image, x - imageWidth / 2, y - imageHeight / 2, imageWidth, imageHeight);
+  ctx.restore();
 }
 
-function drawTeam(ctx, { image, name, cx, cy, logoSize, nameWidth, theme }) {
-  fillRoundRect(ctx, cx - logoSize * 0.65, cy - logoSize * 0.65, logoSize * 1.3, logoSize * 1.3, logoSize * 0.22, theme.raised, theme.border);
-  drawLogo(ctx, image, name, cx, cy, logoSize * 0.82, theme);
+// Team tile per the spec: the home side is accent-tinted, the away side stays
+// neutral, and the monogram fills the tile when no logo exists.
+function drawTeam(ctx, { image, name, cx, cy, logoSize, nameWidth, theme, home }) {
+  const tile = logoSize * 1.3;
+  const radius = tile * 0.2;
+  fillRoundRect(
+    ctx,
+    cx - tile / 2,
+    cy - tile / 2,
+    tile,
+    tile,
+    radius,
+    home ? theme.tileHomeBg : theme.tileAwayBg,
+    home ? theme.tileHomeBorder : theme.tileAwayBorder,
+  );
+  if (image) {
+    drawLogo(ctx, image, name, cx, cy, logoSize * 0.82, theme);
+  } else {
+    drawText(ctx, initials(name), cx, cy + tile * 0.11, tile * 0.72, {
+      size: tile * 0.3, bold: true, align: 'center', color: home ? theme.accent : theme.tileAwayText,
+    });
+  }
   drawText(ctx, name, cx, cy + logoSize * 0.96, nameWidth, {
     size: Math.max(24, logoSize * 0.24), bold: true, align: 'center', color: theme.text,
+  });
+}
+
+function drawStatusPill(ctx, text, cx, cy, theme) {
+  const size = 18;
+  prepareText(ctx, text, { size, bold: true, tracking: hasArabic(text) ? 0 : size * 0.08 });
+  const textWidth = Math.min(220, ctx.measureText(cleanText(text, '', 60)).width);
+  const pillWidth = Math.max(150, textWidth + 56);
+  fillRoundRect(ctx, cx - pillWidth / 2, cy - 21, pillWidth, 42, 21, theme.pillBg, theme.pillBorder, 1.5);
+  drawText(ctx, text, cx, cy + 6.5, pillWidth - 32, {
+    size, bold: true, align: 'center', color: theme.pillText, tracking: size * 0.08,
   });
 }
 
@@ -286,10 +419,10 @@ async function renderMatchResult(input) {
     && Number.isFinite(Number(input.scoreA)) && Number.isFinite(Number(input.scoreB));
   const score = hasScore ? `${Number(input.scoreA)} - ${Number(input.scoreB)}` : 'VS';
   const status = input.status === 'live'
-    ? (input.language === 'ar' ? '\u0645\u0628\u0627\u0634\u0631' : 'LIVE')
+    ? (input.language === 'ar' ? 'مباشر' : 'LIVE')
     : input.status === 'upcoming'
-      ? (input.language === 'ar' ? '\u0642\u0627\u062f\u0645\u0627\u064b' : 'SOON')
-      : (input.language === 'ar' ? '\u0646\u0647\u0627\u0626\u064a' : 'FINAL');
+      ? (input.language === 'ar' ? 'قادماً' : 'SOON')
+      : (input.language === 'ar' ? 'نهائي' : 'FINAL');
 
   drawText(ctx, title, titleAlign.x, horizontal ? height * 0.22 : height * 0.15, width - pad * 2, {
     size: Math.max(34, Math.min(width, height) * (horizontal ? 0.055 : 0.044)),
@@ -301,24 +434,23 @@ async function renderMatchResult(input) {
 
   if (horizontal) {
     const logoSize = Math.min(width * 0.12, height * 0.2);
-    drawTeam(ctx, { image: logoA, name: input.teamA, cx: width * 0.23, cy: height * 0.5, logoSize, nameWidth: width * 0.3, theme });
-    drawTeam(ctx, { image: logoB, name: input.teamB, cx: width * 0.77, cy: height * 0.5, logoSize, nameWidth: width * 0.3, theme });
+    drawTeam(ctx, { image: logoA, name: input.teamA, cx: width * 0.23, cy: height * 0.5, logoSize, nameWidth: width * 0.3, theme, home: true });
+    drawTeam(ctx, { image: logoB, name: input.teamB, cx: width * 0.77, cy: height * 0.5, logoSize, nameWidth: width * 0.3, theme, home: false });
+    // The score is always LTR digits, even inside an Arabic layout.
     drawText(ctx, score, width / 2, height * 0.56, width * 0.28, {
-      size: Math.min(width, height) * 0.105, bold: true, align: 'center', color: theme.text,
+      size: Math.min(width, height) * 0.105, bold: true, align: 'center', color: theme.text, tracking: 2,
     });
+    drawStatusPill(ctx, status, width / 2, height * 0.665, theme);
   } else {
     const logoSize = Math.min(width * 0.2, height * 0.12);
-    drawTeam(ctx, { image: logoA, name: input.teamA, cx: width / 2, cy: height * 0.3, logoSize, nameWidth: width * 0.72, theme });
+    drawTeam(ctx, { image: logoA, name: input.teamA, cx: width / 2, cy: height * 0.3, logoSize, nameWidth: width * 0.72, theme, home: true });
     drawText(ctx, score, width / 2, height * 0.52, width * 0.72, {
-      size: Math.min(width, height) * 0.085, bold: true, align: 'center', color: theme.text,
+      size: Math.min(width, height) * 0.085, bold: true, align: 'center', color: theme.text, tracking: 2,
     });
-    drawTeam(ctx, { image: logoB, name: input.teamB, cx: width / 2, cy: height * 0.7, logoSize, nameWidth: width * 0.72, theme });
+    drawTeam(ctx, { image: logoB, name: input.teamB, cx: width / 2, cy: height * 0.7, logoSize, nameWidth: width * 0.72, theme, home: false });
+    drawStatusPill(ctx, status, width / 2, height * 0.585, theme);
   }
 
-  fillRoundRect(ctx, width / 2 - 95, height * (horizontal ? 0.64 : 0.57), 190, 42, 21, theme.accentSoft, theme.border);
-  drawText(ctx, status, width / 2, height * (horizontal ? 0.675 : 0.59), 160, {
-    size: 18, bold: true, align: 'center', color: theme.accent,
-  });
   drawFooter(ctx, width, height, pad, theme);
   await drawBrand(ctx, input, width, height, pad, theme);
   return canvas.toBuffer('image/png');
@@ -344,7 +476,7 @@ async function renderStandings(input) {
   const rowHeight = Math.min(92, (available - gap * Math.max(0, entries.length - 1)) / Math.max(1, entries.length));
   entries.forEach((entry, index) => {
     const y = startY + index * (rowHeight + gap);
-    fillRoundRect(ctx, pad, y, width - pad * 2, rowHeight, Math.min(18, rowHeight * 0.18), index === 0 ? theme.accentSoft : theme.row, index === 0 ? theme.border : theme.softBorder, 1);
+    fillRoundRect(ctx, pad, y, width - pad * 2, rowHeight, Math.min(18, rowHeight * 0.18), index === 0 ? theme.pillBg : theme.rowBg, index === 0 ? theme.pillBorder : theme.hairline, 1);
     drawText(ctx, String(Number(entry.rank) || index + 1), pad + rowHeight * 0.55, y + rowHeight * 0.64, rowHeight * 0.7, {
       size: rowHeight * 0.3, bold: true, align: 'center', color: index === 0 ? theme.accent : theme.muted,
     });
@@ -368,9 +500,9 @@ async function renderNewsPromo(input) {
   const owner = cleanText(input.owner, 'Community', 80);
   const chipWidth = Math.min(280, width * 0.32);
   const chipX = alignment.align === 'center' ? width / 2 - chipWidth / 2 : alignment.align === 'right' ? width - pad - chipWidth : pad;
-  fillRoundRect(ctx, chipX, height * 0.2, chipWidth, 44, 22, theme.accentSoft, theme.border);
+  fillRoundRect(ctx, chipX, height * 0.2, chipWidth, 44, 22, theme.pillBg, theme.pillBorder, 1.5);
   drawText(ctx, owner, chipX + chipWidth / 2, height * 0.2 + 30, chipWidth - 28, {
-    size: 18, bold: true, align: 'center', color: theme.accent,
+    size: 18, bold: true, align: 'center', color: theme.pillText,
   });
 
   const title = cleanText(input.title, 'Community update', 220);
