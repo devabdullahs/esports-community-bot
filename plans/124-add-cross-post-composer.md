@@ -7,6 +7,9 @@
 
 ## Status
 
+- **Status**: IMPLEMENTED
+- **Completed**: 2026-07-17
+
 - **Priority**: P2
 - **Effort**: L
 - **Risk**: MED
@@ -77,10 +80,10 @@ server-side.
 
 ## Done criteria
 
-- [ ] Editors can preview Discord and prepare social copy from one screen.
-- [ ] Website publishing behavior remains unchanged.
-- [ ] No external social auto-posting exists.
-- [ ] Full verification passes.
+- [x] Editors can preview Discord and prepare social copy from one screen.
+- [x] Website publishing behavior remains unchanged.
+- [x] No external social auto-posting exists.
+- [x] Full verification passes.
 
 ## STOP conditions
 

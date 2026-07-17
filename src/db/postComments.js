@@ -253,6 +253,59 @@ export async function setCommentStatus(id, status, { deletedBy = null } = {}) {
   return getComment(id);
 }
 
+// A moderator decision changes visibility, records the per-comment audit row,
+// and resolves the comment's open reports in one transaction. Bulk moderation
+// calls this once per id, so each valid decision is atomic while stale ids can
+// be reported without rolling back the rest of a batch.
+export async function applyCommentModerationDecision({
+  id,
+  status,
+  action,
+  moderatorDiscordId,
+  moderatorName = null,
+  reason = null,
+}) {
+  return transaction(async (tx) => {
+    const now = nowText();
+    const sets = ['status = $1', 'updated_at = $2', 'auto_approve_at = NULL'];
+    const params = [status, now];
+    if (status === 'deleted') {
+      params.push(now);
+      sets.push(`deleted_at = $${params.length}`);
+      params.push(moderatorDiscordId);
+      sets.push(`deleted_by = $${params.length}`);
+    } else {
+      sets.push('deleted_at = NULL', 'deleted_by = NULL');
+    }
+    params.push(id);
+    // Deleted comments may only be restored. `restore` also remains valid for
+    // held/hidden comments, matching the existing moderation workflow.
+    const statusPredicate = action === 'restore' ? '1 = 1' : "status <> 'deleted'";
+    const updated = await tx.get(
+      `UPDATE post_comments
+       SET ${sets.join(', ')}
+       WHERE id = $${params.length} AND ${statusPredicate}
+       RETURNING *`,
+      params,
+    );
+    if (!updated) return null;
+
+    await tx.run(
+      `INSERT INTO comment_moderation_actions
+         (comment_id, moderator_discord_id, moderator_name, action, reason, created_at)
+       VALUES ($1, $2, $3, $4, $5, $6)`,
+      [id, moderatorDiscordId, moderatorName, action, reason, now],
+    );
+    await tx.run(
+      `UPDATE comment_reports
+       SET status = $1
+       WHERE comment_id = $2 AND status = 'open'`,
+      [action === 'restore' ? 'dismissed' : 'resolved', id],
+    );
+    return hydrate(updated);
+  });
+}
+
 // Atomically hold a still-visible comment for review (report auto-hide). The
 // `status = 'visible'` guard makes this a no-op if a moderator or the author
 // already moved the comment, so a racing report can't clobber that decision.

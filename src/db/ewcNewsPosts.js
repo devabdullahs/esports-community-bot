@@ -4,9 +4,11 @@ import {
   isNewsContentMode,
   isNewsCoverPlacement,
   isNewsLocale,
+  normalizeNewsScheduledPublishAt,
   resolvePostForLocale,
 } from '../lib/ewcNewsContent.js';
 import { canonicalPublicAssetUrl } from '../lib/publicAssets.js';
+import { recordAdminAudit } from './ewcAdminAuditLog.js';
 
 function nowText() {
   return new Date().toISOString().slice(0, 19).replace('T', ' ');
@@ -65,6 +67,7 @@ async function hydrate(row, locale) {
     createdAt: row.created_at,
     updatedAt: row.updated_at,
     publishedAt: row.published_at,
+    scheduledPublishAt: row.scheduled_publish_at || null,
     translations: await translationsForPost(row.id),
     authors: await authorsForPost(row.id),
   };
@@ -127,6 +130,7 @@ function normalizeInput(input) {
       contentMode,
       coverImageUrl,
       defaultLocale,
+      scheduledPublishAt: normalizeNewsScheduledPublishAt(input.scheduledPublishAt),
       authors: normalizeAuthors(input),
       translations: {
         [defaultLocale]: { ...shared, locale: defaultLocale },
@@ -139,6 +143,7 @@ function normalizeInput(input) {
     contentMode,
     coverImageUrl,
     defaultLocale,
+    scheduledPublishAt: normalizeNewsScheduledPublishAt(input.scheduledPublishAt),
     authors: normalizeAuthors(input),
     translations: {
       en: translations.en || { locale: 'en', title: '', summary: '', body: '' },
@@ -391,8 +396,8 @@ export async function createEwcNewsPostInTx(tx, input) {
     `INSERT INTO ewc_news_posts
        (game_slug, locale, content_mode, default_locale, title, summary, body, status,
         author_discord_id, author_name, cover_image_url, cover_placement, ewc,
-        created_at, updated_at, published_at, media_slug)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
+        created_at, updated_at, published_at, media_slug, scheduled_publish_at)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
      RETURNING id`,
     [
       value.gameSlug || null,
@@ -412,6 +417,7 @@ export async function createEwcNewsPostInTx(tx, input) {
       now,
       value.status === 'published' ? now : null,
       value.mediaSlug || null,
+      value.status === 'scheduled' ? value.scheduledPublishAt : null,
     ],
   );
   await replaceTranslations(row.id, value.translations, tx);
@@ -427,10 +433,17 @@ export async function createEwcNewsPost(input) {
 
 export async function updateEwcNewsPost(id, input) {
   const updatedId = await transaction(async (tx) => {
-    const value = normalizeInput(input);
+    const normalized = normalizeInput(input);
+    const now = nowText();
+    // A save may begin before its deadline and reach the database after the
+    // scheduler has promoted (or should promote) it. Persist due scheduled
+    // input as published so stale form state cannot make the post disappear.
+    const value = normalized.status === 'scheduled' &&
+      normalized.scheduledPublishAt && normalized.scheduledPublishAt <= now
+      ? { ...normalized, status: 'published' }
+      : normalized;
     const fallback = legacyTranslation(value);
     const primary = value.authors[0] || null;
-    const now = nowText();
     const info = await tx.run(
       `UPDATE ewc_news_posts
        SET game_slug = $1, locale = $2, content_mode = $3, default_locale = $4, title = $5,
@@ -438,10 +451,15 @@ export async function updateEwcNewsPost(id, input) {
            author_discord_id = $11,
            author_name = $12,
            updated_at = $13,
-           published_at = COALESCE(published_at, $14),
+           published_at = CASE
+             WHEN $8 = 'published' THEN COALESCE(published_at, $14)
+             WHEN $8 = 'scheduled' THEN NULL
+             ELSE published_at
+           END,
            ewc = $15,
-           media_slug = $16
-       WHERE id = $17`,
+           media_slug = $16,
+           scheduled_publish_at = CASE WHEN $8 = 'scheduled' THEN $17 ELSE NULL END
+       WHERE id = $18`,
       [
         value.gameSlug || null,
         fallback.locale,
@@ -459,6 +477,7 @@ export async function updateEwcNewsPost(id, input) {
         value.status === 'published' ? now : null,
         value.ewc ? 1 : 0,
         value.mediaSlug || null,
+        value.scheduledPublishAt,
         id,
       ],
     );
@@ -471,17 +490,51 @@ export async function updateEwcNewsPost(id, input) {
   return updatedId === null ? null : getEwcNewsPostById(updatedId);
 }
 
-export async function setEwcNewsPostStatus(id, status) {
+export async function setEwcNewsPostStatus(id, status, scheduledPublishAt = null) {
   const now = nowText();
+  const scheduledAt = status === 'scheduled' ? normalizeNewsScheduledPublishAt(scheduledPublishAt) : null;
   const info = await run(
     `UPDATE ewc_news_posts
      SET status = $1, updated_at = $2,
-         published_at = COALESCE(published_at, $3)
-     WHERE id = $4`,
-    [status, now, status === 'published' ? now : null, id],
+         published_at = CASE
+           WHEN $1 = 'published' THEN COALESCE(published_at, $3)
+           WHEN $1 = 'scheduled' THEN NULL
+           ELSE published_at
+         END,
+         scheduled_publish_at = CASE WHEN $1 = 'scheduled' THEN $4 ELSE NULL END
+     WHERE id = $5`,
+    [status, now, now, scheduledAt, id],
   );
   if (info.changes === 0) return null;
   return getEwcNewsPostById(id);
+}
+
+// The status predicate is the claim. Concurrent scheduler processes can both
+// run this query, but only one can promote a given row and create its audit row.
+export async function publishDueEwcNewsPosts({ now = nowText() } = {}) {
+  const publishedIds = await transaction(async (tx) => {
+    const rows = await tx.all(
+      `UPDATE ewc_news_posts
+       SET status = 'published', published_at = $1, updated_at = $1
+       WHERE status = 'scheduled' AND scheduled_publish_at IS NOT NULL AND scheduled_publish_at <= $1
+       RETURNING id, scheduled_publish_at`,
+      [now],
+    );
+    for (const row of rows) {
+      await recordAdminAudit(
+        {
+          actorId: 'system:scheduled-publisher',
+          actorName: 'Scheduled publisher',
+          action: 'news.publish_scheduled',
+          target: String(row.id),
+          details: { scheduledPublishAt: row.scheduled_publish_at },
+        },
+        tx,
+      );
+    }
+    return rows.map((row) => row.id);
+  });
+  return Promise.all(publishedIds.map((id) => getEwcNewsPostById(id)));
 }
 
 export async function deleteEwcNewsPost(id) {

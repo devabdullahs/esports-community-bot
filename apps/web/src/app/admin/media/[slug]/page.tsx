@@ -1,11 +1,15 @@
+import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
+import { BarChart3Icon } from "lucide-react";
 import { AdminPageShell } from "@/components/admin/admin-page-shell";
 import { MediaEditor } from "@/components/admin/media-editor";
 import { NewsList } from "@/components/admin/news-list";
+import { Button } from "@/components/ui/button";
 import { canManageMedia, getAdminAccess } from "@/lib/admin";
 import { getAdminCopy } from "@/lib/admin-copy";
 import { localizeText } from "@/lib/community-content";
 import { listGames } from "@/lib/games";
+import { localizedPath } from "@/lib/i18n";
 import { getMediaChannel } from "@/lib/media";
 import { listAdminNewsPosts } from "@/lib/news";
 import { getRequestLocale } from "@/lib/request-locale";
@@ -43,6 +47,16 @@ export default async function EditMediaChannelPage({
       ]}
       eyebrow={t.common.channelPublishing}
       title={t.media.editTitle}
+      actions={
+        <Button
+          variant="outline"
+          render={<Link href={localizedPath(`/admin/media/${slug}/analytics`, locale)} />}
+          nativeButton={false}
+        >
+          <BarChart3Icon data-icon="inline-start" />
+          {locale === "ar" ? "تحليلات المنشورات" : "Post analytics"}
+        </Button>
+      }
     >
       <MediaEditor mode="edit" channel={channel} locale={locale} />
 

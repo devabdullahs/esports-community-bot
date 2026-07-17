@@ -73,10 +73,10 @@ Recharts and existing admin analytics styling.
 
 ## Done criteria
 
-- [ ] Media admins see only their own post analytics.
-- [ ] Aggregates never include raw visitor identifiers.
-- [ ] Analytics respects consent mode data availability.
-- [ ] Full verification passes.
+- [x] Media admins see only their own post analytics.
+- [x] Aggregates never include raw visitor identifiers.
+- [x] Analytics respects consent mode data availability.
+- [x] Full verification passes.
 
 ## STOP conditions
 

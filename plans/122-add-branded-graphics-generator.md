@@ -78,10 +78,10 @@ preview, and download. Use shadcn tabs/select/dialog patterns.
 
 ## Done criteria
 
-- [ ] Admins can generate PNGs from allowed templates.
-- [ ] All inputs are server-resolved and scoped.
-- [ ] No arbitrary remote image/HTML path exists.
-- [ ] Full verification passes.
+- [x] Admins can generate PNGs from allowed templates.
+- [x] All inputs are server-resolved and scoped.
+- [x] No arbitrary remote image/HTML path exists.
+- [x] Full verification passes.
 
 ## STOP conditions
 

@@ -76,10 +76,10 @@ holding them in one request. Audit every affected id and actor.
 
 ## Done criteria
 
-- [ ] Keyword rules are configurable by admins.
-- [ ] Bulk actions are audited and safe on partial failure.
-- [ ] Existing single-comment moderation still works.
-- [ ] Full verification passes.
+- [x] Keyword rules are configurable by admins.
+- [x] Bulk actions are audited and safe on partial failure.
+- [x] Existing single-comment moderation still works.
+- [x] Full verification passes.
 
 ## STOP conditions
 

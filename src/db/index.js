@@ -171,6 +171,68 @@ function ensureColumns(table, defs) {
   }
 }
 
+// SQLite cannot alter a CHECK constraint in place. The temporary table is
+// copied before the old parent is dropped, so child foreign-key definitions
+// continue to refer to ewc_news_posts after the replacement is renamed.
+function migrateEwcNewsPostStatusConstraint() {
+  const row = db
+    .prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'ewc_news_posts'")
+    .get();
+  const statusDefinition = row?.sql?.match(/status\s+[\s\S]*?CHECK\s*\([^)]*\)/i)?.[0] || '';
+  if (!row?.sql || /scheduled/i.test(statusDefinition)) return;
+
+  db.pragma('foreign_keys = OFF');
+  try {
+    db.exec('BEGIN');
+    db.exec(`
+      CREATE TABLE ewc_news_posts_scheduled (
+        id                   INTEGER PRIMARY KEY AUTOINCREMENT,
+        game_slug            TEXT,
+        media_slug           TEXT,
+        locale               TEXT NOT NULL DEFAULT 'en' CHECK (locale IN ('en','ar')),
+        content_mode         TEXT NOT NULL DEFAULT 'shared' CHECK (content_mode IN ('shared','translated')),
+        default_locale       TEXT NOT NULL DEFAULT 'en' CHECK (default_locale IN ('en','ar')),
+        title                TEXT NOT NULL,
+        summary              TEXT NOT NULL DEFAULT '',
+        body                 TEXT NOT NULL DEFAULT '',
+        status               TEXT NOT NULL DEFAULT 'draft' CHECK (status IN ('draft','scheduled','published')),
+        author_discord_id    TEXT,
+        author_name          TEXT,
+        cover_image_url      TEXT,
+        cover_placement      TEXT,
+        ewc                  INTEGER NOT NULL DEFAULT 0,
+        created_at           TEXT NOT NULL DEFAULT (datetime('now')),
+        updated_at           TEXT NOT NULL DEFAULT (datetime('now')),
+        published_at         TEXT,
+        scheduled_publish_at TEXT
+      );
+      INSERT INTO ewc_news_posts_scheduled
+        (id, game_slug, media_slug, locale, content_mode, default_locale, title, summary, body,
+         status, author_discord_id, author_name, cover_image_url, cover_placement, ewc,
+         created_at, updated_at, published_at, scheduled_publish_at)
+      SELECT id, game_slug, media_slug, locale, content_mode, default_locale, title, summary, body,
+             status, author_discord_id, author_name, cover_image_url, cover_placement, ewc,
+             created_at, updated_at, published_at, scheduled_publish_at
+        FROM ewc_news_posts;
+      DROP TABLE ewc_news_posts;
+      ALTER TABLE ewc_news_posts_scheduled RENAME TO ewc_news_posts;
+      CREATE INDEX IF NOT EXISTS idx_ewc_news_posts_game_status
+        ON ewc_news_posts(game_slug, status, published_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_ewc_news_posts_status_updated
+        ON ewc_news_posts(status, updated_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_ewc_news_posts_media_status
+        ON ewc_news_posts(media_slug, status, published_at DESC);
+    `);
+    db.exec('COMMIT');
+    logger.info('[db] expanded ewc_news_posts.status to include scheduled');
+  } catch (error) {
+    db.exec('ROLLBACK');
+    throw error;
+  } finally {
+    db.pragma('foreign_keys = ON');
+  }
+}
+
 // EWC Club Championship tracking (one per guild).
 ensureColumns('guild_settings', [
   ['cc_wiki', 'TEXT'],
@@ -557,13 +619,14 @@ db.exec(`
     title             TEXT NOT NULL,
     summary           TEXT NOT NULL DEFAULT '',
     body              TEXT NOT NULL DEFAULT '',
-    status            TEXT NOT NULL DEFAULT 'draft' CHECK (status IN ('draft','published')),
+    status            TEXT NOT NULL DEFAULT 'draft' CHECK (status IN ('draft','scheduled','published')),
     author_discord_id TEXT,
     author_name       TEXT,
     cover_image_url   TEXT,
     created_at        TEXT NOT NULL DEFAULT (datetime('now')),
     updated_at        TEXT NOT NULL DEFAULT (datetime('now')),
-    published_at      TEXT
+    published_at      TEXT,
+    scheduled_publish_at TEXT
   );
 
   CREATE INDEX IF NOT EXISTS idx_ewc_news_posts_game_status
@@ -704,6 +767,24 @@ db.exec(`
     created_at           TEXT NOT NULL DEFAULT (datetime('now'))
   );
   CREATE INDEX IF NOT EXISTS idx_comment_mod_actions ON comment_moderation_actions(comment_id, created_at);
+
+  -- Global and target-specific literal watchlist rules. Display text remains
+  -- untouched while phrase_normalized enforces case-insensitive uniqueness.
+  CREATE TABLE IF NOT EXISTS comment_keyword_rules (
+    id                INTEGER PRIMARY KEY AUTOINCREMENT,
+    phrase            TEXT NOT NULL CHECK (length(phrase) BETWEEN 1 AND 160),
+    phrase_normalized TEXT NOT NULL CHECK (length(phrase_normalized) BETWEEN 1 AND 160),
+    locale            TEXT NOT NULL DEFAULT 'all' CHECK (locale IN ('all','en','ar')),
+    scope             TEXT NOT NULL DEFAULT 'global' CHECK (scope IN ('global','news','match')),
+    action            TEXT NOT NULL CHECK (action IN ('hold','flag')),
+    enabled           INTEGER NOT NULL DEFAULT 1 CHECK (enabled IN (0,1)),
+    created_by        TEXT NOT NULL,
+    created_at        TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at        TEXT NOT NULL DEFAULT (datetime('now')),
+    UNIQUE (phrase_normalized, locale, scope)
+  );
+  CREATE INDEX IF NOT EXISTS idx_comment_keyword_rules_enabled
+    ON comment_keyword_rules(enabled, scope, locale, id);
 
   CREATE TABLE IF NOT EXISTS comment_reports (
     id                    INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -1053,12 +1134,17 @@ ensureColumns('ewc_news_posts', [
   // Media-channel ownership: when set, the post belongs to a media channel (game_slug
   // becomes an optional related-game tag). NULL = a normal game post.
   ['media_slug', 'TEXT'],
+  // UTC timestamp used only while status is scheduled.
+  ['scheduled_publish_at', 'TEXT'],
 ]);
+migrateEwcNewsPostStatusConstraint();
 // Must run AFTER the media_slug ensureColumns above: on a DB created before the
 // media feature the table exists without the column, so creating this index in
 // the main schema exec would fail the whole boot ("no such column: media_slug").
 db.exec(`CREATE INDEX IF NOT EXISTS idx_ewc_news_posts_media_status
   ON ewc_news_posts(media_slug, status, published_at DESC)`);
+db.exec(`CREATE INDEX IF NOT EXISTS idx_ewc_news_posts_scheduled_publish
+  ON ewc_news_posts(status, scheduled_publish_at)`);
 // Per-game Discord news channel (nullable; falls back to the guild-level news channel).
 ensureColumns('ewc_games', [['discord_channel_id', 'TEXT']]);
 // Media channels: optional Discord channel to auto-announce the entry to, and an

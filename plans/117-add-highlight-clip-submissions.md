@@ -7,6 +7,7 @@
 
 ## Status
 
+- **State**: Deferred - the explicit legal/copyright STOP condition is unresolved. Current Terms do not define submitter rights, copyright responsibility, or a takedown process for third-party clips.
 - **Priority**: P3
 - **Effort**: L
 - **Risk**: MED

@@ -60,4 +60,29 @@ describe("moderationFor — severity routing", () => {
       links: ["sketchy.example"],
     });
   });
+
+  test("global flag stays visible while recording the literal watchlist match", () => {
+    const r = moderationFor("SPOILER ahead", {
+      keywordRules: [
+        { id: 1, phrase: "spoiler", locale: "all" as const, scope: "global" as const, action: "flag" as const, enabled: true },
+      ],
+      locales: ["en"],
+      scope: "news",
+    });
+    expect(r.status).toBe("visible");
+    expect(r.autoApproveAt).toBeNull();
+    expect(r.flagReason).toMatchObject({ keywordRules: [{ phrase: "spoiler", action: "flag" }] });
+  });
+
+  test("locale- and target-scoped hold rules only hold matching comments", () => {
+    const rules = [
+      { id: 1, phrase: "leak", locale: "en" as const, scope: "news" as const, action: "hold" as const, enabled: true },
+    ];
+    const held = moderationFor("leak", { keywordRules: rules, locales: ["en"], scope: "news" });
+    expect(held.status).toBe("pending");
+    expect(held.autoApproveAt).toBeNull();
+
+    const nonMatching = moderationFor("leak", { keywordRules: rules, locales: ["ar"], scope: "match" });
+    expect(nonMatching).toMatchObject({ status: "visible", flagReason: null, autoApproveAt: null });
+  });
 });

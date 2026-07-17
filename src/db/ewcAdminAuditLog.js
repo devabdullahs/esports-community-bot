@@ -1,4 +1,7 @@
-import { all, run } from './client.js';
+import { all, get, run } from './client.js';
+
+const SCHEDULED_PUBLISH_ACTION = 'news.publish_scheduled';
+const NEWS_CACHE_REVALIDATED_ACTION = 'news.cache_revalidated';
 
 /**
  * Safe JSON parser — returns null for missing or malformed detail blobs
@@ -59,4 +62,34 @@ export async function listAdminAuditLog(limit = 100, offset = 0) {
     details: parseJson(row.details),
     createdAt: row.created_at,
   }));
+}
+
+// The audit ids form a durable publication/revalidation watermark. If the
+// process exits after publishing but before invalidating the dashboard cache,
+// the next process observes the unmatched publication and retries.
+export async function hasPendingScheduledNewsCacheRevalidation() {
+  const row = await get(
+    `SELECT CASE WHEN EXISTS (
+       SELECT 1
+       FROM ewc_admin_audit_log published
+       WHERE published.action = $1
+         AND published.id > COALESCE((
+           SELECT MAX(revalidated.id)
+           FROM ewc_admin_audit_log revalidated
+           WHERE revalidated.action = $2
+         ), 0)
+     ) THEN 1 ELSE 0 END AS pending`,
+    [SCHEDULED_PUBLISH_ACTION, NEWS_CACHE_REVALIDATED_ACTION],
+  );
+  return Boolean(row?.pending);
+}
+
+export async function markScheduledNewsCacheRevalidated() {
+  return recordAdminAudit({
+    actorId: 'system:scheduled-publisher',
+    actorName: 'Scheduled publisher',
+    action: NEWS_CACHE_REVALIDATED_ACTION,
+    target: null,
+    details: null,
+  });
 }

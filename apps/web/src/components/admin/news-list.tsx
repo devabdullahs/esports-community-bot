@@ -11,6 +11,7 @@ import { getAdminCopy } from "@/lib/admin-copy";
 import type { GameRecord } from "@/lib/games";
 import { localizedPath, type Locale } from "@/lib/i18n";
 import type { NewsPost } from "@/lib/news";
+import { formatScheduledPublishAt } from "@/lib/scheduled-publishing";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -50,6 +51,15 @@ export function NewsList({
   const [pendingDeleteId, setPendingDeleteId] = useState<number | null>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [deleteSuccess, setDeleteSuccess] = useState<string | null>(null);
+
+  const statusLabel = (post: NewsPost) =>
+    post.status === "published"
+      ? t.newsList.published
+      : post.status === "scheduled"
+        ? t.newsList.scheduled
+        : t.newsList.draft;
+  const statusVariant = (post: NewsPost) =>
+    post.status === "published" ? "default" : post.status === "scheduled" ? "outline" : "secondary";
 
   async function remove(id: number) {
     setPendingDeleteId(null);
@@ -124,10 +134,10 @@ export function NewsList({
                     </div>
                   </div>
                   <Badge
-                    variant={post.status === "published" ? "default" : "secondary"}
+                    variant={statusVariant(post)}
                     className="shrink-0"
                   >
-                    {post.status === "published" ? t.newsList.published : t.newsList.draft}
+                    {statusLabel(post)}
                   </Badge>
                 </div>
 
@@ -138,7 +148,9 @@ export function NewsList({
                       : t.newsList.sharedContent(post.defaultLocale)}
                   </span>
                   <span>
-                    <LocalDateTime value={post.updatedAt} locale={locale} />
+                    {post.status === "scheduled" && post.scheduledPublishAt
+                      ? formatScheduledPublishAt(post.scheduledPublishAt, locale)
+                      : <LocalDateTime value={post.updatedAt} locale={locale} />}
                   </span>
                 </div>
 
@@ -205,12 +217,14 @@ export function NewsList({
                         : t.newsList.sharedContent(post.defaultLocale)}
                     </TableCell>
                     <TableCell>
-                      <Badge variant={post.status === "published" ? "default" : "secondary"}>
-                        {post.status === "published" ? t.newsList.published : t.newsList.draft}
+                      <Badge variant={statusVariant(post)}>
+                        {statusLabel(post)}
                       </Badge>
                     </TableCell>
                     <TableCell className="text-muted-foreground">
-                      <LocalDateTime value={post.updatedAt} locale={locale} />
+                      {post.status === "scheduled" && post.scheduledPublishAt
+                        ? formatScheduledPublishAt(post.scheduledPublishAt, locale)
+                        : <LocalDateTime value={post.updatedAt} locale={locale} />}
                     </TableCell>
                     <TableCell>
                       <div className="flex justify-end gap-1">

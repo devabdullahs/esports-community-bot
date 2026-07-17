@@ -23,7 +23,9 @@ export async function GET(request: Request) {
   const mediaSlug = url.searchParams.get("media");
   const statusParam = url.searchParams.get("status");
   const status =
-    statusParam === "draft" || statusParam === "published" ? (statusParam as NewsStatus) : null;
+    statusParam === "draft" || statusParam === "scheduled" || statusParam === "published"
+      ? (statusParam as NewsStatus)
+      : null;
 
   const posts = await listAdminNewsPosts({ gameSlug, mediaSlug, status });
   // Scope: an admin sees a post if they manage its owner (game or media channel).
@@ -89,7 +91,10 @@ export async function POST(request: Request) {
     authorName: resolved.authors[0]?.name ?? null,
   });
   revalidateTag("cms-news", { expire: 0 });
-  recordAdminAudit(access, "news.create", String((post as { id: number }).id));
+  recordAdminAudit(access, "news.create", String((post as { id: number }).id), {
+    status: v.status ?? "draft",
+    scheduledPublishAt: v.scheduledPublishAt,
+  });
   scheduleIndexNowUrls(indexNowUrlsForPost(post));
   return NextResponse.json(post);
 }

@@ -1,10 +1,14 @@
+import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
+import { BarChart3Icon } from "lucide-react";
 import { AdminPageShell } from "@/components/admin/admin-page-shell";
 import { GameEditor } from "@/components/admin/game-editor";
+import { Button } from "@/components/ui/button";
 import { canManageGame, getAdminAccess } from "@/lib/admin";
 import { getAdminCopy } from "@/lib/admin-copy";
 import { localizeText } from "@/lib/community-content";
 import { getGame } from "@/lib/games";
+import { localizedPath } from "@/lib/i18n";
 import { getRequestLocale } from "@/lib/request-locale";
 
 export const runtime = "nodejs";
@@ -35,6 +39,16 @@ export default async function EditGamePage({
       ]}
       eyebrow={t.common.adminPublishing}
       title={t.games.editTitle}
+      actions={
+        <Button
+          variant="outline"
+          render={<Link href={localizedPath(`/admin/games/${slug}/analytics`, locale)} />}
+          nativeButton={false}
+        >
+          <BarChart3Icon data-icon="inline-start" />
+          {locale === "ar" ? "تحليلات المنشورات" : "Post analytics"}
+        </Button>
+      }
     >
       <GameEditor mode="edit" game={game} locale={locale} />
     </AdminPageShell>

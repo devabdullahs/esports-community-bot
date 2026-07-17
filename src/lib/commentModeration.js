@@ -314,6 +314,43 @@ export function extractLinks(text) {
   return out;
 }
 
+// --- admin keyword watchlist ------------------------------------------------
+
+// Watchlist matching deliberately stays literal: a rule is a case-insensitive
+// contiguous phrase, never a regex or a fuzzy/ML guess. This keeps a rule's
+// effect obvious to the moderator who configured it.
+export function normalizeKeywordPhrase(text) {
+  return String(text ?? '').trim().normalize('NFKC').toLocaleLowerCase();
+}
+
+function ruleEnabled(rule) {
+  return rule?.enabled !== false && rule?.enabled !== 0 && rule?.enabled !== '0';
+}
+
+/**
+ * Return enabled literal keyword rules that apply to the supplied content.
+ * `locales` may contain one or more detected content locales; global (`all`)
+ * rules always apply. A target-scoped rule applies only to that target type.
+ */
+export function findKeywordRules(text, rules = [], { locales = ['all'], scope = 'global' } = {}) {
+  const normalized = normalizeKeywordPhrase(text);
+  if (!normalized) return [];
+  const applicableLocales = new Set(Array.isArray(locales) ? locales : [locales]);
+  return rules.filter((rule) => {
+    if (!ruleEnabled(rule)) return false;
+    if (rule.scope !== 'global' && rule.scope !== scope) return false;
+    if (rule.locale !== 'all' && !applicableLocales.has(rule.locale)) return false;
+    const phrase = rule.phraseNormalized || normalizeKeywordPhrase(rule.phrase);
+    return Boolean(phrase) && normalized.includes(phrase);
+  }).map((rule) => ({
+    ...(rule.id == null ? {} : { id: Number(rule.id) }),
+    phrase: rule.phrase,
+    action: rule.action,
+    locale: rule.locale,
+    scope: rule.scope,
+  }));
+}
+
 // --- combined analysis ------------------------------------------------------
 
 /**
@@ -330,11 +367,17 @@ export function extractLinks(text) {
  * hasExternalLinks keep their prior meaning; reviewTerms / hasReviewTerms /
  * needsReview are additive.
  */
-export function analyzeCommentText(body, { allowed = allowedLinkHosts() } = {}) {
+export function analyzeCommentText(
+  body,
+  { allowed = allowedLinkHosts(), keywordRules = [], locales = ['all'], scope = 'global' } = {},
+) {
   const profanity = findProfanity(body);
   const reviewTerms = findReviewTerms(body);
   const links = extractLinks(body);
   const externalLinks = links.filter((l) => !isAllowedLinkHost(l.host, allowed));
+  const matchedKeywordRules = findKeywordRules(body, keywordRules, { locales, scope });
+  const hasKeywordHold = matchedKeywordRules.some((rule) => rule.action === 'hold');
+  const hasKeywordFlag = matchedKeywordRules.some((rule) => rule.action === 'flag');
   return {
     profanity,
     hasProfanity: profanity.length > 0,
@@ -346,6 +389,10 @@ export function analyzeCommentText(body, { allowed = allowedLinkHosts() } = {}) 
     externalLinks: externalLinks.map((l) => l.host),
     hasExternalLinks: externalLinks.length > 0,
 
-    needsReview: profanity.length > 0 || reviewTerms.length > 0 || externalLinks.length > 0,
+    keywordRules: matchedKeywordRules,
+    hasKeywordHold,
+    hasKeywordFlag,
+
+    needsReview: profanity.length > 0 || reviewTerms.length > 0 || externalLinks.length > 0 || matchedKeywordRules.length > 0,
   };
 }

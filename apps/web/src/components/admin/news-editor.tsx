@@ -1,13 +1,16 @@
 "use client";
 
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { useRouter } from "next/navigation";
 import {
   BoldIcon,
+  CalendarClockIcon,
   CheckIcon,
   CodeIcon,
+  CopyIcon,
   EyeIcon,
   EyeOffIcon,
+  ExternalLinkIcon,
   Heading2Icon,
   ImageIcon,
   ImagePlusIcon,
@@ -17,6 +20,7 @@ import {
   ListOrderedIcon,
   ListTodoIcon,
   Loader2Icon,
+  MessageCircleIcon,
   PencilIcon,
   QuoteIcon,
   SaveIcon,
@@ -38,7 +42,14 @@ import {
   toggleLinePrefix,
   toggleWrap,
 } from "@bot/lib/markdownTools.js";
+import {
+  buildNewsCrossPostPreview,
+  buildNewsDiscordAnnouncementPreview,
+  buildXIntentUrl,
+  getNewsCrossPostWebsiteState,
+} from "@bot/lib/newsCrossPost.js";
 import { localizeText } from "@/lib/community-content";
+import { riyadhDateTimeToIso, toRiyadhDateTimeInput } from "@/lib/scheduled-publishing";
 import type { GameRecord } from "@/lib/games";
 import { copy as i18nCopy, localizedPath, type Locale } from "@/lib/i18n";
 import { safeUrlOrUndefined } from "@/lib/safe-url";
@@ -114,6 +125,51 @@ const LOCALE_LABELS: Record<Locale, string> = {
   en: "English",
   ar: ARABIC_LABEL,
 };
+
+const CROSS_POST_COPY = {
+  en: {
+    title: "Cross-post composer",
+    website: "Website",
+    discord: "Discord preview",
+    xDraft: "X draft",
+    status: "Website status",
+    draft: "Draft",
+    scheduled: "Scheduled",
+    published: "Published",
+    unsaved: "Save to generate public links",
+    canonicalUrl: "Canonical public URL",
+    noCanonicalUrl: "Save this post to create its canonical public URL.",
+    openWebsite: "Open website",
+    hashtags: "Optional hashtags",
+    hashtagsPlaceholder: "EWC, Valorant",
+    copyDraft: "Copy X draft",
+    copied: "Copied",
+    openX: "Open X draft",
+    noXDraft: "Add a headline to prepare an X draft.",
+    readMore: "Read more",
+  },
+  ar: {
+    title: "\u0645\u0644\u062d\u0646 \u0627\u0644\u0646\u0634\u0631 \u0627\u0644\u0645\u062a\u0642\u0627\u0637\u0639",
+    website: "\u0627\u0644\u0645\u0648\u0642\u0639",
+    discord: "\u0645\u0639\u0627\u064a\u0646\u0629 Discord",
+    xDraft: "\u0645\u0633\u0648\u062f\u0629 X",
+    status: "\u062d\u0627\u0644\u0629 \u0627\u0644\u0645\u0648\u0642\u0639",
+    draft: "\u0645\u0633\u0648\u062f\u0629",
+    scheduled: "\u0645\u062c\u062f\u0648\u0644",
+    published: "\u0645\u0646\u0634\u0648\u0631",
+    unsaved: "\u0627\u062d\u0641\u0638 \u0627\u0644\u0645\u0646\u0634\u0648\u0631 \u0644\u0625\u0646\u0634\u0627\u0621 \u0631\u0648\u0627\u0628\u0637 \u0639\u0627\u0645\u0629",
+    canonicalUrl: "\u0627\u0644\u0631\u0627\u0628\u0637 \u0627\u0644\u0639\u0627\u0645 \u0627\u0644\u0642\u064a\u0627\u0633\u064a",
+    noCanonicalUrl: "\u0627\u062d\u0641\u0638 \u0627\u0644\u0645\u0646\u0634\u0648\u0631 \u0644\u0625\u0646\u0634\u0627\u0621 \u0631\u0627\u0628\u0637\u0647 \u0627\u0644\u0639\u0627\u0645 \u0627\u0644\u0642\u064a\u0627\u0633\u064a.",
+    openWebsite: "\u0641\u062a\u062d \u0627\u0644\u0645\u0648\u0642\u0639",
+    hashtags: "\u0648\u0633\u0648\u0645 \u0627\u062e\u062a\u064a\u0627\u0631\u064a\u0629",
+    hashtagsPlaceholder: "EWC, Valorant",
+    copyDraft: "\u0646\u0633\u062e \u0645\u0633\u0648\u062f\u0629 X",
+    copied: "\u062a\u0645 \u0627\u0644\u0646\u0633\u062e",
+    openX: "\u0641\u062a\u062d \u0645\u0633\u0648\u062f\u0629 X",
+    noXDraft: "\u0623\u0636\u0641 \u0639\u0646\u0648\u0627\u0646\u064b\u0627 \u0644\u062a\u062c\u0647\u064a\u0632 \u0645\u0633\u0648\u062f\u0629 X.",
+    readMore: "\u0627\u0642\u0631\u0623 \u0627\u0644\u0645\u0632\u064a\u062f",
+  },
+} satisfies Record<Locale, Record<string, string>>;
 
 // Formats that the crop canvas cannot re-encode meaningfully; uploaded as-is.
 const NON_CROPPABLE_TYPES = new Set(["image/gif", "image/avif"]);
@@ -217,6 +273,18 @@ function wordCount(value: string) {
   return matches ? matches.length : 0;
 }
 
+function subscribeToLocation() {
+  return () => {};
+}
+
+function currentPublicOrigin() {
+  return window.location.origin;
+}
+
+function serverPublicOrigin() {
+  return null;
+}
+
 function isImageFile(file: File) {
   return file.type.startsWith("image/");
 }
@@ -241,6 +309,25 @@ export function NewsEditor({
   const router = useRouter();
   const isMedia = Boolean(mediaChannel);
   const t = i18nCopy[locale].composer;
+  const crossPostCopy = CROSS_POST_COPY[locale];
+  const scheduleCopy =
+    locale === "ar"
+      ? {
+          label: "\u062c\u062f\u0648\u0644\u0629 \u0627\u0644\u0646\u0634\u0631",
+          hint: "\u064a\u0631\u062c\u0649 \u0627\u062e\u062a\u064a\u0627\u0631 \u0648\u0642\u062a \u0645\u0633\u062a\u0642\u0628\u0644\u064a \u0628\u062a\u0648\u0642\u064a\u062a \u0627\u0644\u0631\u064a\u0627\u0636.",
+          action: "\u062c\u062f\u0648\u0644\u0629",
+          update: "\u062a\u062d\u062f\u064a\u062b \u0627\u0644\u062c\u062f\u0648\u0644",
+          status: "\u0645\u062c\u062f\u0648\u0644",
+          invalid: "\u0627\u062e\u062a\u0631 \u0648\u0642\u062a \u0646\u0634\u0631 \u0635\u0627\u0644\u062d\u0627 \u0641\u064a \u0627\u0644\u0645\u0633\u062a\u0642\u0628\u0644.",
+        }
+      : {
+          label: "Schedule publication",
+          hint: "Choose a future time in Asia/Riyadh.",
+          action: "Schedule",
+          update: "Update schedule",
+          status: "Scheduled",
+          invalid: "Choose a valid future publish time.",
+        };
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const uploadTargetRef = useRef<"body" | "cover">("body");
@@ -268,6 +355,12 @@ export function NewsEditor({
   );
   const [ewc, setEwc] = useState<boolean>(post?.ewc ?? false);
   const [status, setStatus] = useState<NewsStatus>(post?.status || "draft");
+  const [scheduledPublishAt, setScheduledPublishAt] = useState(() =>
+    toRiyadhDateTimeInput(post?.scheduledPublishAt),
+  );
+  const [xHashtags, setXHashtags] = useState("");
+  const [xDraftOverride, setXDraftOverride] = useState<{ source: string; value: string } | null>(null);
+  const [copiedCrossPostValue, setCopiedCrossPostValue] = useState<"url" | "x" | null>(null);
   // Author picker: list of eligible authors for the current game (fetched), plus
   // the currently-credited author's discord id. authorName is derived from the
   // selected option (or the post's stored name when the id isn't in the list).
@@ -309,6 +402,12 @@ export function NewsEditor({
   const activeToolValues = Object.entries(activeMarks)
     .filter(([, value]) => value)
     .map(([key]) => key);
+
+  const publicBaseUrl = useSyncExternalStore(
+    subscribeToLocation,
+    currentPublicOrigin,
+    serverPublicOrigin,
+  );
 
   const cropCopy = {
     title: t.cropTitle,
@@ -422,6 +521,95 @@ export function NewsEditor({
   const selectedAuthors = selectedAuthorIds
     .map((id) => authorOptions.find((a) => a.discordId === id))
     .filter((a): a is EligibleAuthor => Boolean(a));
+
+  const crossPostPost = useMemo(() => {
+    const previewTranslations =
+      contentMode === "shared"
+        ? {
+            [defaultLocale]: { locale: defaultLocale, ...translations[defaultLocale] },
+          }
+        : {
+            en: { locale: "en" as const, ...translations.en },
+            ar: { locale: "ar" as const, ...translations.ar },
+          };
+    const primary = previewTranslations[defaultLocale];
+    return {
+      id: post?.id,
+      gameSlug: isMedia ? gameSlug || null : gameSlug || null,
+      mediaSlug: isMedia ? mediaChannel!.slug : null,
+      defaultLocale,
+      locale: defaultLocale,
+      title: primary?.title || "",
+      summary: primary?.summary || "",
+      body: primary?.body || "",
+      status,
+      coverImageUrl: coverImageUrl.trim() || null,
+      authorName: post?.authorName || null,
+      authors: selectedAuthors.map((author) => ({
+        name: author.name,
+        avatarUrl: author.avatarUrl,
+      })),
+      publishedAt: post?.publishedAt || null,
+      translations: previewTranslations,
+    };
+  }, [
+    contentMode,
+    coverImageUrl,
+    defaultLocale,
+    gameSlug,
+    isMedia,
+    mediaChannel,
+    post?.authorName,
+    post?.id,
+    post?.publishedAt,
+    selectedAuthors,
+    status,
+    translations,
+  ]);
+  const crossPostPreview = useMemo(
+    () =>
+      buildNewsCrossPostPreview(crossPostPost, {
+        baseUrl: publicBaseUrl || undefined,
+        preferredLocale: locale,
+        hashtags: xHashtags,
+      }),
+    [crossPostPost, locale, publicBaseUrl, xHashtags],
+  );
+  const discordPreview = useMemo(
+    () =>
+      buildNewsDiscordAnnouncementPreview(crossPostPost, {
+        baseUrl: publicBaseUrl || undefined,
+        game,
+      }),
+    [crossPostPost, game, publicBaseUrl],
+  );
+  const xDraft =
+    xDraftOverride?.source === crossPostPreview.socialText
+      ? xDraftOverride.value
+      : crossPostPreview.socialText;
+  const xIntentUrl = buildXIntentUrl(xDraft);
+  const websiteState = getNewsCrossPostWebsiteState(crossPostPost);
+  const websiteStatus = crossPostCopy[websiteState];
+
+  async function copyCrossPostValue(kind: "url" | "x", value: string) {
+    if (!value) return;
+    try {
+      await navigator.clipboard.writeText(value);
+    } catch {
+      const textarea = document.createElement("textarea");
+      textarea.value = value;
+      textarea.setAttribute("readonly", "");
+      textarea.style.position = "fixed";
+      textarea.style.left = "-9999px";
+      document.body.appendChild(textarea);
+      textarea.select();
+      document.execCommand("copy");
+      document.body.removeChild(textarea);
+    }
+    setCopiedCrossPostValue(kind);
+    window.setTimeout(() => setCopiedCrossPostValue(null), 1_600);
+  }
+
   function toggleAuthor(discordId: string) {
     setSelectedAuthorIds((prev) =>
       prev.includes(discordId) ? prev.filter((id) => id !== discordId) : [...prev, discordId],
@@ -640,13 +828,22 @@ export function NewsEditor({
   // Game posts require a game; media posts require their channel (always present here).
   const canSave = Boolean((isMedia || gameSlug) && !hasLimitError);
   const canPublish = canSave && !publishError;
+  const canSchedule = canPublish && Boolean(riyadhDateTimeToIso(scheduledPublishAt));
 
   function persist(targetStatus: NewsStatus, action: string) {
     setError(null);
-    if (targetStatus === "published" && !canPublish) {
+    if ((targetStatus === "published" || targetStatus === "scheduled") && !canPublish) {
       setError(
         contentMode === "translated" ? t.publishRequiredTranslated : t.publishRequiredShared,
       );
+      return;
+    }
+    if (
+      targetStatus === "scheduled" &&
+      (!riyadhDateTimeToIso(scheduledPublishAt) ||
+        Date.parse(riyadhDateTimeToIso(scheduledPublishAt) || "") <= Date.now())
+    ) {
+      setError(scheduleCopy.invalid);
       return;
     }
     if (contentMode === "shared") {
@@ -674,6 +871,8 @@ export function NewsEditor({
         coverPlacement,
         ewc,
         status: targetStatus,
+        scheduledPublishAt:
+          targetStatus === "scheduled" ? riyadhDateTimeToIso(scheduledPublishAt) : null,
         authors: selectedAuthors.map((a) => ({
           discordId: a.discordId,
           name: a.name,
@@ -742,6 +941,7 @@ export function NewsEditor({
     coverImageUrl,
     coverPlacement,
     ewc,
+    scheduledPublishAt,
   });
   const contentBaselineRef = useRef(contentSnapshot);
   const authorsSnapshot = JSON.stringify([...selectedAuthorIds].sort());
@@ -905,6 +1105,18 @@ export function NewsEditor({
                   <FieldDescription>{t.sharedHint}</FieldDescription>
                 </Field>
               </div>
+
+              <Field>
+                <FieldLabel>{scheduleCopy.label}</FieldLabel>
+                <Input
+                  type="datetime-local"
+                  value={scheduledPublishAt}
+                  min={toRiyadhDateTimeInput(new Date().toISOString())}
+                  onChange={(event) => setScheduledPublishAt(event.target.value)}
+                  className="w-full sm:max-w-sm"
+                />
+                <FieldDescription>{scheduleCopy.hint}</FieldDescription>
+              </Field>
 
               {/* Authors: multi-select. Eligible = supers + roster admins for this game. */}
               <Field>
@@ -1313,8 +1525,8 @@ export function NewsEditor({
                 <EyeIcon data-icon="inline-start" />
                 {t.livePreview}
               </Badge>
-              <Badge variant={status === "published" ? "default" : "secondary"}>
-                {status === "published" ? t.published : t.draft}
+              <Badge variant={status === "published" ? "default" : status === "scheduled" ? "outline" : "secondary"}>
+                {status === "published" ? t.published : status === "scheduled" ? scheduleCopy.status : t.draft}
               </Badge>
             </div>
           </CardHeader>
@@ -1362,6 +1574,198 @@ export function NewsEditor({
         </Card>
       </div>
 
+      <Card>
+        <CardHeader>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <CardTitle className="flex items-center gap-2 text-lg">
+              <MessageCircleIcon className="size-4 text-primary" />
+              {crossPostCopy.title}
+            </CardTitle>
+            <Badge variant={status === "published" ? "default" : status === "scheduled" ? "outline" : "secondary"}>
+              {websiteStatus}
+            </Badge>
+          </div>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-6">
+          <div className="grid gap-6 lg:grid-cols-2">
+            <section className="min-w-0 space-y-3" aria-labelledby="cross-post-website">
+              <div>
+                <p id="cross-post-website" className="text-sm font-medium">
+                  {crossPostCopy.website}
+                </p>
+                <p className="text-sm text-muted-foreground">{crossPostCopy.status}: {websiteStatus}</p>
+              </div>
+              {crossPostPreview.canonicalUrl ? (
+                <div className="flex flex-wrap gap-2">
+                  <Input
+                    value={crossPostPreview.canonicalUrl}
+                    readOnly
+                    dir="ltr"
+                    aria-label={crossPostCopy.canonicalUrl}
+                    className="min-w-0 flex-1"
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="icon-sm"
+                    title={copiedCrossPostValue === "url" ? crossPostCopy.copied : crossPostCopy.canonicalUrl}
+                    aria-label={copiedCrossPostValue === "url" ? crossPostCopy.copied : crossPostCopy.canonicalUrl}
+                    onClick={() => void copyCrossPostValue("url", crossPostPreview.canonicalUrl!)}
+                  >
+                    {copiedCrossPostValue === "url" ? <CheckIcon /> : <CopyIcon />}
+                  </Button>
+                  {status === "published" ? (
+                    <Button
+                      render={
+                        <a
+                          href={crossPostPreview.canonicalUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                        />
+                      }
+                      nativeButton={false}
+                      variant="outline"
+                      size="icon-sm"
+                      title={crossPostCopy.openWebsite}
+                      aria-label={crossPostCopy.openWebsite}
+                    >
+                      <ExternalLinkIcon />
+                    </Button>
+                  ) : null}
+                </div>
+              ) : (
+                <p className="text-sm text-muted-foreground">{crossPostCopy.noCanonicalUrl}</p>
+              )}
+            </section>
+
+            <section className="min-w-0 space-y-3" aria-labelledby="cross-post-x">
+              <p id="cross-post-x" className="text-sm font-medium">
+                {crossPostCopy.xDraft}
+              </p>
+              <Field>
+                <FieldLabel htmlFor="cross-post-hashtags" className="text-xs text-muted-foreground">
+                  {crossPostCopy.hashtags}
+                </FieldLabel>
+                <Input
+                  id="cross-post-hashtags"
+                  value={xHashtags}
+                  onChange={(event) => setXHashtags(event.target.value)}
+                  placeholder={crossPostCopy.hashtagsPlaceholder}
+                  dir="ltr"
+                />
+              </Field>
+              <Textarea
+                value={xDraft}
+                onChange={(event) =>
+                  setXDraftOverride({ source: crossPostPreview.socialText, value: event.target.value })
+                }
+                rows={4}
+                dir="auto"
+                aria-label={crossPostCopy.xDraft}
+                placeholder={crossPostCopy.noXDraft}
+                className="resize-y"
+              />
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={!xDraft}
+                  onClick={() => void copyCrossPostValue("x", xDraft)}
+                >
+                  {copiedCrossPostValue === "x" ? <CheckIcon data-icon="inline-start" /> : <CopyIcon data-icon="inline-start" />}
+                  <span aria-live="polite">
+                    {copiedCrossPostValue === "x" ? crossPostCopy.copied : crossPostCopy.copyDraft}
+                  </span>
+                </Button>
+                {xIntentUrl ? (
+                  <Button
+                    render={<a href={xIntentUrl} target="_blank" rel="noopener noreferrer" />}
+                    nativeButton={false}
+                    variant="outline"
+                  >
+                    <ExternalLinkIcon data-icon="inline-start" />
+                    {crossPostCopy.openX}
+                  </Button>
+                ) : (
+                  <Button type="button" variant="outline" disabled>
+                    <ExternalLinkIcon data-icon="inline-start" />
+                    {crossPostCopy.openX}
+                  </Button>
+                )}
+              </div>
+            </section>
+          </div>
+
+          <section className="min-w-0 space-y-3" aria-labelledby="cross-post-discord">
+            <p id="cross-post-discord" className="text-sm font-medium">
+              {crossPostCopy.discord}
+            </p>
+            <article className="overflow-hidden rounded-md border border-[#202225] bg-[#2b2d31] text-[#f2f3f5]">
+              <div className="flex min-w-0 gap-3 border-l-4 border-[#5865f2] p-4">
+                <div className="min-w-0 flex-1 space-y-2">
+                  {discordPreview.byline ? (
+                    <div className="flex items-center gap-2 text-xs text-[#dbdee1]">
+                      {discordPreview.authorIconUrl ? (
+                        // eslint-disable-next-line @next/next/no-img-element -- safe http(s) URL from the shared Discord payload builder
+                        <img src={discordPreview.authorIconUrl} alt="" className="size-5 rounded-full object-cover" />
+                      ) : null}
+                      <span>{discordPreview.byline}</span>
+                    </div>
+                  ) : null}
+                  {discordPreview.url ? (
+                    <a
+                      href={discordPreview.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="block break-words font-semibold text-[#00a8fc] hover:underline"
+                    >
+                      {discordPreview.title}
+                    </a>
+                  ) : (
+                    <h3 className="break-words font-semibold">{discordPreview.title}</h3>
+                  )}
+                  {discordPreview.description ? (
+                    <p className="whitespace-pre-wrap break-words text-sm leading-5 text-[#dbdee1]">
+                      {discordPreview.description}
+                    </p>
+                  ) : null}
+                  {discordPreview.footer || discordPreview.timestamp !== null ? (
+                    <p className="text-xs text-[#b5bac1]">
+                      {[discordPreview.footer, discordPreview.timestamp !== null
+                        ? new Intl.DateTimeFormat(locale === "ar" ? "ar-SA" : "en-US", {
+                            dateStyle: "medium",
+                            timeStyle: "short",
+                          }).format(discordPreview.timestamp)
+                        : null]
+                        .filter(Boolean)
+                        .join(" · ")}
+                    </p>
+                  ) : null}
+                  {discordPreview.url ? (
+                    <a
+                      href={discordPreview.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex h-8 items-center rounded-sm bg-[#5865f2] px-3 text-sm font-medium text-white hover:bg-[#4752c4]"
+                    >
+                      {discordPreview.readMoreLabel || crossPostCopy.readMore}
+                    </a>
+                  ) : null}
+                </div>
+                {discordPreview.imageUrl ? (
+                  // eslint-disable-next-line @next/next/no-img-element -- safe http(s) URL from the shared Discord payload builder
+                  <img
+                    src={discordPreview.imageUrl}
+                    alt=""
+                    className="hidden aspect-square size-24 rounded object-cover sm:block"
+                  />
+                ) : null}
+              </div>
+            </article>
+          </section>
+        </CardContent>
+      </Card>
+
       {/* Sticky action bar: the form is tall, so the save/publish controls and any
           save error stay visible without scrolling to the bottom. */}
       <div className="sticky bottom-3 z-20 flex w-fit max-w-full flex-col gap-2 rounded-xl border bg-card/95 p-2 shadow-lg backdrop-blur supports-[backdrop-filter]:bg-card/85">
@@ -1396,6 +1800,18 @@ export function NewsEditor({
               <SendIcon data-icon="inline-start" />
             )}
             {mode === "edit" && status === "published" ? t.updatePublished : t.publish}
+          </Button>
+          <Button
+            onClick={() => persist("scheduled", "schedule")}
+            disabled={!canSchedule || busy !== null}
+            variant="outline"
+          >
+            {busy === "schedule" ? (
+              <Loader2Icon data-icon="inline-start" className="animate-spin" />
+            ) : (
+              <CalendarClockIcon data-icon="inline-start" />
+            )}
+            {status === "scheduled" ? scheduleCopy.update : scheduleCopy.action}
           </Button>
           {mode === "edit" && status === "published" ? (
             <Button onClick={() => persist("draft", "unpublish")} disabled={busy !== null} variant="outline">

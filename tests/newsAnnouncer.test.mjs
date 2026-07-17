@@ -9,7 +9,7 @@ process.env.DB_PATH = join(dir, 'bot.sqlite');
 process.env.DISCORD_TOKEN = 'test-token';
 process.env.DISCORD_CLIENT_ID = 'test-client-id';
 process.env.EWC_DASHBOARD_PUBLIC_URL = 'https://esportscommunity.net';
-const { buildNewsPayload } = await import('../src/jobs/newsAnnouncer.js');
+const { buildNewsPayload, postNewPublished } = await import('../src/jobs/newsAnnouncer.js');
 const { config } = await import('../src/config.js');
 const { closeDb } = await import('../src/db/index.js');
 
@@ -61,4 +61,28 @@ test('a malformed optional dashboard URL degrades to a linkless preview', () => 
   } finally {
     config.dashboard.publicUrl = original;
   }
+});
+
+test('a post unpublished after the candidate snapshot is not sent', async () => {
+  let sends = 0;
+  let records = 0;
+  await postNewPublished({}, {
+    listCandidates: async () => [{ post_id: 91, game_slug: 'valorant', media_slug: null }],
+    resolvePostChannel: async () => ({
+      guildId: 'guild',
+      channel: {
+        id: 'channel',
+        send: async () => {
+          sends += 1;
+          return { id: 'message' };
+        },
+      },
+    }),
+    getPost: async () => ({ id: 91, status: 'draft' }),
+    getGame: async () => null,
+    recordPost: async () => { records += 1; },
+  });
+
+  assert.equal(sends, 0);
+  assert.equal(records, 0);
 });

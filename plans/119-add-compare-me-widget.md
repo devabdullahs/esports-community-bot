@@ -7,6 +7,7 @@
 
 ## Status
 
+- **State**: Completed in `5b37595` and verified during roadmap execution.
 - **Priority**: P3
 - **Effort**: S-M
 - **Risk**: LOW
@@ -63,10 +64,10 @@ latest scored week. Use careful copy for unranked users.
 
 ## Done criteria
 
-- [ ] Widget appears on `/me`.
-- [ ] Percentile math is tested and handles ties gracefully.
-- [ ] No new score persistence.
-- [ ] Full verification passes.
+- [x] Widget appears on `/me`.
+- [x] Percentile math is tested and handles ties gracefully.
+- [x] No new score persistence.
+- [x] Full verification passes.
 
 ## STOP conditions
 

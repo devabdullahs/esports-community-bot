@@ -7,6 +7,9 @@
 
 ## Status
 
+- **Status**: DONE
+- **Completed**: 2026-07-17
+
 - **Priority**: P1
 - **Effort**: L
 - **Risk**: MED
@@ -76,10 +79,10 @@ shadcn calendar/date-picker patterns already present in the app.
 
 ## Done criteria
 
-- [ ] Scheduled posts publish automatically at or after the configured time.
-- [ ] Scoped admins only see/manage their posts.
-- [ ] Discord announcement still happens once.
-- [ ] Full verification passes.
+- [x] Scheduled posts publish automatically at or after the configured time.
+- [x] Scoped admins only see/manage their posts.
+- [x] Discord announcement still happens once.
+- [x] Full verification passes.
 
 ## STOP conditions
 

@@ -8,6 +8,7 @@
 
 ## Status
 
+- **State**: Completed in `5b37595` and verified during roadmap execution.
 - **Priority**: P2
 - **Effort**: M
 - **Risk**: MED
@@ -77,10 +78,10 @@ link, generate or expose a stable public route according to the decided default.
 
 ## Done criteria
 
-- [ ] Predictor pages are public and shareable.
-- [ ] No private account controls or hidden picks appear.
-- [ ] Leaderboards link to predictor pages.
-- [ ] Full verification passes.
+- [x] Predictor pages are public and shareable.
+- [x] No private account controls or hidden picks appear.
+- [x] Leaderboards link to predictor pages.
+- [x] Full verification passes.
 
 ## STOP conditions
 

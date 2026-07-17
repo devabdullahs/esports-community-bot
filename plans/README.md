@@ -232,16 +232,16 @@ untouched.
 | 112  | Add Club Championship standings history charts | P2 | M | 080 | DONE |
 | 113  | Add downloadable web share cards | P2 | M | - | DONE |
 | 114  | Add language and game filters to co-streams | P2 | S-M | 093 | DONE |
-| 115  | Add one-tap match reminders | P2 | M | 099 recommended | TODO |
-| 116  | Add MVP of the day voting | P3 | M-L | - | TODO |
-| 117  | Add moderated highlight and clip submissions | P3 | L | - | TODO |
+| 115  | Add one-tap match reminders | P2 | M | 099 recommended | DONE |
+| 116  | Add MVP of the day voting | P3 | M-L | - | DONE |
+| 117  | Add moderated highlight and clip submissions | P3 | L | - | DEFERRED (legal/copyright policy) |
 | 118  | Add public predictor profile pages | P2 | M | 108 optional | DONE |
 | 119  | Add a compare-me prediction widget | P3 | S-M | - | DONE |
-| 120  | Add scheduled publishing and an editorial calendar | P1 | L | - | TODO |
-| 121  | Add per-post analytics for media channels | P1 | M-L | 095 | TODO |
-| 122  | Add branded graphics generator for admins and media channels | P2 | L | - | TODO |
-| 123  | Add keyword auto-flagging and bulk moderation | P2 | M-L | - | TODO |
-| 124  | Add a cross-post composer for site, Discord, and social drafts | P2 | L | 120 recommended | TODO |
+| 120  | Add scheduled publishing and an editorial calendar | P1 | L | - | DONE |
+| 121  | Add per-post analytics for media channels | P1 | M-L | 095 | DONE |
+| 122  | Add branded graphics generator for admins and media channels | P2 | L | - | DONE |
+| 123  | Add keyword auto-flagging and bulk moderation | P2 | M-L | - | DONE |
+| 124  | Add a cross-post composer for site, Discord, and social drafts | P2 | L | 120 recommended | DONE |
 Status values: TODO | IN PROGRESS | DONE | BLOCKED (reason) | REJECTED (rationale) | SUPERSEDED.
 
 ## Feature roadmap dependency notes (plans 102-124)

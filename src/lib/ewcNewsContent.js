@@ -3,6 +3,7 @@ export const NEWS_SUMMARY_MAX_LENGTH = 180;
 export const NEWS_BODY_MAX_LENGTH = 12000;
 export const NEWS_CONTENT_MODES = ['shared', 'translated'];
 export const NEWS_LOCALES = ['en', 'ar'];
+export const NEWS_STATUSES = ['draft', 'scheduled', 'published'];
 // Where the cover image renders on the public article page. 'top' is the legacy
 // behaviour (cover above the body); 'bottom' renders it after the body; 'card-only'
 // keeps it off the article entirely (cards/listings still show it).
@@ -17,8 +18,26 @@ export function isNewsContentMode(value) {
   return value === 'shared' || value === 'translated';
 }
 
+export function isNewsStatus(value) {
+  return value === 'draft' || value === 'scheduled' || value === 'published';
+}
+
 export function isNewsCoverPlacement(value) {
   return value === 'top' || value === 'bottom' || value === 'card-only';
+}
+
+function scheduledDate(value) {
+  if (typeof value !== 'string' || !value.trim()) return null;
+  const text = value.trim();
+  const parsed = Date.parse(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(text) ? `${text.replace(' ', 'T')}Z` : text);
+  return Number.isFinite(parsed) ? new Date(parsed) : null;
+}
+
+// Database timestamps are UTC text without an offset. API callers may send an
+// ISO timestamp, while existing rows return the database representation.
+export function normalizeNewsScheduledPublishAt(value) {
+  const date = scheduledDate(value);
+  return date ? date.toISOString().slice(0, 19).replace('T', ' ') : null;
 }
 
 export function normalizeNewsTranslation(input = {}) {
@@ -74,7 +93,7 @@ function validateTranslation(locale, translation, { requirePublishable }) {
 
 export function normalizeNewsContentInput(raw = {}) {
   const source = raw && typeof raw === 'object' ? raw : {};
-  const status = source.status === 'published' ? 'published' : 'draft';
+  const status = isNewsStatus(source.status) ? source.status : 'draft';
   const contentMode = isNewsContentMode(source.contentMode) ? source.contentMode : 'shared';
   const legacyLocale = isNewsLocale(source.locale) ? source.locale : null;
   const defaultLocale = isNewsLocale(source.defaultLocale)
@@ -98,13 +117,30 @@ export function normalizeNewsContentInput(raw = {}) {
     translations.ar = normalizeNewsTranslation(rawTranslations.ar);
   }
 
-  return { status, contentMode, defaultLocale, translations };
+  return {
+    status,
+    contentMode,
+    defaultLocale,
+    translations,
+    scheduledPublishAt: normalizeNewsScheduledPublishAt(source.scheduledPublishAt),
+  };
 }
 
 export function validateNewsContentInput(raw = {}) {
   const value = normalizeNewsContentInput(raw);
-  const requirePublishable = value.status === 'published';
+  const requirePublishable = value.status === 'published' || value.status === 'scheduled';
   const locales = value.contentMode === 'translated' ? NEWS_LOCALES : [value.defaultLocale];
+
+  if (value.status === 'scheduled') {
+    // Validate the exact normalized value that will be stored. Milliseconds are
+    // intentionally truncated for the database, so comparing the raw ISO value
+    // could accept a timestamp whose stored second is already due.
+    const scheduledAt = scheduledDate(value.scheduledPublishAt);
+    if (!scheduledAt) return { ok: false, error: 'A valid publish time is required before scheduling' };
+    if (scheduledAt.getTime() <= Date.now()) {
+      return { ok: false, error: 'Scheduled publish time must be in the future' };
+    }
+  }
 
   for (const locale of locales) {
     const error = validateTranslation(locale, value.translations[locale], {

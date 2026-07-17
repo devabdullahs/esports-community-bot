@@ -12,6 +12,7 @@ describe("admin navigation model", () => {
       "/admin",
       "/admin/news/new",
       "/admin/news/new/media",
+      "/admin/graphics",
       "/admin/comments",
       "/admin/games",
       "/admin/media",
@@ -40,9 +41,11 @@ describe("admin navigation model", () => {
     const neither = allHrefs(adminNavSections("en", false, false, false));
     expect(neither).not.toContain("/admin/news/new");
     expect(neither).not.toContain("/admin/news/new/media");
+    expect(neither).not.toContain("/admin/graphics");
     const gameOnly = allHrefs(adminNavSections("en", false, true, false));
     expect(gameOnly).toContain("/admin/news/new");
     expect(gameOnly).not.toContain("/admin/news/new/media");
+    expect(gameOnly).toContain("/admin/graphics");
   });
 
   test("active matching: exact /admin and nested dynamic routes", () => {
