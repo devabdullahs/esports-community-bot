@@ -353,6 +353,50 @@ async function drawBrand(ctx, input, width, height, pad) {
   ctx.restore();
 }
 
+function wrapAllLines(ctx, value, maxWidth, options) {
+  const words = cleanText(value, '', 420).split(/\s+/).filter(Boolean);
+  const lines = [];
+  let line = '';
+  for (const word of words) {
+    const next = line ? `${line} ${word}` : word;
+    prepareText(ctx, next, options);
+    if (line && ctx.measureText(next).width > maxWidth) {
+      lines.push(line);
+      line = word;
+    } else {
+      line = next;
+    }
+  }
+  if (line) lines.push(line);
+  return lines;
+}
+
+function drawFittedTitle(ctx, value, x, top, maxWidth, options, { maxLines = 2, minSize = 18, maxHeight = Infinity } = {}) {
+  let size = options.size;
+  let lines = [];
+  while (size >= minSize) {
+    const candidateOptions = { ...options, size };
+    lines = wrapAllLines(ctx, value, maxWidth, candidateOptions);
+    const lineHeight = size * 1.12;
+    const allFit = lines.every((line) => {
+      prepareText(ctx, line, candidateOptions);
+      return ctx.measureText(line).width <= maxWidth;
+    });
+    if (lines.length <= maxLines && lines.length * lineHeight <= maxHeight && allFit) break;
+    size -= 1;
+  }
+
+  size = Math.max(minSize, size);
+  const fittedOptions = { ...options, size };
+  lines = wrapAllLines(ctx, value, maxWidth, fittedOptions);
+  const lineHeight = fittedOptions.size * 1.12;
+  lines.forEach((line, index) => {
+    prepareText(ctx, line, fittedOptions);
+    ctx.fillText(line, x, top + fittedOptions.size + index * lineHeight);
+  });
+  return { bottom: top + fittedOptions.size + Math.max(0, lines.length - 1) * lineHeight, size: fittedOptions.size };
+}
+
 // Team tile per the spec: the home side is accent-tinted, the away side stays
 // neutral, and the monogram fills the tile when no logo exists.
 function drawTeam(ctx, { image, name, cx, cy, logoSize, nameWidth, theme, home }) {
@@ -395,7 +439,7 @@ async function renderMatchResult(input) {
   const base = createBase(input);
   const { canvas, ctx, width, height, theme, pad } = base;
   const [logoA, logoB] = await Promise.all([loadLogoImage(input.logoA), loadLogoImage(input.logoB)]);
-  const title = cleanText(input.tournament, 'Tournament', 120);
+  const title = cleanText(input.tournament, 'Tournament', 260);
   const game = cleanText(input.game, 'Esports', 80);
   const horizontal = width / height >= 1.2;
   const titleAlign = contentAlignment(input, width, pad);
@@ -409,12 +453,14 @@ async function renderMatchResult(input) {
       ? (input.language === 'ar' ? 'قادماً' : 'SOON')
       : (input.language === 'ar' ? 'نهائي' : 'FINAL');
 
-  drawText(ctx, title, titleAlign.x, horizontal ? height * 0.22 : height * 0.15, width - pad * 2, {
+  const titleTop = horizontal ? height * 0.13 : height * 0.085;
+  const titleBlock = drawFittedTitle(ctx, title, titleAlign.x, titleTop, width - pad * 2, {
     size: Math.max(34, Math.min(width, height) * (horizontal ? 0.055 : 0.044)),
     bold: true, align: titleAlign.align, color: theme.text,
-  });
-  drawText(ctx, game, titleAlign.x, horizontal ? height * 0.28 : height * 0.19, width - pad * 2, {
-    size: Math.max(20, Math.min(width, height) * 0.025), align: titleAlign.align, color: theme.muted,
+  }, { maxLines: 2, minSize: 20, maxHeight: height * (horizontal ? 0.13 : 0.09) });
+  const gameSize = Math.max(20, Math.min(width, height) * 0.025);
+  drawText(ctx, game, titleAlign.x, titleBlock.bottom + gameSize * 1.45, width - pad * 2, {
+    size: gameSize, align: titleAlign.align, color: theme.muted,
   });
 
   if (horizontal) {
@@ -447,12 +493,13 @@ async function renderStandings(input) {
   const entries = Array.isArray(input.entries) ? input.entries.slice(0, 6) : [];
   const logos = await Promise.all(entries.map((entry) => loadLogoImage(entry.logo)));
   const align = contentAlignment(input, width, pad);
-  const titleY = height * 0.15;
-  drawText(ctx, cleanText(input.tournament, 'Tournament', 120), align.x, titleY, width - pad * 2, {
+  const titleTop = height * 0.09;
+  const titleBlock = drawFittedTitle(ctx, cleanText(input.tournament, 'Tournament', 260), align.x, titleTop, width - pad * 2, {
     size: Math.max(32, Math.min(width, height) * 0.048), bold: true, align: align.align, color: theme.text,
-  });
-  drawText(ctx, cleanText(input.section, 'Standings', 100), align.x, titleY + Math.max(40, height * 0.045), width - pad * 2, {
-    size: Math.max(20, Math.min(width, height) * 0.025), align: align.align, color: theme.muted,
+  }, { maxLines: 2, minSize: 20, maxHeight: height * 0.11 });
+  const sectionSize = Math.max(20, Math.min(width, height) * 0.025);
+  drawText(ctx, cleanText(input.section, 'Standings', 100), align.x, titleBlock.bottom + sectionSize * 1.45, width - pad * 2, {
+    size: sectionSize, align: align.align, color: theme.muted,
   });
 
   const startY = height * 0.28;

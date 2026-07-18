@@ -141,6 +141,8 @@ test("request parser accepts only the finite template ids and positive numeric r
   expect(parseGraphicsRenderRequest({ template: "standings", resourceId: 1, scale: 4 })).toBeNull();
   expect(parseGraphicsRenderRequest({ template: "news-promo", resourceId: 1, brandX: -1 })).toBeNull();
   expect(parseGraphicsRenderRequest({ template: "news-promo", resourceId: 1, brandMediaSlug: "../alpha" })).toBeNull();
+  expect(parseGraphicsRenderRequest({ template: "news-promo", resourceId: 1, brandAssetUrl: "http://assets.test/logo.png" })).toBeNull();
+  expect(parseGraphicsRenderRequest({ template: "news-promo", resourceId: 1, brandAssetUrl: "not-a-url" })).toBeNull();
   expect(parseGraphicsRenderRequest({
     template: "news-promo",
     resourceId: 1,
@@ -154,6 +156,7 @@ test("request parser accepts only the finite template ids and positive numeric r
     brandY: 63.75,
     brandSize: 16.25,
     brandMediaSlug: "alpha-media",
+    brandAssetUrl: "https://assets.example.test/graphics-branding/logo.png",
   })).toMatchObject({
     format: "9:16",
     language: "ar",
@@ -165,6 +168,7 @@ test("request parser accepts only the finite template ids and positive numeric r
     brandY: 63.8,
     brandSize: 16.3,
     brandMediaSlug: "alpha-media",
+    brandAssetUrl: "https://assets.example.test/graphics-branding/logo.png",
   });
 });
 

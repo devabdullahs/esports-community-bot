@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
 
-import { matchesMagicBytes } from "@/app/api/admin/news/upload/route";
+import { matchesMagicBytes } from "@/lib/image-upload";
 
 const bytes = (values: number[]) => new Uint8Array(values);
 const ascii = (value: string) => [...value].map((char) => char.charCodeAt(0));

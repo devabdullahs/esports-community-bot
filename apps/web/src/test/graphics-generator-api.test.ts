@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, test, vi } from "vitest";
 import { NextResponse } from "next/server";
-import { anonymous, gamesAdmin } from "./access";
+import { anonymous, gamesAdmin, mediaAdmin } from "./access";
 
 vi.mock("@/lib/admin", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/admin")>();
@@ -9,6 +9,7 @@ vi.mock("@/lib/admin", async (importOriginal) => {
 vi.mock("@/lib/audit", () => ({ recordAdminAudit: vi.fn() }));
 vi.mock("@/lib/community", () => ({ sameOriginOr403: vi.fn(() => null) }));
 vi.mock("@/lib/rate-limit", () => ({ rateLimitOr429: vi.fn(async () => null) }));
+vi.mock("@/lib/r2", () => ({ isManagedR2Url: vi.fn(() => false) }));
 vi.mock("@/lib/graphics-generator", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/graphics-generator")>();
   return {
@@ -22,6 +23,7 @@ import { getAdminAccess } from "@/lib/admin";
 import { recordAdminAudit } from "@/lib/audit";
 import { renderGraphics, resolveGraphicsRenderRequest } from "@/lib/graphics-generator";
 import { rateLimitOr429 } from "@/lib/rate-limit";
+import { isManagedR2Url } from "@/lib/r2";
 import { POST } from "@/app/api/admin/graphics/route";
 
 const mockAccess = vi.mocked(getAdminAccess);
@@ -29,6 +31,7 @@ const mockRender = vi.mocked(renderGraphics);
 const mockResolve = vi.mocked(resolveGraphicsRenderRequest);
 const mockRateLimit = vi.mocked(rateLimitOr429);
 const mockAudit = vi.mocked(recordAdminAudit);
+const mockManagedR2Url = vi.mocked(isManagedR2Url);
 
 const canonicalMatch = {
   template: "match-result",
@@ -60,6 +63,7 @@ describe("admin graphics render API", () => {
     mockResolve.mockResolvedValue(canonicalMatch as never);
     mockRender.mockResolvedValue(Buffer.from("png"));
     mockRateLimit.mockResolvedValue(null);
+    mockManagedR2Url.mockReturnValue(false);
   });
 
   test("requires an authenticated admin", async () => {
@@ -88,6 +92,38 @@ describe("admin graphics render API", () => {
     expect(mockRender).not.toHaveBeenCalled();
   });
 
+  test("rejects custom branding for game-only admins", async () => {
+    const response = await POST(request({
+      template: "match-result",
+      resourceId: 77,
+      brandAssetUrl: "https://assets.example.test/graphics-branding/logo.png",
+    }));
+    expect(response.status).toBe(403);
+    expect(mockResolve).not.toHaveBeenCalled();
+  });
+
+  test("accepts only managed custom branding for media admins", async () => {
+    mockAccess.mockResolvedValue(mediaAdmin(["alpha"]));
+    mockManagedR2Url.mockReturnValue(true);
+    mockResolve.mockResolvedValue({ ...canonicalMatch, owner: { kind: "media", slug: "alpha" } } as never);
+    const response = await POST(request({
+      template: "match-result",
+      resourceId: 77,
+      brandAssetUrl: "https://assets.example.test/graphics-branding/logo.png",
+    }));
+    expect(response.status).toBe(200);
+    expect(mockManagedR2Url).toHaveBeenCalledWith(
+      "https://assets.example.test/graphics-branding/logo.png",
+      "graphics-branding/",
+    );
+    expect(mockAudit).toHaveBeenCalledWith(
+      mediaAdmin(["alpha"]),
+      "graphics.render",
+      "match-result:77",
+      expect.objectContaining({ customBrand: true }),
+    );
+  });
+
   test("renders canonical server data, audits it, and never caches the PNG", async () => {
     const response = await POST(request({
       template: "match-result",
@@ -107,7 +143,7 @@ describe("admin graphics render API", () => {
       gamesAdmin(["valorant"]),
       "graphics.render",
       "match-result:77",
-      { template: "match-result", ownerType: "game", ownerSlug: "valorant", brandMediaSlug: null },
+      { template: "match-result", ownerType: "game", ownerSlug: "valorant", brandMediaSlug: null, customBrand: false },
     );
   });
 

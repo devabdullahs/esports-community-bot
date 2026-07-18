@@ -28,6 +28,19 @@ export function isR2Configured(): boolean {
   return Boolean(ACCOUNT_ID && ACCESS_KEY_ID && SECRET_ACCESS_KEY && BUCKET && PUBLIC_BASE_URL);
 }
 
+export function isManagedR2Url(value: string, prefix: string): boolean {
+  if (!PUBLIC_BASE_URL || !prefix || prefix.startsWith("/")) return false;
+  try {
+    const base = new URL(`${PUBLIC_BASE_URL}/`);
+    const candidate = new URL(value);
+    if (candidate.protocol !== "https:" || candidate.origin !== base.origin) return false;
+    const basePath = base.pathname.endsWith("/") ? base.pathname : `${base.pathname}/`;
+    return candidate.pathname.startsWith(`${basePath}${prefix}`);
+  } catch {
+    return false;
+  }
+}
+
 let client: S3Client | null = null;
 function s3(): S3Client {
   if (!client) {
