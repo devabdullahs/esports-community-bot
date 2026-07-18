@@ -477,6 +477,38 @@ test('scorePerGameWeeklyPrediction: player participant aliases match solo-game c
   assert.equal(detail.participant, 'GO1');
 });
 
+test('scorePerGameWeeklyPrediction: verified club abbreviations match public prediction names', () => {
+  const games = [{ key: 'free-fire-1', game: 'Free Fire', event: 'Esports World Cup 2026' }];
+  const results = [
+    {
+      gameKey: 'free-fire-1',
+      placements: [
+        { club: 'LYON', points: 1000, place: '1' },
+        { club: 'AG.AL', points: 750, place: '2' },
+        { club: 'LOS', points: 50, place: '8' },
+      ],
+    },
+  ];
+
+  const allGamers = scorePerGameWeeklyPrediction(
+    [{ gameKey: 'free-fire-1', pick: 'All Gamers Global' }],
+    games,
+    results,
+  );
+  assert.equal(allGamers.score, 750);
+  assert.equal(allGamers.details.picks[0].matchedClub, 'AG.AL');
+  assert.equal(allGamers.details.picks[0].place, '2');
+
+  const mibr = scorePerGameWeeklyPrediction(
+    [{ gameKey: 'free-fire-1', pick: 'MIBR.LOS' }],
+    games,
+    results,
+  );
+  assert.equal(mibr.score, 50);
+  assert.equal(mibr.details.picks[0].matchedClub, 'LOS');
+  assert.equal(mibr.details.picks[0].place, '8');
+});
+
 test('scorePerGameWeeklyPrediction: a missing pick for a configured game scores 0, pick null', () => {
   const picks = [{ gameKey: 'valorant-1', pick: 'Team Falcons' }]; // no apex pick
   const out = scorePerGameWeeklyPrediction(picks, GAMES, resultsFor());
