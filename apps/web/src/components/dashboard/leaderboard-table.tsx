@@ -138,7 +138,7 @@ export function LeaderboardTable({
       },
       {
         accessorKey: "weeklyWins",
-        header: () => <div className="text-end">{text.common.wins}</div>,
+        header: () => <div className="text-end">{text.profile.weeklyWins}</div>,
         cell: ({ row }) => (
           <span className="block text-end tabular-nums">
             {formatNumber(row.original.weeklyWins, locale)}

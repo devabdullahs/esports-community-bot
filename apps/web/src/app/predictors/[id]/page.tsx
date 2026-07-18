@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeftIcon, AwardIcon, TrophyIcon } from "lucide-react";
+import { ArrowLeftIcon, AwardIcon, CircleDotIcon, TrophyIcon } from "lucide-react";
 import { getPublicEwcPredictorProfile } from "@bot/lib/ewcProfileStats.js";
 import { PredictionAchievementBadges } from "@/components/predictions/prediction-achievement-badges";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -26,11 +26,20 @@ type PublicPredictor = {
   wins: number;
   sweeps: number;
   achievements: string[];
+  scoreSources: Array<{
+    key: string;
+    label: string;
+    kind: "weekly" | "season";
+    points: number;
+    provisional: boolean;
+  }>;
   recentFinalizedResults: Array<{
     weekKey: string;
     label: string;
     score: number;
     bonus: number;
+    rank: number | null;
+    winner: boolean;
   }>;
 };
 
@@ -71,8 +80,8 @@ export default async function PublicPredictorPage({
   const metrics = [
     { label: text.common.rank, value: `#${formatNumber(predictor.rank, locale)}` },
     { label: text.common.points, value: formatNumber(predictor.points, locale) },
-    { label: text.common.weeks, value: formatNumber(predictor.weeks, locale) },
-    { label: text.common.wins, value: formatNumber(predictor.wins, locale) },
+    { label: profile.finalizedWeeks, value: formatNumber(predictor.weeks, locale) },
+    { label: profile.weeklyWins, value: formatNumber(predictor.wins, locale) },
     { label: text.common.sweeps, value: formatNumber(predictor.sweeps, locale) },
   ];
 
@@ -121,6 +130,37 @@ export default async function PublicPredictorPage({
         ))}
       </section>
 
+      <section className="flex flex-col gap-3" aria-labelledby="predictor-points">
+        <div className="flex items-center gap-2">
+          <CircleDotIcon className="size-5 text-muted-foreground" />
+          <h2 id="predictor-points" className="text-xl font-semibold">{profile.pointsBreakdown}</h2>
+        </div>
+        {predictor.scoreSources.length ? (
+          <Card>
+            <CardContent className="divide-y p-0">
+              {predictor.scoreSources.map((source) => (
+                <div key={source.key} className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 sm:px-5">
+                  <div className="flex min-w-0 flex-wrap items-center gap-2">
+                    <p className="font-medium" dir="auto">{source.label}</p>
+                    <Badge variant={source.provisional ? "secondary" : "outline"}>
+                      {source.provisional ? profile.provisional : source.kind === "season" ? profile.seasonResult : profile.finalized}
+                    </Badge>
+                  </div>
+                  <span className="font-semibold tabular-nums">
+                    {source.points >= 0 ? "+" : ""}{formatNumber(source.points, locale)} {text.common.points.toLowerCase()}
+                  </span>
+                </div>
+              ))}
+            </CardContent>
+          </Card>
+        ) : (
+          <p className="text-sm text-muted-foreground">{profile.noPointSources}</p>
+        )}
+        {predictor.scoreSources.some((source) => source.provisional) ? (
+          <p className="text-sm leading-6 text-muted-foreground">{profile.provisionalHint}</p>
+        ) : null}
+      </section>
+
       <section className="flex flex-col gap-3" aria-labelledby="predictor-achievements">
         <div className="flex items-center gap-2">
           <AwardIcon className="size-5 text-muted-foreground" />
@@ -142,6 +182,8 @@ export default async function PublicPredictorPage({
                 <div key={result.weekKey} className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 sm:px-5">
                   <p className="font-medium" dir="auto">{result.label}</p>
                   <div className="flex items-center gap-4 text-sm tabular-nums text-muted-foreground">
+                    {result.winner ? <Badge variant="default">{profile.weeklyWinner}</Badge> : null}
+                    {result.rank ? <span>{text.common.rank}: #{formatNumber(result.rank, locale)}</span> : null}
                     <span>{profile.score}: {formatNumber(result.score, locale)}</span>
                     {result.bonus > 0 ? <span>{profile.bonus}: {formatNumber(result.bonus, locale)}</span> : null}
                   </div>

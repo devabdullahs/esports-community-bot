@@ -278,9 +278,18 @@ function recentWeekly(profile) {
 
 async function recentFinalizedPerformance(guildId, season, userId) {
   const rows = await all(
-    `SELECT w.week_key, w.label, wp.score, wp.details_json
+    `WITH ranked AS (
+       SELECT wp2.week_id, wp2.user_id, wp2.score,
+              RANK() OVER (PARTITION BY wp2.week_id ORDER BY wp2.score DESC) AS weekly_rank,
+              MAX(wp2.score) OVER (PARTITION BY wp2.week_id) AS max_score
+       FROM ewc_weekly_predictions wp2
+       WHERE wp2.guild_id = $1 AND wp2.score IS NOT NULL
+     )
+     SELECT w.week_key, w.label, wp.score, wp.details_json,
+            ranked.weekly_rank, ranked.max_score
      FROM ewc_weekly_predictions wp
      JOIN ewc_prediction_weeks w ON w.id = wp.week_id
+     JOIN ranked ON ranked.week_id = wp.week_id AND ranked.user_id = wp.user_id
      WHERE wp.guild_id = $1
        AND w.season = $2
        AND w.status = 'scored'
@@ -295,7 +304,60 @@ async function recentFinalizedPerformance(guildId, season, userId) {
     label: String(row.label || row.week_key || '').slice(0, 160),
     score: Number(row.score || 0),
     bonus: Number(parseJson(row.details_json, {})?.bonus || 0),
+    rank: Number(row.weekly_rank || 0) || null,
+    winner: Number(row.score || 0) > 0 && Number(row.score) === Number(row.max_score),
   }));
+}
+
+async function overallScoreSources(guildId, season, userId) {
+  const round = await getEwcSeason(guildId, season);
+  const bestWeeks = Number(round?.best_weeks) > 0 ? Number(round.best_weeks) : 999999;
+  const [weeklyRows, seasonRow] = await Promise.all([
+    all(
+      `WITH ranked AS (
+         SELECT w.week_key, w.label, w.status, wp.score, wp.details_json,
+                ROW_NUMBER() OVER (ORDER BY wp.score DESC, wp.week_id) AS rn
+         FROM ewc_weekly_predictions wp
+         JOIN ewc_prediction_weeks w ON w.id = wp.week_id
+         WHERE wp.guild_id = $1
+           AND w.season = $2
+           AND wp.user_id = $3
+           AND wp.score IS NOT NULL
+       )
+       SELECT week_key, label, status, score, details_json
+       FROM ranked
+       WHERE rn <= $4
+       ORDER BY score DESC, week_key ASC`,
+      [guildId, season, userId, bestWeeks],
+    ),
+    get(
+      `SELECT score
+       FROM ewc_season_predictions
+       WHERE guild_id = $1 AND season = $2 AND user_id = $3 AND score IS NOT NULL`,
+      [guildId, season, userId],
+    ),
+  ]);
+
+  const sources = weeklyRows.map((row) => {
+    const details = parseJson(row.details_json, {});
+    return {
+      key: String(row.week_key || '').slice(0, 100),
+      label: String(row.label || row.week_key || '').slice(0, 160),
+      kind: 'weekly',
+      points: Number(row.score || 0),
+      provisional: row.status !== 'scored' || details?.provisional === true,
+    };
+  });
+  if (seasonRow?.score != null) {
+    sources.push({
+      key: `season-${season}`,
+      label: `EWC ${season} season prediction`,
+      kind: 'season',
+      points: Number(seasonRow.score || 0),
+      provisional: false,
+    });
+  }
+  return sources;
 }
 
 function publicAvatarProxyUrl(identity) {
@@ -314,11 +376,12 @@ export async function getPublicEwcPredictorProfile({
   const userId = await getEwcPredictorDiscordUserIdByPublicId(publicId);
   if (!userId) return null;
 
-  const [overall, weeklyByUser, identitiesByUser, recentFinalizedResults] = await Promise.all([
+  const [overall, weeklyByUser, identitiesByUser, recentFinalizedResults, scoreSources] = await Promise.all([
     overallRankForUser(guildId, season, userId),
     weeklyAggregateStatsForUsers(guildId, season, [userId]),
     publicEwcProfileIdentitiesByDiscordUserIds([userId]),
     recentFinalizedPerformance(guildId, season, userId),
+    overallScoreSources(guildId, season, userId),
   ]);
   if (!overall) return null;
 
@@ -340,6 +403,7 @@ export async function getPublicEwcPredictorProfile({
     wins: weekly.weeklyWins,
     sweeps: weekly.top3Sweeps,
     achievements: achievements.ids,
+    scoreSources,
     recentFinalizedResults,
   };
 }
