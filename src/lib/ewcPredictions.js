@@ -117,18 +117,40 @@ export function perGamePredictionRoundLocked(games = [], now = Math.floor(Date.n
   });
 }
 
-export function dueEwcGamesForResults(games = [], results = [], now = Math.floor(Date.now() / 1000), earlyWindowSec = 12 * 3600) {
-  const completed = new Set(
-    (results || [])
-      .filter((result) => !ewcGameResultPending(result))
-      .map((result) => String(result.gameKey || ''))
-      .filter(Boolean),
-  );
+export function dueEwcGamesForResults(
+  games = [],
+  results = [],
+  now = Math.floor(Date.now() / 1000),
+  earlyWindowSec = 12 * 3600,
+  scoreAfter = null,
+) {
+  const byKey = new Map((results || []).map((result) => [String(result?.gameKey || ''), result]));
   return (games || []).filter((game) => {
     const key = String(game?.key || '');
-    if (!key || completed.has(key)) return false;
+    if (!key) return false;
     const endAt = Number(game?.endAt);
-    return Number.isFinite(endAt) && now >= endAt - Math.max(0, Number(earlyWindowSec) || 0);
+    if (!Number.isFinite(endAt) || now < endAt - Math.max(0, Number(earlyWindowSec) || 0)) return false;
+    const result = byKey.get(key);
+    if (ewcGameResultPending(result)) return true;
+
+    // Live battle-royale standings already contain a first-place row. A good
+    // snapshot taken before the scheduled finish must therefore be refreshed
+    // once after the event ends instead of being mistaken for a final result.
+    const fetchedAt = Number(result?.fetchedAt) || 0;
+    if (now >= endAt && fetchedAt < endAt) return true;
+    const delayedFinalAt = Number(scoreAfter) || 0;
+    return delayedFinalAt > endAt && now >= delayedFinalAt && fetchedAt < delayedFinalAt;
+  });
+}
+
+export function ewcGameResultsFinalReady(results = [], games = [], now = Math.floor(Date.now() / 1000), scoreAfter = null) {
+  const byKey = new Map((results || []).map((result) => [String(result?.gameKey || ''), result]));
+  return (games || []).length > 0 && (games || []).every((game) => {
+    const result = byKey.get(String(game?.key || ''));
+    if (ewcGameResultPending(result)) return false;
+    const endAt = Number(game?.endAt) || 0;
+    const finalAt = Math.max(endAt, Number(scoreAfter) || 0);
+    return now >= finalAt && (Number(result?.fetchedAt) || 0) >= finalAt;
   });
 }
 
