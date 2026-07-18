@@ -66,11 +66,30 @@ export function normalizeClubName(name) {
     .toLowerCase();
 }
 
+// Liquipedia prize tables occasionally use a current division abbreviation
+// while the prediction picker stores the club's public name. Keep these
+// verified identities explicit so scoring never relies on fuzzy matching.
+const EWC_CLUB_ALIAS_GROUPS = [
+  ['ag.al', 'all gamers', 'all gamers global'],
+  ['los', 'mibr.los', 'mibr los'],
+];
+
+const EWC_CLUB_ALIASES = new Map();
+for (const group of EWC_CLUB_ALIAS_GROUPS) {
+  const keys = [...new Set(group.flatMap((name) => {
+    const base = normalizeClubName(name);
+    return [base, base.replace(/^team\s+/, ''), normalizeTeamName(name)].filter(Boolean);
+  }))];
+  for (const key of keys) EWC_CLUB_ALIASES.set(key, keys);
+}
+
 export function clubNameKeys(name) {
   const base = normalizeClubName(name);
   const noTeamPrefix = base.replace(/^team\s+/, '');
   const compact = normalizeTeamName(name);
-  return [...new Set([base, noTeamPrefix, compact].filter(Boolean))];
+  const direct = [base, noTeamPrefix, compact].filter(Boolean);
+  const aliases = direct.flatMap((key) => EWC_CLUB_ALIASES.get(key) || []);
+  return [...new Set([...direct, ...aliases])];
 }
 
 export function uniqueClubPicks(picks, requiredCount) {
