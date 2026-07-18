@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
@@ -37,6 +37,12 @@ function authUser(id, name, image = null) {
 test.after(() => {
   closeDb();
   rmSync(dir, { recursive: true, force: true });
+});
+
+test('public profile ordering keeps text timestamps separate from integer columns', () => {
+  const source = readFileSync(new URL('../src/lib/ewcProfileStats.js', import.meta.url), 'utf8');
+  assert.doesNotMatch(source, /COALESCE\(w\.scored_at,\s*w\.close_at,\s*w\.id\)/i);
+  assert.match(source, /ORDER BY w\.scored_at DESC, w\.close_at DESC, w\.id DESC/i);
 });
 
 test('profile links are public and resolve the current auth name through an opaque avatar token', async () => {
