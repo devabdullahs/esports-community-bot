@@ -265,14 +265,21 @@ export async function listEwcClubChampionshipSnapshotHistory(
   season,
   { since = null, limit = EWC_CLUB_CHAMPIONSHIP_HISTORY_DEFAULT_LIMIT } = {},
 ) {
+  const cleanedSeason = cleanSeason(season);
+  const cleanedSince = cleanHistorySince(since);
+  const cleanedLimit = cleanHistoryLimit(limit);
+  const sinceClause = cleanedSince ? 'AND fetched_at >= $2' : '';
+  const limitParameter = cleanedSince ? '$3' : '$2';
   const rows = await all(
     `SELECT season, standings_json, fetched_at
        FROM ewc_club_championship_snapshot_history
       WHERE season = $1
-        AND ($2 IS NULL OR fetched_at >= $2)
+        ${sinceClause}
       ORDER BY fetched_at DESC
-      LIMIT $3`,
-    [cleanSeason(season), cleanHistorySince(since), cleanHistoryLimit(limit)],
+      LIMIT ${limitParameter}`,
+    cleanedSince
+      ? [cleanedSeason, cleanedSince, cleanedLimit]
+      : [cleanedSeason, cleanedLimit],
   );
   return rows.map(toHistorySnapshot).filter(Boolean).reverse();
 }

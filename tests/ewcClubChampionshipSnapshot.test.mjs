@@ -113,6 +113,15 @@ test('keeps a bounded, chronologically ordered history from stored snapshots', a
   assert.equal(history[0].standings[0].points, 2);
   assert.equal(history.at(-1).standings[0].points, total - 1);
 
+  const recentHistory = await listEwcClubChampionshipSnapshotHistory(season, {
+    since: history.at(-2).fetchedAt,
+    limit: EWC_CLUB_CHAMPIONSHIP_HISTORY_MAX_SNAPSHOTS,
+  });
+  assert.deepEqual(
+    recentHistory.map((entry) => entry.standings[0].points),
+    [total - 2, total - 1],
+  );
+
   await upsertEwcClubChampionshipSnapshot(
     snapshot(season, 'Falcons', total, history.at(-1).fetchedAt),
   );
