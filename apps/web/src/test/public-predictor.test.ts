@@ -14,5 +14,6 @@ describe("public predictor routes", () => {
     expect(directionForLocale("ar")).toBe("rtl");
     expect(copy.ar.predictor.title("Falcons fan")).toContain("Falcons fan");
     expect(copy.ar.predictor.recentResults).not.toBe(copy.en.predictor.recentResults);
+    expect(copy.ar.profile.scoreStatus.pending).not.toBe(copy.en.profile.scoreStatus.pending);
   });
 });

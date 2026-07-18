@@ -90,3 +90,25 @@ test('handles malformed historical details and visibly detects stored-total mism
   assert.equal(mismatch.total, 900);
   assert.equal(mismatch.rows[0].points, 500);
 });
+
+test('distinguishes a pending game result from a failed club match', () => {
+  const breakdown = projectWeeklyScoreBreakdown({
+    score: 0,
+    details: {
+      mode: 'per-game',
+      picks: [{
+        gameKey: 'league-of-legends',
+        game: 'League of Legends',
+        event: 'EWC 2026',
+        pick: 'Hanwha Life Esports',
+        matchedClub: null,
+        points: 0,
+        resultAvailable: false,
+      }],
+    },
+  });
+
+  assert.equal(breakdown.rows[0].status, 'pending');
+  assert.equal(breakdown.rows[0].resultAvailable, false);
+  assert.equal(breakdown.integrity, 'ok');
+});

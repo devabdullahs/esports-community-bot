@@ -309,6 +309,14 @@ async function recentFinalizedPerformance(guildId, season, userId) {
   }));
 }
 
+function publicScoreBreakdown(breakdown) {
+  if (!breakdown?.available || breakdown.kind !== 'weekly-per-game') return breakdown;
+  return {
+    ...breakdown,
+    rows: breakdown.rows.filter((row) => row.resultAvailable === true),
+  };
+}
+
 async function overallScoreSources(guildId, season, userId) {
   const round = await getEwcSeason(guildId, season);
   const bestWeeks = Number(round?.best_weeks) > 0 ? Number(round.best_weeks) : 999999;
@@ -331,7 +339,7 @@ async function overallScoreSources(guildId, season, userId) {
       [guildId, season, userId, bestWeeks],
     ),
     get(
-      `SELECT score
+      `SELECT score, details_json
        FROM ewc_season_predictions
        WHERE guild_id = $1 AND season = $2 AND user_id = $3 AND score IS NOT NULL`,
       [guildId, season, userId],
@@ -346,15 +354,24 @@ async function overallScoreSources(guildId, season, userId) {
       kind: 'weekly',
       points: Number(row.score || 0),
       provisional: row.status !== 'scored' || details?.provisional === true,
+      breakdown: publicScoreBreakdown(projectWeeklyScoreBreakdown({
+        score: Number(row.score || 0),
+        details,
+      })),
     };
   });
   if (seasonRow?.score != null) {
+    const details = parseJson(seasonRow.details_json, {});
     sources.push({
       key: `season-${season}`,
       label: `EWC ${season} season prediction`,
       kind: 'season',
       points: Number(seasonRow.score || 0),
       provisional: false,
+      breakdown: projectSeasonScoreBreakdown({
+        score: Number(seasonRow.score || 0),
+        details,
+      }),
     });
   }
   return sources;

@@ -124,12 +124,12 @@ function assertNoPrivateFields(value) {
   }
   if (!value || typeof value !== 'object') return;
   for (const [key, nested] of Object.entries(value)) {
-    assert.doesNotMatch(key, /(?:auth|discord|user.?id|token|session|setting|pick|detail|season)/i);
+    assert.doesNotMatch(key, /(?:auth|discord|user.?id|token|session|setting|details_json|picks_json|secret)/i);
     assertNoPrivateFields(nested);
   }
 }
 
-test('public predictor projection returns only finalized performance and no private fields', async () => {
+test('public predictor projection returns bounded per-game score sources and no private fields', async () => {
   const guildId = '900000000000000503';
   const season = '2026';
   const discordUserId = '200000000000000505';
@@ -140,8 +140,18 @@ test('public predictor projection returns only finalized performance and no priv
   const finalized = await upsertEwcWeek({ guildId, season, weekKey: 'final-week', label: 'Final week', createdBy: 'test' });
   await upsertWeeklyPrediction({ guildId, weekId: finalized.id, userId: discordUserId, picks: ['Private finalized pick'] });
   await saveWeeklyPredictionScore(guildId, finalized.id, discordUserId, 420, {
+    mode: 'per-game',
     bonus: 50,
-    picks: ['Private finalized pick'],
+    picks: [{
+      gameKey: 'valorant',
+      game: 'Valorant',
+      event: 'EWC 2026',
+      pick: 'Team Falcons',
+      matchedClub: 'Team Falcons',
+      place: '2',
+      points: 370,
+      resultAvailable: true,
+    }],
     secretToken: 'do-not-publish',
   });
   await markEwcWeekScored(finalized.id, []);
@@ -149,8 +159,26 @@ test('public predictor projection returns only finalized performance and no priv
   const unscored = await upsertEwcWeek({ guildId, season, weekKey: 'open-week', label: 'Open week', createdBy: 'test' });
   await upsertWeeklyPrediction({ guildId, weekId: unscored.id, userId: discordUserId, picks: ['Pre-lock private pick'] });
   await saveWeeklyPredictionScore(guildId, unscored.id, discordUserId, 900, {
+    mode: 'per-game',
     provisional: true,
-    picks: ['Pre-lock private pick'],
+    picks: [{
+      gameKey: 'free-fire',
+      game: 'Free Fire',
+      event: 'EWC 2026',
+      pick: 'Buriram United Esports',
+      matchedClub: 'Buriram United Esports',
+      place: '1',
+      points: 900,
+      resultAvailable: true,
+    }, {
+      gameKey: 'league-of-legends',
+      game: 'League of Legends',
+      event: 'EWC 2026',
+      pick: 'Secret future club',
+      matchedClub: null,
+      points: 0,
+      resultAvailable: false,
+    }],
   });
 
   const board = await getPublicEwcLeaderboard({ guildId, season });
@@ -173,16 +201,29 @@ test('public predictor projection returns only finalized performance and no priv
   assert.deepEqual(profile?.recentFinalizedResults, [
     { weekKey: 'final-week', label: 'Final week', score: 420, bonus: 50, rank: 1, winner: true },
   ]);
-  assert.deepEqual(profile?.scoreSources, [
+  assert.deepEqual(profile?.scoreSources.map(({ breakdown, ...source }) => source), [
     { key: 'open-week', label: 'Open week', kind: 'weekly', points: 900, provisional: true },
     { key: 'final-week', label: 'Final week', kind: 'weekly', points: 420, provisional: false },
   ]);
+  assert.deepEqual(profile?.scoreSources[0]?.breakdown?.rows, [{
+    game: 'Free Fire — EWC 2026',
+    pick: 'Buriram United Esports',
+    matchedClub: 'Buriram United Esports',
+    placement: '1',
+    points: 900,
+    winner: null,
+    resultAvailable: true,
+    status: 'scored',
+  }]);
+  assert.equal(profile?.scoreSources[0]?.breakdown?.integrity, 'ok');
+  assert.equal(profile?.scoreSources[1]?.breakdown?.rows[0]?.game, 'Valorant — EWC 2026');
+  assert.equal(profile?.scoreSources[1]?.breakdown?.bonus, 50);
   assert.equal(profile?.points, 1320);
   assert.equal(profile?.scoreSources.reduce((sum, source) => sum + source.points, 0), profile?.points);
   assertNoPrivateFields(profile);
 
   const serialized = JSON.stringify(profile);
-  for (const hiddenValue of [discordUserId, authUserId, 'Private finalized pick', 'Pre-lock private pick', 'do-not-publish']) {
+  for (const hiddenValue of [discordUserId, authUserId, 'Private finalized pick', 'Pre-lock private pick', 'Secret future club', 'do-not-publish']) {
     assert.equal(serialized.includes(hiddenValue), false);
   }
 
