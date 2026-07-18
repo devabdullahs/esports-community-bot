@@ -490,7 +490,7 @@ async function renderMatchResult(input) {
 async function renderStandings(input) {
   const base = createBase(input);
   const { canvas, ctx, width, height, theme, pad } = base;
-  const entries = Array.isArray(input.entries) ? input.entries.slice(0, 6) : [];
+  const entries = Array.isArray(input.entries) ? input.entries.slice(0, 12) : [];
   const logos = await Promise.all(entries.map((entry) => loadLogoImage(entry.logo)));
   const align = contentAlignment(input, width, pad);
   const titleTop = height * 0.09;

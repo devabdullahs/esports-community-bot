@@ -5,6 +5,7 @@ import { sameOriginOr403 } from "@/lib/community";
 import {
   canManageGraphicsOwner,
   renderGraphics,
+  resolveCustomGraphicsRenderRequest,
   resolveGraphicsRenderRequest,
 } from "@/lib/graphics-generator";
 import { parseGraphicsRenderRequest } from "@/lib/graphics-generator-model";
@@ -19,7 +20,7 @@ const CACHE_CONTROL = "private, no-store";
 // The workspace auto-renders the preview (debounced) as controls change, so
 // the budget covers an active editing session, not just explicit exports.
 const RATE_LIMIT = { limit: 60, windowSec: 600 };
-const MAX_BODY_BYTES = 4 * 1024;
+const MAX_BODY_BYTES = 32 * 1024;
 
 function privateJson(body: unknown, status: number) {
   return NextResponse.json(body, { status, headers: { "Cache-Control": CACHE_CONTROL } });
@@ -28,6 +29,17 @@ function privateJson(body: unknown, status: number) {
 function privateResponse(response: NextResponse) {
   response.headers.set("Cache-Control", CACHE_CONTROL);
   return response;
+}
+
+function customAssetUrls(parsed: ReturnType<typeof parseGraphicsRenderRequest>): string[] {
+  if (!parsed || parsed.sourceMode !== "custom") return [];
+  if (parsed.template === "match-result") {
+    return [parsed.data.logoA, parsed.data.logoB].filter((value): value is string => Boolean(value));
+  }
+  if (parsed.template === "standings") {
+    return parsed.data.entries.map((entry) => entry.logo).filter((value): value is string => Boolean(value));
+  }
+  return [];
 }
 
 export async function POST(request: Request) {
@@ -66,25 +78,33 @@ export async function POST(request: Request) {
     }
   }
 
-  const resolved = await resolveGraphicsRenderRequest(parsed);
+  if (customAssetUrls(parsed).some((url) => !isManagedR2Url(url, "graphics-assets/"))) {
+    return privateJson({ error: "Invalid custom graphics asset" }, 400);
+  }
+
+  const resolved = parsed.sourceMode === "custom"
+    ? await resolveCustomGraphicsRenderRequest(parsed)
+    : await resolveGraphicsRenderRequest(parsed);
   if (!resolved) return privateJson({ error: "Graphics source not found" }, 404);
-  if (!canManageGraphicsOwner(access, resolved.owner)) {
+  if (resolved.owner && !canManageGraphicsOwner(access, resolved.owner)) {
     return privateJson({ error: "You are not assigned to this source" }, 403);
   }
 
   try {
     const image = await renderGraphics(resolved);
-    recordAdminAudit(access, "graphics.render", `${parsed.template}:${resolved.target.id}`, {
+    const auditTarget = resolved.target.id === null ? `${parsed.template}:custom` : `${parsed.template}:${resolved.target.id}`;
+    recordAdminAudit(access, "graphics.render", auditTarget, {
       template: parsed.template,
-      ownerType: resolved.owner.kind,
-      ownerSlug: resolved.owner.slug,
+      sourceMode: parsed.sourceMode,
+      ownerType: resolved.owner?.kind ?? "custom",
+      ownerSlug: resolved.owner?.slug ?? null,
       brandMediaSlug: parsed.brandMediaSlug,
       customBrand: Boolean(parsed.brandAssetUrl),
     });
     return new NextResponse(new Uint8Array(image), {
       headers: {
         "Cache-Control": CACHE_CONTROL,
-        "Content-Disposition": `attachment; filename="graphics-${parsed.template}-${resolved.target.id}.png"`,
+        "Content-Disposition": `attachment; filename="graphics-${parsed.template}-${resolved.target.id ?? "custom"}.png"`,
         "Content-Type": "image/png",
       },
     });

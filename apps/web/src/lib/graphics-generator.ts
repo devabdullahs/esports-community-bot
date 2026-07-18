@@ -14,6 +14,8 @@ import {
   type GraphicsOwner,
   type GraphicsRenderRequest,
   type GraphicsRenderOptions,
+  type CustomGraphicsRenderRequest,
+  type StoredGraphicsRenderRequest,
 } from "@/lib/graphics-generator-model";
 
 type RenderOptions = GraphicsRenderOptions & {
@@ -62,7 +64,23 @@ type NewsGraphic = {
   };
 };
 
-export type ResolvedGraphicsRender = MatchGraphic | StandingsGraphic | NewsGraphic;
+type CustomMatchGraphic = Omit<MatchGraphic, "owner" | "target"> & {
+  owner: null;
+  target: { id: null; label: string };
+};
+
+type CustomStandingsGraphic = Omit<StandingsGraphic, "owner" | "target"> & {
+  owner: null;
+  target: { id: null; label: string };
+};
+
+type CustomNewsGraphic = Omit<NewsGraphic, "owner" | "target"> & {
+  owner: null;
+  target: { id: null; label: string };
+};
+
+export type ResolvedGraphicsRender = MatchGraphic | StandingsGraphic | NewsGraphic
+  | CustomMatchGraphic | CustomStandingsGraphic | CustomNewsGraphic;
 
 type StandingsRow = {
   section: string;
@@ -117,9 +135,9 @@ function uniqueStandingsRows(rows: StandingsRow[], sectionTitle: string): Standi
   });
 }
 
-async function resolveBrandLogo(request: GraphicsRenderRequest, owner: GraphicsOwner): Promise<string | null> {
+async function resolveBrandLogo(request: GraphicsRenderRequest, owner: GraphicsOwner | null): Promise<string | null> {
   if (request.brandAssetUrl) return canonicalPublicAssetUrl(request.brandAssetUrl);
-  const slug = request.brandMediaSlug || (owner.kind === "media" ? owner.slug : null);
+  const slug = request.brandMediaSlug || (owner?.kind === "media" ? owner.slug : null);
   if (!slug) return null;
   const logoUrl = (await getMediaChannel(slug))?.logoUrl;
   return logoUrl ? canonicalPublicAssetUrl(logoUrl) : null;
@@ -229,7 +247,7 @@ export async function listGraphicsGeneratorData(access: AdminAccess): Promise<Gr
 }
 
 export async function resolveGraphicsRenderRequest(
-  request: GraphicsRenderRequest,
+  request: StoredGraphicsRenderRequest,
 ): Promise<ResolvedGraphicsRender | null> {
   const guildId = await resolveDefaultGuildId();
   if (!guildId) return null;
@@ -345,6 +363,80 @@ export async function resolveGraphicsRenderRequest(
       owner: owner.slug,
       title: cleanText(post.title, "Community update", 150),
       summary: cleanText(post.summary, "", 220),
+    },
+  };
+}
+
+export async function resolveCustomGraphicsRenderRequest(
+  request: CustomGraphicsRenderRequest,
+): Promise<ResolvedGraphicsRender> {
+  const options: GraphicsRenderOptions = {
+    format: request.format,
+    language: request.language,
+    alignment: request.alignment,
+    style: request.style,
+    scale: request.scale,
+    brandPlacement: request.brandPlacement,
+    brandX: request.brandX,
+    brandY: request.brandY,
+    brandSize: request.brandSize,
+    brandMediaSlug: request.brandMediaSlug,
+    brandAssetUrl: request.brandAssetUrl,
+  };
+  const brandLogo = await resolveBrandLogo(request, null);
+
+  if (request.template === "match-result") {
+    return {
+      template: request.template,
+      owner: null,
+      target: { id: null, label: request.data.tournament },
+      input: {
+        ...options,
+        brandLogo,
+        template: request.template,
+        tournament: request.data.tournament,
+        game: request.data.game,
+        teamA: request.data.teamA,
+        teamB: request.data.teamB,
+        logoA: request.data.logoA ? canonicalPublicAssetUrl(request.data.logoA) : null,
+        logoB: request.data.logoB ? canonicalPublicAssetUrl(request.data.logoB) : null,
+        scoreA: request.data.scoreMode === "score" ? request.data.scoreA : null,
+        scoreB: request.data.scoreMode === "score" ? request.data.scoreB : null,
+        status: request.data.status,
+      },
+    };
+  }
+
+  if (request.template === "standings") {
+    return {
+      template: request.template,
+      owner: null,
+      target: { id: null, label: request.data.tournament },
+      input: {
+        ...options,
+        brandLogo,
+        template: request.template,
+        tournament: request.data.tournament,
+        section: request.data.section,
+        entries: request.data.entries.map((entry) => ({
+          ...entry,
+          logo: entry.logo ? canonicalPublicAssetUrl(entry.logo) : null,
+        })),
+      },
+    };
+  }
+
+  return {
+    template: request.template,
+    owner: null,
+    target: { id: null, label: request.data.title },
+    input: {
+      ...options,
+      brandLogo,
+      template: request.template,
+      owner: request.data.owner,
+      title: request.data.title,
+      summary: request.data.summary,
     },
   };
 }

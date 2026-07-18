@@ -101,10 +101,62 @@ export type GraphicsRenderOptions = {
   brandAssetUrl: string | null;
 };
 
-export type GraphicsRenderRequest = GraphicsRenderOptions & {
+export type CustomMatchGraphicInput = {
+  tournament: string;
+  game: string;
+  teamA: string;
+  teamB: string;
+  logoA: string | null;
+  logoB: string | null;
+  scoreMode: "versus" | "score";
+  scoreA: number | null;
+  scoreB: number | null;
+  status: "live" | "finished" | "upcoming";
+};
+
+export type CustomStandingsEntry = {
+  rank: number;
+  team: string;
+  logo: string | null;
+  points: string;
+  extra: string;
+};
+
+export type CustomStandingsGraphicInput = {
+  tournament: string;
+  section: string;
+  entries: CustomStandingsEntry[];
+};
+
+export type CustomNewsGraphicInput = {
+  owner: string;
+  title: string;
+  summary: string;
+};
+
+export type CustomGraphicsInputMap = {
+  "match-result": CustomMatchGraphicInput;
+  standings: CustomStandingsGraphicInput;
+  "news-promo": CustomNewsGraphicInput;
+};
+
+export type CustomGraphicsInput =
+  | { template: "match-result"; data: CustomMatchGraphicInput }
+  | { template: "standings"; data: CustomStandingsGraphicInput }
+  | { template: "news-promo"; data: CustomNewsGraphicInput };
+
+export type StoredGraphicsRenderRequest = GraphicsRenderOptions & {
+  sourceMode: "stored";
   template: GraphicsTemplateId;
   resourceId: number;
 };
+
+export type CustomGraphicsRenderRequest = GraphicsRenderOptions & {
+  sourceMode: "custom";
+  resourceId: null;
+} & CustomGraphicsInput;
+
+export type GraphicsRenderRequest = StoredGraphicsRenderRequest | CustomGraphicsRenderRequest;
 
 export const DEFAULT_GRAPHICS_RENDER_OPTIONS: GraphicsRenderOptions = {
   format: "16:9",
@@ -120,6 +172,35 @@ export const DEFAULT_GRAPHICS_RENDER_OPTIONS: GraphicsRenderOptions = {
   brandAssetUrl: null,
 };
 
+export const DEFAULT_CUSTOM_GRAPHICS_INPUTS: CustomGraphicsInputMap = {
+  "match-result": {
+    tournament: "Tournament name",
+    game: "Esports",
+    teamA: "Team Alpha",
+    teamB: "Team Bravo",
+    logoA: null,
+    logoB: null,
+    scoreMode: "versus",
+    scoreA: null,
+    scoreB: null,
+    status: "upcoming",
+  },
+  standings: {
+    tournament: "Tournament name",
+    section: "Final standings",
+    entries: [
+      { rank: 1, team: "Team Alpha", logo: null, points: "100", extra: "" },
+      { rank: 2, team: "Team Bravo", logo: null, points: "82", extra: "" },
+      { rank: 3, team: "Team Charlie", logo: null, points: "71", extra: "" },
+    ],
+  },
+  "news-promo": {
+    owner: "Community",
+    title: "Your headline goes here",
+    summary: "Add a concise summary for the announcement.",
+  },
+};
+
 function includesValue<T>(values: readonly T[], value: unknown): value is T {
   return values.includes(value as T);
 }
@@ -128,6 +209,88 @@ function boundedNumber(value: unknown, min: number, max: number): number | null 
   if (typeof value !== "number" || !Number.isFinite(value)) return null;
   if (value < min || value > max) return null;
   return Math.round(value * 10) / 10;
+}
+
+function boundedText(value: unknown, maxLength: number, required = true): string | null {
+  if (typeof value !== "string") return null;
+  const text = value.replace(/\s+/g, " ").trim();
+  if ((required && !text) || text.length > maxLength) return null;
+  return text;
+}
+
+function optionalHttpsUrl(value: unknown): string | null | undefined {
+  if (value == null || value === "") return null;
+  if (typeof value !== "string" || value.length > 1024) return undefined;
+  try {
+    const url = new URL(value.trim());
+    return url.protocol === "https:" ? url.toString() : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function parseCustomInput(template: GraphicsTemplateId, body: Record<string, unknown>): CustomGraphicsInput | null {
+  const raw = body.data;
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
+  const data = raw as Record<string, unknown>;
+
+  if (template === "match-result") {
+    const tournament = boundedText(data.tournament, 260);
+    const game = boundedText(data.game, 80);
+    const teamA = boundedText(data.teamA, 80);
+    const teamB = boundedText(data.teamB, 80);
+    const logoA = optionalHttpsUrl(data.logoA);
+    const logoB = optionalHttpsUrl(data.logoB);
+    const scoreMode = data.scoreMode;
+    const status = data.status;
+    const scoreA = data.scoreA == null ? null : boundedNumber(data.scoreA, 0, 999);
+    const scoreB = data.scoreB == null ? null : boundedNumber(data.scoreB, 0, 999);
+    if (!tournament || !game || !teamA || !teamB || logoA === undefined || logoB === undefined) return null;
+    if (!includesValue(["versus", "score"] as const, scoreMode)) return null;
+    if (!includesValue(["live", "finished", "upcoming"] as const, status)) return null;
+    if (scoreMode === "score" && (scoreA === null || scoreB === null)) return null;
+    return {
+      template,
+      data: {
+        tournament,
+        game,
+        teamA,
+        teamB,
+        logoA,
+        logoB,
+        scoreMode,
+        scoreA: scoreMode === "score" ? scoreA : null,
+        scoreB: scoreMode === "score" ? scoreB : null,
+        status,
+      },
+    };
+  }
+
+  if (template === "standings") {
+    const tournament = boundedText(data.tournament, 260);
+    const section = boundedText(data.section, 100);
+    if (!tournament || !section || !Array.isArray(data.entries) || data.entries.length < 1 || data.entries.length > 12) return null;
+    const entries: CustomStandingsEntry[] = [];
+    for (const rawEntry of data.entries) {
+      if (!rawEntry || typeof rawEntry !== "object" || Array.isArray(rawEntry)) return null;
+      const entry = rawEntry as Record<string, unknown>;
+      const rank = boundedNumber(entry.rank, 1, 999);
+      const team = boundedText(entry.team, 80);
+      const logo = optionalHttpsUrl(entry.logo);
+      const points = boundedText(entry.points, 32, false);
+      const extra = boundedText(entry.extra, 32, false);
+      if (rank === null || !team || logo === undefined || points === null || extra === null) return null;
+      entries.push({ rank: Math.round(rank), team, logo, points, extra });
+    }
+    return { template, data: { tournament, section, entries } };
+  }
+
+  const owner = boundedText(data.owner, 80);
+  const title = boundedText(data.title, 220);
+  const summary = boundedText(data.summary, 360, false);
+  return owner && title && summary !== null
+    ? { template, data: { owner, title, summary } }
+    : null;
 }
 
 export function isGraphicsTemplateId(value: unknown): value is GraphicsTemplateId {
@@ -146,13 +309,7 @@ export function parseGraphicsRenderRequest(value: unknown): GraphicsRenderReques
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
   const body = value as Record<string, unknown>;
   if (!isGraphicsTemplateId(body.template)) return null;
-  if (
-    typeof body.resourceId !== "number" ||
-    !Number.isSafeInteger(body.resourceId) ||
-    body.resourceId < 1
-  ) {
-    return null;
-  }
+  const sourceMode = body.sourceMode === "custom" ? "custom" : "stored";
 
   const format = body.format ?? DEFAULT_GRAPHICS_RENDER_OPTIONS.format;
   const language = body.language ?? DEFAULT_GRAPHICS_RENDER_OPTIONS.language;
@@ -192,9 +349,7 @@ export function parseGraphicsRenderRequest(value: unknown): GraphicsRenderReques
     }
   }
 
-  return {
-    template: body.template,
-    resourceId: body.resourceId,
+  const common = {
     format,
     language,
     alignment,
@@ -207,6 +362,21 @@ export function parseGraphicsRenderRequest(value: unknown): GraphicsRenderReques
     brandMediaSlug,
     brandAssetUrl,
   };
+
+  if (sourceMode === "custom") {
+    const custom = parseCustomInput(body.template, body);
+    if (!custom) return null;
+    return { ...common, sourceMode, resourceId: null, ...custom };
+  }
+
+  if (
+    typeof body.resourceId !== "number" ||
+    !Number.isSafeInteger(body.resourceId) ||
+    body.resourceId < 1
+  ) {
+    return null;
+  }
+  return { ...common, sourceMode, template: body.template, resourceId: body.resourceId };
 }
 
 export function graphicsOptionsForTemplate(

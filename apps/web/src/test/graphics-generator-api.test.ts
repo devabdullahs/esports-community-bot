@@ -14,6 +14,7 @@ vi.mock("@/lib/graphics-generator", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/graphics-generator")>();
   return {
     ...actual,
+    resolveCustomGraphicsRenderRequest: vi.fn(),
     resolveGraphicsRenderRequest: vi.fn(),
     renderGraphics: vi.fn(),
   };
@@ -21,7 +22,7 @@ vi.mock("@/lib/graphics-generator", async (importOriginal) => {
 
 import { getAdminAccess } from "@/lib/admin";
 import { recordAdminAudit } from "@/lib/audit";
-import { renderGraphics, resolveGraphicsRenderRequest } from "@/lib/graphics-generator";
+import { renderGraphics, resolveCustomGraphicsRenderRequest, resolveGraphicsRenderRequest } from "@/lib/graphics-generator";
 import { rateLimitOr429 } from "@/lib/rate-limit";
 import { isManagedR2Url } from "@/lib/r2";
 import { POST } from "@/app/api/admin/graphics/route";
@@ -29,6 +30,7 @@ import { POST } from "@/app/api/admin/graphics/route";
 const mockAccess = vi.mocked(getAdminAccess);
 const mockRender = vi.mocked(renderGraphics);
 const mockResolve = vi.mocked(resolveGraphicsRenderRequest);
+const mockResolveCustom = vi.mocked(resolveCustomGraphicsRenderRequest);
 const mockRateLimit = vi.mocked(rateLimitOr429);
 const mockAudit = vi.mocked(recordAdminAudit);
 const mockManagedR2Url = vi.mocked(isManagedR2Url);
@@ -143,8 +145,64 @@ describe("admin graphics render API", () => {
       gamesAdmin(["valorant"]),
       "graphics.render",
       "match-result:77",
-      { template: "match-result", ownerType: "game", ownerSlug: "valorant", brandMediaSlug: null, customBrand: false },
+      { template: "match-result", sourceMode: "stored", ownerType: "game", ownerSlug: "valorant", brandMediaSlug: null, customBrand: false },
     );
+  });
+
+  test("renders bounded custom data without requiring a stored source", async () => {
+    const custom = { ...canonicalMatch, owner: null, target: { id: null, label: "Community cup" } } as never;
+    mockResolveCustom.mockResolvedValue(custom);
+    const response = await POST(request({
+      sourceMode: "custom",
+      template: "match-result",
+      data: {
+        tournament: "Community cup",
+        game: "Valorant",
+        teamA: "Alpha",
+        teamB: "Bravo",
+        logoA: null,
+        logoB: null,
+        scoreMode: "versus",
+        scoreA: null,
+        scoreB: null,
+        status: "upcoming",
+      },
+    }));
+
+    expect(response.status).toBe(200);
+    expect(mockResolve).not.toHaveBeenCalled();
+    expect(mockResolveCustom).toHaveBeenCalledOnce();
+    expect(response.headers.get("content-disposition")).toContain("graphics-match-result-custom.png");
+    expect(mockAudit).toHaveBeenCalledWith(
+      gamesAdmin(["valorant"]),
+      "graphics.render",
+      "match-result:custom",
+      expect.objectContaining({ sourceMode: "custom", ownerType: "custom", ownerSlug: null }),
+    );
+  });
+
+  test("rejects custom team logos outside managed graphics assets", async () => {
+    const response = await POST(request({
+      sourceMode: "custom",
+      template: "match-result",
+      data: {
+        tournament: "Community cup",
+        game: "Valorant",
+        teamA: "Alpha",
+        teamB: "Bravo",
+        logoA: "https://untrusted.example/logo.png",
+        logoB: null,
+        scoreMode: "versus",
+        scoreA: null,
+        scoreB: null,
+        status: "upcoming",
+      },
+    }));
+
+    expect(response.status).toBe(400);
+    expect(mockManagedR2Url).toHaveBeenCalledWith("https://untrusted.example/logo.png", "graphics-assets/");
+    expect(mockResolveCustom).not.toHaveBeenCalled();
+    expect(mockRender).not.toHaveBeenCalled();
   });
 
   test("enforces a per-admin render limit before canvas work", async () => {
@@ -166,7 +224,7 @@ describe("admin graphics render API", () => {
     const response = await POST(request({
       template: "match-result",
       resourceId: 77,
-      padding: "x".repeat(5 * 1024),
+      padding: "x".repeat(40 * 1024),
     }));
     expect(response.status).toBe(413);
     expect(response.headers.get("cache-control")).toBe("private, no-store");
