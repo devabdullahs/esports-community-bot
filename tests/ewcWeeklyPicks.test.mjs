@@ -275,6 +275,64 @@ test('standings (curated field) replace match teams so qualifier brackets stay o
   assert.ok(!teams.includes('Random LCQ Entrant'), 'LCQ bracket entrants are not options');
 });
 
+test('EA SPORTS FC World Championship choices exclude Play-Ins and LCQ entrants', async () => {
+  const worldChampionship = await addTournament({
+    source: 'liquipedia',
+    external_id: 'easportsfc/FC_Pro_26/World_Championship',
+    game: 'easportsfc',
+    name: 'FC Pro 26 World Championship at Esports World Cup 2026',
+    url: 'https://liquipedia.net/easportsfc/FC_Pro_26/World_Championship',
+    guild_id: 'g-ewc',
+    added_by: 'admin',
+  });
+  await updateTournamentEwc(worldChampionship.id, true);
+  await replaceTournamentStandings(worldChampionship.id, [
+    {
+      title: '8 players from FC Pro Open',
+      entries: [
+        { rank: 1, team: 'Danipitbull' },
+        { rank: 2, team: 'EmreYilmaz' },
+      ],
+    },
+    {
+      title: '10 players from Play-Ins',
+      entries: [
+        { rank: 1, team: 'Adida' },
+        { rank: 2, team: 'Obrun2002' },
+      ],
+    },
+  ]);
+
+  const lcq = await addTournament({
+    source: 'startgg',
+    external_id: 'fc-pro-last-chance-qualifier-at-2026-esports-world-cup',
+    game: 'easportsfc',
+    name: 'FC Pro Last Chance Qualifier at 2026 Esports World Cup',
+    url: 'https://www.start.gg/tournament/fc-pro-last-chance-qualifier-at-2026-esports-world-cup/event/fc-pro-last-chance-qualifier-at-2026-esports-world-cup',
+    guild_id: 'g-ewc',
+    added_by: 'admin',
+  });
+  await upsertMatch({
+    tournament_id: lcq.id,
+    source: 'startgg',
+    external_id: 'sgg:fc-lcq:1',
+    team_a: 'Random LCQ Entrant',
+    team_b: 'Another LCQ Entrant',
+    status: 'finished',
+    scheduled_at: 1783687200,
+  });
+
+  const teams = await ewcGameParticipantTeams('EA SPORTS FC 26', {
+    guildId: 'g-ewc',
+    eventName: 'FC Pro 26 World Championship',
+    eventUrl: 'https://liquipedia.net/esports/FC_Pro_World_Championship',
+  });
+
+  assert.deepEqual(teams, ['Danipitbull', 'EmreYilmaz', 'Adida', 'Obrun2002']);
+  assert.ok(!teams.includes('Random LCQ Entrant'));
+  assert.ok(!teams.includes('Another LCQ Entrant'));
+});
+
 test('version-suffixed schedule game names resolve to tracked slugs', async () => {
   // The EWC calendar names games "Counter-Strike 2" / "Overwatch 2" / "Rainbow
   // Six Siege" — shapes our registry lacks; the tolerant resolver must map them.

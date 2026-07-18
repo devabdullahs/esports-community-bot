@@ -42,8 +42,12 @@ function nonEmptyPicks(picks) {
   return (picks || []).filter((pick) => typeof pick === 'string' && pick.trim());
 }
 
-async function canonicalWeeklyPick(rawPick, game, resolvers) {
-  const participants = await resolvers.participants(game.game, { eventUrl: game.eventUrl });
+async function canonicalWeeklyPick(rawPick, game, guildId, resolvers) {
+  const participants = await resolvers.participants(game.game, {
+    eventUrl: game.eventUrl,
+    eventName: game.event,
+    guildId,
+  });
   const { matchParticipant } = await import('./ewcGameTeams.js');
   const participant = matchParticipant(rawPick, participants);
   if (participant) return result(true, 'ok', '', { pick: participant });
@@ -85,7 +89,7 @@ export async function submitWeeklyGamePick({
 
   // Club/participant resolution may refresh cached Liquipedia data, so it must finish
   // before the short transaction that revalidates the trusted submission time.
-  const canonical = await canonicalWeeklyPick(rawPick, initialGame, resolvers || await defaultResolvers());
+  const canonical = await canonicalWeeklyPick(rawPick, initialGame, guildId, resolvers || await defaultResolvers());
   if (!canonical.ok) return canonical;
 
   return transaction(async (client) => {
