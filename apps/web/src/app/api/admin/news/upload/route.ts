@@ -5,6 +5,9 @@ import { recordAdminAudit } from "@/lib/audit";
 import { sameOriginOr403 } from "@/lib/community";
 import { rateLimitOr429 } from "@/lib/rate-limit";
 import { isR2Configured, uploadToR2 } from "@/lib/r2";
+import { matchesMagicBytes } from "@/lib/image-upload";
+
+export { matchesMagicBytes } from "@/lib/image-upload";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -19,61 +22,6 @@ const ALLOWED_TYPES: Record<string, string> = {
 };
 
 const MAX_BYTES = 8 * 1024 * 1024; // 8 MB
-
-function isBrand(bytes: Uint8Array, offset: number, brand: string): boolean {
-  return (
-    bytes[offset] === brand.charCodeAt(0) &&
-    bytes[offset + 1] === brand.charCodeAt(1) &&
-    bytes[offset + 2] === brand.charCodeAt(2) &&
-    bytes[offset + 3] === brand.charCodeAt(3)
-  );
-}
-
-function isAvifBrand(bytes: Uint8Array, offset: number): boolean {
-  return isBrand(bytes, offset, "avif") || isBrand(bytes, offset, "avis");
-}
-
-export function matchesMagicBytes(bytes: Uint8Array, mimeType: string): boolean {
-  if (bytes.length < 12) return false;
-  switch (mimeType) {
-    case "image/png":
-      // 89 50 4E 47
-      return bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4e && bytes[3] === 0x47;
-    case "image/jpeg":
-      // FF D8 FF
-      return bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff;
-    case "image/gif":
-      // 47 49 46 38
-      return bytes[0] === 0x47 && bytes[1] === 0x49 && bytes[2] === 0x46 && bytes[3] === 0x38;
-    case "image/webp":
-      // RIFF at 0 + WEBP at offset 8
-      return (
-        bytes[0] === 0x52 &&
-        bytes[1] === 0x49 &&
-        bytes[2] === 0x46 &&
-        bytes[3] === 0x46 &&
-        bytes[8] === 0x57 &&
-        bytes[9] === 0x45 &&
-        bytes[10] === 0x42 &&
-        bytes[11] === 0x50
-      );
-    case "image/avif":
-      // ISO-BMFF files share "ftyp"; AVIF must declare avif/avis as the
-      // major brand or one of the compatible brands in that box.
-      if (!isBrand(bytes, 4, "ftyp")) return false;
-      if (isAvifBrand(bytes, 8)) return true;
-      if (bytes.length < 16) return false;
-      const declaredBoxSize = ((bytes[0] << 24) | (bytes[1] << 16) | (bytes[2] << 8) | bytes[3]) >>> 0;
-      const brandEnd =
-        declaredBoxSize >= 16 && declaredBoxSize <= bytes.length ? declaredBoxSize : bytes.length;
-      for (let offset = 16; offset + 3 < brandEnd; offset += 4) {
-        if (isAvifBrand(bytes, offset)) return true;
-      }
-      return false;
-    default:
-      return false;
-  }
-}
 
 export async function POST(request: Request) {
   const origin = sameOriginOr403(request);

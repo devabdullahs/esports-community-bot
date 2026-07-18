@@ -118,6 +118,7 @@ function uniqueStandingsRows(rows: StandingsRow[], sectionTitle: string): Standi
 }
 
 async function resolveBrandLogo(request: GraphicsRenderRequest, owner: GraphicsOwner): Promise<string | null> {
+  if (request.brandAssetUrl) return canonicalPublicAssetUrl(request.brandAssetUrl);
   const slug = request.brandMediaSlug || (owner.kind === "media" ? owner.slug : null);
   if (!slug) return null;
   const logoUrl = (await getMediaChannel(slug))?.logoUrl;
@@ -243,6 +244,7 @@ export async function resolveGraphicsRenderRequest(
     brandY: request.brandY,
     brandSize: request.brandSize,
     brandMediaSlug: request.brandMediaSlug,
+    brandAssetUrl: request.brandAssetUrl,
   };
 
   if (request.template === "match-result") {
@@ -334,7 +336,9 @@ export async function resolveGraphicsRenderRequest(
     target: { id: post.id, label: cleanText(post.title, "Untitled post", 100) },
     input: {
       ...options,
-      brandLogo: request.brandMediaSlug
+      brandLogo: request.brandAssetUrl
+        ? canonicalPublicAssetUrl(request.brandAssetUrl)
+        : request.brandMediaSlug
         ? await resolveBrandLogo(request, owner)
         : mediaChannel?.logoUrl ?? null,
       template: "news-promo",

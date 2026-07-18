@@ -10,6 +10,7 @@ import {
 import { parseGraphicsRenderRequest } from "@/lib/graphics-generator-model";
 import { rateLimitOr429 } from "@/lib/rate-limit";
 import { readBoundedJson } from "@/lib/request-body";
+import { isManagedR2Url } from "@/lib/r2";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -55,6 +56,15 @@ export async function POST(request: Request) {
   if (parsed.brandMediaSlug && !canManageMedia(access, parsed.brandMediaSlug)) {
     return privateJson({ error: "You are not assigned to this media channel" }, 403);
   }
+  if (parsed.brandAssetUrl) {
+    const canUseCustomBrand = access.isSuper || access.media === "ALL" || access.media.length > 0;
+    if (!canUseCustomBrand) {
+      return privateJson({ error: "Custom branding is limited to assigned media channels" }, 403);
+    }
+    if (!isManagedR2Url(parsed.brandAssetUrl, "graphics-branding/")) {
+      return privateJson({ error: "Invalid custom branding asset" }, 400);
+    }
+  }
 
   const resolved = await resolveGraphicsRenderRequest(parsed);
   if (!resolved) return privateJson({ error: "Graphics source not found" }, 404);
@@ -69,6 +79,7 @@ export async function POST(request: Request) {
       ownerType: resolved.owner.kind,
       ownerSlug: resolved.owner.slug,
       brandMediaSlug: parsed.brandMediaSlug,
+      customBrand: Boolean(parsed.brandAssetUrl),
     });
     return new NextResponse(new Uint8Array(image), {
       headers: {

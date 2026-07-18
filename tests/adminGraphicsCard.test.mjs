@@ -83,6 +83,27 @@ test('Arabic language renders the mirrored RTL match layout', async () => {
   assert.deepEqual([...image.subarray(0, 8)], [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
 });
 
+test('long tournament names wrap into the title zone without changing the canvas size', async () => {
+  const image = await renderAdminGraphic({
+    template: 'match-result',
+    tournament: 'Overwatch Champions Series 2026 - Korea Stage Two Regular Season Championship Finals',
+    game: 'Overwatch 2',
+    teamA: 'Team Falcons',
+    teamB: 'Crazy Raccoon',
+    scoreA: 3,
+    scoreB: 2,
+    format: '16:9',
+    language: 'en',
+    alignment: 'center',
+    style: 'ewc-teal',
+    scale: 1,
+  });
+  const decoded = await loadImage(image);
+  assert.equal(decoded.width, 1920);
+  assert.equal(decoded.height, 1080);
+  assert.ok(image.length > 10_000);
+});
+
 test('media branding is composited into the exported PNG above card content', async () => {
   const logoCanvas = createCanvas(80, 40);
   const logoContext = logoCanvas.getContext('2d');

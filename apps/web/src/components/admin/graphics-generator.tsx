@@ -20,6 +20,8 @@ import {
   RefreshCwIcon,
   SearchIcon,
   SparklesIcon,
+  UploadIcon,
+  XIcon,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -125,6 +127,9 @@ export function GraphicsGenerator({ data }: { data: GraphicsGeneratorData }) {
   const [brandY, setBrandY] = useState(DEFAULT_GRAPHICS_RENDER_OPTIONS.brandY);
   const [brandSize, setBrandSize] = useState(DEFAULT_GRAPHICS_RENDER_OPTIONS.brandSize);
   const [brandMediaSlug, setBrandMediaSlug] = useState<string | null>(DEFAULT_GRAPHICS_RENDER_OPTIONS.brandMediaSlug);
+  const [brandAssetUrl, setBrandAssetUrl] = useState<string | null>(DEFAULT_GRAPHICS_RENDER_OPTIONS.brandAssetUrl);
+  const [brandAssetName, setBrandAssetName] = useState("");
+  const [brandUploading, setBrandUploading] = useState(false);
   const [zoom, setZoom] = useState(100);
   const [safeArea, setSafeArea] = useState(true);
   const [showGrid, setShowGrid] = useState(false);
@@ -137,6 +142,7 @@ export function GraphicsGenerator({ data }: { data: GraphicsGeneratorData }) {
   const [renderedAt, setRenderedAt] = useState<number | null>(null);
   const workspaceRef = useRef<HTMLDivElement>(null);
   const searchRef = useRef<HTMLInputElement>(null);
+  const brandFileRef = useRef<HTMLInputElement>(null);
   const abortRef = useRef<AbortController | null>(null);
   const objectUrls = useRef(new Set<string>());
   const recentRef = useRef<RecentGeneration[]>([]);
@@ -149,13 +155,16 @@ export function GraphicsGenerator({ data }: { data: GraphicsGeneratorData }) {
     return options.filter((option) => `${option.label} ${option.detail}`.toLocaleLowerCase().includes(needle));
   }, [options, query]);
   const dimensions = graphicsFormatDimensions(format);
-  const selectedBrand = useMemo(
+  const channelBrand = useMemo(
     () => data.brands.find((brand) => brand.slug === brandMediaSlug) ?? null,
     [brandMediaSlug, data.brands],
   );
+  const selectedBrand = brandAssetUrl
+    ? { slug: "custom", label: brandAssetName || "Custom branding", logoUrl: brandAssetUrl }
+    : channelBrand;
   const renderOptions = useMemo<GraphicsRenderOptions>(() => ({
-    format, language, alignment, style, scale, brandPlacement, brandX, brandY, brandSize, brandMediaSlug,
-  }), [alignment, brandMediaSlug, brandPlacement, brandSize, brandX, brandY, format, language, scale, style]);
+    format, language, alignment, style, scale, brandPlacement, brandX, brandY, brandSize, brandMediaSlug, brandAssetUrl,
+  }), [alignment, brandAssetUrl, brandMediaSlug, brandPlacement, brandSize, brandX, brandY, format, language, scale, style]);
   const currentSignature = resourceId ? JSON.stringify({ template, resourceId, ...renderOptions }) : "";
   const previewStale = Boolean(previewUrl && generatedSignature !== currentSignature);
   const canConfigureBrand = data.brands.length > 0 || selectedOption?.owner.kind === "media";
@@ -223,6 +232,8 @@ export function GraphicsGenerator({ data }: { data: GraphicsGeneratorData }) {
     setBrandY(item.options.brandY);
     setBrandSize(item.options.brandSize);
     setBrandMediaSlug(item.options.brandMediaSlug);
+    setBrandAssetUrl(item.options.brandAssetUrl);
+    setBrandAssetName(item.options.brandAssetUrl ? "Custom branding" : "");
     setPreviewUrl(item.url);
     setGeneratedSignature(JSON.stringify({ template: item.template, resourceId: item.resourceId, ...item.options }));
     setRenderedAt(item.createdAt);
@@ -309,6 +320,26 @@ export function GraphicsGenerator({ data }: { data: GraphicsGeneratorData }) {
     const y = Math.min(95, Math.max(5, ((event.clientY - frame.top) / frame.height) * 100));
     setBrandX(Math.round(x * 10) / 10);
     setBrandY(Math.round(y * 10) / 10);
+  }
+
+  async function uploadCustomBrand(file: File) {
+    setBrandUploading(true);
+    setError(null);
+    try {
+      const form = new FormData();
+      form.set("file", file);
+      const response = await fetch("/api/admin/graphics/brand", { method: "POST", body: form });
+      const body = await response.json().catch(() => null) as { url?: string; error?: string } | null;
+      if (!response.ok || !body?.url) throw new Error(body?.error || "Unable to upload branding");
+      setBrandAssetUrl(body.url);
+      setBrandAssetName(file.name);
+      setBrandMediaSlug(null);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Unable to upload branding");
+    } finally {
+      setBrandUploading(false);
+      if (brandFileRef.current) brandFileRef.current.value = "";
+    }
   }
 
   return (
@@ -448,20 +479,46 @@ export function GraphicsGenerator({ data }: { data: GraphicsGeneratorData }) {
                   ) : null}
                   <div className="min-w-0">
                     <p className="text-sm font-medium">Media branding</p>
-                    <p className="text-xs text-muted-foreground">Choose an authorized channel logo. Use a corner preset, or choose custom and click or drag its position directly on the preview.</p>
+                    <p className="text-xs text-muted-foreground">Use a saved channel logo or upload custom branding for this graphic. Position and size controls apply to either source.</p>
                   </div>
                 </div>
-                {data.brands.length ? (
-                  <>
-                    <Select value={brandMediaSlug ?? "none"} onValueChange={(value) => setBrandMediaSlug(value && value !== "none" ? value : null)}>
+                <div className="grid gap-2 sm:grid-cols-[1fr_auto]">
+                  {data.brands.length ? (
+                    <Select value={brandMediaSlug ?? "none"} onValueChange={(value) => {
+                      setBrandMediaSlug(value && value !== "none" ? value : null);
+                      setBrandAssetUrl(null);
+                      setBrandAssetName("");
+                    }}>
                       <SelectTrigger className="w-full"><SelectValue placeholder="No media logo" /></SelectTrigger>
                       <SelectContent>
                         <SelectItem value="none">No media logo</SelectItem>
                         {data.brands.map((brand) => <SelectItem key={brand.slug} value={brand.slug}>{brand.label}</SelectItem>)}
                       </SelectContent>
                     </Select>
-                    {selectedBrand ? (
-                      <>
+                  ) : <p className="self-center text-xs text-muted-foreground">No saved channel logo.</p>}
+                  <Input
+                    ref={brandFileRef}
+                    type="file"
+                    accept="image/png,image/jpeg,image/webp"
+                    className="sr-only"
+                    onChange={(event) => {
+                      const file = event.target.files?.[0];
+                      if (file) void uploadCustomBrand(file);
+                    }}
+                  />
+                  <Button type="button" variant="outline" disabled={brandUploading} onClick={() => brandFileRef.current?.click()}>
+                    {brandUploading ? <LoaderCircleIcon className="animate-spin" /> : <UploadIcon />}
+                    {brandAssetUrl ? "Replace upload" : "Upload branding"}
+                  </Button>
+                </div>
+                {brandAssetUrl ? (
+                  <div className="flex items-center justify-between gap-3 rounded-md border border-primary/25 bg-primary/5 px-3 py-2">
+                    <p className="min-w-0 truncate text-xs"><span className="font-medium">Custom:</span> {brandAssetName || "Uploaded branding"}</p>
+                    <Button type="button" variant="ghost" size="icon-xs" onClick={() => { setBrandAssetUrl(null); setBrandAssetName(""); }} aria-label="Remove custom branding"><XIcon /></Button>
+                  </div>
+                ) : null}
+                {selectedBrand ? (
+                  <>
                     <ToggleGroup value={[brandPlacement]} onValueChange={(values) => values[0] && setBrandPlacement(values[0] as GraphicsBrandPlacement)} variant="outline" spacing={0} className="grid w-full grid-cols-5">
                       {GRAPHICS_BRAND_PLACEMENTS.map((item) => {
                         const Icon = BRAND_ICONS[item];
@@ -476,10 +533,8 @@ export function GraphicsGenerator({ data }: { data: GraphicsGeneratorData }) {
                       </div>
                     ) : null}
                     <label className="grid grid-cols-[48px_1fr_34px] items-center gap-2 text-xs"><span>Size</span><Slider value={brandSize} min={5} max={24} onValueChange={(value) => typeof value === "number" && setBrandSize(value)} /><span className="text-end font-mono">{brandSize}%</span></label>
-                      </>
-                    ) : null}
                   </>
-                ) : <p className="text-xs text-muted-foreground">Add a logo to this media channel to enable branding.</p>}
+                ) : null}
               </section>
             ) : null}
 
@@ -487,7 +542,7 @@ export function GraphicsGenerator({ data }: { data: GraphicsGeneratorData }) {
           </div>
 
           <div className="sticky bottom-0 z-20 mt-auto grid gap-2 border-t border-border bg-background/90 p-4 backdrop-blur xl:static xl:bg-transparent xl:p-5 xl:backdrop-blur-none">
-            <Button disabled={resourceId === null || rendering} onClick={() => void generatePreview()} className="w-full max-sm:h-12">
+            <Button disabled={resourceId === null || rendering || brandUploading} onClick={() => void generatePreview()} className="w-full max-sm:h-12">
               {rendering ? <LoaderCircleIcon className="animate-spin" data-icon="inline-start" /> : <SparklesIcon data-icon="inline-start" />}
               {rendering ? "Generating..." : "Generate preview"}
             </Button>

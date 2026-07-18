@@ -98,6 +98,7 @@ export type GraphicsRenderOptions = {
   brandY: number;
   brandSize: number;
   brandMediaSlug: string | null;
+  brandAssetUrl: string | null;
 };
 
 export type GraphicsRenderRequest = GraphicsRenderOptions & {
@@ -116,6 +117,7 @@ export const DEFAULT_GRAPHICS_RENDER_OPTIONS: GraphicsRenderOptions = {
   brandY: 12,
   brandSize: 12,
   brandMediaSlug: null,
+  brandAssetUrl: null,
 };
 
 function includesValue<T>(values: readonly T[], value: unknown): value is T {
@@ -166,6 +168,11 @@ export function parseGraphicsRenderRequest(value: unknown): GraphicsRenderReques
     : typeof body.brandMediaSlug === "string" && /^[a-z0-9][a-z0-9-]{0,79}$/.test(body.brandMediaSlug)
       ? body.brandMediaSlug
       : undefined;
+  const brandAssetUrl = body.brandAssetUrl == null || body.brandAssetUrl === ""
+    ? null
+    : typeof body.brandAssetUrl === "string" && body.brandAssetUrl.length <= 1024
+      ? body.brandAssetUrl.trim()
+      : undefined;
 
   if (!isGraphicsFormatId(format)) return null;
   if (!includesValue(GRAPHICS_LANGUAGES, language)) return null;
@@ -175,6 +182,15 @@ export function parseGraphicsRenderRequest(value: unknown): GraphicsRenderReques
   if (!includesValue(GRAPHICS_BRAND_PLACEMENTS, brandPlacement)) return null;
   if (brandX === null || brandY === null || brandSize === null) return null;
   if (brandMediaSlug === undefined) return null;
+  if (brandAssetUrl === undefined) return null;
+  if (brandAssetUrl) {
+    try {
+      const url = new URL(brandAssetUrl);
+      if (url.protocol !== "https:") return null;
+    } catch {
+      return null;
+    }
+  }
 
   return {
     template: body.template,
@@ -189,6 +205,7 @@ export function parseGraphicsRenderRequest(value: unknown): GraphicsRenderReques
     brandY,
     brandSize,
     brandMediaSlug,
+    brandAssetUrl,
   };
 }
 
