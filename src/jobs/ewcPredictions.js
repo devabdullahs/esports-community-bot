@@ -40,6 +40,7 @@ import {
   effectiveEwcWeekStatus,
   dueEwcGamesForResults,
   ewcGameResultPending,
+  ewcGameResultsFinalReady,
   mergeEwcGameResults,
   pendingEwcGameResults,
   perGamePredictionRoundLocked,
@@ -554,9 +555,13 @@ async function processWeek(client, round) {
   let results = perGame ? round.results || [] : [];
   let resultsChanged = false;
   if (perGame) {
-    const candidates = readyAt && now >= readyAt
-      ? dueEwcGamesForResults(round.games, results, now, Number.MAX_SAFE_INTEGER)
-      : dueEwcGamesForResults(round.games, results, now);
+    const candidates = dueEwcGamesForResults(
+      round.games,
+      results,
+      now,
+      readyAt && now >= readyAt ? Number.MAX_SAFE_INTEGER : undefined,
+      readyAt,
+    );
     if (candidates.length) {
       const resolvedCandidates = await Promise.all(candidates.map(async (game) => ({
         ...game,
@@ -566,7 +571,10 @@ async function processWeek(client, round) {
           eventName: game.event,
         }),
       })));
-      const fetched = await fetchEwcWeekGameResults(resolvedCandidates);
+      const fetched = (await fetchEwcWeekGameResults(resolvedCandidates)).map((result) => ({
+        ...result,
+        fetchedAt: nowSec(),
+      }));
       const merged = mergeEwcGameResults(results, fetched);
       resultsChanged = JSON.stringify(merged) !== JSON.stringify(results);
       results = merged;
@@ -578,9 +586,7 @@ async function processWeek(client, round) {
   const predictions = await listWeeklyPredictions(round.id);
 
   const hasCompletedResult = results.some((result) => !ewcGameResultPending(result));
-  // A complete placement table is authoritative enough to finalize early;
-  // score_after remains the aggressive polling fallback for missing tables.
-  const finalReady = perGame && missingResults.length === 0;
+  const finalReady = perGame && ewcGameResultsFinalReady(results, round.games, now, readyAt);
   if (perGame && !finalReady && hasCompletedResult && (resultsChanged || predictions.some((prediction) => prediction.score == null))) {
     await transaction(async (tx) => {
       for (const prediction of predictions) {
@@ -611,6 +617,11 @@ async function processWeek(client, round) {
         .map((result) => result.game || result.event || result.gameKey)
         .join(', ')}`,
     );
+    return;
+  }
+
+  if (perGame && !finalReady) {
+    logger.debug(`[ewc-predictions] final placement snapshots are not ready for ${round.guild_id}/${round.season}/${round.week_key}`);
     return;
   }
 

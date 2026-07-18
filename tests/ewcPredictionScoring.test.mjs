@@ -16,6 +16,7 @@ const {
   pendingEwcGameResults,
   perGamePredictionRoundLocked,
   dueEwcGamesForResults,
+  ewcGameResultsFinalReady,
   mergeEwcGameResults,
   effectiveEwcWeekStatus,
   generateEwcWeekWindows,
@@ -542,19 +543,48 @@ test('dueEwcGamesForResults polls only unresolved events near their scheduled fi
     { ...GAMES[0], endAt: 10_000 },
     { ...GAMES[1], endAt: 30_000 },
   ];
-  const due = dueEwcGamesForResults(games, [resultsFor()[0]], 20_000, 5_000);
+  const due = dueEwcGamesForResults(games, [{ ...resultsFor()[0], fetchedAt: 10_000 }], 20_000, 5_000);
   assert.deepEqual(due.map((game) => game.key), []);
   assert.deepEqual(dueEwcGamesForResults(games, [], 20_000, 15_000).map((game) => game.key), ['valorant-1', 'apex-2']);
+  assert.deepEqual(dueEwcGamesForResults(games, [resultsFor()[0]], 20_000, 5_000).map((game) => game.key), ['valorant-1']);
+  const completed = resultsFor().map((result, index) => ({ ...result, fetchedAt: index ? 30_000 : 10_000 }));
+  assert.deepEqual(dueEwcGamesForResults(games, completed, 20_000, 5_000, 25_000), []);
+  assert.deepEqual(dueEwcGamesForResults(games, completed, 30_000, 5_000, 25_000).map((game) => game.key), ['valorant-1']);
+  assert.deepEqual(dueEwcGamesForResults(games, [{ ...resultsFor()[0], fetchedAt: 9_000 }, completed[1]], 20_000, 5_000, 25_000).map((game) => game.key), ['valorant-1']);
 });
 
-test('mergeEwcGameResults preserves completed snapshots and upgrades pending ones', () => {
+test('mergeEwcGameResults preserves completed snapshots through gaps and replaces them with newer valid standings', () => {
   const complete = resultsFor()[0];
   const pending = { gameKey: 'apex-2', placements: [], error: 'not final' };
+  const updated = {
+    ...complete,
+    fetchedAt: 20_000,
+    placements: [
+      { club: 'New Winner', place: '1st', points: 1000 },
+      { ...complete.placements[0], place: '7th', points: 100 },
+    ],
+  };
   const merged = mergeEwcGameResults([complete, pending], [
-    { gameKey: 'valorant-1', placements: [], error: 'transient' },
+    updated,
     resultsFor()[1],
   ]);
-  assert.deepEqual(merged, resultsFor());
+  assert.deepEqual(merged, [updated, resultsFor()[1]]);
+
+  const afterGap = mergeEwcGameResults(merged, [{ gameKey: 'valorant-1', placements: [], error: 'transient' }]);
+  assert.deepEqual(afterGap, merged);
+});
+
+test('ewcGameResultsFinalReady requires valid snapshots fetched after every event and the scoring delay', () => {
+  const games = [
+    { ...GAMES[0], endAt: 10_000 },
+    { ...GAMES[1], endAt: 12_000 },
+  ];
+  const stale = resultsFor().map((result) => ({ ...result, fetchedAt: 9_000 }));
+  assert.equal(ewcGameResultsFinalReady(stale, games, 20_000, 15_000), false);
+
+  const fresh = resultsFor().map((result) => ({ ...result, fetchedAt: 15_000 }));
+  assert.equal(ewcGameResultsFinalReady(fresh, games, 14_999, 15_000), false);
+  assert.equal(ewcGameResultsFinalReady(fresh, games, 15_000, 15_000), true);
 });
 
 // ─── effectiveEwcWeekStatus (per-game lock-window state machine) ──────────────
