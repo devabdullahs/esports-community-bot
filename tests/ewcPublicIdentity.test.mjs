@@ -148,6 +148,10 @@ test('public predictor projection returns only finalized performance and no priv
 
   const unscored = await upsertEwcWeek({ guildId, season, weekKey: 'open-week', label: 'Open week', createdBy: 'test' });
   await upsertWeeklyPrediction({ guildId, weekId: unscored.id, userId: discordUserId, picks: ['Pre-lock private pick'] });
+  await saveWeeklyPredictionScore(guildId, unscored.id, discordUserId, 900, {
+    provisional: true,
+    picks: ['Pre-lock private pick'],
+  });
 
   const board = await getPublicEwcLeaderboard({ guildId, season });
   const publicId = board.rows.find((row) => row.displayName === 'Safe Predictor')?.profileHref?.split('/').at(-1);
@@ -161,13 +165,20 @@ test('public predictor projection returns only finalized performance and no priv
     'points',
     'rank',
     'recentFinalizedResults',
+    'scoreSources',
     'sweeps',
     'weeks',
     'wins',
   ]);
   assert.deepEqual(profile?.recentFinalizedResults, [
-    { weekKey: 'final-week', label: 'Final week', score: 420, bonus: 50 },
+    { weekKey: 'final-week', label: 'Final week', score: 420, bonus: 50, rank: 1, winner: true },
   ]);
+  assert.deepEqual(profile?.scoreSources, [
+    { key: 'open-week', label: 'Open week', kind: 'weekly', points: 900, provisional: true },
+    { key: 'final-week', label: 'Final week', kind: 'weekly', points: 420, provisional: false },
+  ]);
+  assert.equal(profile?.points, 1320);
+  assert.equal(profile?.scoreSources.reduce((sum, source) => sum + source.points, 0), profile?.points);
   assertNoPrivateFields(profile);
 
   const serialized = JSON.stringify(profile);
