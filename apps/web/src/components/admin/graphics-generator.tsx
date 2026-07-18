@@ -40,8 +40,10 @@ import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { GraphicsCustomFields } from "@/components/admin/graphics-custom-fields";
 import { cn } from "@/lib/utils";
 import {
+  DEFAULT_CUSTOM_GRAPHICS_INPUTS,
   DEFAULT_GRAPHICS_RENDER_OPTIONS,
   GRAPHICS_ALIGNMENTS,
   GRAPHICS_BRAND_PLACEMENTS,
@@ -63,6 +65,7 @@ import {
   type GraphicsRenderOptions,
   type GraphicsStyleId,
   type GraphicsTemplateId,
+  type CustomGraphicsInputMap,
 } from "@/lib/graphics-generator-model";
 
 type RecentGeneration = {
@@ -72,7 +75,9 @@ type RecentGeneration = {
   meta: string;
   createdAt: number;
   template: GraphicsTemplateId;
-  resourceId: number;
+  resourceId: number | null;
+  sourceMode: "stored" | "custom";
+  customValues: CustomGraphicsInputMap;
   options: GraphicsRenderOptions;
 };
 
@@ -115,7 +120,9 @@ function isMacPlatform() {
 
 export function GraphicsGenerator({ data }: { data: GraphicsGeneratorData }) {
   const [template, setTemplate] = useState<GraphicsTemplateId>("match-result");
+  const [sourceMode, setSourceMode] = useState<"stored" | "custom">("stored");
   const [resourceId, setResourceId] = useState<number | null>(() => initialGraphicsSelection(data, "match-result"));
+  const [customValues, setCustomValues] = useState<CustomGraphicsInputMap>(() => structuredClone(DEFAULT_CUSTOM_GRAPHICS_INPUTS));
   const [query, setQuery] = useState("");
   const [format, setFormat] = useState<GraphicsFormatId>(DEFAULT_GRAPHICS_RENDER_OPTIONS.format);
   const [language, setLanguage] = useState<GraphicsLanguageId>(DEFAULT_GRAPHICS_RENDER_OPTIONS.language);
@@ -165,7 +172,11 @@ export function GraphicsGenerator({ data }: { data: GraphicsGeneratorData }) {
   const renderOptions = useMemo<GraphicsRenderOptions>(() => ({
     format, language, alignment, style, scale, brandPlacement, brandX, brandY, brandSize, brandMediaSlug, brandAssetUrl,
   }), [alignment, brandAssetUrl, brandMediaSlug, brandPlacement, brandSize, brandX, brandY, format, language, scale, style]);
-  const currentSignature = resourceId ? JSON.stringify({ template, resourceId, ...renderOptions }) : "";
+  const activeCustomValue = customValues[template];
+  const canGenerate = sourceMode === "custom" || resourceId !== null;
+  const currentSignature = canGenerate ? JSON.stringify(sourceMode === "custom"
+    ? { sourceMode, template, resourceId: null, data: activeCustomValue, ...renderOptions }
+    : { sourceMode, template, resourceId, ...renderOptions }) : "";
   const previewStale = Boolean(previewUrl && generatedSignature !== currentSignature);
   const canConfigureBrand = data.brands.length > 0 || selectedOption?.owner.kind === "media";
   const selectedStyle = GRAPHICS_STYLES.find((item) => item.id === style) ?? GRAPHICS_STYLES[0];
@@ -221,7 +232,9 @@ export function GraphicsGenerator({ data }: { data: GraphicsGeneratorData }) {
 
   function applyRecent(item: RecentGeneration) {
     setTemplate(item.template);
+    setSourceMode(item.sourceMode);
     setResourceId(item.resourceId);
+    setCustomValues(structuredClone(item.customValues));
     setFormat(item.options.format);
     setLanguage(item.options.language);
     setAlignment(item.options.alignment);
@@ -235,18 +248,22 @@ export function GraphicsGenerator({ data }: { data: GraphicsGeneratorData }) {
     setBrandAssetUrl(item.options.brandAssetUrl);
     setBrandAssetName(item.options.brandAssetUrl ? "Custom branding" : "");
     setPreviewUrl(item.url);
-    setGeneratedSignature(JSON.stringify({ template: item.template, resourceId: item.resourceId, ...item.options }));
+    setGeneratedSignature(JSON.stringify(item.sourceMode === "custom"
+      ? { sourceMode: item.sourceMode, template: item.template, resourceId: null, data: item.customValues[item.template], ...item.options }
+      : { sourceMode: item.sourceMode, template: item.template, resourceId: item.resourceId, ...item.options }));
     setRenderedAt(item.createdAt);
   }
 
   const generatePreview = useCallback(async (auto = false) => {
-    if (resourceId === null) return;
+    if (!canGenerate) return;
     abortRef.current?.abort();
     const controller = new AbortController();
     abortRef.current = controller;
     setRendering(true);
     setError(null);
-    const signature = JSON.stringify({ template, resourceId, ...renderOptions });
+    const signature = JSON.stringify(sourceMode === "custom"
+      ? { sourceMode, template, resourceId: null, data: customValues[template], ...renderOptions }
+      : { sourceMode, template, resourceId, ...renderOptions });
     try {
       const response = await fetch("/api/admin/graphics", {
         method: "POST",
@@ -265,13 +282,17 @@ export function GraphicsGenerator({ data }: { data: GraphicsGeneratorData }) {
       let nextRecent = recentRef.current;
       if (!auto) {
         nextRecent = [{
-          id: `${createdAt}-${resourceId}`,
+          id: `${createdAt}-${sourceMode}-${resourceId ?? "custom"}`,
           url,
-          title: selectedOption?.label || "Generated graphic",
+          title: sourceMode === "custom"
+            ? (template === "news-promo" ? customValues[template].title : customValues[template].tournament)
+            : selectedOption?.label || "Generated graphic",
           meta: `${GRAPHICS_TEMPLATES.find((item) => item.id === template)?.label} - ${dimensions.label}`,
           createdAt,
           template,
           resourceId,
+          sourceMode,
+          customValues: structuredClone(customValues),
           options: renderOptions,
         }, ...recentRef.current].slice(0, 4);
         recentRef.current = nextRecent;
@@ -287,16 +308,16 @@ export function GraphicsGenerator({ data }: { data: GraphicsGeneratorData }) {
     } finally {
       if (abortRef.current === controller) setRendering(false);
     }
-  }, [dimensions.label, releaseUnusedObjectUrls, renderOptions, resourceId, selectedOption, template]);
+  }, [canGenerate, customValues, dimensions.label, releaseUnusedObjectUrls, renderOptions, resourceId, selectedOption, sourceMode, template]);
 
   // The preview keeps itself in sync with the controls (spec: "preview
   // updates instantly"): any change re-renders after a short debounce.
   // Failures (e.g. rate limit) do not retry until the controls change again.
   useEffect(() => {
-    if (resourceId === null || !currentSignature || currentSignature === generatedSignature) return;
+    if (!canGenerate || !currentSignature || currentSignature === generatedSignature) return;
     const timer = window.setTimeout(() => void generatePreview(true), 700);
     return () => window.clearTimeout(timer);
-  }, [currentSignature, generatedSignature, generatePreview, resourceId]);
+  }, [canGenerate, currentSignature, generatedSignature, generatePreview]);
 
   function download(url = previewUrl) {
     if (!url) return;
@@ -342,6 +363,20 @@ export function GraphicsGenerator({ data }: { data: GraphicsGeneratorData }) {
     }
   }
 
+  async function uploadCustomAsset(file: File): Promise<string> {
+    const form = new FormData();
+    form.set("file", file);
+    const response = await fetch("/api/admin/graphics/asset", { method: "POST", body: form });
+    const body = await response.json().catch(() => null) as { url?: string; error?: string } | null;
+    if (!response.ok || !body?.url) {
+      const message = body?.error || "Unable to upload logo";
+      setError(message);
+      throw new Error(message);
+    }
+    setError(null);
+    return body.url;
+  }
+
   return (
     <TooltipProvider>
       <div ref={workspaceRef} className="flex flex-col overflow-hidden rounded-lg border border-border bg-background shadow-sm xl:grid xl:min-h-[760px] xl:grid-cols-[340px_minmax(0,1fr)]">
@@ -366,7 +401,20 @@ export function GraphicsGenerator({ data }: { data: GraphicsGeneratorData }) {
               </Tabs>
             </Field>
 
-            <section className="grid gap-2" aria-labelledby="graphics-source-label">
+            <Field>
+              <FieldLabel>Data source</FieldLabel>
+              <Tabs value={sourceMode} onValueChange={(value) => value && setSourceMode(value as "stored" | "custom")}>
+                <TabsList className="grid w-full grid-cols-2">
+                  <TabsTrigger value="stored">Live data</TabsTrigger>
+                  <TabsTrigger value="custom">Custom input</TabsTrigger>
+                </TabsList>
+              </Tabs>
+              <p className="text-xs leading-5 text-muted-foreground">
+                {sourceMode === "stored" ? "Use verified matches, standings, and posts already stored by the platform." : "Enter one-off values for matchups, results, tables, battle royale points, or announcements."}
+              </p>
+            </Field>
+
+            {sourceMode === "stored" ? <section className="grid gap-2" aria-labelledby="graphics-source-label">
               <div className="flex items-center justify-between gap-3">
                 <FieldLabel id="graphics-source-label">Source</FieldLabel>
                 <span className="font-mono text-[11px] text-muted-foreground">{options.length} available</span>
@@ -406,7 +454,15 @@ export function GraphicsGenerator({ data }: { data: GraphicsGeneratorData }) {
                 })}
                 {filteredOptions.length === 0 ? <p className="px-3 py-8 text-center text-sm text-muted-foreground">No matching sources.</p> : null}
               </div>
-            </section>
+            </section> : (
+              <section className="grid gap-3" aria-labelledby="graphics-custom-label">
+                <div className="flex items-center justify-between gap-3">
+                  <FieldLabel id="graphics-custom-label">Custom content</FieldLabel>
+                  <Badge variant="outline">Draft</Badge>
+                </div>
+                <GraphicsCustomFields template={template} values={customValues} onChange={setCustomValues} uploadAsset={uploadCustomAsset} />
+              </section>
+            )}
 
             <Field>
               <FieldLabel>Format</FieldLabel>
@@ -542,7 +598,7 @@ export function GraphicsGenerator({ data }: { data: GraphicsGeneratorData }) {
           </div>
 
           <div className="sticky bottom-0 z-20 mt-auto grid gap-2 border-t border-border bg-background/90 p-4 backdrop-blur xl:static xl:bg-transparent xl:p-5 xl:backdrop-blur-none">
-            <Button disabled={resourceId === null || rendering || brandUploading} onClick={() => void generatePreview()} className="w-full max-sm:h-12">
+            <Button disabled={!canGenerate || rendering || brandUploading} onClick={() => void generatePreview()} className="w-full max-sm:h-12">
               {rendering ? <LoaderCircleIcon className="animate-spin" data-icon="inline-start" /> : <SparklesIcon data-icon="inline-start" />}
               {rendering ? "Generating..." : "Generate preview"}
             </Button>
@@ -578,14 +634,14 @@ export function GraphicsGenerator({ data }: { data: GraphicsGeneratorData }) {
             <Button variant={showGrid ? "secondary" : "outline"} size="sm" onClick={() => setShowGrid((value) => !value)}><Grid3X3Icon data-icon="inline-start" />Grid</Button>
             <div className="ms-auto flex shrink-0 items-center gap-2">
               <span className="font-mono text-xs text-muted-foreground">{dimensions.width}x{dimensions.height}</span>
-              <Button variant="outline" size="sm" disabled={resourceId === null || rendering} onClick={() => void generatePreview(true)}><RefreshCwIcon data-icon="inline-start" className={cn(rendering && "animate-spin")} />Refresh</Button>
+              <Button variant="outline" size="sm" disabled={!canGenerate || rendering} onClick={() => void generatePreview(true)}><RefreshCwIcon data-icon="inline-start" className={cn(rendering && "animate-spin")} />Refresh</Button>
               <Button variant="outline" size="icon-sm" className="max-sm:hidden" onClick={() => void toggleFullscreen()} aria-label="Toggle fullscreen"><ExpandIcon /></Button>
             </div>
           </div>
 
           <div className="relative order-1 flex min-h-[320px] flex-1 items-center justify-center overflow-auto bg-[radial-gradient(ellipse_at_50%_0%,color-mix(in_oklab,var(--muted)_25%,transparent),transparent_62%)] p-4 sm:min-h-[470px] sm:p-8 xl:order-2">
             <div data-graphics-preview-frame className={cn("relative max-h-[68vh] w-full max-w-[940px] overflow-hidden rounded-lg border border-border bg-card shadow-2xl transition-[aspect-ratio,transform]", formatAspectClass(format), (format === "9:16" || format === "4:5") && "w-auto max-w-none")} style={{ transform: `scale(${zoom / 100})`, height: format === "9:16" ? "min(68vh,760px)" : format === "4:5" ? "min(68vh,700px)" : undefined }}>
-              {previewUrl ? <Image src={previewUrl} alt="Generated social graphic" fill unoptimized className="object-contain" /> : <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 text-muted-foreground"><ImageIcon className="size-8" /><p className="text-sm">{resourceId === null ? "Select a source to render a preview." : "Rendering preview…"}</p></div>}
+              {previewUrl ? <Image src={previewUrl} alt="Generated social graphic" fill unoptimized className="object-contain" /> : <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 text-muted-foreground"><ImageIcon className="size-8" /><p className="text-sm">{canGenerate ? "Rendering preview…" : "Select a source to render a preview."}</p></div>}
               {previewStale && !rendering ? <div className="absolute inset-x-3 top-3 z-40 rounded-md border border-amber-400/25 bg-background/90 px-3 py-2 text-center text-xs text-amber-300 backdrop-blur">Preview out of date — updating…</div> : null}
               {safeArea ? <div className="pointer-events-none absolute inset-[4%] z-10 border border-dashed" style={{ borderColor: `${selectedStyle.accent}73` }}><span className="absolute -bottom-px start-0 px-1.5 py-0.5 font-mono text-[8px]" style={{ background: selectedStyle.dark ? "rgba(0,0,0,.8)" : "rgba(255,255,255,.85)", color: selectedStyle.accent }}>SAFE AREA</span></div> : null}
               {showGrid ? <div className="pointer-events-none absolute inset-0 z-10 opacity-40" style={{ backgroundImage: `linear-gradient(to right, ${selectedStyle.accent}38 1px, transparent 1px), linear-gradient(to bottom, ${selectedStyle.accent}38 1px, transparent 1px)`, backgroundSize: "8.333% 16.666%" }} /> : null}
@@ -629,7 +685,7 @@ export function GraphicsGenerator({ data }: { data: GraphicsGeneratorData }) {
           <div className="order-3 flex min-h-8 flex-wrap items-center gap-x-4 gap-y-1 border-t border-border px-4 py-2 font-mono text-[11px] text-muted-foreground">
             <span className="flex items-center gap-2"><span className={cn("size-1.5 rounded-full", rendering ? "animate-pulse bg-amber-400" : "bg-teal-400")} />{rendering ? "Rendering..." : renderedAt ? `Rendered ${new Date(renderedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}` : "Ready"}</span>
             <span>{dimensions.width * scale}x{dimensions.height * scale} @ {scale}x export</span>
-            <span className="ms-auto">{selectedOption ? `source #${selectedOption.id} - ${selectedOption.detail}` : "No source selected"}</span>
+            <span className="ms-auto">{sourceMode === "custom" ? "Custom input" : selectedOption ? `source #${selectedOption.id} - ${selectedOption.detail}` : "No source selected"}</span>
           </div>
 
           <div className="order-4 border-t border-border bg-card/35 p-4">

@@ -3,6 +3,7 @@ import { get, run } from "@bot/db/client.js";
 import {
   filterGraphicsGeneratorData,
   renderGraphics,
+  resolveCustomGraphicsRenderRequest,
   resolveGraphicsRenderRequest,
 } from "@/lib/graphics-generator";
 import {
@@ -170,6 +171,79 @@ test("request parser accepts only the finite template ids and positive numeric r
     brandMediaSlug: "alpha-media",
     brandAssetUrl: "https://assets.example.test/graphics-branding/logo.png",
   });
+});
+
+test("custom match requests require bounded fields and complete numeric scores", async () => {
+  const versus = parseGraphicsRenderRequest({
+    sourceMode: "custom",
+    template: "match-result",
+    data: {
+      tournament: "Community Invitational",
+      game: "Valorant",
+      teamA: "Alpha",
+      teamB: "Bravo",
+      logoA: null,
+      logoB: null,
+      scoreMode: "versus",
+      scoreA: null,
+      scoreB: null,
+      status: "upcoming",
+    },
+  });
+  expect(versus).toMatchObject({ sourceMode: "custom", resourceId: null, template: "match-result" });
+  if (!versus || versus.sourceMode !== "custom") throw new Error("Expected custom request");
+  const resolved = await resolveCustomGraphicsRenderRequest(versus);
+  expect(resolved).toMatchObject({
+    owner: null,
+    target: { id: null, label: "Community Invitational" },
+    input: { teamA: "Alpha", teamB: "Bravo", scoreA: null, scoreB: null, status: "upcoming" },
+  });
+  expect(await renderGraphics(resolved)).toEqual(expect.any(Buffer));
+
+  expect(parseGraphicsRenderRequest({
+    sourceMode: "custom",
+    template: "match-result",
+    data: {
+      tournament: "Community Invitational",
+      game: "Valorant",
+      teamA: "Alpha",
+      teamB: "Bravo",
+      logoA: null,
+      logoB: null,
+      scoreMode: "score",
+      scoreA: 2,
+      scoreB: null,
+      status: "finished",
+    },
+  })).toBeNull();
+});
+
+test("custom standings accept ordered battle royale rows and reject oversized tables", async () => {
+  const rows = Array.from({ length: 12 }, (_, index) => ({
+    rank: index + 1,
+    team: `Team ${index + 1}`,
+    logo: null,
+    points: String(120 - index * 4),
+    extra: `${24 - index} kills`,
+  }));
+  const parsed = parseGraphicsRenderRequest({
+    sourceMode: "custom",
+    template: "standings",
+    format: "9:16",
+    data: { tournament: "Battle Royale Finals", section: "Overall points", entries: rows },
+  });
+  expect(parsed).toMatchObject({ sourceMode: "custom", template: "standings", data: { entries: rows } });
+  if (!parsed || parsed.sourceMode !== "custom") throw new Error("Expected custom standings request");
+  const resolved = await resolveCustomGraphicsRenderRequest(parsed);
+  expect(resolved.input).toMatchObject({ tournament: "Battle Royale Finals", section: "Overall points" });
+  if (resolved.template !== "standings") throw new Error("Expected standings graphic");
+  expect(resolved.input.entries).toHaveLength(12);
+
+  expect(parseGraphicsRenderRequest({
+    sourceMode: "custom",
+    template: "standings",
+    data: { tournament: "Too large", section: "Standings", entries: [...rows, rows[0]] },
+  })).toBeNull();
 });
 
 test("standings graphics collapse duplicate historical rows for the same team", async () => {
