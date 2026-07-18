@@ -1,4 +1,4 @@
-export type ScoreBreakdownStatus = "scored" | "missed" | "unmatched" | "late";
+export type ScoreBreakdownStatus = "scored" | "missed" | "unmatched" | "late" | "pending";
 
 export type PredictionBreakdownRow = {
   game?: string | null;
@@ -7,6 +7,7 @@ export type PredictionBreakdownRow = {
   matchedTeam?: string | null;
   placement?: string | null;
   winner?: string | null;
+  resultAvailable?: boolean;
   weeklyRank?: number | null;
   predictedRank?: number | null;
   actualRank?: number | null;
@@ -32,5 +33,7 @@ export function isExpandableScoreBreakdown(
 }
 
 export function scoreBreakdownStatusKey(status: string): ScoreBreakdownStatus {
-  return status === "missed" || status === "unmatched" || status === "late" ? status : "scored";
+  return status === "missed" || status === "unmatched" || status === "late" || status === "pending"
+    ? status
+    : "scored";
 }

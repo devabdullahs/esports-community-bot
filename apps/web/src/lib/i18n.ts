@@ -650,6 +650,7 @@ const baseCopy = {
       scoreExactBonus: "Exact-rank bonus",
       scoreStatus: {
         scored: "Scored",
+        pending: "Awaiting result",
         missed: "Missing pick",
         unmatched: "No matching result",
         late: "Late pick",
@@ -1450,6 +1451,7 @@ const baseCopy = {
       scoreExactBonus: "\u0645\u0643\u0627\u0641\u0623\u0629 \u0627\u0644\u0645\u0631\u0643\u0632 \u0627\u0644\u0645\u0637\u0627\u0628\u0642",
       scoreStatus: {
         scored: "\u0645\u062d\u0633\u0648\u0628",
+        pending: "\u0628\u0627\u0646\u062a\u0638\u0627\u0631 \u0627\u0644\u0646\u062a\u064a\u062c\u0629",
         missed: "\u0627\u062e\u062a\u064a\u0627\u0631 \u0645\u0641\u0642\u0648\u062f",
         unmatched: "\u0644\u0627 \u062a\u0648\u062c\u062f \u0646\u062a\u064a\u062c\u0629 \u0645\u0637\u0627\u0628\u0642\u0629",
         late: "\u0627\u062e\u062a\u064a\u0627\u0631 \u0645\u062a\u0623\u062e\u0631",

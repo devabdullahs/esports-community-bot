@@ -231,7 +231,7 @@ describe("EWC profile routes", () => {
       details: {
         mode: "per-game",
         bonus: 0,
-        picks: [{ gameKey: "valorant", game: "Valorant", pick: "Team Falcons", matchedClub: "Team Falcons", place: "1st", points: 1000, winner: "Team Falcons" }],
+        picks: [{ gameKey: "valorant", game: "Valorant", pick: "Team Falcons", matchedClub: "Team Falcons", place: "1st", points: 1000, winner: "Team Falcons", resultAvailable: true }],
       },
     });
 

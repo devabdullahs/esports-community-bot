@@ -48,7 +48,16 @@ function weeklyPerGameRow(detail) {
   const pick = text(detail?.pick);
   const matchedClub = text(detail?.matchedClub || detail?.participant);
   const late = Boolean(detail?.late);
-  const status = late ? 'late' : !pick ? 'missed' : !matchedClub ? 'unmatched' : 'scored';
+  const resultAvailable = Boolean(detail?.resultAvailable);
+  const status = late
+    ? 'late'
+    : !pick
+      ? 'missed'
+      : !resultAvailable
+        ? 'pending'
+        : !matchedClub
+          ? 'unmatched'
+          : 'scored';
   return {
     game: text([detail?.game, detail?.event].filter(Boolean).join(' — ')) || text(detail?.gameKey) || 'Game',
     pick,
@@ -56,6 +65,7 @@ function weeklyPerGameRow(detail) {
     placement: text(detail?.place),
     points: number(detail?.points),
     winner: text(detail?.winner),
+    resultAvailable,
     status,
   };
 }

@@ -4,14 +4,21 @@ import { notFound } from "next/navigation";
 import { ArrowLeftIcon, AwardIcon, CircleDotIcon, TrophyIcon } from "lucide-react";
 import { getPublicEwcPredictorProfile } from "@bot/lib/ewcProfileStats.js";
 import { PredictionAchievementBadges } from "@/components/predictions/prediction-achievement-badges";
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { currentSeason } from "@/lib/env";
 import { resolveDefaultGuildId } from "@/lib/guild";
 import { buildPageMetadata } from "@/lib/metadata";
 import { copy, formatNumber, localizedPath } from "@/lib/i18n";
+import {
+  scoreBreakdownStatusKey,
+  type PredictionBreakdown,
+  type PredictionBreakdownRow,
+} from "@/lib/prediction-breakdown-model";
 import { getRequestLocale } from "@/lib/request-locale";
 
 export const runtime = "nodejs";
@@ -32,6 +39,7 @@ type PublicPredictor = {
     kind: "weekly" | "season";
     points: number;
     provisional: boolean;
+    breakdown: PredictionBreakdown | null;
   }>;
   recentFinalizedResults: Array<{
     weekKey: string;
@@ -42,6 +50,25 @@ type PublicPredictor = {
     winner: boolean;
   }>;
 };
+
+function breakdownRowName(
+  row: PredictionBreakdownRow,
+  index: number,
+  breakdown: PredictionBreakdown | null,
+  locale: "en" | "ar",
+) {
+  if (breakdown?.kind === "weekly-per-game") {
+    return row.game || `${copy[locale].profile.scoreDetails} ${formatNumber(index + 1, locale)}`;
+  }
+  if (breakdown?.kind === "season") {
+    return `${copy[locale].profile.scorePick} #${formatNumber(row.predictedRank || index + 1, locale)}`;
+  }
+  return `${copy[locale].profile.scorePick} ${formatNumber(index + 1, locale)}`;
+}
+
+function breakdownRowPick(row: PredictionBreakdownRow) {
+  return row.pick || row.matchedClub || row.matchedTeam || "-";
+}
 
 async function getPredictor(id: string): Promise<PublicPredictor | null> {
   const guildId = await resolveDefaultGuildId();
@@ -137,20 +164,79 @@ export default async function PublicPredictorPage({
         </div>
         {predictor.scoreSources.length ? (
           <Card>
-            <CardContent className="divide-y p-0">
-              {predictor.scoreSources.map((source) => (
-                <div key={source.key} className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 sm:px-5">
-                  <div className="flex min-w-0 flex-wrap items-center gap-2">
-                    <p className="font-medium" dir="auto">{source.label}</p>
-                    <Badge variant={source.provisional ? "secondary" : "outline"}>
-                      {source.provisional ? profile.provisional : source.kind === "season" ? profile.seasonResult : profile.finalized}
-                    </Badge>
-                  </div>
-                  <span className="font-semibold tabular-nums">
-                    {source.points >= 0 ? "+" : ""}{formatNumber(source.points, locale)} {text.common.points.toLowerCase()}
-                  </span>
-                </div>
-              ))}
+            <CardContent className="p-0">
+              <Accordion defaultValue={predictor.scoreSources[0]?.key ? [predictor.scoreSources[0].key] : []}>
+                {predictor.scoreSources.map((source) => (
+                  <AccordionItem key={source.key} value={source.key}>
+                    <AccordionTrigger className="px-4 py-3 hover:no-underline sm:px-5">
+                      <div className="flex min-w-0 flex-1 flex-wrap items-center justify-between gap-3 pe-3">
+                        <div className="flex min-w-0 flex-wrap items-center gap-2">
+                          <span className="font-medium" dir="auto">{source.label}</span>
+                          <Badge variant={source.provisional ? "secondary" : "outline"}>
+                            {source.provisional ? profile.provisional : source.kind === "season" ? profile.seasonResult : profile.finalized}
+                          </Badge>
+                        </div>
+                        <span className="font-semibold tabular-nums">
+                          {source.points >= 0 ? "+" : ""}{formatNumber(source.points, locale)} {text.common.points.toLowerCase()}
+                        </span>
+                      </div>
+                    </AccordionTrigger>
+                    <AccordionContent className="pb-0">
+                      {source.breakdown?.available ? (
+                        <Table>
+                          <TableHeader>
+                            <TableRow>
+                              <TableHead>{text.profiles.game}</TableHead>
+                              <TableHead>{text.profile.scorePick}</TableHead>
+                              <TableHead>{text.profiles.status}</TableHead>
+                              <TableHead className="text-end">{text.common.points}</TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {source.breakdown.rows.map((row, index) => (
+                              <TableRow key={`${row.game || row.pick || "score"}-${index}`}>
+                                <TableCell className="max-w-72 whitespace-normal font-medium" dir="auto">
+                                  {breakdownRowName(row, index, source.breakdown, locale)}
+                                </TableCell>
+                                <TableCell className="max-w-56 whitespace-normal" dir="auto">
+                                  <div className="flex flex-col gap-1">
+                                    <span>{breakdownRowPick(row)}</span>
+                                    {row.placement ? (
+                                      <span className="text-xs text-muted-foreground">
+                                        {text.profile.scorePlacement}: {row.placement}
+                                      </span>
+                                    ) : null}
+                                  </div>
+                                </TableCell>
+                                <TableCell>
+                                  <Badge variant="secondary">
+                                    {text.profile.scoreStatus[scoreBreakdownStatusKey(row.status)]}
+                                  </Badge>
+                                </TableCell>
+                                <TableCell className="text-end font-semibold tabular-nums">
+                                  {row.points >= 0 ? "+" : ""}{formatNumber(row.points, locale)}
+                                </TableCell>
+                              </TableRow>
+                            ))}
+                            {source.breakdown.bonus ? (
+                              <TableRow>
+                                <TableCell colSpan={3} className="font-medium">{profile.bonus}</TableCell>
+                                <TableCell className="text-end font-semibold tabular-nums">
+                                  +{formatNumber(source.breakdown.bonus, locale)}
+                                </TableCell>
+                              </TableRow>
+                            ) : null}
+                          </TableBody>
+                        </Table>
+                      ) : (
+                        <p className="border-t px-4 py-3 text-sm text-muted-foreground sm:px-5">
+                          {text.profile.scoreDetailsUnavailable}
+                        </p>
+                      )}
+                    </AccordionContent>
+                  </AccordionItem>
+                ))}
+              </Accordion>
             </CardContent>
           </Card>
         ) : (
