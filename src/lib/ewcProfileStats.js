@@ -286,7 +286,7 @@ async function recentFinalizedPerformance(guildId, season, userId) {
        AND w.status = 'scored'
        AND wp.user_id = $3
        AND wp.score IS NOT NULL
-     ORDER BY COALESCE(w.scored_at, w.close_at, w.id) DESC, w.id DESC
+     ORDER BY w.scored_at DESC, w.close_at DESC, w.id DESC
      LIMIT 6`,
     [guildId, season, userId],
   );
