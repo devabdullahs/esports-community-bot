@@ -37,7 +37,7 @@ test.after(() => {
 });
 
 test('standings games gate', () => {
-  for (const g of ['pubg', 'pubgmobile', 'freefire', 'fortnite', 'apexlegends', 'warzone', 'tft', 'fighters']) {
+  for (const g of ['pubg', 'pubgmobile', 'freefire', 'fortnite', 'apexlegends', 'warzone', 'tft', 'fighters', 'easportsfc']) {
     assert.ok(isStandingsGame(g), g);
   }
   assert.ok(!isStandingsGame('valorant'));

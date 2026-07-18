@@ -207,6 +207,8 @@ export async function privatePickerForViewer(guildId: string, season: string, di
               const existingPick = picks.get(String(game.key)) || null;
               const participants = await ewcGameParticipantTeams(game.game || String(game.key), {
                 eventUrl: game.eventUrl || null,
+                eventName: game.event || null,
+                guildId,
               }).catch(() => []);
               const choices = [...new Set([...participants, ...(existingPick ? [existingPick] : [])])]
                 .filter(Boolean)

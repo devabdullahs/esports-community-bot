@@ -14,6 +14,7 @@ import * as defaultLiquipedia from '../services/liquipedia.js';
 // 8 active events = ~4 minutes of queue time per sweep at the >=30s gap.
 const STANDINGS_GAMES = new Set([
   'apexlegends',
+  'easportsfc',
   'fighters',
   'fortnite',
   'freefire',

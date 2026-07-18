@@ -664,10 +664,14 @@ function modalTextValue(interaction, customId) {
 // clubs for that game not already listed. Surfaces game-specific qualifiers (e.g.
 // Free Fire's EVOS Divine) that are not season-long club members. Optional `query`
 // filters for autocomplete. Returns Discord {name, value} options.
-async function weeklyGameTeamOptions(game, query = '', { limit = 25 } = {}) {
+async function weeklyGameTeamOptions(game, query = '', { limit = 25, guildId = null } = {}) {
   const q = normalizeClubName(query);
   const [participants, clubChoices] = await Promise.all([
-    ewcGameParticipantTeams(game.game, { eventUrl: game.eventUrl }),
+    ewcGameParticipantTeams(game.game, {
+      eventUrl: game.eventUrl,
+      eventName: game.event,
+      guildId,
+    }),
     searchEwcClubChoices(query, { game: game.game, strictGame: true }),
   ]);
   const seen = new Set();
@@ -708,7 +712,7 @@ async function showWeeklyPickModal(interaction, { seasonYear, weekKey, gameKey, 
   }
 
   const current = await getExistingGamePick(interaction.guildId, round, interaction.user.id, gameKey);
-  const choices = await weeklyGameTeamOptions(game, '', { limit: 100 });
+  const choices = await weeklyGameTeamOptions(game, '', { limit: 100, guildId: interaction.guildId });
   const modal = new ModalBuilder()
     .setCustomId(weeklyPickModalId(seasonYear, weekKey, gameKey, page, interaction.user.id))
     .setTitle(`${game.game || 'Game'} pick`.slice(0, 45));

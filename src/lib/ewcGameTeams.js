@@ -116,12 +116,15 @@ function scopeRows(rows, { slug, gameName, eventPath }) {
 // same normalization scoring uses, so a picked name matches results at scoring.
 /**
  * @param {string} gameName
- * @param {{ eventUrl?: string | null }} [options]
+ * @param {{ eventUrl?: string | null, eventName?: string | null, guildId?: string | null }} [options]
  */
-export async function ewcGameParticipantTeams(gameName, { eventUrl = null } = {}) {
+export async function ewcGameParticipantTeams(gameName, { eventUrl = null, eventName = null, guildId = null } = {}) {
   const slug = slugForGameName(gameName);
   if (!slug) return [];
-  const eventPath = eventPathFromUrl(eventUrl);
+  const resolvedEventUrl = guildId
+    ? await resolveEwcGameEventUrl(gameName, { guildId, eventUrl, eventName })
+    : eventUrl;
+  const eventPath = eventPathFromUrl(resolvedEventUrl);
 
   const [standingsRows, matchRows] = await Promise.all([
     listStandingsTeamRowsForGame(slug, { ewcOnly: true }).catch(() => []),
