@@ -48,7 +48,7 @@ import {
   scoreSeasonPrediction,
   scoreWeeklyPrediction,
 } from '../lib/ewcPredictions.js';
-import { resolveEwcGameEventUrl } from '../lib/ewcGameTeams.js';
+import { resolveEwcGameEventUrl, trackedEwcGamePlacements } from '../lib/ewcGameTeams.js';
 import { renderEwcPredictionLeaderboardCard } from '../lib/ewcPredictionLeaderboardCard.js';
 import { fetchEwcClubStandings, fetchEwcWeekGameResults } from '../services/liquipedia.js';
 
@@ -571,9 +571,20 @@ async function processWeek(client, round) {
           eventName: game.event,
         }),
       })));
-      const fetched = (await fetchEwcWeekGameResults(resolvedCandidates)).map((result) => ({
-        ...result,
-        fetchedAt: nowSec(),
+      const fetchedAt = nowSec();
+      const fetched = await Promise.all((await fetchEwcWeekGameResults(resolvedCandidates)).map(async (result) => {
+        const game = resolvedCandidates.find((candidate) => candidate.key === result.gameKey);
+        if (!game || !ewcGameResultPending(result) || fetchedAt < Number(game.endAt || 0)) {
+          return { ...result, fetchedAt };
+        }
+        const placements = await trackedEwcGamePlacements(game.game, {
+          guildId: round.guild_id,
+          eventUrl: game.eventUrl,
+          eventName: game.event,
+        });
+        if (!placements.length) return { ...result, fetchedAt };
+        logger.info(`[ewc-predictions] used final tracked standings for ${round.guild_id}/${round.week_key}/${game.game}`);
+        return { ...result, placements, resultSource: 'tracked-final-standings', fetchedAt };
       }));
       const merged = mergeEwcGameResults(results, fetched);
       resultsChanged = JSON.stringify(merged) !== JSON.stringify(results);

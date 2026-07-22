@@ -262,8 +262,12 @@ test('notifyMatchEvent enqueues deduped notifications and honors prefs', async (
   const first = await notifyMatchEvent(null, 'started', row);
   assert.equal(first.notified, 4); // everyone but QUIET_FAN
 
-  // Same transition again (poll churn): dedupe key blocks every insert.
-  const second = await notifyMatchEvent(null, 'started', row);
+  // The same event discovered through a stage-page alias must not notify again.
+  const second = await notifyMatchEvent(null, 'started', {
+    ...row,
+    id: Number(row.id) + 1000,
+    external_id: 'valorant:Follow_Cup/Group_Stage:bracket:1:team liquid vs karmine corp',
+  });
   assert.equal(second.notified, 0);
 
   // 'update' events (score ticks) never notify.

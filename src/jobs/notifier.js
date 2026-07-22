@@ -1,5 +1,6 @@
 import { config } from '../config.js';
 import { logger } from '../lib/logger.js';
+import { matchEventKey } from '../db/matches.js';
 import { getTournamentById } from '../db/tournaments.js';
 import { listFollowersForMatch } from '../db/userFollows.js';
 import { listActiveReminderUserIdsForMatch } from '../db/userMatchReminders.js';
@@ -76,7 +77,7 @@ export async function notifyMatchEvent(client, type, match) {
     title,
     body: tournament.name || '',
     url: siteUrl(`/tournaments/${tournament.id}`),
-    dedupeKey: `${notificationType}:${match.source}:${match.external_id}`,
+    dedupeKey: `${notificationType}:${matchEventKey({ ...match, game: tournament.game })}`,
   });
 
   if (inserted) {

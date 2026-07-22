@@ -1,6 +1,6 @@
 import { categoryToGameSlug, fightersTag, gameSlugFromName, isLobbyGame, isKnownGameSlug, normalizeGameSlug } from './games.js';
-import { normalizeClubName } from './ewcPredictions.js';
-import { listStandingsTeamRowsForGame } from '../db/tournamentStandings.js';
+import { EWC_POINTS_BY_RANK, normalizeClubName } from './ewcPredictions.js';
+import { listStandingsForTournament, listStandingsTeamRowsForGame } from '../db/tournamentStandings.js';
 import { listTrackedTeamRowsForGame } from '../db/matches.js';
 import { listEwcTournamentsForGame } from '../db/tournaments.js';
 
@@ -25,7 +25,7 @@ function slugForGameName(gameName) {
 function eventPathFromUrl(eventUrl) {
   if (!eventUrl) return null;
   try {
-    const url = new URL(eventUrl);
+    const url = new URL(String(eventUrl).replace(/^url:/i, ''));
     if (!/liquipedia\.net$/i.test(url.hostname)) return null;
     const parts = url.pathname.split('/').filter(Boolean);
     if (parts.length < 2) return null;
@@ -33,6 +33,40 @@ function eventPathFromUrl(eventUrl) {
   } catch {
     return null;
   }
+}
+
+function finalStandingsPriority(section) {
+  const normalized = String(section || '').trim().toLowerCase().replace(/\bfinals\b/g, 'final');
+  if (/\bgrand final\b/.test(normalized)) return 4;
+  if (/\bfinal standings\b/.test(normalized)) return 3;
+  if (/(?:^|:)\s*final\s*$/.test(normalized)) return 1;
+  return 0;
+}
+
+function trackedTournamentForEvent(rows, { slug, gameName, eventUrl, eventName }) {
+  const liquipediaRows = rows.filter((row) => row.source === 'liquipedia' && eventPathFromUrl(row.url));
+  if (!liquipediaRows.length) return null;
+
+  const requestedPath = eventPathFromUrl(eventUrl);
+  const exact = requestedPath
+    ? liquipediaRows.find((row) => eventPathFromUrl(row.url) === requestedPath)
+    : null;
+  if (exact) return exact;
+
+  if (normalizeGameSlug(slug) === 'fighters') {
+    const wanted = fightersTag(gameName);
+    const tagged = liquipediaRows.find((row) => fightersTag(row.name) === wanted);
+    if (tagged) return tagged;
+  }
+
+  const wantedTokens = eventNameTokens(eventName);
+  if (wantedTokens.size) {
+    const ranked = liquipediaRows
+      .map((row) => ({ row, score: [...eventNameTokens(row.name)].filter((token) => wantedTokens.has(token)).length }))
+      .sort((a, b) => b.score - a.score);
+    if (ranked[0]?.score > 0) return ranked[0].row;
+  }
+  return liquipediaRows[0];
 }
 
 function eventNameTokens(value) {
@@ -59,28 +93,44 @@ export async function resolveEwcGameEventUrl(gameName, { guildId, eventUrl = nul
   const slug = slugForGameName(gameName);
   if (!slug || !guildId) return eventUrl;
   const rows = await listEwcTournamentsForGame(guildId, slug).catch(() => []);
-  const liquipediaRows = rows.filter((row) => row.source === 'liquipedia' && eventPathFromUrl(row.url));
-  if (!liquipediaRows.length) return eventUrl;
+  const tournament = trackedTournamentForEvent(rows, { slug, gameName, eventUrl, eventName });
+  return tournament ? resultPageUrl(slug, String(tournament.url).replace(/^url:/i, '')) : eventUrl;
+}
 
-  const requestedPath = eventPathFromUrl(eventUrl);
-  const exact = requestedPath
-    ? liquipediaRows.find((row) => eventPathFromUrl(row.url) === requestedPath)
-    : null;
-  if (exact) return resultPageUrl(slug, exact.url);
+// Prize tables can remain TBD after an event is complete even though the
+// tracked page has already published an authoritative final standings table.
+// This fallback deliberately accepts only semantically final sections and
+// requires a first-place row; group-stage and live standings fail closed.
+export async function trackedEwcGamePlacements(gameName, { guildId, eventUrl = null, eventName = null } = {}) {
+  const slug = slugForGameName(gameName);
+  if (!slug || !guildId) return [];
+  const tournaments = await listEwcTournamentsForGame(guildId, slug).catch(() => []);
+  const tournament = trackedTournamentForEvent(tournaments, { slug, gameName, eventUrl, eventName });
+  if (!tournament) return [];
 
-  if (normalizeGameSlug(slug) === 'fighters') {
-    const wanted = fightersTag(gameName);
-    const tagged = liquipediaRows.find((row) => fightersTag(row.name) === wanted);
-    if (tagged) return resultPageUrl(slug, tagged.url);
+  const rows = await listStandingsForTournament(tournament.id).catch(() => []);
+  const sections = [...new Set(rows.map((row) => String(row.section || '').trim()).filter(Boolean))];
+  const selected = sections
+    .map((section, index) => ({ section, index, priority: finalStandingsPriority(section) }))
+    .filter(({ priority }) => priority > 0)
+    .sort((a, b) => b.priority - a.priority || b.index - a.index)[0]?.section;
+  if (!selected) return [];
+
+  const placements = [];
+  const seen = new Set();
+  for (const row of rows) {
+    if (row.section !== selected) continue;
+    const rank = Number(row.rank);
+    const points = EWC_POINTS_BY_RANK.get(rank) || 0;
+    const club = String(row.team || '').replace(/\s+/g, ' ').trim();
+    const key = normalizeClubName(club);
+    if (!club || !points || seen.has(key)) continue;
+    seen.add(key);
+    placements.push({ club, place: String(rank), points, participant: null });
   }
-  const wantedTokens = eventNameTokens(eventName);
-  if (wantedTokens.size) {
-    const ranked = liquipediaRows
-      .map((row) => ({ row, score: [...eventNameTokens(row.name)].filter((token) => wantedTokens.has(token)).length }))
-      .sort((a, b) => b.score - a.score);
-    if (ranked[0]?.score > 0) return resultPageUrl(slug, ranked[0].row.url);
-  }
-  return resultPageUrl(slug, liquipediaRows[0].url);
+  return placements.some((row) => row.points === EWC_POINTS_BY_RANK.get(1))
+    ? placements.sort((a, b) => b.points - a.points || a.club.localeCompare(b.club))
+    : [];
 }
 
 // Narrow EWC team rows to the week game's OWN event. Fallback chain, most to
