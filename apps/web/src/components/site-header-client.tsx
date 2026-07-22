@@ -139,12 +139,12 @@ export function SiteHeaderClient({
   ];
   const competitionLinks: Destination[] = [
     { href: "/tournaments", label: text.common.tournaments, icon: TrophyIcon },
+    { href: "/live", label: text.common.liveMatches, icon: RadioIcon },
     { href: "/teams", label: text.common.teams, icon: UsersIcon },
     { href: "/players", label: text.common.players, icon: UserRoundIcon },
     { href: "/mvp", label: locale === "ar" ? "أفضل لاعب اليوم" : "MVP of the day", icon: MedalIcon },
     { href: "/compare", label: text.profiles.compare, icon: ArrowLeftRightIcon },
   ];
-  const liveLink: Destination = { href: "/live", label: text.common.live, icon: RadioIcon };
   // Co-streams stays top-level because it spans every tracked event and carries
   // a live indicator when any co-streamer is on air.
   const coStreamsLink: Destination = { href: "/co-streams", label: text.common.coStreams, icon: RadioIcon };
@@ -153,7 +153,6 @@ export function SiteHeaderClient({
     label: text.follows.notificationsTitle,
     icon: BellIcon,
   };
-  const primary: Destination[] = [...contentLinks, ...competitionLinks, liveLink, coStreamsLink];
   const desktopGroups = [
     { label: text.common.content, icon: NewspaperIcon, links: contentLinks },
     { label: text.common.competition, icon: TrophyIcon, links: competitionLinks },
@@ -266,17 +265,6 @@ export function SiteHeaderClient({
                 </NavigationMenuItem>
               );
             })}
-            <NavigationMenuItem>
-              <NavigationMenuLink
-                data-active={linkActive(liveLink.href) || undefined}
-                aria-current={linkActive(liveLink.href) ? "page" : undefined}
-                render={<Link href={localizedPath(liveLink.href, locale)} />}
-                className={navigationMenuTriggerStyle()}
-              >
-                <RadioIcon />
-                {liveLink.label}
-              </NavigationMenuLink>
-            </NavigationMenuItem>
             <NavigationMenuItem>
               <NavigationMenuLink
                 data-active={linkActive(coStreamsLink.href) || undefined}
@@ -455,9 +443,9 @@ export function SiteHeaderClient({
               <nav className="flex flex-col gap-1 px-3 pb-3">
                 <GlobalSearch locale={locale} mobile onResultOpen={() => setMobileOpen(false)} />
                 <p className="px-3 pb-1 pt-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                  {text.common.browse}
+                  {text.common.content}
                 </p>
-                {primary.map((destination) => (
+                {contentLinks.map((destination) => (
                   <MobileNavLink
                     key={destination.href}
                     destination={destination}
@@ -466,6 +454,23 @@ export function SiteHeaderClient({
                     badge={liveBadge(destination.href)}
                   />
                 ))}
+                <p className="px-3 pb-1 pt-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  {text.common.competition}
+                </p>
+                {competitionLinks.map((destination) => (
+                  <MobileNavLink
+                    key={destination.href}
+                    destination={destination}
+                    locale={locale}
+                    active={linkActive(destination.href)}
+                  />
+                ))}
+                <MobileNavLink
+                  destination={coStreamsLink}
+                  locale={locale}
+                  active={linkActive(coStreamsLink.href)}
+                  badge={liveBadge(coStreamsLink.href)}
+                />
                 <p className="px-3 pb-1 pt-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                   {text.common.ewc}
                 </p>

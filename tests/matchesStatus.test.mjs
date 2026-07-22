@@ -13,6 +13,7 @@ const {
   getActiveMatches,
   getMatch,
   getMatchesForGuild,
+  matchEventKey,
   markStaleActiveFinished,
   upsertMatch,
 } = await import('../src/db/matches.js');
@@ -208,6 +209,62 @@ test('dedupeMatches prefers full Rune Eaters result over short-name live row', (
   ];
 
   assert.deepEqual(dedupeMatches(rows), [rows[1]]);
+});
+
+test('dedupeMatches collapses parent and stage tournament copies deterministically', () => {
+  const scheduledAt = 1_784_710_800;
+  const parent = {
+    id: 18792627,
+    tournament_id: 28,
+    tournament_name: 'MLBB Mid Season Cup 2026',
+    tournament_path: 'mobilelegends/MSC/2026',
+    game: 'mobilelegends',
+    external_id: 'mobilelegends:MSC/2026:bracket:10:team falcons vs team vamos',
+    team_a: 'Team Vamos',
+    team_b: 'Team Falcons',
+    score_a: 0,
+    score_b: 0,
+    status: 'running',
+    scheduled_at: scheduledAt,
+  };
+  const stage = {
+    ...parent,
+    id: 18794480,
+    tournament_id: 142,
+    tournament_name: 'MLBB Mid Season Cup 2026 - Group Stage',
+    tournament_path: 'mobilelegends/MSC/2026/Group_Stage',
+    external_id: 'mobilelegends:MSC/2026/Group_Stage:bracket:3:team falcons vs team vamos',
+  };
+
+  assert.deepEqual(dedupeMatches([parent, stage]), [stage]);
+  assert.deepEqual(dedupeMatches([stage, parent]), [stage]);
+  assert.equal(matchEventKey(parent), matchEventKey(stage));
+});
+
+test('dedupeMatches preserves legitimate same-pair rematches later on the same day', () => {
+  const first = {
+    id: 1,
+    tournament_id: 10,
+    game: 'mobilelegends',
+    external_id: 'match:first',
+    team_a: 'Team Vamos',
+    team_b: 'Team Falcons',
+    status: 'finished',
+    score_a: 2,
+    score_b: 0,
+    scheduled_at: 1_784_710_800,
+  };
+  const rematch = {
+    ...first,
+    id: 2,
+    external_id: 'match:rematch',
+    score_a: 0,
+    score_b: 2,
+    scheduled_at: first.scheduled_at + 2 * 3600,
+  };
+
+  assert.deepEqual(dedupeMatches([first, rematch]), [first, rematch]);
+  assert.notEqual(matchEventKey(first), matchEventKey(rematch));
 });
 
 test('markStaleActiveFinished retires old scheduled and running rows only', async (t) => {

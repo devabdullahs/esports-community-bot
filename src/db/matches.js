@@ -1,5 +1,6 @@
 import { all, get, run, transaction } from './client.js';
 import { normalizeTeamName } from '../lib/render.js';
+import { normalizeGameSlug } from '../lib/games.js';
 import { EWC_TOURNAMENT_SQL } from './tournamentStandings.js';
 
 function nowText() {
@@ -89,43 +90,95 @@ export async function getMatch(source, externalId) {
   return get('SELECT * FROM matches WHERE source = $1 AND external_id = $2', [source, externalId]);
 }
 
-// Collapse rows that describe the SAME match but were stored separately — e.g. the bracket form
-// "Team Canada" plus the upcoming-widget form "Canada", or the same game tracked on two sources.
-// Keyed by game + normalized team pair + calendar day; keeps the most authoritative row.
-// A finished result with a score beats a stale "running" widget row for the same pair/day.
+const MATCH_ALIAS_WINDOW_SECONDS = 15 * 60;
+
+function normalizedPair(m) {
+  return [normalizeTeamName(m.team_a), normalizeTeamName(m.team_b)].sort().join('|');
+}
+
+function scheduledTimestamp(m) {
+  const value = Number(m.scheduled_at);
+  return Number.isFinite(value) && value > 0 ? Math.trunc(value) : null;
+}
+
+// Stable identity for persisted event state. Tournament names and page paths are excluded:
+// a parent page and its stage page can expose the same match under different external ids.
+// Unknown-time rows keep their external id so unscheduled rematches never collide.
+export function matchEventKey(m) {
+  const game = normalizeGameSlug(String(m.game ?? ''));
+  const timestamp = scheduledTimestamp(m);
+  const occurrence = timestamp == null ? `external:${String(m.external_id ?? '')}` : `at:${timestamp}`;
+  return `${game}|${normalizedPair(m)}|${occurrence}`;
+}
+
+function tournamentSpecificity(m) {
+  const path = String(m.tournament_path ?? m.tournament_external_id ?? '');
+  const pathDepth = path.split('/').filter(Boolean).length;
+  const stageName = /(?:group|play-?offs?|finals?|survivor|stage|bracket)/i.test(String(m.tournament_name ?? ''));
+  return pathDepth * 10 + (stageName ? 1 : 0);
+}
+
+function matchRank(m) {
+  const hasScore = m.score_a != null && m.score_b != null;
+  const status =
+    m.status === 'finished' && hasScore ? 300 : m.status === 'running' ? 200 : m.status === 'finished' ? 150 : 0;
+  const stableMatchId = /^Match:/i.test(m.external_id || '') ? 40 : 0;
+  const structural = /:(?:matchlist|bracket):/i.test(m.external_id || '') ? 10 : 0;
+  const liveWidgetFallback = /^[^:]+:\d+:/i.test(m.external_id || '') ? -10 : 0;
+  return (
+    status +
+    stableMatchId +
+    structural +
+    liveWidgetFallback +
+    (hasScore ? 20 : 0) +
+    (m.logo_a ? 1 : 0) +
+    (m.logo_b ? 1 : 0)
+  );
+}
+
+function compareMatchCopies(a, b) {
+  const quality = matchRank(a) - matchRank(b);
+  if (quality) return quality;
+  const specificity = tournamentSpecificity(a) - tournamentSpecificity(b);
+  if (specificity) return specificity;
+  const external = String(b.external_id ?? '').localeCompare(String(a.external_id ?? ''));
+  if (external) return external;
+  return Number(b.id ?? 0) - Number(a.id ?? 0);
+}
+
+// Collapse copies from widgets, brackets, parent pages, and stage pages. Timestamped copies
+// merge only inside a narrow window, preserving legitimate same-pair rematches later that day.
 export function dedupeMatches(rows) {
-  const rank = (m) => {
-    const hasScore = m.score_a != null && m.score_b != null;
-    const status =
-      m.status === 'finished' && hasScore ? 300 : m.status === 'running' ? 200 : m.status === 'finished' ? 150 : 0;
-    const stableMatchId = /^Match:/i.test(m.external_id || '') ? 40 : 0;
-    const structural = /:(?:matchlist|bracket):/i.test(m.external_id || '') ? 10 : 0;
-    const liveWidgetFallback = /^[^:]+:\d+:/i.test(m.external_id || '') ? -10 : 0;
-    return (
-      status +
-      stableMatchId +
-      structural +
-      liveWidgetFallback +
-      (hasScore ? 20 : 0) +
-      (m.logo_a ? 1 : 0) +
-      (m.logo_b ? 1 : 0)
+  const groups = [];
+  for (const [index, row] of rows.entries()) {
+    const baseKey = `${normalizeGameSlug(String(row.game ?? ''))}|${normalizedPair(row)}`;
+    const timestamp = scheduledTimestamp(row);
+    const group = groups.find(
+      (candidate) =>
+        candidate.baseKey === baseKey &&
+        ((timestamp != null &&
+          candidate.timestamp != null &&
+          Math.abs(timestamp - candidate.timestamp) <= MATCH_ALIAS_WINDOW_SECONDS) ||
+          (timestamp == null && candidate.timestamp == null && candidate.externalId === String(row.external_id ?? ''))),
     );
-  };
-  const best = new Map();
-  for (const m of rows) {
-    const day = m.scheduled_at ? Math.floor(m.scheduled_at / 86400) : 'x';
-    const pair = [normalizeTeamName(m.team_a), normalizeTeamName(m.team_b)].sort().join('|');
-    const key = `${m.game}|${pair}|${day}`;
-    const cur = best.get(key);
-    if (!cur || rank(m) > rank(cur)) best.set(key, m);
+    if (!group) {
+      groups.push({
+        baseKey,
+        timestamp,
+        externalId: String(row.external_id ?? ''),
+        firstIndex: index,
+        best: row,
+      });
+    } else if (compareMatchCopies(row, group.best) > 0) {
+      group.best = row;
+    }
   }
-  const keep = new Set(best.values());
-  const exact = rows.filter((r) => keep.has(r));
+  const exact = groups.sort((a, b) => a.firstIndex - b.firstIndex).map((group) => group.best);
 
   const byTime = new Map();
   for (const row of exact) {
     if (!row.scheduled_at) continue;
-    const key = `${row.tournament_id ?? ''}|${row.game ?? ''}|${row.scheduled_at}`;
+    const key = `${normalizeGameSlug(String(row.game ?? ''))}|${row.scheduled_at}`;
     const group = byTime.get(key);
     if (group) group.push(row);
     else byTime.set(key, [row]);
@@ -136,7 +189,7 @@ export function dedupeMatches(rows) {
   for (const group of byTime.values()) {
     if (group.length < 2) continue;
     const chosen = [];
-    for (const row of [...group].sort((a, b) => rank(b) - rank(a))) {
+    for (const row of [...group].sort((a, b) => compareMatchCopies(b, a))) {
       const keys = new Set(teamKeys(row));
       const duplicate = chosen.some((kept) => teamKeys(kept).some((key) => keys.has(key)));
       if (duplicate) drop.add(row);
