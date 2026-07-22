@@ -22,7 +22,12 @@ const { upsertMatch } = await import('../src/db/matches.js');
 const { upsertEwcWeek, listEwcWeeksToAnnounceOpen, markEwcWeekOpenAnnounced, setEwcWeekStatus } = await import(
   '../src/db/ewcPredictions.js'
 );
-const { ewcGameParticipantTeams, matchParticipant, resolveEwcGameEventUrl } = await import('../src/lib/ewcGameTeams.js');
+const {
+  ewcGameParticipantTeams,
+  matchParticipant,
+  resolveEwcGameEventUrl,
+  trackedEwcGamePlacements,
+} = await import('../src/lib/ewcGameTeams.js');
 const { formatWeeklyPickLabel } = await import('../src/lib/ewcProfileStats.js');
 
 test.after(() => {
@@ -273,6 +278,79 @@ test('standings (curated field) replace match teams so qualifier brackets stay o
   });
   assert.ok(teams.includes('NaiWang'), 'participants table still listed');
   assert.ok(!teams.includes('Random LCQ Entrant'), 'LCQ bracket entrants are not options');
+});
+
+test('trackedEwcGamePlacements uses only an exact final standings section', async () => {
+  const mwi = await addTournament({
+    source: 'liquipedia',
+    external_id: 'mobilelegends/MWI/2026',
+    game: 'mobilelegends',
+    name: "MLBB Women's International 2026",
+    url: 'url:https://liquipedia.net/mobilelegends/MWI/2026',
+    guild_id: 'g-ewc',
+    added_by: 'admin',
+  });
+  await updateTournamentEwc(mwi.id, true);
+  await replaceTournamentStandings(mwi.id, [
+    {
+      title: 'Group A',
+      entries: [
+        { rank: 1, team: 'Wrong live leader' },
+        { rank: 2, team: 'Wrong runner-up' },
+      ],
+    },
+    {
+      title: 'Final standings',
+      entries: [
+        { rank: 1, team: 'Team Vitality' },
+        { rank: 2, team: 'Natus Vincere PH' },
+        { rank: 5, team: 'Falcons Vega' },
+        { rank: 9, team: 'Outside points' },
+      ],
+    },
+  ]);
+
+  assert.deepEqual(
+    await trackedEwcGamePlacements('Mobile Legends: Bang Bang', {
+      guildId: 'g-ewc',
+      eventUrl: 'https://liquipedia.net/mobilelegends/MWI/2026',
+      eventName: "MLBB Women's International 2026",
+    }),
+    [
+      { club: 'Team Vitality', place: '1', points: 1000, participant: null },
+      { club: 'Natus Vincere PH', place: '2', points: 750, participant: null },
+      { club: 'Falcons Vega', place: '5', points: 200, participant: null },
+    ],
+  );
+  assert.equal(
+    await resolveEwcGameEventUrl('Mobile Legends: Bang Bang', {
+      guildId: 'g-ewc',
+      eventUrl: 'https://liquipedia.net/mobilelegends/MWI/2026',
+    }),
+    'https://liquipedia.net/mobilelegends/MWI/2026',
+  );
+});
+
+test('trackedEwcGamePlacements rejects non-final standings', async () => {
+  const event = await addTournament({
+    source: 'liquipedia',
+    external_id: 'tft/Esports_World_Cup/2026/live',
+    game: 'tft',
+    name: 'TFT at Esports World Cup 2026 live table',
+    url: 'https://liquipedia.net/tft/Esports_World_Cup/2026/live',
+    guild_id: 'g-ewc',
+    added_by: 'admin',
+  });
+  await updateTournamentEwc(event.id, true);
+  await replaceTournamentStandings(event.id, [{
+    title: 'Group Stage',
+    entries: [{ rank: 1, team: 'Current leader' }],
+  }]);
+
+  assert.deepEqual(await trackedEwcGamePlacements('Teamfight Tactics', {
+    guildId: 'g-ewc',
+    eventUrl: event.url,
+  }), []);
 });
 
 test('EA SPORTS FC World Championship choices exclude Play-Ins and LCQ entrants', async () => {
