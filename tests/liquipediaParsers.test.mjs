@@ -26,6 +26,7 @@ const {
   parseBracketMatch,
   parseMatchInfo,
   parseMatchStream,
+  matchResultRank,
   mergeLiveWidgetMatch,
   parseTournamentEwcAffiliation,
   parseEwcEventPlacements,
@@ -1002,6 +1003,33 @@ test('mergeLiveWidgetMatch does not reopen an authoritative scored result', () =
   assert.equal(existing.status, 'finished');
   assert.equal(existing.scoreA, 1);
   assert.equal(existing.scoreB, 1);
+});
+
+test('mergeLiveWidgetMatch does not reopen an authoritative winner without numeric scores', () => {
+  const existing = {
+    teamA: 'DFernandes',
+    teamB: 'MarwanMC9',
+    scoreA: null,
+    scoreB: null,
+    status: 'finished',
+    scheduledAt: 1_784_744_400,
+    winner: 'DFernandes',
+  };
+  const liveWidget = {
+    teamA: 'DFernandes',
+    teamB: 'MarwanMC9',
+    scoreA: null,
+    scoreB: null,
+    status: 'running',
+    scheduledAt: 1_784_744_400,
+  };
+
+  assert.ok(matchResultRank(existing) > matchResultRank(liveWidget));
+  assert.equal(mergeLiveWidgetMatch(existing, liveWidget), false);
+  assert.equal(existing.status, 'finished');
+  assert.equal(existing.winner, 'DFernandes');
+  assert.equal(existing.scoreA, null);
+  assert.equal(existing.scoreB, null);
 });
 
 test('mergeLiveWidgetMatch can still start and enrich an unresolved row', () => {
