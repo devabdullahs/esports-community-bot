@@ -23,6 +23,7 @@ import {
   VRS_REGIONS,
   normalizeValveRankingRegion,
   parseValveRankingTable,
+  matchResultRank,
   mergeLiveWidgetMatch,
 } from './parsers.js';
 import { alignMatchDetailsSides, parseMatchDetails } from './matchDetailsParsers.js';
@@ -218,13 +219,6 @@ export async function fetchSchedule(tournament) {
     }
     return matches.length === 1 ? matches[0] : null;
   };
-  const resultRank = (m) => {
-    const hasScore = m.scoreA != null && m.scoreB != null;
-    if (m.status === 'finished' && hasScore) return 4;
-    if (m.status === 'running') return 3;
-    if (m.status === 'finished') return 2;
-    return hasScore ? 1 : 0;
-  };
   const addAuthoritative = ($page, el, parser, structuralScope, widget) => {
     const m = parser($page, el, game, structuralScope || page);
     if (!m || seenIds.has(m.externalId)) return;
@@ -232,7 +226,7 @@ export async function fetchSchedule(tournament) {
     const kept = key ? (authByKey.get(key) || []).find((entry) => entry.widget !== widget)?.match : null;
     if (kept) {
       // Same match from the sibling widget: fold in a richer result, drop the dup.
-      if (resultRank(m) > resultRank(kept)) {
+      if (matchResultRank(m) > matchResultRank(kept)) {
         kept.status = m.status;
         kept.scoreA = m.scoreA;
         kept.scoreB = m.scoreB;

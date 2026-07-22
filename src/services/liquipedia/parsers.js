@@ -316,11 +316,18 @@ export function parseMatchInfo($, el, game) {
   };
 }
 
-export function mergeLiveWidgetMatch(existing, liveMatch) {
-  const existingHasScoredResult =
-    existing.status === 'finished' && existing.scoreA != null && existing.scoreB != null;
+export function matchResultRank(match) {
+  const hasScore = match.scoreA != null && match.scoreB != null;
+  if (match.status === 'finished' && (hasScore || match.winner)) return 4;
+  if (match.status === 'running') return 3;
+  if (match.status === 'finished') return 2;
+  return hasScore ? 1 : 0;
+}
 
-  if (liveMatch.status === 'running' && !existingHasScoredResult) {
+export function mergeLiveWidgetMatch(existing, liveMatch) {
+  const existingHasAuthoritativeResult = matchResultRank(existing) === 4;
+
+  if (liveMatch.status === 'running' && !existingHasAuthoritativeResult) {
     existing.status = 'running';
     existing.winner = null;
     if (liveMatch.scoreA != null) existing.scoreA = liveMatch.scoreA;

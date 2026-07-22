@@ -16,6 +16,7 @@ export {
   parseMatchInfo,
   parseMatchlistMatch,
   parseMatchStream,
+  matchResultRank,
   mergeLiveWidgetMatch,
   parseSwissMatches,
   parseTournamentEwcAffiliation,
