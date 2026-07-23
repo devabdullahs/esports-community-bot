@@ -94,14 +94,24 @@ export function normalize(m, wiki) {
   };
 }
 
+export function scheduleConditions(page) {
+  const normalized = String(page || '').trim().replace(/^\/+|\/+$/g, '').replace(/ /g, '_');
+  if (!normalized || /[\[\]\r\n]/.test(normalized)) return null;
+
+  // Liquipedia stores tournament matches under the infobox `parent` value.
+  // `pagename` only describes the page where a particular match widget was
+  // rendered, so querying it alone returns an incomplete schedule whenever a
+  // stage is transcluded from a child page.
+  return `[[parent::${normalized}]] OR [[pagename::${normalized}]]`;
+}
+
 // Matches for a tracked tournament via LPDB (external_id = "<wiki>/<Page_Path>").
 export async function fetchSchedule(tournament) {
   const [wiki, ...rest] = tournament.external_id.split('/');
   const page = rest.join('/');
   if (!page) return [];
-  // Matches whose page is this tournament page or one of its sub-pages (e.g. Swiss groups).
-  // TODO(confirm with dashboard): the sub-page prefix match may need different LPDB syntax.
-  const conditions = `[[pagename::${page}]] OR [[pagename::${page}/_]]`;
+  const conditions = scheduleConditions(page);
+  if (!conditions) return [];
   const rows = await queryMatches(wiki, conditions);
   const seen = new Set();
   return rows

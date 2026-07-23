@@ -39,6 +39,8 @@ let archivedTournamentId: number;
 let newestArchivedTournamentId: number;
 let legacyPlayInsTournamentId: number;
 let canonicalPlayInsTournamentId: number;
+let individualTournamentId: number;
+let individualPlayerId: number;
 
 async function seed(): Promise<void> {
   // Bootstrap the SQLite schema on the shared connection. The tournaments/matches
@@ -48,6 +50,8 @@ async function seed(): Promise<void> {
   await import("@bot/db/index.js");
   const { addTournament, archiveTournament, updateTournamentEwc } = await import("@bot/db/tournaments.js");
   const { upsertMatch } = await import("@bot/db/matches.js");
+  const { createLiquipediaPlayer } = await import("@bot/db/players.js");
+  const { createLiquipediaTeam } = await import("@bot/db/teams.js");
   const { recordTournamentSyncSuccess } = await import("@bot/db/tournamentSyncHealth.js");
 
   const tournament = (await addTournament({
@@ -100,6 +104,34 @@ async function seed(): Promise<void> {
     guild_id: GUILD_ID,
   })) as { id: number };
   canonicalPlayInsTournamentId = canonicalPlayIns.id;
+
+  const individualTournament = (await addTournament({
+    source: "liquipedia",
+    external_id: `easportsfc/FC_Pro_26/World_Championship-${Date.now()}`,
+    game: "easportsfc",
+    name: "FC Pro 26 World Championship",
+    url: "https://liquipedia.net/easportsfc/FC_Pro_26/World_Championship",
+    guild_id: GUILD_ID,
+  })) as { id: number };
+  individualTournamentId = individualTournament.id;
+  const individualPlayer = (await createLiquipediaPlayer({
+    game: "easportsfc",
+    name: "AboMakkah",
+    slug: "abomakkah",
+  })) as { id: number };
+  individualPlayerId = individualPlayer.id;
+  await createLiquipediaTeam({ game: "easportsfc", name: "AboMakkah", slug: "abomakkah-team-stub" });
+  await upsertMatch({
+    tournament_id: individualTournamentId,
+    source: "liquipedia",
+    external_id: `Match:fc-profile-${individualTournamentId}`,
+    team_a: "AboMakkah",
+    team_b: "Ilian",
+    score_a: 3,
+    score_b: 2,
+    status: "finished",
+    scheduled_at: 1_900_000_000,
+  });
 
   const base = { tournament_id: tournamentId, source: "liquipedia" };
   // 1 running, 2 scheduled, 5 finished, plus one parser duplicate that should be hidden by public reads.
@@ -215,6 +247,17 @@ describe("GET /api/tournaments/[id]/matches", () => {
     const body = await res.json();
     expect(body.tournament.id).toBe(canonicalPlayInsTournamentId);
     expect(body.tournament.source).toBe("startgg");
+  });
+
+  test("resolves individual-game competitors to player profiles even when a legacy team stub exists", async () => {
+    const res = await matchesGET(matchesReq(), ctx(String(individualTournamentId)));
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    const match = body.matches.finished[0];
+    expect(match.team_a).toBe("AboMakkah");
+    expect(match.team_a_id).toBeNull();
+    expect(match.team_a_profile_type).toBe("player");
+    expect(match.team_a_profile_id).toBe(individualPlayerId);
   });
 
   test("groups matches by status with the tournament header and total", async () => {

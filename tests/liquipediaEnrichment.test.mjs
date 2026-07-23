@@ -14,7 +14,13 @@ const { closeDb } = await import('../src/db/index.js');
 const { addTournament, listActiveTournaments } = await import('../src/db/tournaments.js');
 const { upsertMatch } = await import('../src/db/matches.js');
 const { upsertTeam, listTeams, saveTeamLiquipedia, createLiquipediaTeam } = await import('../src/db/teams.js');
-const { listPlayers, upsertPlayer, getPlayerByPandaScoreId, savePlayerLiquipedia } = await import('../src/db/players.js');
+const {
+  backfillIndividualCompetitorProfiles,
+  listPlayers,
+  upsertPlayer,
+  getPlayerByPandaScoreId,
+  savePlayerLiquipedia,
+} = await import('../src/db/players.js');
 const { replaceTournamentStandings, listStandingsTeamNamesForGame } = await import(
   '../src/db/tournamentStandings.js'
 );
@@ -143,6 +149,49 @@ test('creates Liquipedia-only entities for uncovered games and enriches them', a
 
   // Placeholder TBD never became an entity.
   assert.ok(!rlTeams.some((t) => t.name === 'TBD'));
+});
+
+test('individual FC competitors are backfilled and enriched as players, never teams', async () => {
+  const fc = await addTournament({
+    source: 'liquipedia',
+    external_id: 'easportsfc/FC_Pro_26/World_Championship',
+    game: 'easportsfc',
+    name: 'FC Pro 26 World Championship at Esports World Cup 2026',
+    url: 'https://liquipedia.net/easportsfc/FC_Pro_26/World_Championship',
+    guild_id: GUILD,
+  });
+  await upsertMatch({
+    tournament_id: fc.id,
+    source: 'liquipedia',
+    external_id: 'Match:fc-individual-1',
+    team_a: 'AboMakkah',
+    team_b: 'Ilian',
+    status: 'finished',
+    score_a: 3,
+    score_b: 2,
+  });
+
+  const firstBackfill = await backfillIndividualCompetitorProfiles();
+  const secondBackfill = await backfillIndividualCompetitorProfiles();
+  assert.ok(firstBackfill.created >= 2);
+  assert.equal(secondBackfill.created, 0, 'startup backfill is idempotent');
+
+  const parseCalls = [];
+  await runLiquipediaEnrichment({
+    liquipedia: mockLiquipedia({ parseCalls, supportedGames: ['easportsfc'] }),
+    maxParses: 20,
+    ttlMs: 0,
+  });
+
+  const players = await listPlayers({ game: 'easportsfc', limit: 50 });
+  const aboMakkah = players.find((player) => player.name === 'AboMakkah');
+  assert.ok(aboMakkah, 'FC participant has a player profile');
+  assert.match(aboMakkah.liquipedia_url, /easportsfc\/AboMakkah/);
+  assert.ok(aboMakkah.liquipedia_parsed_at);
+  assert.ok(parseCalls.some((call) => call.kind === 'player' && call.page === 'AboMakkah'));
+
+  const teams = await listTeams({ game: 'easportsfc', limit: 50 });
+  assert.ok(!teams.some((team) => team.name === 'AboMakkah' || team.name === 'Ilian'));
 });
 
 test('enriches battle-royale/TFT standings participants, not just match teams', async () => {

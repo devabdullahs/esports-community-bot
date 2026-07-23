@@ -12,6 +12,7 @@ import {
   deleteResolvedLiveAliasMatches,
   deleteTournamentPlaceholderMatches,
   deleteTournamentDuplicateMatches,
+  reconcileUntimedTournamentMatches,
 } from '../db/matches.js';
 import { getMatchDetailsFetchedAt, upsertMatchDetails } from '../db/matchDetails.js';
 import { getTournamentById } from '../db/tournaments.js';
@@ -24,6 +25,11 @@ import { fetchTournamentSchedule } from './tournamentScheduleFetch.js';
 const services = { liquipedia, pandascore, startgg };
 const nowSec = () => Math.floor(Date.now() / 1000);
 const MAX_RUN_SECONDS = 8 * 3600; // safety net: stop polling 8h after a match's start time
+const MAX_ABSENT_RUN_SECONDS_BY_GAME = new Map([
+  // EA FC pairings finish quickly. Once one disappears from the authoritative feed,
+  // waiting the generic eight hours leaves completed matches stuck on the live board.
+  ['easportsfc', 3 * 3600],
+]);
 const MAX_TIMEOUT_MS = 2_147_483_647;
 // Must stay wider than the daily (24h) morning-sync interval: that sync is the only re-arm
 // for tournaments with no live match, so a cap of 48h guarantees every match is armed with at
@@ -37,6 +43,16 @@ const ARM_LOOKAHEAD_SECONDS = Math.max(
 const watchers = new Map(); // external_id -> { armTimer?, pollTimer? }
 const detailRefreshes = new Map(); // match.id -> { promise, finalRequested }
 const MATCH_DETAIL_GAMES = new Set(['valorant', 'dota2']);
+
+export function maxAbsentRunSeconds(tournament) {
+  return MAX_ABSENT_RUN_SECONDS_BY_GAME.get(tournament?.game) || MAX_RUN_SECONDS;
+}
+
+export function shouldRetireAbsentMatch(match, tournament, currentTime = nowSec()) {
+  return Boolean(
+    match?.scheduled_at && currentTime > match.scheduled_at + maxAbsentRunSeconds(tournament),
+  );
+}
 
 export async function persistFetchedStandings(matches, tournamentId, { replace = replaceTournamentStandings } = {}) {
   const standings = matches?.standings;
@@ -217,7 +233,8 @@ async function pollOnce(match, tournament) {
     return;
   }
 
-  const all = await fetchTournamentSchedule(service, tournament);
+  const fetched = await fetchTournamentSchedule(service, tournament);
+  const all = await reconcileUntimedTournamentMatches(match.tournament_id, fetched);
   const currentIds = all.map((m) => m.externalId);
   await persistFetchedStandings(all, match.tournament_id);
 
@@ -280,7 +297,7 @@ async function pollOnce(match, tournament) {
       clearWatcher(match.external_id);
       logger.info(`[poll] stop ${match.external_id} (finished ${polled.score_a}-${polled.score_b})`);
     }
-  } else if (match.scheduled_at && nowSec() > match.scheduled_at + MAX_RUN_SECONDS) {
+  } else if (shouldRetireAbsentMatch(match, tournament)) {
     // Safety net: gone from the page and long overdue. Mark it finished (no score) so it
     // leaves the live match-card board instead of staying stuck 'running' forever, then
     // refresh so the card is dropped and the upcoming-matches card takes its place.
