@@ -2,8 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 process.env.DISCORD_TOKEN ||= 'test-token';
-process.env.CLIENT_ID ||= 'test-client';
-process.env.GUILD_ID ||= 'test-guild';
+process.env.DISCORD_CLIENT_ID ||= 'test-client';
+process.env.DISCORD_GUILD_ID ||= 'test-guild';
 
 const { scheduleConditions } = await import('../src/services/lpdb.js');
 
