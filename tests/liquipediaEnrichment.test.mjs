@@ -16,6 +16,8 @@ const { upsertMatch } = await import('../src/db/matches.js');
 const { upsertTeam, listTeams, saveTeamLiquipedia, createLiquipediaTeam } = await import('../src/db/teams.js');
 const {
   backfillIndividualCompetitorProfiles,
+  createLiquipediaPlayer,
+  ensureIndividualCompetitorProfiles,
   listPlayers,
   upsertPlayer,
   getPlayerByPandaScoreId,
@@ -192,6 +194,23 @@ test('individual FC competitors are backfilled and enriched as players, never te
 
   const teams = await listTeams({ game: 'easportsfc', limit: 50 });
   assert.ok(!teams.some((team) => team.name === 'AboMakkah' || team.name === 'Ilian'));
+});
+
+test('individual competitor backfill respects an existing slug after a display-name change', async () => {
+  const existing = await createLiquipediaPlayer({
+    game: 'chess',
+    name: 'Previous Display Name',
+    slug: 'newcompetitor',
+  });
+
+  const result = await ensureIndividualCompetitorProfiles('chess', ['New Competitor']);
+
+  assert.equal(result.created, 0);
+  const players = await listPlayers({ game: 'chess', limit: 50 });
+  assert.deepEqual(
+    players.filter((player) => player.slug === 'newcompetitor').map((player) => player.id),
+    [existing.id],
+  );
 });
 
 test('enriches battle-royale/TFT standings participants, not just match teams', async () => {

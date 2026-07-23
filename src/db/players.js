@@ -196,9 +196,12 @@ export async function ensureIndividualCompetitorProfiles(game, names) {
 
   const existing = await listPlayerNamesForGame(game);
   const byName = new Map();
+  const bySlug = new Map();
   for (const player of existing) {
     const key = normalizeTeamName(player.name);
     if (key && !byName.has(key)) byName.set(key, player);
+    const slug = normalizeTeamName(player.slug);
+    if (slug && !bySlug.has(slug)) bySlug.set(slug, player);
   }
 
   let created = 0;
@@ -207,9 +210,10 @@ export async function ensureIndividualCompetitorProfiles(game, names) {
     if (!isIndividualCompetitorName(rawName)) continue;
     const name = String(rawName).trim();
     const key = normalizeTeamName(name);
-    if (!key || byName.has(key)) continue;
+    if (!key || byName.has(key) || bySlug.has(key)) continue;
     const player = await createLiquipediaPlayer({ game, name, slug: key });
     byName.set(key, player);
+    bySlug.set(key, player);
     players.push(player);
     created += 1;
   }
@@ -294,7 +298,7 @@ export async function savePlayerLiquipedia(
 // (PandaScore or previously created) before creating anything.
 export async function listPlayerNamesForGame(game) {
   return all(
-    'SELECT id, name, image_url, liquipedia_url, liquipedia_parsed_at, current_team_id, current_team_name FROM players WHERE game = $1 ORDER BY id ASC',
+    'SELECT id, name, slug, image_url, liquipedia_url, liquipedia_parsed_at, current_team_id, current_team_name FROM players WHERE game = $1 ORDER BY id ASC',
     [game],
   );
 }
