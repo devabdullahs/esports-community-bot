@@ -244,7 +244,7 @@ untouched.
 | 124  | Add a cross-post composer for site, Discord, and social drafts | P2 | L | 120 recommended | DONE |
 | 125  | Exercise PostgreSQL behavior in CI | P1 | M | - | DONE |
 | 126  | Bound every web mutation request before parsing | P1 | L | - | TODO |
-| 127  | Preserve CMS content when games or media channels are deleted | P1 | M | - | TODO |
+| 127  | Preserve CMS content when games or media channels are deleted | P1 | M | - | DONE |
 | 128  | Compute and reconcile official EWC boundaries in Riyadh | P1 | M | - | TODO |
 | 129  | Serialize prediction submissions with round transitions and scoring | P1 | M | 125 | TODO |
 | 130  | Give EWC prediction games stable identities and migrate references | P1 | L | 129 | TODO |

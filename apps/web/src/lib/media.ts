@@ -54,7 +54,11 @@ const update = _update as unknown as (
   slug: string,
   input: Omit<MediaChannelInput, "slug">,
 ) => Promise<MediaChannelRecord | null>;
-const remove = _delete as (slug: string) => Promise<{ deleted: number }>;
+export type MediaChannelDeleteResult =
+  | { deleted: 0; conflict: "media_has_posts"; postCount: number }
+  | { deleted: number; conflict: null; postCount: 0 };
+
+const remove = _delete as (slug: string) => Promise<MediaChannelDeleteResult>;
 const reorder = _reorder as (slugs: string[]) => Promise<MediaChannelRecord[]>;
 
 export function listMediaChannels(): Promise<MediaChannelRecord[]> {
@@ -72,7 +76,7 @@ export function updateMediaChannel(
 ): Promise<MediaChannelRecord | null> {
   return update(slug, input);
 }
-export function deleteMediaChannel(slug: string): Promise<{ deleted: number }> {
+export function deleteMediaChannel(slug: string): Promise<MediaChannelDeleteResult> {
   return remove(slug);
 }
 export function reorderMediaChannels(slugs: string[]): Promise<MediaChannelRecord[]> {

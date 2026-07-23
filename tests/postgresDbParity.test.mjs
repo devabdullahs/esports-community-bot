@@ -84,6 +84,9 @@ const postgresEnabled =
 test('PostgreSQL DB parity', { skip: postgresEnabled ? false : 'run through npm run test:postgres' }, async (t) => {
   const db = await import('../src/db/client.js');
   const predictions = await import('../src/db/ewcPredictions.js');
+  const games = await import('../src/db/ewcGames.js');
+  const media = await import('../src/db/ewcMediaChannels.js');
+  const news = await import('../src/db/ewcNewsPosts.js');
 
   t.after(async () => {
     await db.closeDbClient();
@@ -144,6 +147,66 @@ test('PostgreSQL DB parity', { skip: postgresEnabled ? false : 'run through npm 
       ).count,
       2,
     );
+  });
+
+  await t.test('CMS owner deletion preserves tagged media content and blocks orphaning', async () => {
+    const gameSlug = 'postgres-owner-delete';
+    const mediaSlug = 'postgres-owned-channel';
+    await games.createEwcGame({
+      slug: gameSlug,
+      title: { en: 'PostgreSQL owner delete', ar: 'PostgreSQL owner delete' },
+      description: { en: '', ar: '' },
+      status: { en: 'Active', ar: 'Active' },
+      owner: { en: 'CI', ar: 'CI' },
+      focus: [],
+    });
+    await media.createEwcMediaChannel({
+      slug: mediaSlug,
+      name: { en: 'PostgreSQL media', ar: 'PostgreSQL media' },
+      description: { en: '', ar: '' },
+      logoUrl: null,
+      links: [],
+      gameSlug,
+    });
+    const gamePost = await news.createEwcNewsPost({
+      gameSlug,
+      status: 'draft',
+      contentMode: 'shared',
+      defaultLocale: 'en',
+      translations: { en: { title: 'Game post', summary: '', body: 'Body' } },
+    });
+    const mediaPost = await news.createEwcNewsPost({
+      gameSlug,
+      mediaSlug,
+      status: 'published',
+      contentMode: 'shared',
+      defaultLocale: 'en',
+      translations: { en: { title: 'Media post', summary: '', body: 'Body' } },
+    });
+
+    assert.deepEqual(await games.deleteEwcGame(gameSlug), {
+      gameDeleted: 1,
+      postsDeleted: 1,
+      mediaPostsDetached: 1,
+      mediaChannelsDetached: 1,
+    });
+    assert.equal(await news.getEwcNewsPostById(gamePost.id), null);
+    assert.equal((await news.getEwcNewsPostById(mediaPost.id)).gameSlug, null);
+    assert.equal((await media.getEwcMediaChannel(mediaSlug)).gameSlug, null);
+
+    assert.deepEqual(await media.deleteEwcMediaChannel(mediaSlug), {
+      deleted: 0,
+      conflict: 'media_has_posts',
+      postCount: 1,
+    });
+    assert.ok(await media.getEwcMediaChannel(mediaSlug));
+
+    await news.deleteEwcNewsPost(mediaPost.id);
+    assert.deepEqual(await media.deleteEwcMediaChannel(mediaSlug), {
+      deleted: 1,
+      conflict: null,
+      postCount: 0,
+    });
   });
 
   const guildId = 'postgres-ci-guild';

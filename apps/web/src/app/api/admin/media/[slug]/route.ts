@@ -49,8 +49,15 @@ export async function DELETE(
 
   const { slug } = await context.params;
   const result = await deleteMediaChannel(slug);
+  if (result.conflict === "media_has_posts") {
+    return NextResponse.json(
+      { error: "media_has_posts", postCount: result.postCount },
+      { status: 409 },
+    );
+  }
   if (result.deleted === 0) return NextResponse.json({ error: "Not found" }, { status: 404 });
   revalidateTag("cms-media", "default");
-  recordAdminAudit(access, "media.delete", slug);
-  return NextResponse.json({ ok: true });
+  revalidateTag("cms-news", "default");
+  recordAdminAudit(access, "media.delete", slug, { deleted: result.deleted });
+  return NextResponse.json({ ok: true, deleted: result.deleted });
 }
