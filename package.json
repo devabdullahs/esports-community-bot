@@ -15,6 +15,7 @@
     "start:production": "node src/start-production.js",
     "dev": "node --watch src/index.js",
     "test": "node --test tests/*.test.mjs",
+    "test:postgres": "node scripts/run-postgres-tests.mjs",
     "deploy": "node src/deploy-commands.js",
     "web:dev": "npm --workspace @esports-community-bot/web run dev",
     "web:build": "npm --workspace @esports-community-bot/web run build",

@@ -27,6 +27,38 @@ jobs:
       - run: npm ci
       - run: npm test
 
+  postgres-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: ecb_ci_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d ecb_ci_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      DB_DRIVER: postgres
+      DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/ecb_ci_test
+      ALLOW_POSTGRES_TEST_RESET: "1"
+      POSTGRES_TEST_HOST_ALLOWED: "1"
+      PGSSLMODE: disable
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run test:postgres
+
   web:
     runs-on: ubuntu-latest
     env:
