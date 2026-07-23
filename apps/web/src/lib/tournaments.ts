@@ -232,7 +232,7 @@ const listTeamNamesForGame = _listTeamNamesForGame as (
 ) => Promise<Array<{ id: number; name: string }>>;
 const listPlayerNamesForGame = _listPlayerNamesForGame as (
   game: string,
-) => Promise<Array<{ id: number; name: string }>>;
+) => Promise<Array<{ id: number; name: string; slug?: string | null }>>;
 const listStandingsForTournament = _listStandingsForTournament as (
   tournamentId: number,
 ) => Promise<StandingRow[]>;
@@ -276,12 +276,23 @@ type ProfileReference = { id: number; type: "team" | "player" };
 async function profileResolver(game: string | null): Promise<(name: string | null) => ProfileReference | null> {
   if (!game) return () => null;
   const individual = isIndividualCompetitorGame(game);
-  const pairs = individual ? await listPlayerNamesForGame(game) : await listTeamNamesForGame(game);
+  const pairs: Array<{ id: number; name: string; slug?: string | null }> = individual
+    ? await listPlayerNamesForGame(game)
+    : await listTeamNamesForGame(game);
   const byName = new Map<string, number | null>();
+  const registerAlias = (value: string | null | undefined, id: number) => {
+    const key = normalizeTeamName(value);
+    if (!key) return;
+    const existing = byName.get(key);
+    if (existing === undefined || existing === id) {
+      byName.set(key, id);
+      return;
+    }
+    byName.set(key, null);
+  };
   for (const pair of pairs) {
-    const key = normalizeTeamName(pair.name);
-    if (!key) continue;
-    byName.set(key, byName.has(key) ? null : pair.id);
+    registerAlias(pair.name, pair.id);
+    if (individual) registerAlias(pair.slug, pair.id);
   }
   return (name) => {
     const key = normalizeTeamName(name);
