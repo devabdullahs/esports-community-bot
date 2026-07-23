@@ -20,6 +20,14 @@ export const EWC_POINTS_BY_RANK = new Map([
   [8, 50],
 ]);
 
+const EWC_AWARDED_RANKS = [...EWC_POINTS_BY_RANK.keys()];
+const EWC_AUTHORITATIVE_RESULT_KINDS = new Set([
+  'club-points-prize-table',
+  'prize-table',
+  'final-standings-panel',
+  'tracked-final-standings',
+]);
+
 export const EWC_2026_OFFICIAL_WEEKS = [
   ['week-1', 'Week 1', '2026-07-06', '2026-07-12'],
   ['week-2', 'Week 2', '2026-07-13', '2026-07-19'],
@@ -114,6 +122,52 @@ export function ewcPlacementPoints(place) {
   return EWC_POINTS_BY_RANK.get(firstRank) || 0;
 }
 
+export function ewcPlacementCoveredRanks(place) {
+  const text = String(place ?? '').trim();
+  const match = text.match(/^(\d+)(?:st|nd|rd|th)?\s*(?:-|\u2013|\u2014|to)?\s*(\d+)?(?:st|nd|rd|th)?$/i);
+  if (!match) return [];
+  const first = Number(match[1]);
+  const last = Number(match[2] || match[1]);
+  if (!EWC_POINTS_BY_RANK.has(first) || !EWC_POINTS_BY_RANK.has(last) || last < first) return [];
+  return EWC_AWARDED_RANKS.filter((rank) => rank >= first && rank <= last);
+}
+
+function resultEvidenceCoveredRanks(evidence) {
+  return new Set(
+    (Array.isArray(evidence?.coveredRanks) ? evidence.coveredRanks : [])
+      .map(Number)
+      .filter((rank) => EWC_POINTS_BY_RANK.has(rank)),
+  );
+}
+
+function completenessResult(ready, reason, coveredRanks) {
+  return { ready, reason, coveredRanks: [...coveredRanks].sort((a, b) => a - b) };
+}
+
+export function evaluateEwcGameResultCompleteness(result = {}) {
+  const evidence = result?.evidence;
+  if (!evidence?.authoritative || !EWC_AUTHORITATIVE_RESULT_KINDS.has(evidence.kind)) {
+    return completenessResult(false, 'untrusted_source', []);
+  }
+
+  const evidenceCoverage = resultEvidenceCoveredRanks(evidence);
+  const placementCoverage = new Set();
+  const champions = new Set();
+  for (const row of Array.isArray(result?.placements) ? result.placements : []) {
+    const ranks = ewcPlacementCoveredRanks(row?.place);
+    if (!ranks.length) continue;
+    const club = normalizeClubName(row?.club);
+    if (!club) return completenessResult(false, 'invalid_club', placementCoverage);
+    for (const rank of ranks) placementCoverage.add(rank);
+    if (ranks.includes(1)) champions.add(club);
+  }
+
+  if (champions.size !== 1) return completenessResult(false, 'multiple_champions', placementCoverage);
+  const missing = EWC_AWARDED_RANKS.filter((rank) => !evidenceCoverage.has(rank) || !placementCoverage.has(rank));
+  if (missing.length) return completenessResult(false, 'missing_rank', placementCoverage);
+  return completenessResult(true, 'ready', placementCoverage);
+}
+
 export function ewcGameResultPending(result) {
   const placements = result?.placements || [];
   if (!placements.length) return true;
@@ -125,7 +179,7 @@ export function pendingEwcGameResults(results, games = []) {
   const expected = (games || []).length
     ? games.map((game) => byKey.get(game.key) || { gameKey: game.key, game: game.game, event: game.event, placements: [] })
     : results || [];
-  return expected.filter(ewcGameResultPending);
+  return expected.filter((result) => !evaluateEwcGameResultCompleteness(result).ready);
 }
 
 export function perGamePredictionRoundLocked(games = [], now = Math.floor(Date.now() / 1000)) {
@@ -150,7 +204,7 @@ export function dueEwcGamesForResults(
     const endAt = Number(game?.endAt);
     if (!Number.isFinite(endAt) || now < endAt - Math.max(0, Number(earlyWindowSec) || 0)) return false;
     const result = byKey.get(key);
-    if (ewcGameResultPending(result)) return true;
+    if (!evaluateEwcGameResultCompleteness(result).ready) return true;
 
     // Live battle-royale standings already contain a first-place row. A good
     // snapshot taken before the scheduled finish must therefore be refreshed
@@ -163,14 +217,55 @@ export function dueEwcGamesForResults(
 }
 
 export function ewcGameResultsFinalReady(results = [], games = [], now = Math.floor(Date.now() / 1000), scoreAfter = null) {
+  return evaluateEwcGameResultsFinalReadiness(results, games, now, scoreAfter).ready;
+}
+
+export function evaluateEwcGameResultsFinalReadiness(results = [], games = [], now = Math.floor(Date.now() / 1000), scoreAfter = null) {
   const byKey = new Map((results || []).map((result) => [String(result?.gameKey || ''), result]));
-  return (games || []).length > 0 && (games || []).every((game) => {
+  if (!(games || []).length) return { ready: false, reason: 'missing_rank', gameKey: null };
+  for (const game of games || []) {
     const result = byKey.get(String(game?.key || ''));
-    if (ewcGameResultPending(result)) return false;
+    const completeness = evaluateEwcGameResultCompleteness(result);
+    if (!completeness.ready) return { ...completeness, gameKey: String(game?.key || '') };
     const endAt = Number(game?.endAt) || 0;
     const finalAt = Math.max(endAt, Number(scoreAfter) || 0);
-    return now >= finalAt && (Number(result?.fetchedAt) || 0) >= finalAt;
-  });
+    if (now < finalAt || (Number(result?.fetchedAt) || 0) < finalAt) {
+      return { ready: false, reason: 'stale', coveredRanks: completeness.coveredRanks, gameKey: String(game?.key || '') };
+    }
+  }
+  return { ready: true, reason: 'ready', coveredRanks: EWC_AWARDED_RANKS, gameKey: null };
+}
+
+function resultSnapshotQuality(result) {
+  const completeness = evaluateEwcGameResultCompleteness(result);
+  const evidence = result?.evidence;
+  const authoritative = Boolean(
+    evidence?.authoritative && EWC_AUTHORITATIVE_RESULT_KINDS.has(evidence.kind),
+  );
+  const placementCoverage = new Set(
+    (Array.isArray(result?.placements) ? result.placements : [])
+      .flatMap((placement) => ewcPlacementCoveredRanks(placement?.place)),
+  );
+  return [
+    completeness.ready ? 1 : 0,
+    authoritative ? 1 : 0,
+    placementCoverage.size,
+    ewcGameResultPending(result) ? 0 : 1,
+    Array.isArray(result?.placements) ? result.placements.length : 0,
+    Number(result?.fetchedAt) || 0,
+  ];
+}
+
+function incomingSnapshotIsBetter(current, incoming) {
+  if (!current) return true;
+  const currentQuality = resultSnapshotQuality(current);
+  const incomingQuality = resultSnapshotQuality(incoming);
+  for (let index = 0; index < currentQuality.length; index += 1) {
+    if (incomingQuality[index] !== currentQuality[index]) {
+      return incomingQuality[index] > currentQuality[index];
+    }
+  }
+  return true;
 }
 
 export function mergeEwcGameResults(existing = [], incoming = []) {
@@ -183,7 +278,7 @@ export function mergeEwcGameResults(existing = [], incoming = []) {
     const key = String(result?.gameKey || '');
     if (!key) continue;
     const current = merged.get(key);
-    if (!current || !ewcGameResultPending(result) || ewcGameResultPending(current)) merged.set(key, result);
+    if (incomingSnapshotIsBetter(current, result)) merged.set(key, result);
   }
   return [...merged.values()];
 }

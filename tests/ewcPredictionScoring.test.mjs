@@ -13,6 +13,9 @@ const {
   scoreSeasonPrediction,
   scorePerGameWeeklyPrediction,
   ewcPlacementPoints,
+  ewcPlacementCoveredRanks,
+  evaluateEwcGameResultCompleteness,
+  evaluateEwcGameResultsFinalReadiness,
   pendingEwcGameResults,
   perGamePredictionRoundLocked,
   dueEwcGamesForResults,
@@ -418,6 +421,31 @@ function resultsFor({ valorantWinner = 'Team Falcons', apexWinner = 'Team Liquid
   ];
 }
 
+function completeResultFor(gameKey, prefix) {
+  return {
+    gameKey,
+    placements: [
+      { club: `${prefix} One`, place: '1', points: 1000 },
+      { club: `${prefix} Two`, place: '2', points: 750 },
+      { club: `${prefix} Three`, place: '3', points: 500 },
+      { club: `${prefix} Four`, place: '4', points: 300 },
+      { club: `${prefix} Five`, place: '5-8', points: 200 },
+    ],
+    evidence: {
+      kind: 'club-points-prize-table',
+      authoritative: true,
+      coveredRanks: [1, 2, 3, 4, 5, 6, 7, 8],
+    },
+  };
+}
+
+function completeResultsFor() {
+  return [
+    completeResultFor('valorant-1', 'Valorant'),
+    completeResultFor('apex-2', 'Apex'),
+  ];
+}
+
 test('scorePerGameWeeklyPrediction: happy path — correct winner per game scores per-rank points', () => {
   const picks = [
     { gameKey: 'valorant-1', pick: 'Team Vitality' }, // 2nd → 750
@@ -607,13 +635,13 @@ test('scorePerGameWeeklyPrediction: throws when the round has no per-game events
   assert.throws(() => scorePerGameWeeklyPrediction([], [], []), /no per-game events/);
 });
 
-test('pendingEwcGameResults: flags games whose results are absent or have no 1st-place club', () => {
-  const results = [resultsFor()[0]]; // only valorant resolved
+test('pendingEwcGameResults: keeps legacy and partial snapshots provisional-only', () => {
+  const results = [completeResultsFor()[0]]; // only valorant is final-ready
   const pending = pendingEwcGameResults(results, GAMES);
   assert.equal(pending.length, 1);
   assert.equal(pending[0].gameKey, 'apex-2');
-  // Both resolved → none pending.
-  assert.equal(pendingEwcGameResults(resultsFor(), GAMES).length, 0);
+  assert.equal(pendingEwcGameResults(completeResultsFor(), GAMES).length, 0);
+  assert.equal(pendingEwcGameResults(resultsFor(), GAMES).length, 2, 'legacy snapshots have no source evidence');
 });
 
 test('perGamePredictionRoundLocked: closes only after every independent game lock', () => {
@@ -629,35 +657,47 @@ test('dueEwcGamesForResults polls only unresolved events near their scheduled fi
     { ...GAMES[0], endAt: 10_000 },
     { ...GAMES[1], endAt: 30_000 },
   ];
-  const due = dueEwcGamesForResults(games, [{ ...resultsFor()[0], fetchedAt: 10_000 }], 20_000, 5_000);
+  const due = dueEwcGamesForResults(games, [{ ...completeResultsFor()[0], fetchedAt: 10_000 }], 20_000, 5_000);
   assert.deepEqual(due.map((game) => game.key), []);
   assert.deepEqual(dueEwcGamesForResults(games, [], 20_000, 15_000).map((game) => game.key), ['valorant-1', 'apex-2']);
   assert.deepEqual(dueEwcGamesForResults(games, [resultsFor()[0]], 20_000, 5_000).map((game) => game.key), ['valorant-1']);
-  const completed = resultsFor().map((result, index) => ({ ...result, fetchedAt: index ? 30_000 : 10_000 }));
+  const completed = completeResultsFor().map((result, index) => ({ ...result, fetchedAt: index ? 30_000 : 10_000 }));
   assert.deepEqual(dueEwcGamesForResults(games, completed, 20_000, 5_000, 25_000), []);
   assert.deepEqual(dueEwcGamesForResults(games, completed, 30_000, 5_000, 25_000).map((game) => game.key), ['valorant-1']);
   assert.deepEqual(dueEwcGamesForResults(games, [{ ...resultsFor()[0], fetchedAt: 9_000 }, completed[1]], 20_000, 5_000, 25_000).map((game) => game.key), ['valorant-1']);
 });
 
-test('mergeEwcGameResults preserves completed snapshots through gaps and replaces them with newer valid standings', () => {
-  const complete = resultsFor()[0];
+test('mergeEwcGameResults preserves richer snapshots through gaps and replaces them with newer complete standings', () => {
+  const complete = { ...completeResultsFor()[0], fetchedAt: 10_000 };
   const pending = { gameKey: 'apex-2', placements: [], error: 'not final' };
   const updated = {
     ...complete,
     fetchedAt: 20_000,
     placements: [
       { club: 'New Winner', place: '1st', points: 1000 },
-      { ...complete.placements[0], place: '7th', points: 100 },
+      ...complete.placements.slice(1),
     ],
   };
   const merged = mergeEwcGameResults([complete, pending], [
     updated,
-    resultsFor()[1],
+    completeResultsFor()[1],
   ]);
-  assert.deepEqual(merged, [updated, resultsFor()[1]]);
+  assert.deepEqual(merged, [updated, completeResultsFor()[1]]);
 
   const afterGap = mergeEwcGameResults(merged, [{ gameKey: 'valorant-1', placements: [], error: 'transient' }]);
   assert.deepEqual(afterGap, merged);
+
+  const partialRefresh = {
+    ...complete,
+    fetchedAt: 30_000,
+    placements: complete.placements.slice(0, 4),
+    evidence: { ...complete.evidence, coveredRanks: [1, 2, 3, 4] },
+  };
+  assert.deepEqual(
+    mergeEwcGameResults([updated], [partialRefresh]),
+    [updated],
+    'a later partial response must not downgrade a complete authoritative snapshot',
+  );
 });
 
 test('ewcGameResultsFinalReady requires valid snapshots fetched after every event and the scoring delay', () => {
@@ -665,12 +705,51 @@ test('ewcGameResultsFinalReady requires valid snapshots fetched after every even
     { ...GAMES[0], endAt: 10_000 },
     { ...GAMES[1], endAt: 12_000 },
   ];
-  const stale = resultsFor().map((result) => ({ ...result, fetchedAt: 9_000 }));
+  const stale = completeResultsFor().map((result) => ({ ...result, fetchedAt: 9_000 }));
   assert.equal(ewcGameResultsFinalReady(stale, games, 20_000, 15_000), false);
 
-  const fresh = resultsFor().map((result) => ({ ...result, fetchedAt: 15_000 }));
+  const fresh = completeResultsFor().map((result) => ({ ...result, fetchedAt: 15_000 }));
   assert.equal(ewcGameResultsFinalReady(fresh, games, 14_999, 15_000), false);
   assert.equal(ewcGameResultsFinalReady(fresh, games, 15_000, 15_000), true);
+});
+
+test('EWC final completeness requires trusted source evidence, valid clubs, one champion, and all ranks', () => {
+  const complete = completeResultFor('valorant-1', 'Ready');
+  assert.deepEqual(ewcPlacementCoveredRanks('5-8'), [5, 6, 7, 8]);
+  assert.deepEqual(ewcPlacementCoveredRanks('5th - 8th'), [5, 6, 7, 8]);
+  assert.equal(evaluateEwcGameResultCompleteness(complete).reason, 'ready');
+
+  assert.equal(evaluateEwcGameResultCompleteness({
+    ...complete,
+    evidence: { kind: 'untrusted', authoritative: false, coveredRanks: [] },
+  }).reason, 'untrusted_source');
+
+  assert.equal(evaluateEwcGameResultCompleteness({
+    ...complete,
+    placements: complete.placements.filter((placement) => placement.place !== '5-8'),
+    evidence: { ...complete.evidence, coveredRanks: [1, 2, 3, 4] },
+  }).reason, 'missing_rank');
+
+  assert.equal(evaluateEwcGameResultCompleteness({
+    ...complete,
+    placements: [...complete.placements, { club: 'Second Champion', place: '1', points: 1000 }],
+  }).reason, 'multiple_champions');
+
+  assert.equal(evaluateEwcGameResultCompleteness({
+    ...complete,
+    placements: complete.placements.map((placement) => placement.place === '2' ? { ...placement, club: '' } : placement),
+  }).reason, 'invalid_club');
+});
+
+test('EWC final readiness reports stale separately from structural completeness', () => {
+  const games = [{ ...GAMES[0], endAt: 10_000 }];
+  const stale = { ...completeResultFor('valorant-1', 'Stale'), fetchedAt: 9_999 };
+  assert.deepEqual(evaluateEwcGameResultsFinalReadiness([stale], games, 10_001, 10_000), {
+    ready: false,
+    reason: 'stale',
+    coveredRanks: [1, 2, 3, 4, 5, 6, 7, 8],
+    gameKey: 'valorant-1',
+  });
 });
 
 // ─── effectiveEwcWeekStatus (per-game lock-window state machine) ──────────────

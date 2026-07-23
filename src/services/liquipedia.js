@@ -10,6 +10,7 @@ export {
   parseClubPrizepool,
   parseClubStandings,
   parseEwcClubs,
+  parseEwcEventResult,
   parseEwcEventPlacements,
   parseEwcEventSchedule,
   parseEwcPlayerList,

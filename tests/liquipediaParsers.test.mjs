@@ -32,6 +32,7 @@ const {
   matchResultRank,
   mergeLiveWidgetMatch,
   parseTournamentEwcAffiliation,
+  parseEwcEventResult,
   parseEwcEventPlacements,
 } = await import('../src/services/liquipedia.js');
 
@@ -91,6 +92,84 @@ test('parseEwcEventPlacements: maps an Apex finals panel table to EWC points', (
     { club: 'UNLIMIT', place: '1', points: 1000, participant: null },
     { club: 'Team Vision', place: '2', points: 750, participant: null },
   ]);
+});
+
+test('parseEwcEventResult: qualifier-only tables are untrusted and cannot supply final placements', () => {
+  const $ = load(`
+    <table class="prizepooltable">
+      <tr><th>Place</th><th>Participant</th></tr>
+      <tr><td class="prizepooltable-place">1</td><td class="prizepooltable-col-team"><span data-highlightingclass="Qualifier One">Qualifier One</span></td></tr>
+    </table>`);
+
+  assert.deepEqual(parseEwcEventResult($, { game: 'Fighter Games' }), {
+    placements: [],
+    evidence: { kind: 'untrusted', authoritative: false, coveredRanks: [] },
+  });
+});
+
+test('parseEwcEventResult: authoritative prize tables retain partial rank coverage', () => {
+  const $ = load(`
+    <table class="prizepooltable">
+      <tr><th>Place</th><th>Participant</th><th>Prize</th></tr>
+      <tr><td class="prizepooltable-place">1</td><td class="prizepooltable-col-team"><span data-highlightingclass="Champion">Champion</span></td><td>$250,000</td></tr>
+      <tr><td class="prizepooltable-place">2</td><td class="prizepooltable-col-team"><span data-highlightingclass="Runner Up">Runner Up</span></td><td>$125,000</td></tr>
+      <tr><td class="prizepooltable-place">3</td><td class="prizepooltable-col-team"><span data-highlightingclass="Third">Third</span></td><td>$75,000</td></tr>
+      <tr><td class="prizepooltable-place">4</td><td class="prizepooltable-col-team"><span data-highlightingclass="Fourth">Fourth</span></td><td>$50,000</td></tr>
+    </table>`);
+
+  const result = parseEwcEventResult($, { game: 'Fighter Games' });
+  assert.equal(result.evidence.kind, 'prize-table');
+  assert.equal(result.evidence.authoritative, true);
+  assert.deepEqual(result.evidence.coveredRanks, [1, 2, 3, 4]);
+  assert.equal(result.placements[0].club, 'Champion');
+});
+
+test('parseEwcEventResult: Club Points range labels cover every awarded rank', () => {
+  const $ = load(`
+    <table class="prizepooltable">
+      <tr><th>Place</th><th>Participant</th><th>Club Points</th></tr>
+      <tr><td class="prizepooltable-place">1</td><td class="prizepooltable-col-team"><span data-highlightingclass="Club One">Club One</span></td><td>1,000</td></tr>
+      <tr><td class="prizepooltable-place">2</td><td class="prizepooltable-col-team"><span data-highlightingclass="Club Two">Club Two</span></td><td>750</td></tr>
+      <tr><td class="prizepooltable-place">3</td><td class="prizepooltable-col-team"><span data-highlightingclass="Club Three">Club Three</span></td><td>500</td></tr>
+      <tr><td class="prizepooltable-place">4</td><td class="prizepooltable-col-team"><span data-highlightingclass="Club Four">Club Four</span></td><td>300</td></tr>
+      <tr><td class="prizepooltable-place">5-8</td><td class="prizepooltable-col-team"><span data-highlightingclass="Club Five">Club Five</span></td><td>200</td></tr>
+    </table>`);
+
+  const result = parseEwcEventResult($, { game: 'Fighter Games' });
+  assert.equal(result.evidence.kind, 'club-points-prize-table');
+  assert.equal(result.evidence.authoritative, true);
+  assert.deepEqual(result.evidence.coveredRanks, [1, 2, 3, 4, 5, 6, 7, 8]);
+});
+
+test('parseEwcEventResult: full final-standings panels are authoritative', () => {
+  const rows = Array.from({ length: 8 }, (_, index) => `
+    <div class="panel-table__row">
+      <div class="cell--rank" data-sort-val="${index + 1}">${index + 1}</div>
+      <div class="cell--team" data-sort-val="Panel Club ${index + 1}">Panel Club ${index + 1}</div>
+    </div>`).join('');
+  const $ = load(`<div class="panel-table"><div class="panel-table__row row--header"></div>${rows}</div>`);
+
+  const result = parseEwcEventResult($, { game: 'Apex Legends' });
+  assert.equal(result.evidence.kind, 'final-standings-panel');
+  assert.equal(result.evidence.authoritative, true);
+  assert.deepEqual(result.evidence.coveredRanks, [1, 2, 3, 4, 5, 6, 7, 8]);
+});
+
+test('parseEwcEventResult: preserves duplicate apparent champions for readiness validation', () => {
+  const rows = [
+    ['1', 'Champion One'],
+    ['1', 'Champion Two'],
+    ['2', 'Club Two'],
+    ['3', 'Club Three'],
+    ['4', 'Club Four'],
+    ['5-8', 'Club Five'],
+  ].map(([place, club]) => `
+    <tr><td class="prizepooltable-place">${place}</td><td class="prizepooltable-col-team"><span data-highlightingclass="${club}">${club}</span></td><td>1,000</td></tr>`).join('');
+  const $ = load(`<table class="prizepooltable"><tr><th>Place</th><th>Participant</th><th>Club Points</th></tr>${rows}</table>`);
+
+  const result = parseEwcEventResult($, { game: 'Fighter Games' });
+  assert.equal(result.placements.filter((placement) => placement.place === '1').length, 2);
+  assert.deepEqual(result.evidence.coveredRanks, [1, 2, 3, 4, 5, 6, 7, 8]);
 });
 
 // ---------------------------------------------------------------------------

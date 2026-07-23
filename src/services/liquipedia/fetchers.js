@@ -16,8 +16,8 @@ import {
   parseClubStandings,
   parseClubPrizepool,
   parseEwcClubs,
+  parseEwcEventResult,
   parseEwcPlayerList,
-  parseEwcEventPlacements,
   parseEwcEventSchedule,
   parseTournamentEwcAffiliation,
   VRS_REGIONS,
@@ -390,13 +390,13 @@ function liquipediaEventPage(event) {
 export async function fetchEwcEventPlacements(event, players = [], { parse = parsePage } = {}) {
   const normalizedEvent = { ...event, gameKey: event?.gameKey || event?.key };
   const page = liquipediaEventPage(normalizedEvent);
-  if (!page) return { ...normalizedEvent, placements: [], error: 'Missing Liquipedia event URL' };
+  if (!page) return { ...normalizedEvent, placements: [], evidence: { kind: 'untrusted', authoritative: false, coveredRanks: [] }, error: 'Missing Liquipedia event URL' };
   const data = await parse(page.wiki, page.page);
   const html = data?.parse?.text?.['*'];
-  if (!html) return { ...normalizedEvent, placements: [], error: 'Empty event page' };
+  if (!html) return { ...normalizedEvent, placements: [], evidence: { kind: 'untrusted', authoritative: false, coveredRanks: [] }, error: 'Empty event page' };
   return {
     ...normalizedEvent,
-    placements: parseEwcEventPlacements(cheerio.load(html), normalizedEvent, players),
+    ...parseEwcEventResult(cheerio.load(html), normalizedEvent, players),
   };
 }
 
@@ -415,7 +415,13 @@ export async function fetchEwcWeekGameResults(games) {
       results.push(await fetchEwcEventPlacements(game, playerData.players || []));
     } catch (error) {
       logger.warn(`[ewc] placements unavailable for ${game?.gameKey || game?.key || game?.game || 'event'}: ${error.message}`);
-      results.push({ ...game, gameKey: game?.gameKey || game?.key, placements: [], error: error.message });
+      results.push({
+        ...game,
+        gameKey: game?.gameKey || game?.key,
+        placements: [],
+        evidence: { kind: 'untrusted', authoritative: false, coveredRanks: [] },
+        error: error.message,
+      });
     }
   }
   return results;
