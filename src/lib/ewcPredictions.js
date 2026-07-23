@@ -1,7 +1,7 @@
 import { normalizeTeamName } from './render.js';
 
-const RIYADH_OFFSET = '+03:00';
-const EWC_EVENT_TIME_ZONE = 'Europe/Paris';
+const RIYADH_UTC_OFFSET = '+03:00';
+const EWC_SCHEDULE_TIME_ZONE = 'Asia/Riyadh';
 
 export const WEEKLY_TOP_THREE_SWEEP_BONUS = 300;
 export const WEEKLY_ALL_GAME_WINNERS_BONUS = 300;
@@ -30,7 +30,7 @@ export const EWC_2026_OFFICIAL_WEEKS = [
   ['week-7', 'Week 7', '2026-08-17', '2026-08-23'],
 ];
 
-const EWC_2026_OFFICIAL_EVENT_DATES = [
+export const EWC_2026_OFFICIAL_EVENT_DATES = [
   { test: /\bvalorant\b/i, start: '2026-07-09', end: '2026-07-12' },
   { test: /\balgs\b|\bapex\b/i, start: '2026-07-07', end: '2026-07-11' },
   { test: /fatal fury/i, start: '2026-07-08', end: '2026-07-11' },
@@ -197,7 +197,7 @@ export function parsePredictionDate(input) {
   if (/^\d{13}$/.test(value)) return Math.floor(Number(value) / 1000);
 
   const normalized = value.includes('T') ? value : value.replace(' ', 'T');
-  const withZone = /(?:Z|[+-]\d{2}:?\d{2})$/i.test(normalized) ? normalized : `${normalized}${RIYADH_OFFSET}`;
+  const withZone = /(?:Z|[+-]\d{2}:?\d{2})$/i.test(normalized) ? normalized : `${normalized}${RIYADH_UTC_OFFSET}`;
   const time = Date.parse(withZone);
   if (Number.isNaN(time)) throw new Error('Use a Discord timestamp, Unix seconds, or `YYYY-MM-DD HH:mm` Riyadh time.');
   return Math.floor(time / 1000);
@@ -405,7 +405,7 @@ function formatEwcShortDate(seconds) {
   return new Intl.DateTimeFormat('en-GB', {
     day: '2-digit',
     month: 'short',
-    timeZone: EWC_EVENT_TIME_ZONE,
+    timeZone: EWC_SCHEDULE_TIME_ZONE,
   }).format(new Date(seconds * 1000));
 }
 
@@ -425,10 +425,10 @@ function timeZoneOffsetMs(date, timeZone) {
   return sign * (hours * 60 + minutes) * 60_000;
 }
 
-function ewcEventDay(dateText, endOfDay = false) {
+export function officialEwcDateBoundary(dateText, endOfDay = false) {
   const [year, month, day] = String(dateText).split('-').map(Number);
   const utcGuess = new Date(Date.UTC(year, month - 1, day, 0, 0, 0));
-  const seconds = Math.floor((utcGuess.getTime() - timeZoneOffsetMs(utcGuess, EWC_EVENT_TIME_ZONE)) / 1000);
+  const seconds = Math.floor((utcGuess.getTime() - timeZoneOffsetMs(utcGuess, EWC_SCHEDULE_TIME_ZONE)) / 1000);
   return endOfDay ? seconds + 24 * 3600 - 1 : seconds;
 }
 
@@ -441,8 +441,8 @@ export function defaultEwcSeasonPredictionWindow(
   } = {},
 ) {
   if (String(season) !== '2026') return null;
-  const starts = EWC_2026_OFFICIAL_EVENT_DATES.map((event) => ewcEventDay(event.start));
-  const ends = EWC_2026_OFFICIAL_EVENT_DATES.map((event) => ewcEventDay(event.end, true));
+  const starts = EWC_2026_OFFICIAL_EVENT_DATES.map((event) => officialEwcDateBoundary(event.start));
+  const ends = EWC_2026_OFFICIAL_EVENT_DATES.map((event) => officialEwcDateBoundary(event.end, true));
   const firstEventAt = Math.min(...starts);
   const finalEventEndAt = Math.max(...ends);
   return {
@@ -485,15 +485,19 @@ export function effectiveEwcWeekStatusText(round, now = Math.floor(Date.now() / 
 }
 
 function applyOfficialEwc2026EventDates(event) {
-  const hay = `${event.game || ''} ${event.event || ''}`;
-  const override = EWC_2026_OFFICIAL_EVENT_DATES.find((rule) => rule.test.test(hay));
+  const [override] = matchingOfficialEwc2026EventDates(event);
   if (!override) return event;
   return {
     ...event,
-    startAt: ewcEventDay(override.start),
-    endAt: ewcEventDay(override.end, true),
+    startAt: officialEwcDateBoundary(override.start),
+    endAt: officialEwcDateBoundary(override.end, true),
     dateLabel: `${override.start} - ${override.end}`,
   };
+}
+
+function matchingOfficialEwc2026EventDates(event) {
+  const hay = `${event?.game || ''} ${event?.event || ''}`;
+  return EWC_2026_OFFICIAL_EVENT_DATES.filter((rule) => rule.test.test(hay));
 }
 
 function slugifyGameKey(value) {
@@ -507,8 +511,8 @@ function slugifyGameKey(value) {
 
 function officialWeekWindows2026() {
   return EWC_2026_OFFICIAL_WEEKS.map(([weekKey, name, start, end], index) => {
-    const startAt = ewcEventDay(start);
-    const endAt = ewcEventDay(end, true);
+    const startAt = officialEwcDateBoundary(start);
+    const endAt = officialEwcDateBoundary(end, true);
     return {
       index: index + 1,
       weekKey,
@@ -539,13 +543,128 @@ function compactEvent(event, index, lockBeforeHours) {
   };
 }
 
+const EWC_WEEK_TIMING_FIELDS = [
+  ['startAt', 'start_at'],
+  ['endAt', 'end_at'],
+  ['openAt', 'open_at'],
+  ['closeAt', 'close_at'],
+  ['scoreAfter', 'score_after'],
+];
+
+function unixSeconds(value) {
+  if (value == null || value === '') return null;
+  const seconds = Number(value);
+  return Number.isFinite(seconds) ? seconds : null;
+}
+
+function shiftedTime(value, oldReference, newReference) {
+  const seconds = unixSeconds(value);
+  return seconds == null ? null : newReference + (seconds - oldReference);
+}
+
+function changedFields(fields) {
+  return fields.filter((field) => field.oldValue !== field.newValue);
+}
+
+export function reconcileStoredEwc2026Week(week) {
+  if (String(week?.season) !== '2026') {
+    throw new Error('Only stored EWC 2026 weeks can be reconciled.');
+  }
+
+  const officialWeek = officialWeekWindows2026().find((candidate) => candidate.weekKey === (week.week_key ?? week.weekKey));
+  if (!officialWeek) {
+    throw new Error('Stored EWC 2026 week cannot be matched to an official week.');
+  }
+
+  const storedGames = Array.isArray(week.games) ? week.games : [];
+  if (!storedGames.length) {
+    throw new Error('Stored EWC 2026 week has no event metadata to reconcile.');
+  }
+
+  const correctedGames = storedGames.map((game) => {
+    const matches = matchingOfficialEwc2026EventDates(game);
+    if (matches.length !== 1) {
+      throw new Error('Stored EWC 2026 event cannot be uniquely matched to an official override.');
+    }
+
+    const oldStartAt = unixSeconds(game.startAt);
+    const oldEndAt = unixSeconds(game.endAt);
+    const oldLockAt = unixSeconds(game.lockAt);
+    if (oldStartAt == null || oldEndAt == null || oldLockAt == null) {
+      throw new Error('Stored EWC 2026 event is missing a timing value required for reconciliation.');
+    }
+
+    const override = matches[0];
+    const startAt = officialEwcDateBoundary(override.start);
+    const endAt = officialEwcDateBoundary(override.end, true);
+    const lockAt = startAt + (oldLockAt - oldStartAt);
+    return {
+      ...game,
+      startAt,
+      endAt,
+      lockAt,
+      _reconciliation: { oldStartAt, oldEndAt, oldLockAt },
+    };
+  });
+
+  const oldFirstLock = Math.min(...correctedGames.map((game) => game._reconciliation.oldLockAt));
+  const newFirstLock = Math.min(...correctedGames.map((game) => game.lockAt));
+  const oldLastLock = Math.max(...correctedGames.map((game) => game._reconciliation.oldLockAt));
+  const newLastLock = Math.max(...correctedGames.map((game) => game.lockAt));
+  const oldLastEnd = Math.max(...correctedGames.map((game) => game._reconciliation.oldEndAt));
+  const newLastEnd = Math.max(...correctedGames.map((game) => game.endAt));
+  const correctedTiming = {
+    startAt: officialWeek.startAt,
+    endAt: officialWeek.endAt,
+    openAt: shiftedTime(week.open_at ?? week.openAt, oldFirstLock, newFirstLock),
+    closeAt: shiftedTime(week.close_at ?? week.closeAt, oldLastLock, newLastLock),
+    scoreAfter: shiftedTime(week.score_after ?? week.scoreAfter, oldLastEnd, newLastEnd),
+  };
+
+  const corrected = {
+    ...correctedTiming,
+    games: correctedGames.map(({ _reconciliation, ...game }) => game),
+  };
+  const weekDiff = changedFields(
+    EWC_WEEK_TIMING_FIELDS.map(([key, column]) => ({
+      field: column,
+      oldValue: unixSeconds(week[column] ?? week[key]),
+      newValue: correctedTiming[key],
+    })),
+  );
+  const gameDiff = correctedGames
+    .map((game, index) => ({
+      gameKey: game.key ?? null,
+      fields: changedFields([
+        { field: 'startAt', oldValue: game._reconciliation.oldStartAt, newValue: game.startAt },
+        { field: 'endAt', oldValue: game._reconciliation.oldEndAt, newValue: game.endAt },
+        { field: 'lockAt', oldValue: game._reconciliation.oldLockAt, newValue: game.lockAt },
+      ]),
+      index,
+    }))
+    .filter((game) => game.fields.length);
+  const invalidSubmissionIntervals = correctedGames
+    .filter((game) => game.lockAt < game._reconciliation.oldLockAt)
+    .map((game) => ({
+      gameKey: game.key ?? null,
+      newLockAt: game.lockAt,
+      oldLockAt: game._reconciliation.oldLockAt,
+    }));
+
+  return {
+    corrected,
+    diff: { week: weekDiff, games: gameDiff },
+    invalidSubmissionIntervals,
+  };
+}
+
 export function generateEwcWeekWindows(events, { openBeforeHours = 48, lockBeforeHours = 24, scoreDelayHours = 24 } = {}) {
   const normalizedEvents = (events || []).map(applyOfficialEwc2026EventDates);
   const dated = normalizedEvents.filter((event) => event.startAt && event.endAt).sort((a, b) => a.startAt - b.startAt);
   if (!dated.length) return [];
 
   lockBeforeHours = Math.max(0, Number(lockBeforeHours) || 0);
-  const year = new Date(dated[0].startAt * 1000).toLocaleString('en-GB', { timeZone: EWC_EVENT_TIME_ZONE, year: 'numeric' });
+  const year = new Date(dated[0].startAt * 1000).toLocaleString('en-GB', { timeZone: EWC_SCHEDULE_TIME_ZONE, year: 'numeric' });
   if (year === '2026') {
     const windows = officialWeekWindows2026();
     const byWeek = windows.map((week) => ({ ...week, events: [] }));
