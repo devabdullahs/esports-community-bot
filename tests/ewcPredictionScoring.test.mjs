@@ -20,6 +20,10 @@ const {
   mergeEwcGameResults,
   effectiveEwcWeekStatus,
   generateEwcWeekWindows,
+  defaultEwcSeasonPredictionWindow,
+  officialEwcDateBoundary,
+  EWC_2026_OFFICIAL_EVENT_DATES,
+  EWC_2026_OFFICIAL_WEEKS,
   WEEKLY_TOP_THREE_SWEEP_BONUS,
   WEEKLY_ALL_GAME_WINNERS_BONUS,
   SEASON_EXACT_RANK_BONUS,
@@ -258,6 +262,56 @@ test('scoreSeasonPrediction: exact-rank bonus applies at the matching predicted 
 const T = 1750000000;
 const DAY = 86400;
 const WEEK = 7 * DAY;
+
+function expectedRiyadhBoundary(dateText, endOfDay = false) {
+  const [year, month, day] = dateText.split('-').map(Number);
+  const midnight = Math.floor(Date.UTC(year, month - 1, day) / 1000) - 3 * 3600;
+  return endOfDay ? midnight + DAY - 1 : midnight;
+}
+
+test('official EWC 2026 date-only event and week boundaries are exact Riyadh epochs', () => {
+  for (const { start, end } of EWC_2026_OFFICIAL_EVENT_DATES) {
+    const startAt = officialEwcDateBoundary(start);
+    const endAt = officialEwcDateBoundary(end, true);
+    assert.equal(startAt, expectedRiyadhBoundary(start));
+    assert.equal(endAt, expectedRiyadhBoundary(end, true));
+    assert.equal(new Date(startAt * 1000).toISOString().slice(11), '21:00:00.000Z');
+    assert.equal(new Date(endAt * 1000).toISOString().slice(11), '20:59:59.000Z');
+  }
+
+  for (const [, , start, end] of EWC_2026_OFFICIAL_WEEKS) {
+    assert.equal(officialEwcDateBoundary(start), expectedRiyadhBoundary(start));
+    assert.equal(officialEwcDateBoundary(end, true), expectedRiyadhBoundary(end, true));
+  }
+});
+
+test('official EWC 2026 generation keeps July and August locks and scoring windows in Riyadh', () => {
+  const windows = generateEwcWeekWindows(
+    [
+      { game: 'Valorant', event: 'EWC Valorant' },
+      { game: 'Tekken 8', event: 'EWC Tekken 8' },
+    ],
+    { openBeforeHours: 48, lockBeforeHours: 24, scoreDelayHours: 24 },
+  );
+  const valorant = windows.flatMap((week) => week.events).find((event) => event.game === 'Valorant');
+  const tekken = windows.flatMap((week) => week.events).find((event) => event.game === 'Tekken 8');
+  const week1 = windows.find((week) => week.weekKey === 'week-1');
+  const week5 = windows.find((week) => week.weekKey === 'week-5');
+
+  assert.equal(valorant.startAt, expectedRiyadhBoundary('2026-07-09'));
+  assert.equal(tekken.startAt, expectedRiyadhBoundary('2026-08-05'));
+  assert.equal(valorant.lockAt, valorant.startAt - 24 * 3600);
+  assert.equal(week1.openAt, valorant.lockAt - 48 * 3600);
+  assert.equal(week1.closeAt, valorant.lockAt);
+  assert.equal(week1.scoreAfter, valorant.endAt + 24 * 3600);
+  assert.equal(week5.startAt, expectedRiyadhBoundary('2026-08-04'));
+  assert.equal(week5.endAt, expectedRiyadhBoundary('2026-08-09', true));
+
+  const season = defaultEwcSeasonPredictionWindow('2026');
+  assert.equal(season.firstEventAt, expectedRiyadhBoundary('2026-07-07'));
+  assert.equal(season.finalEventEndAt, expectedRiyadhBoundary('2026-08-23', true));
+  assert.equal(season.scoreAfter, season.finalEventEndAt + 24 * 3600);
+});
 
 test('generateEwcWeekWindows: gap week (no events) is skipped; index does not advance', () => {
   // Event 1 starts at T, event 2 starts at T+14 days.

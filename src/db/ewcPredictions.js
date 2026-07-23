@@ -53,6 +53,10 @@ async function getWith(client, sql, params) {
   return client ? client.get(sql, params) : get(sql, params);
 }
 
+async function allWith(client, sql, params) {
+  return client ? client.all(sql, params) : all(sql, params);
+}
+
 function transactionWith(client) {
   return client ? async (fn) => fn(client) : transaction;
 }
@@ -116,6 +120,17 @@ export async function listEwcWeeks(guildId, season = '2026') {
     await all(
       'SELECT * FROM ewc_prediction_weeks WHERE guild_id = $1 AND season = $2 ORDER BY COALESCE(open_at, id), id',
       [guildId, season],
+    )
+  ).map(hydrateWeek);
+}
+
+export async function listEwcWeeksForTimezoneReconciliation(season = '2026', { client = null, forUpdate = false } = {}) {
+  const suffix = forUpdate && dbDriver() === 'postgres' ? ' FOR UPDATE' : '';
+  return (
+    await allWith(
+      client,
+      `SELECT * FROM ewc_prediction_weeks WHERE season = $1 ORDER BY id${suffix}`,
+      [season],
     )
   ).map(hydrateWeek);
 }
@@ -369,8 +384,31 @@ export async function getWeeklyPrediction(guildId, weekId, userId, client = null
   );
 }
 
-export async function listWeeklyPredictions(weekId) {
-  return (await all('SELECT * FROM ewc_weekly_predictions WHERE week_id = $1', [weekId])).map(hydratePrediction);
+export async function listWeeklyPredictions(weekId, client = null, { forUpdate = false } = {}) {
+  const suffix = forUpdate && dbDriver() === 'postgres' ? ' FOR UPDATE' : '';
+  return (await allWith(client, `SELECT * FROM ewc_weekly_predictions WHERE week_id = $1${suffix}`, [weekId])).map(hydratePrediction);
+}
+
+export async function updateEwcWeekTimingForTimezoneReconciliation(
+  { weekId, startAt, endAt, openAt, closeAt, scoreAfter, games },
+  client = null,
+) {
+  const result = await runWith(
+    client,
+    `UPDATE ewc_prediction_weeks
+     SET start_at = $1,
+         end_at = $2,
+         open_at = $3,
+         close_at = $4,
+         score_after = $5,
+         games_json = $6
+     WHERE id = $7
+       AND season = '2026'
+       AND status != 'scored'
+       AND scored_at IS NULL`,
+    [startAt, endAt, openAt, closeAt, scoreAfter, stringify(games), weekId],
+  );
+  return changes(result);
 }
 
 function emptyWeeklyPickDistribution() {
