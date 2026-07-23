@@ -39,8 +39,9 @@ import { logger } from '../lib/logger.js';
 import {
   effectiveEwcWeekStatus,
   dueEwcGamesForResults,
-  ewcGameResultPending,
-  ewcGameResultsFinalReady,
+  evaluateEwcGameResultCompleteness,
+  evaluateEwcGameResultsFinalReadiness,
+  ewcPlacementCoveredRanks,
   mergeEwcGameResults,
   pendingEwcGameResults,
   perGamePredictionRoundLocked,
@@ -574,7 +575,7 @@ async function processWeek(client, round) {
       const fetchedAt = nowSec();
       const fetched = await Promise.all((await fetchEwcWeekGameResults(resolvedCandidates)).map(async (result) => {
         const game = resolvedCandidates.find((candidate) => candidate.key === result.gameKey);
-        if (!game || !ewcGameResultPending(result) || fetchedAt < Number(game.endAt || 0)) {
+        if (!game || evaluateEwcGameResultCompleteness(result).ready || fetchedAt < Number(game.endAt || 0)) {
           return { ...result, fetchedAt };
         }
         const placements = await trackedEwcGamePlacements(game.game, {
@@ -584,7 +585,17 @@ async function processWeek(client, round) {
         });
         if (!placements.length) return { ...result, fetchedAt };
         logger.info(`[ewc-predictions] used final tracked standings for ${round.guild_id}/${round.week_key}/${game.game}`);
-        return { ...result, placements, resultSource: 'tracked-final-standings', fetchedAt };
+        return {
+          ...result,
+          placements,
+          evidence: {
+            kind: 'tracked-final-standings',
+            authoritative: true,
+            coveredRanks: [...new Set(placements.flatMap((placement) => ewcPlacementCoveredRanks(placement.place)))].sort((a, b) => a - b),
+          },
+          resultSource: 'tracked-final-standings',
+          fetchedAt,
+        };
       }));
       const merged = mergeEwcGameResults(results, fetched);
       resultsChanged = JSON.stringify(merged) !== JSON.stringify(results);
@@ -596,8 +607,9 @@ async function processWeek(client, round) {
   const missingResults = perGame ? pendingEwcGameResults(results, round.games) : [];
   const predictions = await listWeeklyPredictions(round.id);
 
-  const hasCompletedResult = results.some((result) => !ewcGameResultPending(result));
-  const finalReady = perGame && ewcGameResultsFinalReady(results, round.games, now, readyAt);
+  const hasCompletedResult = results.some((result) => result?.placements?.length);
+  const finalReadiness = perGame ? evaluateEwcGameResultsFinalReadiness(results, round.games, now, readyAt) : null;
+  const finalReady = perGame && finalReadiness.ready;
   if (perGame && !finalReady && hasCompletedResult && (resultsChanged || predictions.some((prediction) => prediction.score == null))) {
     await transaction(async (tx) => {
       for (const prediction of predictions) {
@@ -626,13 +638,15 @@ async function processWeek(client, round) {
     logger.warn(
       `[ewc-predictions] results pending for ${round.guild_id}/${round.season}/${round.week_key}: ${missingResults
         .map((result) => result.game || result.event || result.gameKey)
-        .join(', ')}`,
+        .join(', ')} (${finalReadiness?.reason || 'missing_rank'})`,
     );
     return;
   }
 
   if (perGame && !finalReady) {
-    logger.debug(`[ewc-predictions] final placement snapshots are not ready for ${round.guild_id}/${round.season}/${round.week_key}`);
+    logger.debug(
+      `[ewc-predictions] final placement snapshots are not ready for ${round.guild_id}/${round.season}/${round.week_key}: ${finalReadiness.reason}${finalReadiness.gameKey ? `/${finalReadiness.gameKey}` : ''}`,
+    );
     return;
   }
 
