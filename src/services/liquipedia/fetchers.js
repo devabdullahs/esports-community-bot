@@ -152,24 +152,28 @@ export async function fetchMatchDetails(game, matchPage, { teamA, teamB, maxAgeM
 // Matches for a tracked tournament, parsed from its OWN page's bracket/matchlist
 // (external_id = "<game>/<Page_Path>"). Stable + authoritative: upcoming, live, and finished
 // (with final scores + winners), so results are correct and corrections propagate.
-export async function fetchSchedule(tournament) {
+export async function fetchSchedule(tournament, { lpdbService = lpdb, loadPage = loadTournamentPage } = {}) {
   const [game, ...rest] = tournament.external_id.split('/');
   const page = rest.join('/');
   if (!page) return [];
 
-  // Prefer the structured LPDB API when a key is configured; fall back to HTML parsing on any
-  // error or empty result, so enabling LPDB can never break tracking.
-  if (lpdb.isEnabled()) {
+  // Prefer LPDB when configured. Backoff/rate/truncation failures must not
+  // amplify into an immediate second request to Liquipedia's MediaWiki API.
+  if (lpdbService.isEnabled()) {
     try {
-      const viaApi = await lpdb.fetchSchedule(tournament);
+      const viaApi = await lpdbService.fetchSchedule(tournament);
       if (viaApi.length) return viaApi;
-      logger.debug(`[lpdb] no matches for ${tournament.external_id}; using HTML parse`);
+      logger.debug('[lpdb] no matches; using HTML parse');
     } catch (e) {
-      logger.warn(`[lpdb] ${tournament.external_id} failed, using HTML parse: ${e.message}`);
+      if (lpdb.isLpdbProviderBlock(e)) {
+        logger.warn(`[lpdb] schedule retrieval deferred (${e.code})`);
+        throw e;
+      }
+      logger.warn(`[lpdb] schedule request failed (${e.code || 'request_failed'}); using HTML parse`);
     }
   }
 
-  const loaded = await loadTournamentPage(game, page);
+  const loaded = await loadPage(game, page);
   if (!loaded) return [];
   const { $ } = loaded;
 
@@ -256,7 +260,7 @@ export async function fetchSchedule(tournament) {
   const pages = [{ page, $, stageTitle: '' }];
 
   for (const child of childStagePages($, game, page)) {
-    const childLoaded = await loadTournamentPage(game, child);
+    const childLoaded = await loadPage(game, child);
     if (!childLoaded) continue;
     pages.push({ page: child, $: childLoaded.$, stageTitle: titleFromPageSegment(child) });
   }

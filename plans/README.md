@@ -253,7 +253,7 @@ untouched.
 | 133  | Gate every service startup on versioned PostgreSQL migrations | P1 | L | 125 | TODO |
 | 134  | Make SQLite-to-PostgreSQL imports fail closed on skipped data | P1 | M | 125, 133 | TODO |
 | 135  | Route Liquipedia MediaWiki requests through one scheduler | P1 | M | - | DONE |
-| 136  | Serialize, persist, and paginate LPDB schedule requests | P1 | M | - | TODO |
+| 136  | Serialize, persist, and paginate LPDB schedule requests | P1 | M | - | DONE |
 Status values: TODO | IN PROGRESS | DONE | BLOCKED (reason) | REJECTED (rationale) | SUPERSEDED.
 
 ## Deep reliability audit - first planning batch (2026-07-23 @ `0718e2d`)
