@@ -242,7 +242,38 @@ untouched.
 | 122  | Add branded graphics generator for admins and media channels | P2 | L | - | DONE |
 | 123  | Add keyword auto-flagging and bulk moderation | P2 | M-L | - | DONE |
 | 124  | Add a cross-post composer for site, Discord, and social drafts | P2 | L | 120 recommended | DONE |
+| 125  | Exercise PostgreSQL behavior in CI | P1 | M | - | DONE |
+| 126  | Bound every web mutation request before parsing | P1 | L | - | TODO |
+| 127  | Preserve CMS content when games or media channels are deleted | P1 | M | - | TODO |
+| 128  | Compute and reconcile official EWC boundaries in Riyadh | P1 | M | - | TODO |
+| 129  | Serialize prediction submissions with round transitions and scoring | P1 | M | 125 | TODO |
+| 130  | Give EWC prediction games stable identities and migrate references | P1 | L | 129 | TODO |
+| 131  | Require authoritative and complete EWC results before final scoring | P1 | M | - | TODO |
+| 132  | Make manual prediction scoring honor automation readiness | P1 | M | 129, 131 | TODO |
+| 133  | Gate every service startup on versioned PostgreSQL migrations | P1 | L | 125 | TODO |
+| 134  | Make SQLite-to-PostgreSQL imports fail closed on skipped data | P1 | M | 125, 133 | TODO |
+| 135  | Route Liquipedia MediaWiki requests through one scheduler | P1 | M | - | TODO |
+| 136  | Serialize, persist, and paginate LPDB schedule requests | P1 | M | - | TODO |
 Status values: TODO | IN PROGRESS | DONE | BLOCKED (reason) | REJECTED (rationale) | SUPERSEDED.
+
+## Deep reliability audit - first planning batch (2026-07-23 @ `0718e2d`)
+
+Plans 125-136 are the operator-selected first batch from the 2026-07-23 deep
+audit. The audit covered the complete owned bot/web repository, excluding
+dependencies, generated assets, secret values, and live external
+infrastructure. Baseline verification was green.
+
+### Recommended execution order
+
+1. **Establish the safety lane**: execute 125 first.
+2. **Independent urgent fixes**: 126, 127, 128, 131, 135, and 136 may proceed
+   after their own drift checks.
+3. **Prediction integrity chain**: 129 after 125; then 130 after 129. Execute
+   132 only after both 129 and 131.
+4. **Database rollout chain**: 133 after 125; 134 after 133.
+5. **Production data operations are separate approvals**: plans 128 and 130
+   create dry-run-first reconciliation tools. Do not apply those tools to
+   production without a separate operator review.
 
 ## Feature roadmap dependency notes (plans 102-124)
 
