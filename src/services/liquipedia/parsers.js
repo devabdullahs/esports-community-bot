@@ -475,10 +475,69 @@ export function parseMatchlistMatch($, el, game, scope = '') {
   };
 }
 
-// Parse Swiss-stage standings grids (table.swisstable).
-export function parseSwissMatches($, game) {
+function swissMatchKey(roundIndex, teamA, teamB) {
+  const pair = [teamA, teamB]
+    .map((team) => cleanName(team).toLowerCase().replace(/[^a-z0-9]+/g, ''))
+    .sort()
+    .join('|');
+  return `${roundIndex}|${pair}`;
+}
+
+function parseModernSwissMatches($, game) {
   const out = [];
   const seen = new Set();
+
+  $('.swiss-table-body-row').each((_rowIndex, row) => {
+    const $row = $(row);
+    const $entry = $row.find('.group-table-result-row .group-table-entry').first();
+    const rowTeam = cleanName($entry.attr('aria-label') || $entry.find('a[title]').attr('title') || $entry.text());
+    if (isPlaceholderTeam(rowTeam)) return;
+    const rowLogo = teamLogo($, $entry);
+
+    $row.find('.swiss-table-match-row .swiss-table-match').each((roundIndex, cell) => {
+      const $cell = $(cell);
+      const score = cleanName($cell.find('.swiss-table-match-score').text()).match(/^(\d+)\s*[:\-\u2013]\s*(\d+)$/);
+      if (!score) return;
+
+      const opponent = cleanName(
+        $cell.attr('aria-label') || $cell.find('a[title]').attr('title') || $cell.find('a').first().text(),
+      );
+      if (isPlaceholderTeam(opponent) || opponent.toLowerCase() === rowTeam.toLowerCase()) return;
+
+      const key = swissMatchKey(roundIndex, rowTeam, opponent);
+      if (seen.has(key)) return;
+      seen.add(key);
+
+      const scoreA = Number(score[1]);
+      const scoreB = Number(score[2]);
+      out.push({
+        source: 'liquipedia',
+        externalId: `${game}:swiss:${key}`,
+        name: `${rowTeam} vs ${opponent}`,
+        teamA: rowTeam,
+        teamB: opponent,
+        logoA: rowLogo,
+        logoB: teamLogo($, $cell),
+        scoreA,
+        scoreB,
+        bestOf: null,
+        scheduledAt: null,
+        status: 'finished',
+        winner: scoreA === scoreB ? null : scoreA > scoreB ? rowTeam : opponent,
+        roundIndex,
+      });
+    });
+  });
+
+  return out;
+}
+
+// Parse Swiss-stage standings grids (legacy table.swisstable and current div.swiss-table).
+export function parseSwissMatches($, game) {
+  const out = parseModernSwissMatches($, game);
+  const seen = new Set(
+    out.map(({ teamA, teamB }) => [teamA.toLowerCase(), teamB.toLowerCase()].sort().join('|')),
+  );
   $('.swisstable').each((_t, table) => {
     $(table)
       .find('tr')

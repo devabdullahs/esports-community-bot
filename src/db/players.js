@@ -1,4 +1,5 @@
 import { all, get, run } from './client.js';
+import { isIndividualCompetitorGame } from '../lib/games.js';
 import { normalizeTeamName } from '../lib/render.js';
 import { EWC_TOURNAMENT_SQL } from './tournamentStandings.js';
 
@@ -182,6 +183,71 @@ export async function createLiquipediaPlayer({
      RETURNING *`,
     [textOrNull(game), textOrNull(name), textOrNull(slug), currentTeamId, textOrNull(currentTeamName), textOrNull(liquipediaUrl), now],
   );
+}
+
+function isIndividualCompetitorName(name) {
+  const text = String(name ?? '').trim();
+  if (!text || /^(?:tbd|unknown|bye|lobby|-)$/i.test(text)) return false;
+  return !/\bgame\s*\d+\b/i.test(text) && !/\s-\s*match$/i.test(text);
+}
+
+export async function ensureIndividualCompetitorProfiles(game, names) {
+  if (!isIndividualCompetitorGame(game)) return { created: 0, players: [] };
+
+  const existing = await listPlayerNamesForGame(game);
+  const byName = new Map();
+  for (const player of existing) {
+    const key = normalizeTeamName(player.name);
+    if (key && !byName.has(key)) byName.set(key, player);
+  }
+
+  let created = 0;
+  const players = [];
+  for (const rawName of names ?? []) {
+    if (!isIndividualCompetitorName(rawName)) continue;
+    const name = String(rawName).trim();
+    const key = normalizeTeamName(name);
+    if (!key || byName.has(key)) continue;
+    const player = await createLiquipediaPlayer({ game, name, slug: key });
+    byName.set(key, player);
+    players.push(player);
+    created += 1;
+  }
+  return { created, players };
+}
+
+export async function backfillIndividualCompetitorProfiles() {
+  const rows = await all(
+    `SELECT DISTINCT t.game, m.team_a AS name
+       FROM matches m
+       JOIN tournaments t ON t.id = m.tournament_id
+      WHERE m.team_a IS NOT NULL
+     UNION
+     SELECT DISTINCT t.game, m.team_b AS name
+       FROM matches m
+       JOIN tournaments t ON t.id = m.tournament_id
+      WHERE m.team_b IS NOT NULL
+     UNION
+     SELECT DISTINCT t.game, s.team AS name
+       FROM tournament_standings s
+       JOIN tournaments t ON t.id = s.tournament_id
+      WHERE s.team IS NOT NULL`,
+    [],
+  );
+  const namesByGame = new Map();
+  for (const row of rows) {
+    if (!isIndividualCompetitorGame(row.game)) continue;
+    const names = namesByGame.get(row.game) ?? [];
+    names.push(row.name);
+    namesByGame.set(row.game, names);
+  }
+
+  let created = 0;
+  for (const [game, names] of namesByGame) {
+    const result = await ensureIndividualCompetitorProfiles(game, names);
+    created += result.created;
+  }
+  return { created, games: namesByGame.size };
 }
 
 export async function rememberPlayerLiquipediaUrl(id, url) {

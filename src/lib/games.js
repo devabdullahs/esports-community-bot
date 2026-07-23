@@ -127,6 +127,7 @@ export function categoryToGameSlug(category) {
   return null;
 }
 const LOBBY_GAMES = new Set(['apexlegends', 'freefire', 'fortnite', 'pubg', 'pubgmobile', 'teamfighttactics', 'tft']);
+const INDIVIDUAL_COMPETITOR_GAMES = new Set(['easportsfc', 'fighters', 'chess']);
 
 // Short tag for a game key (handles wiki slugs, a few legacy codes, and unknowns).
 const LEGACY_TAGS = { lol: 'LoL', cs2: 'CS', csgo: 'CS', rl: 'RL', ow: 'OW', other: '' };
@@ -145,6 +146,10 @@ export function gameName(slug) {
 
 export function isLobbyGame(slug) {
   return LOBBY_GAMES.has(slug) || LOBBY_GAMES.has(normalizeGameSlug(slug));
+}
+
+export function isIndividualCompetitorGame(slug) {
+  return INDIVIDUAL_COMPETITOR_GAMES.has(normalizeGameSlug(slug));
 }
 
 export function normalizeGameSlug(slug) {

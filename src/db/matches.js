@@ -90,6 +90,63 @@ export async function getMatch(source, externalId) {
   return get('SELECT * FROM matches WHERE source = $1 AND external_id = $2', [source, externalId]);
 }
 
+// Current Liquipedia Swiss grids expose completed round scores but no timestamps.
+// Reuse an already-persisted scheduled identity only when the pairing has one
+// unambiguous stored occurrence. Ambiguous same-pair rematches keep their parser
+// identity so a score can never be applied to the wrong match.
+export async function reconcileUntimedTournamentMatches(tournamentId, parsedMatches) {
+  if (!Array.isArray(parsedMatches) || !parsedMatches.length) return parsedMatches || [];
+  const untimed = parsedMatches.filter(
+    (match) => match?.scheduledAt == null && Number.isInteger(match?.roundIndex),
+  );
+  if (!untimed.length) return parsedMatches;
+
+  const existing = await all(
+    `SELECT id, source, external_id, team_a, team_b, logo_a, logo_b, scheduled_at
+       FROM matches
+      WHERE tournament_id = $1 AND scheduled_at IS NOT NULL
+      ORDER BY scheduled_at ASC, id ASC`,
+    [tournamentId],
+  );
+  const pairKey = (teamA, teamB) =>
+    [normalizeTeamName(teamA), normalizeTeamName(teamB)].sort().join('|');
+  const storedByPair = new Map();
+  for (const row of existing) {
+    const key = `${row.source}|${pairKey(row.team_a, row.team_b)}`;
+    const bucket = storedByPair.get(key);
+    if (bucket) bucket.push(row);
+    else storedByPair.set(key, [row]);
+  }
+
+  const parsedByPair = new Map();
+  for (const match of untimed) {
+    const key = `${match.source}|${pairKey(match.teamA, match.teamB)}`;
+    const bucket = parsedByPair.get(key);
+    if (bucket) bucket.push(match);
+    else parsedByPair.set(key, [match]);
+  }
+
+  const replacements = new Map();
+  for (const [key, matches] of parsedByPair) {
+    const stored = storedByPair.get(key) || [];
+    if (stored.length !== matches.length) continue;
+    const orderedMatches = [...matches].sort((a, b) => a.roundIndex - b.roundIndex);
+    for (let index = 0; index < orderedMatches.length; index++) {
+      const match = orderedMatches[index];
+      const row = stored[index];
+      replacements.set(match, {
+        ...match,
+        externalId: row.external_id,
+        scheduledAt: Number(row.scheduled_at),
+        logoA: match.logoA || (normalizeTeamName(match.teamA) === normalizeTeamName(row.team_a) ? row.logo_a : row.logo_b),
+        logoB: match.logoB || (normalizeTeamName(match.teamB) === normalizeTeamName(row.team_b) ? row.logo_b : row.logo_a),
+      });
+    }
+  }
+
+  return parsedMatches.map((match) => replacements.get(match) || match);
+}
+
 const MATCH_ALIAS_WINDOW_SECONDS = 15 * 60;
 
 function normalizedPair(m) {

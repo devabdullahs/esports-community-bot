@@ -2,6 +2,7 @@ import "server-only";
 
 import { all } from "@bot/db/client.js";
 import { dedupeMatches as _dedupeMatches } from "@bot/db/matches.js";
+import { listPlayerNamesForGame as _listPlayerNamesForGame } from "@bot/db/players.js";
 import { listTeamNamesForGame as _listTeamNamesForGame } from "@bot/db/teams.js";
 import {
   listStandingsCounts as _listStandingsCounts,
@@ -13,6 +14,7 @@ import {
 } from "@bot/db/tournamentSyncHealth.js";
 import { publicTournamentSyncHealth as _publicTournamentSyncHealth } from "@bot/lib/tournamentSyncHealth.js";
 import { isEwcTournamentReference } from "@bot/lib/ewcTournament.js";
+import { isIndividualCompetitorGame as _isIndividualCompetitorGame } from "@bot/lib/games.js";
 import { normalizeTeamName as _normalizeTeamName } from "@bot/lib/render.js";
 import {
   getTournamentById as _getById,
@@ -103,9 +105,13 @@ export type MatchRow = {
   name: string | null;
   team_a: string | null;
   team_b: string | null;
-  /** PandaScore team-profile ids, linked only on an unambiguous name match. */
+  /** Legacy team ids retained for team-game compatibility. */
   team_a_id?: number | null;
   team_b_id?: number | null;
+  team_a_profile_id?: number | null;
+  team_b_profile_id?: number | null;
+  team_a_profile_type?: "team" | "player" | null;
+  team_b_profile_type?: "team" | "player" | null;
   logo_a: string | null;
   logo_b: string | null;
   score_a: number | null;
@@ -131,6 +137,8 @@ export type StandingRow = {
   rank: number;
   team: string;
   team_id?: number | null;
+  profile_id?: number | null;
+  profile_type?: "team" | "player" | null;
   logo: string | null;
   points: string;
   extra: string;
@@ -222,6 +230,9 @@ function publicMatch(row: MatchRow): MatchRow {
 const listTeamNamesForGame = _listTeamNamesForGame as (
   game: string,
 ) => Promise<Array<{ id: number; name: string }>>;
+const listPlayerNamesForGame = _listPlayerNamesForGame as (
+  game: string,
+) => Promise<Array<{ id: number; name: string }>>;
 const listStandingsForTournament = _listStandingsForTournament as (
   tournamentId: number,
 ) => Promise<StandingRow[]>;
@@ -240,6 +251,7 @@ const publicTournamentSyncHealth = _publicTournamentSyncHealth as (
   },
 ) => PublicSyncHealth;
 const normalizeTeamName = _normalizeTeamName as (value: string | null | undefined) => string;
+const isIndividualCompetitorGame = _isIndividualCompetitorGame as (game: string | null | undefined) => boolean;
 const livePollIntervalMs = Number(process.env.LIVE_POLL_INTERVAL_MS || 300_000);
 
 function syncHealthForTournament(
@@ -259,9 +271,12 @@ function syncHealthForTournament(
 // unambiguous matches link: two teams sharing a normalized name map to null
 // rather than guessing. Matches store Liquipedia/start.gg names while profiles
 // store PandaScore names, so normalization is what makes them meet.
-async function teamIdResolver(game: string | null): Promise<(name: string | null) => number | null> {
+type ProfileReference = { id: number; type: "team" | "player" };
+
+async function profileResolver(game: string | null): Promise<(name: string | null) => ProfileReference | null> {
   if (!game) return () => null;
-  const pairs = await listTeamNamesForGame(game);
+  const individual = isIndividualCompetitorGame(game);
+  const pairs = individual ? await listPlayerNamesForGame(game) : await listTeamNamesForGame(game);
   const byName = new Map<string, number | null>();
   for (const pair of pairs) {
     const key = normalizeTeamName(pair.name);
@@ -270,12 +285,26 @@ async function teamIdResolver(game: string | null): Promise<(name: string | null
   }
   return (name) => {
     const key = normalizeTeamName(name);
-    return key ? (byName.get(key) ?? null) : null;
+    const id = key ? (byName.get(key) ?? null) : null;
+    return id ? { id, type: individual ? "player" : "team" } : null;
   };
 }
 
-function withTeamIds(match: MatchRow, resolve: (name: string | null) => number | null): MatchRow {
-  return { ...match, team_a_id: resolve(match.team_a), team_b_id: resolve(match.team_b) };
+function withProfileReferences(
+  match: MatchRow,
+  resolve: (name: string | null) => ProfileReference | null,
+): MatchRow {
+  const a = resolve(match.team_a);
+  const b = resolve(match.team_b);
+  return {
+    ...match,
+    team_a_id: a?.type === "team" ? a.id : null,
+    team_b_id: b?.type === "team" ? b.id : null,
+    team_a_profile_id: a?.id ?? null,
+    team_b_profile_id: b?.id ?? null,
+    team_a_profile_type: a?.type ?? null,
+    team_b_profile_type: b?.type ?? null,
+  };
 }
 
 async function dedupedTournamentMatches(tournament: TournamentRow): Promise<MatchRow[]> {
@@ -390,30 +419,35 @@ export async function getTournamentMatches(
   if (!tournament || tournament.guild_id !== guildId || tournament.active !== 1) return null;
 
   const rows = await dedupedTournamentMatches(tournament);
-  const [resolveTeamId, rawStandings, health] = await Promise.all([
-    teamIdResolver(tournament.game),
+  const [resolveProfile, rawStandings, health] = await Promise.all([
+    profileResolver(tournament.game),
     listStandingsForTournament(tournament.id),
     getTournamentSyncHealth(tournament.id),
   ]);
-  let standings = rawStandings.map((row) => ({
-    ...row,
-    team_id: resolveTeamId(row.team),
-  }));
+  let standings = rawStandings.map((row) => {
+    const profile = resolveProfile(row.team);
+    return {
+      ...row,
+      team_id: profile?.type === "team" ? profile.id : null,
+      profile_id: profile?.id ?? null,
+      profile_type: profile?.type ?? null,
+    };
+  });
   const rawRunning = rows.filter((m) => m.status === "running");
   const coStreamMap = await liveCoStreamsByMatch(rawRunning, {
     gameSlug: tournament.game,
     includeEwc: isEwcTournamentReference(tournament),
   });
   const running = rawRunning.map((m) => ({
-    ...withTeamIds(publicMatch(m), resolveTeamId),
+    ...withProfileReferences(publicMatch(m), resolveProfile),
     coStreams: coStreamMap.get(m.id),
   }));
   const scheduled = rows
     .filter((m) => m.status === "scheduled")
-    .map((m) => withTeamIds(publicMatch(m), resolveTeamId));
+    .map((m) => withProfileReferences(publicMatch(m), resolveProfile));
   const finishedAll = rows
     .filter((m) => m.status === "finished")
-    .map((m) => withTeamIds(publicMatch(m), resolveTeamId));
+    .map((m) => withProfileReferences(publicMatch(m), resolveProfile));
   const finished = finishedAll.slice(offset, offset + limit);
   const ewc = isEwcTournamentReference(tournament);
   const standingsHaveResults = rawStandings.some(

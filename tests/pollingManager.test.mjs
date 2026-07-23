@@ -7,7 +7,9 @@ process.env.NODE_ENV = 'test';
 process.env.STARTGG_TOKEN = 'test-token';
 process.env.LOG_LEVEL = 'error';
 
-const { activeCount, armMatch, stopAll } = await import('../src/jobs/pollingManager.js');
+const { activeCount, armMatch, maxAbsentRunSeconds, shouldRetireAbsentMatch, stopAll } = await import(
+  '../src/jobs/pollingManager.js'
+);
 
 function startggMatch(externalId) {
   return {
@@ -64,4 +66,17 @@ test('armMatch can delay the first poll for resumed live rows', (t) => {
 
   assert.equal(armMatch(match, { id: 1, source: 'startgg' }, { initialPollDelayMs: 60_000 }), true);
   assert.equal(activeCount(), 1);
+});
+
+test('absent EA FC matches retire sooner without changing the default safety net', () => {
+  assert.equal(maxAbsentRunSeconds({ game: 'easportsfc' }), 3 * 3600);
+  assert.equal(maxAbsentRunSeconds({ game: 'dota2' }), 8 * 3600);
+  assert.equal(maxAbsentRunSeconds(null), 8 * 3600);
+
+  const scheduledAt = 1_000_000;
+  const match = { scheduled_at: scheduledAt };
+  assert.equal(shouldRetireAbsentMatch(match, { game: 'easportsfc' }, scheduledAt + 3 * 3600), false);
+  assert.equal(shouldRetireAbsentMatch(match, { game: 'easportsfc' }, scheduledAt + 3 * 3600 + 1), true);
+  assert.equal(shouldRetireAbsentMatch(match, { game: 'dota2' }, scheduledAt + 3 * 3600 + 1), false);
+  assert.equal(shouldRetireAbsentMatch({}, { game: 'easportsfc' }, scheduledAt + 9 * 3600), false);
 });

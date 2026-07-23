@@ -6,6 +6,7 @@
 //   or: node --test tests/liquipediaParsers.test.mjs
 
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import test from 'node:test';
 
 // Set required env vars before any imports that trigger config.js.
@@ -15,6 +16,8 @@ process.env.DISCORD_CLIENT_ID = 'test-client-id';
 process.env.DB_PATH = ':memory:';
 
 import { load } from 'cheerio';
+
+const fixture = (name) => readFileSync(new URL(`./fixtures/${name}`, import.meta.url), 'utf8');
 
 const {
   clubChampionshipStandingsPage,
@@ -512,6 +515,49 @@ test('parseSwissMatches: table with no played rounds returns []', () => {
   `;
   const $ = load(html);
   assert.deepEqual(parseSwissMatches($, 'rl'), []);
+});
+
+test('parseSwissMatches: current div grid returns finished scores and dedupes mirrored player rows', () => {
+  const $ = load(`${fixture('liquipedia-modern-swiss.html')}
+    <table class="swisstable">
+      <tr><th>#</th><th>Player</th><th>Round 1</th></tr>
+      <tr>
+        <th>1</th>
+        <td><span data-highlightingclass="Samugamer 07">Samugamer 07</span></td>
+        <td class="swisstable-bgc-win">
+          <span data-highlightingclass="Adida">Adida</span>
+          9:3
+        </td>
+      </tr>
+    </table>
+  `);
+  const matches = parseSwissMatches($, 'easportsfc');
+
+  assert.equal(matches.length, 1);
+  assert.deepEqual(
+    {
+      externalId: matches[0].externalId,
+      teamA: matches[0].teamA,
+      teamB: matches[0].teamB,
+      scoreA: matches[0].scoreA,
+      scoreB: matches[0].scoreB,
+      status: matches[0].status,
+      winner: matches[0].winner,
+      roundIndex: matches[0].roundIndex,
+    },
+    {
+      externalId: 'easportsfc:swiss:0|adida|samugamer07',
+      teamA: 'Samugamer 07',
+      teamB: 'Adida',
+      scoreA: 9,
+      scoreB: 3,
+      status: 'finished',
+      winner: 'Samugamer 07',
+      roundIndex: 0,
+    },
+  );
+  assert.match(matches[0].logoA, /it\.png$/);
+  assert.match(matches[0].logoB, /us\.png$/);
 });
 
 // ---------------------------------------------------------------------------

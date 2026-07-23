@@ -50,6 +50,10 @@ type MatchRow = {
   team_b: string | null;
   team_a_id?: number | null;
   team_b_id?: number | null;
+  team_a_profile_id?: number | null;
+  team_b_profile_id?: number | null;
+  team_a_profile_type?: "team" | "player" | null;
+  team_b_profile_type?: "team" | "player" | null;
   logo_a: string | null;
   logo_b: string | null;
   score_a: number | null;
@@ -69,6 +73,8 @@ type StandingRow = {
   rank: number;
   team: string;
   team_id?: number | null;
+  profile_id?: number | null;
+  profile_type?: "team" | "player" | null;
   logo: string | null;
   points: string;
   extra: string;
@@ -198,21 +204,27 @@ function MatchDetailsLink({ match, locale, text }: { match: MatchRow; locale: Lo
 function TeamName({
   label,
   teamId,
+  profileId,
+  profileType,
   locale,
   bold,
   returnContext,
 }: {
   label: string;
   teamId?: number | null;
+  profileId?: number | null;
+  profileType?: "team" | "player" | null;
   locale: Locale;
   bold?: boolean;
   returnContext?: ProfileReturnContext | null;
 }) {
   const className = `min-w-0 truncate ${bold ? "font-bold text-foreground" : ""}`;
-  if (!teamId) return <bdi className={className}>{label}</bdi>;
+  const resolvedId = profileId ?? teamId;
+  const resolvedType = profileType ?? (teamId ? "team" : null);
+  if (!resolvedId || !resolvedType) return <bdi className={className}>{label}</bdi>;
   return (
     <Link
-      href={withProfileReturn(`/teams/${teamId}`, locale, returnContext)}
+      href={withProfileReturn(`/${resolvedType === "player" ? "players" : "teams"}/${resolvedId}`, locale, returnContext)}
       className={`${className} underline-offset-4 hover:text-primary hover:underline`}
     >
       <bdi>{label}</bdi>
@@ -225,6 +237,10 @@ function MatchText({
   b,
   aId,
   bId,
+  aProfileId,
+  bProfileId,
+  aProfileType,
+  bProfileType,
   logoA,
   logoB,
   locale,
@@ -237,6 +253,10 @@ function MatchText({
   b: string | null;
   aId?: number | null;
   bId?: number | null;
+  aProfileId?: number | null;
+  bProfileId?: number | null;
+  aProfileType?: "team" | "player" | null;
+  bProfileType?: "team" | "player" | null;
   logoA?: string | null;
   logoB?: string | null;
   locale: Locale;
@@ -254,6 +274,8 @@ function MatchText({
         <TeamName
           label={aLabel}
           teamId={aId}
+          profileId={aProfileId}
+          profileType={aProfileType}
           locale={locale}
           bold={winner === "a"}
           returnContext={returnContext}
@@ -264,6 +286,8 @@ function MatchText({
         <TeamName
           label={bLabel}
           teamId={bId}
+          profileId={bProfileId}
+          profileType={bProfileType}
           locale={locale}
           bold={winner === "b"}
           returnContext={returnContext}
@@ -447,6 +471,8 @@ export function TournamentMatchList({
                       <TeamName
                         label={teamLabel(m.team_a, tbd)}
                         teamId={m.team_a_id}
+                        profileId={m.team_a_profile_id}
+                        profileType={m.team_a_profile_type}
                         locale={locale}
                         returnContext={returnContext}
                       />
@@ -459,6 +485,8 @@ export function TournamentMatchList({
                       <TeamName
                         label={teamLabel(m.team_b, tbd)}
                         teamId={m.team_b_id}
+                        profileId={m.team_b_profile_id}
+                        profileType={m.team_b_profile_type}
                         locale={locale}
                         returnContext={returnContext}
                       />
@@ -544,6 +572,10 @@ export function TournamentMatchList({
                             b={m.team_b}
                             aId={m.team_a_id}
                             bId={m.team_b_id}
+                            aProfileId={m.team_a_profile_id}
+                            bProfileId={m.team_b_profile_id}
+                            aProfileType={m.team_a_profile_type}
+                            bProfileType={m.team_b_profile_type}
                             logoA={m.logo_a}
                             logoB={m.logo_b}
                             locale={locale}
@@ -607,6 +639,10 @@ export function TournamentMatchList({
                               b={m.team_b}
                               aId={m.team_a_id}
                               bId={m.team_b_id}
+                              aProfileId={m.team_a_profile_id}
+                              bProfileId={m.team_b_profile_id}
+                              aProfileType={m.team_a_profile_type}
+                              bProfileType={m.team_b_profile_type}
                               logoA={m.logo_a}
                               logoB={m.logo_b}
                               locale={locale}
@@ -755,6 +791,8 @@ function StandingsSection({
                       <TeamName
                         label={row.team}
                         teamId={row.team_id}
+                        profileId={row.profile_id}
+                        profileType={row.profile_type}
                         locale={locale}
                         returnContext={returnContext}
                       />

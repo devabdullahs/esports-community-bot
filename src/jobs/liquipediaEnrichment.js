@@ -2,6 +2,7 @@ import cron from 'node-cron';
 import { config } from '../config.js';
 import { logger } from '../lib/logger.js';
 import { isEwcTournamentReference } from '../lib/ewcTournament.js';
+import { isIndividualCompetitorGame } from '../lib/games.js';
 import { normalizeTeamName } from '../lib/render.js';
 import { listActiveTournaments } from '../db/tournaments.js';
 import { listGameNextMatchAt, listTrackedTeamNamesForGame } from '../db/matches.js';
@@ -218,7 +219,6 @@ export async function runLiquipediaEnrichment({
       };
       const stalePlayers = existingPlayers.filter(
         (player) =>
-          player.current_team_id &&
           player.liquipedia_url &&
           needsPlayerPageRefresh(player, ttlMs, now, playerImageBackfillCutoff),
       );
@@ -259,7 +259,9 @@ export async function runLiquipediaEnrichment({
         if (team?.id) ewcTeamIds.add(team.id);
       }
       const isEwcPlayer = (player) =>
-        ewcTeamIds.has(player.current_team_id) || ewcTrackedKeys.has(normalizeTeamName(player.current_team_name));
+        ewcTeamIds.has(player.current_team_id) ||
+        ewcTrackedKeys.has(normalizeTeamName(player.current_team_name)) ||
+        ewcTrackedKeys.has(normalizeTeamName(player.name));
 
       const processTeams = async (trackedNames, { ewc = false } = {}) => {
         for (const teamName of trackedNames) {
@@ -357,6 +359,44 @@ export async function runLiquipediaEnrichment({
         }
       };
 
+      const processPlayers = async (trackedNames) => {
+        for (const playerName of trackedNames) {
+          if (budget <= 0) break;
+          if (isPlaceholderTeam(playerName)) continue;
+          const key = normalizeTeamName(playerName);
+          if (!key) continue;
+
+          let player = playersByName.get(key);
+          if (!player) {
+            player = await createLiquipediaPlayer({ game, name: playerName, slug: key });
+            playersByName.set(key, player);
+            summary.created += 1;
+          }
+          if (!needsPlayerPageRefresh(player, ttlMs, now, playerImageBackfillCutoff)) {
+            summary.skippedFresh += 1;
+            continue;
+          }
+
+          let page = liquipedia.pageFromUrl?.(player.liquipedia_url) ?? null;
+          let url = player.liquipedia_url ?? null;
+          if (!page) {
+            const resolved = await liquipedia.resolveEntityPage(wiki, playerName);
+            budget -= 1;
+            if (resolved.status === 'transient') continue;
+            if (resolved.status !== 'ok') {
+              await stampPlayerLiquipedia(player.id, {});
+              summary.misses += 1;
+              continue;
+            }
+            page = resolved.page;
+            url = resolved.url;
+            player = await rememberPlayerLiquipediaUrl(player.id, url);
+            playersByName.set(key, player);
+          }
+          queuePlayer({ player, page, url });
+        }
+      };
+
       // Roster players: their rows were created/verified during the roster
       // pass above, and their pages came straight from the team page links, so
       // no search round-trip is needed - just a parse each, budget permitting.
@@ -393,16 +433,29 @@ export async function runLiquipediaEnrichment({
         }
       };
 
-      await processTeams(priorityNames, { ewc: true });
-      for (const player of stalePlayers) {
-        if (isEwcPlayer(player)) queuePlayer({ player, url: player.liquipedia_url });
+      if (isIndividualCompetitorGame(game)) {
+        await processPlayers(priorityNames);
+        for (const player of stalePlayers) {
+          if (isEwcPlayer(player)) queuePlayer({ player, url: player.liquipedia_url });
+        }
+        await drainPlayerQueue();
+        for (const player of stalePlayers) {
+          if (!isEwcPlayer(player)) queuePlayer({ player, url: player.liquipedia_url });
+        }
+        await processPlayers(remainingNames);
+        await drainPlayerQueue();
+      } else {
+        await processTeams(priorityNames, { ewc: true });
+        for (const player of stalePlayers) {
+          if (isEwcPlayer(player)) queuePlayer({ player, url: player.liquipedia_url });
+        }
+        await drainPlayerQueue();
+        for (const player of stalePlayers) {
+          if (!isEwcPlayer(player)) queuePlayer({ player, url: player.liquipedia_url });
+        }
+        await processTeams(remainingNames);
+        await drainPlayerQueue();
       }
-      await drainPlayerQueue();
-      for (const player of stalePlayers) {
-        if (!isEwcPlayer(player)) queuePlayer({ player, url: player.liquipedia_url });
-      }
-      await processTeams(remainingNames);
-      await drainPlayerQueue();
     }
 
     logger.info(

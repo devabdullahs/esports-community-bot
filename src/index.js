@@ -20,6 +20,7 @@ import { stopLiquipediaEnrichment } from './jobs/liquipediaEnrichment.js';
 import { stopStandingsSync } from './jobs/standingsSync.js';
 import { startWebAnalyticsRetention, stopWebAnalyticsRetention } from './jobs/webAnalyticsRetention.js';
 import { deployCommands } from './lib/commandRegistry.js';
+import { backfillIndividualCompetitorProfiles } from './db/players.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 
@@ -33,6 +34,16 @@ const client = new Client({
 client.commands = new Collection();
 
 await ensurePostgresAppSchema();
+try {
+  const profileBackfill = await backfillIndividualCompetitorProfiles();
+  if (profileBackfill.created) {
+    logger.info(
+      `[profiles] created ${profileBackfill.created} individual competitor profile(s) across ${profileBackfill.games} game(s).`,
+    );
+  }
+} catch (err) {
+  logger.warn(`[profiles] individual competitor backfill failed: ${err.message}`);
+}
 startWebAnalyticsRetention();
 
 // --- Load commands ---
