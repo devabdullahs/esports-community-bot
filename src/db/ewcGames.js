@@ -120,18 +120,49 @@ export async function updateEwcGame(slug, { title, description, status, owner, f
   return getEwcGame(slug);
 }
 
-// Deleting a game also removes its news posts (and their translations) so nothing is orphaned.
+// Delete game-owned content while preserving media-owned posts that only use
+// game_slug as an optional topic tag.
 export async function deleteEwcGame(slug) {
   return transaction(async (tx) => {
+    const existing = await tx.get('SELECT slug FROM ewc_games WHERE slug = $1', [slug]);
+    if (!existing) {
+      return {
+        gameDeleted: 0,
+        postsDeleted: 0,
+        mediaPostsDetached: 0,
+        mediaChannelsDetached: 0,
+      };
+    }
+
     await tx.run(
       `DELETE FROM ewc_news_post_translations
-       WHERE post_id IN (SELECT id FROM ewc_news_posts WHERE game_slug = $1)`,
+       WHERE post_id IN (
+         SELECT id
+         FROM ewc_news_posts
+         WHERE game_slug = $1 AND media_slug IS NULL
+       )`,
       [slug],
     );
-    const posts = await tx.run('DELETE FROM ewc_news_posts WHERE game_slug = $1', [slug]);
+    const posts = await tx.run(
+      'DELETE FROM ewc_news_posts WHERE game_slug = $1 AND media_slug IS NULL',
+      [slug],
+    );
+    const mediaPosts = await tx.run(
+      'UPDATE ewc_news_posts SET game_slug = NULL WHERE game_slug = $1 AND media_slug IS NOT NULL',
+      [slug],
+    );
+    const mediaChannels = await tx.run(
+      'UPDATE ewc_media_channels SET game_slug = NULL WHERE game_slug = $1',
+      [slug],
+    );
     await tx.run('DELETE FROM ewc_admin_game_scopes WHERE game_slug = $1', [slug]);
     const game = await tx.run('DELETE FROM ewc_games WHERE slug = $1', [slug]);
-    return { gameDeleted: game.changes, postsDeleted: posts.changes };
+    return {
+      gameDeleted: game.changes,
+      postsDeleted: posts.changes,
+      mediaPostsDetached: mediaPosts.changes,
+      mediaChannelsDetached: mediaChannels.changes,
+    };
   });
 }
 
