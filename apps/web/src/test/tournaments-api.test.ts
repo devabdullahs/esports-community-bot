@@ -116,7 +116,7 @@ async function seed(): Promise<void> {
   individualTournamentId = individualTournament.id;
   const individualPlayer = (await createLiquipediaPlayer({
     game: "easportsfc",
-    name: "AboMakkah",
+    name: "AbuMakkah",
     slug: "abomakkah",
   })) as { id: number };
   individualPlayerId = individualPlayer.id;
