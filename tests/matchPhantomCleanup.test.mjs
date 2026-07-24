@@ -21,6 +21,7 @@ const {
   deleteResolvedDuplicateMatches,
   deleteResolvedLiveAliasMatches,
   deleteTournamentDuplicateMatches,
+  reconcileUntimedTournamentMatches,
 } = await import('../src/db/matches.js');
 
 test.after(() => {
@@ -431,4 +432,49 @@ test('startup cleanup keeps later same-day alias rows as possible rematches', as
 
   assert.equal(removed, 0);
   assert.ok(await getMatch('liquipedia', 'dota2:1783437900:Team Liquid:PTime'));
+});
+
+test('reconciles one untimed Swiss result onto its stored scheduled match identity', async () => {
+  const t = await tournament('easportsfc/FC_Pro_26/World_Championship-reconcile');
+  await sched(t.id, 'easportsfc:1784744400:LevideWeerd:Paulo Neto', 'LevideWeerd', 'Paulo Neto', 1784744400);
+
+  const parsed = [{
+    source: 'liquipedia',
+    externalId: 'easportsfc:swiss:0|levideweerd|pauloneto',
+    teamA: 'Paulo Neto',
+    teamB: 'Levi de Weerd',
+    scoreA: 7,
+    scoreB: 8,
+    scheduledAt: null,
+    status: 'finished',
+    roundIndex: 0,
+  }];
+  const reconciled = await reconcileUntimedTournamentMatches(t.id, parsed);
+
+  assert.equal(reconciled[0].externalId, 'easportsfc:1784744400:LevideWeerd:Paulo Neto');
+  assert.equal(reconciled[0].scheduledAt, 1784744400);
+  assert.equal(reconciled[0].scoreA, 7);
+  assert.equal(parsed[0].scheduledAt, null, 'parser output is not mutated');
+});
+
+test('does not reconcile an untimed score when same-pair rematches are ambiguous', async () => {
+  const t = await tournament('easportsfc/FC_Pro_26/World_Championship-rematch');
+  await sched(t.id, 'easportsfc:round-1', 'Player A', 'Player B', 1784744400);
+  await sched(t.id, 'easportsfc:round-6', 'Player B', 'Player A', 1784766000);
+  const parsed = [{
+    source: 'liquipedia',
+    externalId: 'easportsfc:swiss:0|playera|playerb',
+    teamA: 'Player A',
+    teamB: 'Player B',
+    scoreA: 9,
+    scoreB: 3,
+    scheduledAt: null,
+    status: 'finished',
+    roundIndex: 0,
+  }];
+
+  const reconciled = await reconcileUntimedTournamentMatches(t.id, parsed);
+
+  assert.equal(reconciled[0].externalId, parsed[0].externalId);
+  assert.equal(reconciled[0].scheduledAt, null);
 });

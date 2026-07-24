@@ -16,6 +16,7 @@ import {
   deleteResolvedLiveAliasMatches,
   deleteTournamentPlaceholderMatches,
   deleteTournamentDuplicateMatches,
+  reconcileUntimedTournamentMatches,
   upsertMatch,
   toMatchRow,
 } from '../db/matches.js';
@@ -25,6 +26,7 @@ import { fetchTournamentSchedule } from './tournamentScheduleFetch.js';
 import * as liquipedia from '../services/liquipedia.js';
 import * as startgg from '../services/startgg.js';
 import * as pandascore from '../services/pandascore.js';
+import { ensureIndividualCompetitorProfiles } from '../db/players.js';
 
 // Liquipedia is primary (free, broad coverage); start.gg secondary; pandascore optional.
 const services = { liquipedia, startgg, pandascore };
@@ -86,7 +88,12 @@ export async function syncTournament(client, t) {
     }
   }
 
-  const matches = await fetchTournamentSchedule(service, t);
+  const fetchedMatches = await fetchTournamentSchedule(service, t);
+  const matches = await reconcileUntimedTournamentMatches(t.id, fetchedMatches);
+  await ensureIndividualCompetitorProfiles(
+    t.game,
+    matches.flatMap((match) => [match.teamA, match.teamB]),
+  );
   const currentIds = matches.map((m) => m.externalId);
   for (const parsed of matches) {
     const row = await upsertMatch(toMatchRow(parsed, t.id));

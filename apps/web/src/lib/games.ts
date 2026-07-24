@@ -51,7 +51,14 @@ const update = _update as unknown as (
   slug: string,
   input: Omit<GameInput, "slug">,
 ) => Promise<GameRecord | null>;
-const remove = _delete as (slug: string) => Promise<{ gameDeleted: number; postsDeleted: number }>;
+export type GameDeleteResult = {
+  gameDeleted: number;
+  postsDeleted: number;
+  mediaPostsDetached: number;
+  mediaChannelsDetached: number;
+};
+
+const remove = _delete as (slug: string) => Promise<GameDeleteResult>;
 const reorder = _reorder as (slugs: string[]) => Promise<GameRecord[]>;
 
 export function listGames(): Promise<GameRecord[]> {
@@ -70,7 +77,7 @@ export function updateGame(slug: string, input: Omit<GameInput, "slug">): Promis
   return update(slug, input);
 }
 
-export function deleteGame(slug: string): Promise<{ gameDeleted: number; postsDeleted: number }> {
+export function deleteGame(slug: string): Promise<GameDeleteResult> {
   return remove(slug);
 }
 

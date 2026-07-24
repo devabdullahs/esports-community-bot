@@ -4,7 +4,12 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import test from 'node:test';
 
-import { appTables, identityColumns } from '../scripts/migrate-sqlite-to-postgres.mjs';
+import {
+  appTables,
+  buildColumnMapping,
+  identityColumns,
+  parseArgs,
+} from '../scripts/migrate-sqlite-to-postgres.mjs';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const schema = readFileSync(join(root, 'scripts/postgres/schema.sql'), 'utf8');
@@ -58,6 +63,47 @@ test('comment targets stay aligned across SQLite, Postgres, and the copy migrati
   assert.match(schema, /delete_match_comments/i);
   assert.match(
     readFileSync(join(root, 'scripts/migrate-sqlite-to-postgres.mjs'), 'utf8'),
-    /historical post_comments row is a news target/i,
+    /legacy comments are news comments/i,
   );
+});
+
+test('migration column mapping rejects every unlisted schema difference', () => {
+  assert.throws(
+    () =>
+      buildColumnMapping({
+        table: 'teams',
+        sourceColumns: ['id', 'name', 'unexpected_source'],
+        targetColumns: ['id', 'name'],
+      }),
+    /teams.*source-only.*unexpected_source/i,
+  );
+  assert.throws(
+    () =>
+      buildColumnMapping({
+        table: 'teams',
+        sourceColumns: ['id', 'name'],
+        targetColumns: ['id', 'name', 'unexpected_target'],
+      }),
+    /teams.*target-only.*unexpected_target/i,
+  );
+});
+
+test('legacy post comments have an explicit target transformation', () => {
+  const mapping = buildColumnMapping({
+    table: 'post_comments',
+    sourceColumns: ['id', 'post_id', 'body'],
+    targetColumns: ['id', 'post_id', 'target_type', 'target_id', 'body'],
+  });
+  const targetType = mapping.columns.find((column) => column.targetColumn === 'target_type');
+  const targetId = mapping.columns.find((column) => column.targetColumn === 'target_id');
+  assert.equal(targetType.derive({ post_id: 42 }), 'news');
+  assert.equal(targetId.derive({ post_id: 42 }), 42);
+});
+
+test('database URL is accepted only through the environment', () => {
+  assert.throws(
+    () => parseArgs(['--database-url', 'postgresql://user:secret@example.invalid/db']),
+    /Use DATABASE_URL/,
+  );
+  assert.equal(parseArgs(['--preflight-target', '--sqlite', 'fixture.sqlite']).preflightTarget, true);
 });

@@ -1,7 +1,7 @@
 // Pure HTML parser functions — no imports from client or rateState.
 // Each takes a cheerio `$` (and optionally the element/game) and returns plain data.
 
-import { ewcPlacementPoints, normalizeClubName } from '../../lib/ewcPredictions.js';
+import { ewcPlacementCoveredRanks, ewcPlacementPoints, normalizeClubName } from '../../lib/ewcPredictions.js';
 
 // ---------------------------------------------------------------------------
 // Shared helpers
@@ -104,22 +104,34 @@ export function teamName($, cell) {
 }
 
 // EWC event pages can contain qualification tables before the actual prize
-// pool. Prefer the table whose columns explicitly carry Club Points so callers
-// never treat qualifier seeding as the final event result.
-export function ewcPrizePoolTable($) {
+// pool. Only tables with explicit prize or Club Points evidence can be final
+// sources; a rank-like table alone is never enough to score a round.
+function ewcPrizePoolTableCandidate($) {
   const candidates = $('.prizepooltable').toArray();
-  if (!candidates.length) return $();
+  if (!candidates.length) return null;
   const ranked = candidates
     .map((table, index) => {
-      const header = $(table).find('tr').first().text().replace(/\s+/g, ' ').trim();
+      const header = $(table)
+        .find('tr')
+        .first()
+        .find('th, td')
+        .toArray()
+        .map((cell) => $(cell).text().replace(/\s+/g, ' ').trim())
+        .join(' ');
       const heading = $(table).prevAll('h2, h3, h4').first().text().replace(/\s+/g, ' ').trim();
-      const score = (/club\s*points?/i.test(header) ? 8 : 0) +
+      const hasClubPoints = /club\s*points?/i.test(header);
+      const score = (hasClubPoints ? 8 : 0) +
         (/\b(?:usd|prize)\b|\$/i.test(header) ? 4 : 0) +
         (/\bprize\s*pool\b/i.test(heading) ? 2 : 0);
-      return { table, index, score };
+      return { table, index, score, kind: hasClubPoints ? 'club-points-prize-table' : 'prize-table' };
     })
     .sort((a, b) => b.score - a.score || a.index - b.index);
-  return $(ranked[0].table);
+  return ranked[0]?.score ? ranked[0] : null;
+}
+
+export function ewcPrizePoolTable($) {
+  const candidate = ewcPrizePoolTableCandidate($);
+  return candidate ? $(candidate.table) : $();
 }
 
 // Extract a single integer score from a bracket/matchlist score cell, tolerating
@@ -316,11 +328,18 @@ export function parseMatchInfo($, el, game) {
   };
 }
 
-export function mergeLiveWidgetMatch(existing, liveMatch) {
-  const existingHasScoredResult =
-    existing.status === 'finished' && existing.scoreA != null && existing.scoreB != null;
+export function matchResultRank(match) {
+  const hasScore = match.scoreA != null && match.scoreB != null;
+  if (match.status === 'finished' && (hasScore || match.winner)) return 4;
+  if (match.status === 'running') return 3;
+  if (match.status === 'finished') return 2;
+  return hasScore ? 1 : 0;
+}
 
-  if (liveMatch.status === 'running' && !existingHasScoredResult) {
+export function mergeLiveWidgetMatch(existing, liveMatch) {
+  const existingHasAuthoritativeResult = matchResultRank(existing) === 4;
+
+  if (liveMatch.status === 'running' && !existingHasAuthoritativeResult) {
     existing.status = 'running';
     existing.winner = null;
     if (liveMatch.scoreA != null) existing.scoreA = liveMatch.scoreA;
@@ -468,10 +487,69 @@ export function parseMatchlistMatch($, el, game, scope = '') {
   };
 }
 
-// Parse Swiss-stage standings grids (table.swisstable).
-export function parseSwissMatches($, game) {
+function swissMatchKey(roundIndex, teamA, teamB) {
+  const pair = [teamA, teamB]
+    .map((team) => cleanName(team).toLowerCase().replace(/[^a-z0-9]+/g, ''))
+    .sort()
+    .join('|');
+  return `${roundIndex}|${pair}`;
+}
+
+function parseModernSwissMatches($, game) {
   const out = [];
   const seen = new Set();
+
+  $('.swiss-table-body-row').each((_rowIndex, row) => {
+    const $row = $(row);
+    const $entry = $row.find('.group-table-result-row .group-table-entry').first();
+    const rowTeam = cleanName($entry.attr('aria-label') || $entry.find('a[title]').attr('title') || $entry.text());
+    if (isPlaceholderTeam(rowTeam)) return;
+    const rowLogo = teamLogo($, $entry);
+
+    $row.find('.swiss-table-match-row .swiss-table-match').each((roundIndex, cell) => {
+      const $cell = $(cell);
+      const score = cleanName($cell.find('.swiss-table-match-score').text()).match(/^(\d+)\s*[:\-\u2013]\s*(\d+)$/);
+      if (!score) return;
+
+      const opponent = cleanName(
+        $cell.attr('aria-label') || $cell.find('a[title]').attr('title') || $cell.find('a').first().text(),
+      );
+      if (isPlaceholderTeam(opponent) || opponent.toLowerCase() === rowTeam.toLowerCase()) return;
+
+      const key = swissMatchKey(roundIndex, rowTeam, opponent);
+      if (seen.has(key)) return;
+      seen.add(key);
+
+      const scoreA = Number(score[1]);
+      const scoreB = Number(score[2]);
+      out.push({
+        source: 'liquipedia',
+        externalId: `${game}:swiss:${key}`,
+        name: `${rowTeam} vs ${opponent}`,
+        teamA: rowTeam,
+        teamB: opponent,
+        logoA: rowLogo,
+        logoB: teamLogo($, $cell),
+        scoreA,
+        scoreB,
+        bestOf: null,
+        scheduledAt: null,
+        status: 'finished',
+        winner: scoreA === scoreB ? null : scoreA > scoreB ? rowTeam : opponent,
+        roundIndex,
+      });
+    });
+  });
+
+  return out;
+}
+
+// Parse Swiss-stage standings grids (legacy table.swisstable and current div.swiss-table).
+export function parseSwissMatches($, game) {
+  const out = parseModernSwissMatches($, game);
+  const seen = new Set(
+    out.map(({ teamA, teamB }) => [teamA.toLowerCase(), teamB.toLowerCase()].sort().join('|')),
+  );
   $('.swisstable').each((_t, table) => {
     $(table)
       .find('tr')
@@ -1084,11 +1162,7 @@ function clubsFromPrizepoolRow($, row, game, playerLookup) {
   return clubs;
 }
 
-// Parse a Liquipedia event prizepool table into normalized per-club placements.
-// `event` carries the game label so solo games can be mapped via the player list.
-export function parseEwcEventPlacements($, event, players = []) {
-  const table = ewcPrizePoolTable($);
-  const playerLookup = buildEwcPlayerClubLookup(players);
+function placementsFromPrizepoolTable($, table, event, playerLookup) {
   const byClub = new Map();
 
   let carriedPlace = '';
@@ -1114,31 +1188,79 @@ export function parseEwcEventPlacements($, event, players = []) {
     }
   });
 
-  // Battle-royale finals (including ALGS) publish the authoritative order as
-  // a panel standings table rather than a prizepooltable. Use it only when no
-  // Club Points prize rows were found, and map its final rank to EWC points.
-  if (!byClub.size) {
-    $('.panel-table').each((_tableIndex, panel) => {
-      $(panel).find('.panel-table__row').not('.row--header').each((_rowIndex, row) => {
-        const rankCell = $(row).find('.cell--rank').first();
-        const teamCell = $(row).find('.cell--team').first();
-        const place = cleanName(rankCell.attr('data-sort-val') || rankCell.text());
-        const points = ewcPlacementPoints(place);
-        const club = cleanName(
-          teamCell.attr('data-sort-val') ||
-          teamCell.find('.block-team .name').first().text() ||
-          teamName($, teamCell),
-        );
-        if (!club || !points) return;
-        const key = normalizeClubName(club);
-        const existing = byClub.get(key);
-        if (existing && existing.points >= points) return;
-        byClub.set(key, { club, place, points, participant: null });
-      });
-    });
+  return [...byClub.values()].sort((a, b) => b.points - a.points || a.club.localeCompare(b.club));
+}
+
+function placementsFromFinalStandingsPanel($, panel) {
+  const byClub = new Map();
+  $(panel).find('.panel-table__row').not('.row--header').each((_rowIndex, row) => {
+    const rankCell = $(row).find('.cell--rank').first();
+    const teamCell = $(row).find('.cell--team').first();
+    const place = cleanName(rankCell.attr('data-sort-val') || rankCell.text());
+    const points = ewcPlacementPoints(place);
+    const club = cleanName(
+      teamCell.attr('data-sort-val') ||
+      teamCell.find('.block-team .name').first().text() ||
+      teamName($, teamCell),
+    );
+    if (!club || !points) return;
+    const key = normalizeClubName(club);
+    const existing = byClub.get(key);
+    if (existing && existing.points >= points) return;
+    byClub.set(key, { club, place, points, participant: null });
+  });
+  return [...byClub.values()].sort((a, b) => b.points - a.points || a.club.localeCompare(b.club));
+}
+
+function evidenceForPlacements(kind, authoritative, placements) {
+  return {
+    kind,
+    authoritative,
+    coveredRanks: [...new Set(placements.flatMap((placement) => ewcPlacementCoveredRanks(placement.place)))].sort((a, b) => a - b),
+  };
+}
+
+// Preserve bounded source evidence alongside the normalized rows so downstream
+// scoring can distinguish a final table from a plausible-looking qualifier.
+export function parseEwcEventResult($, event, players = []) {
+  const playerLookup = buildEwcPlayerClubLookup(players);
+  const prizeTable = ewcPrizePoolTableCandidate($);
+  if (prizeTable) {
+    const placements = placementsFromPrizepoolTable($, $(prizeTable.table), event, playerLookup);
+    return {
+      placements,
+      evidence: evidenceForPlacements(prizeTable.kind, true, placements),
+    };
   }
 
-  return [...byClub.values()].sort((a, b) => b.points - a.points || a.club.localeCompare(b.club));
+  // Battle-royale finals (including ALGS) publish results in this explicit
+  // panel-table shape. Pick one complete-looking panel rather than combining
+  // unrelated standings panels from the same page.
+  const panels = $('.panel-table')
+    .toArray()
+    .map((panel, index) => ({ panel, index, placements: placementsFromFinalStandingsPanel($, panel) }))
+    .filter((candidate) => candidate.placements.length)
+    .sort((a, b) => {
+      const coverage = (candidate) => evidenceForPlacements('final-standings-panel', true, candidate.placements).coveredRanks.length;
+      return coverage(b) - coverage(a) || a.index - b.index;
+    });
+  if (panels.length) {
+    const placements = panels[0].placements;
+    return {
+      placements,
+      evidence: evidenceForPlacements('final-standings-panel', true, placements),
+    };
+  }
+
+  return {
+    placements: [],
+    evidence: { kind: 'untrusted', authoritative: false, coveredRanks: [] },
+  };
+}
+
+// Compatibility wrapper for callers that only need display/scoring placements.
+export function parseEwcEventPlacements($, event, players = []) {
+  return parseEwcEventResult($, event, players).placements;
 }
 
 export function parseTournamentEwcAffiliation($) {

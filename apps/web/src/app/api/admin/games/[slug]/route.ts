@@ -51,7 +51,8 @@ export async function DELETE(
   const result = await deleteGame(slug);
   if (result.gameDeleted === 0) return NextResponse.json({ error: "Not found" }, { status: 404 });
   revalidateTag("cms-games", "default");
+  revalidateTag("cms-media", "default");
   revalidateTag("cms-news", "default");
-  recordAdminAudit(access, "game.delete", slug);
-  return NextResponse.json({ ok: true, postsDeleted: result.postsDeleted });
+  recordAdminAudit(access, "game.delete", slug, result);
+  return NextResponse.json({ ok: true, ...result });
 }

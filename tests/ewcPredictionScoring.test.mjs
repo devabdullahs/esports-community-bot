@@ -13,6 +13,9 @@ const {
   scoreSeasonPrediction,
   scorePerGameWeeklyPrediction,
   ewcPlacementPoints,
+  ewcPlacementCoveredRanks,
+  evaluateEwcGameResultCompleteness,
+  evaluateEwcGameResultsFinalReadiness,
   pendingEwcGameResults,
   perGamePredictionRoundLocked,
   dueEwcGamesForResults,
@@ -20,6 +23,10 @@ const {
   mergeEwcGameResults,
   effectiveEwcWeekStatus,
   generateEwcWeekWindows,
+  defaultEwcSeasonPredictionWindow,
+  officialEwcDateBoundary,
+  EWC_2026_OFFICIAL_EVENT_DATES,
+  EWC_2026_OFFICIAL_WEEKS,
   WEEKLY_TOP_THREE_SWEEP_BONUS,
   WEEKLY_ALL_GAME_WINNERS_BONUS,
   SEASON_EXACT_RANK_BONUS,
@@ -259,13 +266,63 @@ const T = 1750000000;
 const DAY = 86400;
 const WEEK = 7 * DAY;
 
+function expectedRiyadhBoundary(dateText, endOfDay = false) {
+  const [year, month, day] = dateText.split('-').map(Number);
+  const midnight = Math.floor(Date.UTC(year, month - 1, day) / 1000) - 3 * 3600;
+  return endOfDay ? midnight + DAY - 1 : midnight;
+}
+
+test('official EWC 2026 date-only event and week boundaries are exact Riyadh epochs', () => {
+  for (const { start, end } of EWC_2026_OFFICIAL_EVENT_DATES) {
+    const startAt = officialEwcDateBoundary(start);
+    const endAt = officialEwcDateBoundary(end, true);
+    assert.equal(startAt, expectedRiyadhBoundary(start));
+    assert.equal(endAt, expectedRiyadhBoundary(end, true));
+    assert.equal(new Date(startAt * 1000).toISOString().slice(11), '21:00:00.000Z');
+    assert.equal(new Date(endAt * 1000).toISOString().slice(11), '20:59:59.000Z');
+  }
+
+  for (const [, , start, end] of EWC_2026_OFFICIAL_WEEKS) {
+    assert.equal(officialEwcDateBoundary(start), expectedRiyadhBoundary(start));
+    assert.equal(officialEwcDateBoundary(end, true), expectedRiyadhBoundary(end, true));
+  }
+});
+
+test('official EWC 2026 generation keeps July and August locks and scoring windows in Riyadh', () => {
+  const windows = generateEwcWeekWindows(
+    [
+      { game: 'Valorant', event: 'EWC Valorant' },
+      { game: 'Tekken 8', event: 'EWC Tekken 8' },
+    ],
+    { openBeforeHours: 48, lockBeforeHours: 24, scoreDelayHours: 24 },
+  );
+  const valorant = windows.flatMap((week) => week.events).find((event) => event.game === 'Valorant');
+  const tekken = windows.flatMap((week) => week.events).find((event) => event.game === 'Tekken 8');
+  const week1 = windows.find((week) => week.weekKey === 'week-1');
+  const week5 = windows.find((week) => week.weekKey === 'week-5');
+
+  assert.equal(valorant.startAt, expectedRiyadhBoundary('2026-07-09'));
+  assert.equal(tekken.startAt, expectedRiyadhBoundary('2026-08-05'));
+  assert.equal(valorant.lockAt, valorant.startAt - 24 * 3600);
+  assert.equal(week1.openAt, valorant.lockAt - 48 * 3600);
+  assert.equal(week1.closeAt, valorant.lockAt);
+  assert.equal(week1.scoreAfter, valorant.endAt + 24 * 3600);
+  assert.equal(week5.startAt, expectedRiyadhBoundary('2026-08-04'));
+  assert.equal(week5.endAt, expectedRiyadhBoundary('2026-08-09', true));
+
+  const season = defaultEwcSeasonPredictionWindow('2026');
+  assert.equal(season.firstEventAt, expectedRiyadhBoundary('2026-07-07'));
+  assert.equal(season.finalEventEndAt, expectedRiyadhBoundary('2026-08-23', true));
+  assert.equal(season.scoreAfter, season.finalEventEndAt + 24 * 3600);
+});
+
 test('generateEwcWeekWindows: gap week (no events) is skipped; index does not advance', () => {
   // Event 1 starts at T, event 2 starts at T+14 days.
   // Week 1: [T, T+WEEK-1] — has event 1. Week 2 (T+WEEK): [T+7d, T+14d-1] — no events → SKIPPED.
   // Week 3 (T+14d): has event 2 → becomes week-2 (index advances only for non-empty weeks).
   const events = [
-    { startAt: T, endAt: T + 6 * DAY },
-    { startAt: T + 14 * DAY, endAt: T + 20 * DAY },
+    { game: 'Game A', event: 'Event A', startAt: T, endAt: T + 6 * DAY },
+    { game: 'Game B', event: 'Event B', startAt: T + 14 * DAY, endAt: T + 20 * DAY },
   ];
   const windows = generateEwcWeekWindows(events);
   // Documents gap-week behavior: only 2 output weeks for 3 calendar weeks,
@@ -277,8 +334,8 @@ test('generateEwcWeekWindows: gap week (no events) is skipped; index does not ad
 
 test('generateEwcWeekWindows: week 1 openAt/closeAt/scoreAfter offsets are correct', () => {
   const events = [
-    { startAt: T, endAt: T + 6 * DAY },
-    { startAt: T + 14 * DAY, endAt: T + 20 * DAY },
+    { game: 'Game A', event: 'Event A', startAt: T, endAt: T + 6 * DAY },
+    { game: 'Game B', event: 'Event B', startAt: T + 14 * DAY, endAt: T + 20 * DAY },
   ];
   const windows = generateEwcWeekWindows(events);
   const w1 = windows[0];
@@ -361,6 +418,31 @@ function resultsFor({ valorantWinner = 'Team Falcons', apexWinner = 'Team Liquid
         { club: 'TSM', points: 750, place: '2nd' },
       ],
     },
+  ];
+}
+
+function completeResultFor(gameKey, prefix) {
+  return {
+    gameKey,
+    placements: [
+      { club: `${prefix} One`, place: '1', points: 1000 },
+      { club: `${prefix} Two`, place: '2', points: 750 },
+      { club: `${prefix} Three`, place: '3', points: 500 },
+      { club: `${prefix} Four`, place: '4', points: 300 },
+      { club: `${prefix} Five`, place: '5-8', points: 200 },
+    ],
+    evidence: {
+      kind: 'club-points-prize-table',
+      authoritative: true,
+      coveredRanks: [1, 2, 3, 4, 5, 6, 7, 8],
+    },
+  };
+}
+
+function completeResultsFor() {
+  return [
+    completeResultFor('valorant-1', 'Valorant'),
+    completeResultFor('apex-2', 'Apex'),
   ];
 }
 
@@ -553,13 +635,13 @@ test('scorePerGameWeeklyPrediction: throws when the round has no per-game events
   assert.throws(() => scorePerGameWeeklyPrediction([], [], []), /no per-game events/);
 });
 
-test('pendingEwcGameResults: flags games whose results are absent or have no 1st-place club', () => {
-  const results = [resultsFor()[0]]; // only valorant resolved
+test('pendingEwcGameResults: keeps legacy and partial snapshots provisional-only', () => {
+  const results = [completeResultsFor()[0]]; // only valorant is final-ready
   const pending = pendingEwcGameResults(results, GAMES);
   assert.equal(pending.length, 1);
   assert.equal(pending[0].gameKey, 'apex-2');
-  // Both resolved → none pending.
-  assert.equal(pendingEwcGameResults(resultsFor(), GAMES).length, 0);
+  assert.equal(pendingEwcGameResults(completeResultsFor(), GAMES).length, 0);
+  assert.equal(pendingEwcGameResults(resultsFor(), GAMES).length, 2, 'legacy snapshots have no source evidence');
 });
 
 test('perGamePredictionRoundLocked: closes only after every independent game lock', () => {
@@ -575,35 +657,47 @@ test('dueEwcGamesForResults polls only unresolved events near their scheduled fi
     { ...GAMES[0], endAt: 10_000 },
     { ...GAMES[1], endAt: 30_000 },
   ];
-  const due = dueEwcGamesForResults(games, [{ ...resultsFor()[0], fetchedAt: 10_000 }], 20_000, 5_000);
+  const due = dueEwcGamesForResults(games, [{ ...completeResultsFor()[0], fetchedAt: 10_000 }], 20_000, 5_000);
   assert.deepEqual(due.map((game) => game.key), []);
   assert.deepEqual(dueEwcGamesForResults(games, [], 20_000, 15_000).map((game) => game.key), ['valorant-1', 'apex-2']);
   assert.deepEqual(dueEwcGamesForResults(games, [resultsFor()[0]], 20_000, 5_000).map((game) => game.key), ['valorant-1']);
-  const completed = resultsFor().map((result, index) => ({ ...result, fetchedAt: index ? 30_000 : 10_000 }));
+  const completed = completeResultsFor().map((result, index) => ({ ...result, fetchedAt: index ? 30_000 : 10_000 }));
   assert.deepEqual(dueEwcGamesForResults(games, completed, 20_000, 5_000, 25_000), []);
   assert.deepEqual(dueEwcGamesForResults(games, completed, 30_000, 5_000, 25_000).map((game) => game.key), ['valorant-1']);
   assert.deepEqual(dueEwcGamesForResults(games, [{ ...resultsFor()[0], fetchedAt: 9_000 }, completed[1]], 20_000, 5_000, 25_000).map((game) => game.key), ['valorant-1']);
 });
 
-test('mergeEwcGameResults preserves completed snapshots through gaps and replaces them with newer valid standings', () => {
-  const complete = resultsFor()[0];
+test('mergeEwcGameResults preserves richer snapshots through gaps and replaces them with newer complete standings', () => {
+  const complete = { ...completeResultsFor()[0], fetchedAt: 10_000 };
   const pending = { gameKey: 'apex-2', placements: [], error: 'not final' };
   const updated = {
     ...complete,
     fetchedAt: 20_000,
     placements: [
       { club: 'New Winner', place: '1st', points: 1000 },
-      { ...complete.placements[0], place: '7th', points: 100 },
+      ...complete.placements.slice(1),
     ],
   };
   const merged = mergeEwcGameResults([complete, pending], [
     updated,
-    resultsFor()[1],
+    completeResultsFor()[1],
   ]);
-  assert.deepEqual(merged, [updated, resultsFor()[1]]);
+  assert.deepEqual(merged, [updated, completeResultsFor()[1]]);
 
   const afterGap = mergeEwcGameResults(merged, [{ gameKey: 'valorant-1', placements: [], error: 'transient' }]);
   assert.deepEqual(afterGap, merged);
+
+  const partialRefresh = {
+    ...complete,
+    fetchedAt: 30_000,
+    placements: complete.placements.slice(0, 4),
+    evidence: { ...complete.evidence, coveredRanks: [1, 2, 3, 4] },
+  };
+  assert.deepEqual(
+    mergeEwcGameResults([updated], [partialRefresh]),
+    [updated],
+    'a later partial response must not downgrade a complete authoritative snapshot',
+  );
 });
 
 test('ewcGameResultsFinalReady requires valid snapshots fetched after every event and the scoring delay', () => {
@@ -611,12 +705,51 @@ test('ewcGameResultsFinalReady requires valid snapshots fetched after every even
     { ...GAMES[0], endAt: 10_000 },
     { ...GAMES[1], endAt: 12_000 },
   ];
-  const stale = resultsFor().map((result) => ({ ...result, fetchedAt: 9_000 }));
+  const stale = completeResultsFor().map((result) => ({ ...result, fetchedAt: 9_000 }));
   assert.equal(ewcGameResultsFinalReady(stale, games, 20_000, 15_000), false);
 
-  const fresh = resultsFor().map((result) => ({ ...result, fetchedAt: 15_000 }));
+  const fresh = completeResultsFor().map((result) => ({ ...result, fetchedAt: 15_000 }));
   assert.equal(ewcGameResultsFinalReady(fresh, games, 14_999, 15_000), false);
   assert.equal(ewcGameResultsFinalReady(fresh, games, 15_000, 15_000), true);
+});
+
+test('EWC final completeness requires trusted source evidence, valid clubs, one champion, and all ranks', () => {
+  const complete = completeResultFor('valorant-1', 'Ready');
+  assert.deepEqual(ewcPlacementCoveredRanks('5-8'), [5, 6, 7, 8]);
+  assert.deepEqual(ewcPlacementCoveredRanks('5th - 8th'), [5, 6, 7, 8]);
+  assert.equal(evaluateEwcGameResultCompleteness(complete).reason, 'ready');
+
+  assert.equal(evaluateEwcGameResultCompleteness({
+    ...complete,
+    evidence: { kind: 'untrusted', authoritative: false, coveredRanks: [] },
+  }).reason, 'untrusted_source');
+
+  assert.equal(evaluateEwcGameResultCompleteness({
+    ...complete,
+    placements: complete.placements.filter((placement) => placement.place !== '5-8'),
+    evidence: { ...complete.evidence, coveredRanks: [1, 2, 3, 4] },
+  }).reason, 'missing_rank');
+
+  assert.equal(evaluateEwcGameResultCompleteness({
+    ...complete,
+    placements: [...complete.placements, { club: 'Second Champion', place: '1', points: 1000 }],
+  }).reason, 'multiple_champions');
+
+  assert.equal(evaluateEwcGameResultCompleteness({
+    ...complete,
+    placements: complete.placements.map((placement) => placement.place === '2' ? { ...placement, club: '' } : placement),
+  }).reason, 'invalid_club');
+});
+
+test('EWC final readiness reports stale separately from structural completeness', () => {
+  const games = [{ ...GAMES[0], endAt: 10_000 }];
+  const stale = { ...completeResultFor('valorant-1', 'Stale'), fetchedAt: 9_999 };
+  assert.deepEqual(evaluateEwcGameResultsFinalReadiness([stale], games, 10_001, 10_000), {
+    ready: false,
+    reason: 'stale',
+    coveredRanks: [1, 2, 3, 4, 5, 6, 7, 8],
+    gameKey: 'valorant-1',
+  });
 });
 
 // ─── effectiveEwcWeekStatus (per-game lock-window state machine) ──────────────

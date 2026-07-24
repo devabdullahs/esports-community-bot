@@ -8,6 +8,8 @@ import {
   deleteEwcWeek,
   getEwcSeason,
   getEwcWeek,
+  lockEwcSeasonForTransition,
+  lockEwcWeekForTransition,
   listSeasonPredictions,
   listWeeklyPredictions,
   markEwcSeasonScored,
@@ -24,8 +26,13 @@ import { transaction } from '../db/client.js';
 import { config } from '../config.js';
 import { validateEwcPredictionAdminOperation } from './ewcPredictionOperationValidation.js';
 import {
+  dueEwcGamesForResults,
+  EWC_PREDICTION_READINESS,
+  evaluateEwcSeasonScoringReadiness,
+  evaluateEwcWeekScoringReadiness,
+  ewcPredictionScoreAfter,
   generateEwcWeekWindows,
-  pendingEwcGameResults,
+  mergeEwcGameResults,
   scorePerGameWeeklyPrediction,
   scoreSeasonPrediction,
   scoreWeeklyPrediction,
@@ -33,6 +40,39 @@ import {
 import { fetchEwcClubStandings, fetchEwcEventSchedule, fetchEwcWeekGameResults } from '../services/liquipedia.js';
 
 export { EWC_PREDICTION_ADMIN_OPERATIONS, validateEwcPredictionAdminOperation } from './ewcPredictionOperationValidation.js';
+
+const RESULT_READINESS_REASONS = new Set([
+  EWC_PREDICTION_READINESS.MISSING_RESULTS,
+  EWC_PREDICTION_READINESS.UNTRUSTED_RESULT,
+  EWC_PREDICTION_READINESS.INCOMPLETE_RESULT,
+  EWC_PREDICTION_READINESS.STALE_RESULT,
+]);
+
+const READINESS_MESSAGES = Object.freeze({
+  [EWC_PREDICTION_READINESS.NOT_OPEN]: 'the prediction round has not opened',
+  [EWC_PREDICTION_READINESS.GAMES_UNLOCKED]: 'one or more game picks are still unlocked',
+  [EWC_PREDICTION_READINESS.ROUND_NOT_CLOSED]: 'the prediction round is not closed',
+  [EWC_PREDICTION_READINESS.SCORE_DELAY_PENDING]: 'the scoring delay has not elapsed',
+  [EWC_PREDICTION_READINESS.MISSING_BASELINE]: 'the weekly baseline snapshot is missing',
+  [EWC_PREDICTION_READINESS.MISSING_RESULTS]: 'official results are missing',
+  [EWC_PREDICTION_READINESS.UNTRUSTED_RESULT]: 'an official result source has not been verified',
+  [EWC_PREDICTION_READINESS.INCOMPLETE_RESULT]: 'official results are incomplete',
+  [EWC_PREDICTION_READINESS.STALE_RESULT]: 'the stored result snapshot is older than the final scoring time',
+});
+
+export class EwcPredictionNotReadyError extends Error {
+  constructor(decision) {
+    const reasonCode = decision?.reason || EWC_PREDICTION_READINESS.INCOMPLETE_RESULT;
+    super(`Prediction scoring is not ready: ${READINESS_MESSAGES[reasonCode] || 'the round is incomplete'} (${reasonCode}).`);
+    this.name = 'EwcPredictionNotReadyError';
+    this.code = 'EWC_PREDICTION_NOT_READY';
+    this.reasonCode = reasonCode;
+  }
+}
+
+function requireReady(decision) {
+  if (!decision?.ready) throw new EwcPredictionNotReadyError(decision);
+}
 
 async function currentStandings(season, dependencies) {
   const data = await dependencies.fetchStandings(season);
@@ -60,39 +100,75 @@ async function scoreWeek({ guildId, season, weekKey, dependencies, effects, allo
   }
 
   const perGame = Array.isArray(round.games) && round.games.length > 0;
+  const now = dependencies.nowSec();
+  const readyAt = ewcPredictionScoreAfter(round, config.ewcPredictions.scoreDelayHours);
+  const preflight = evaluateEwcWeekScoringReadiness(round, {
+    now,
+    results: round.results || [],
+    finalStandings: round.final || [],
+    scoreAfter: readyAt,
+  });
+  if (!preflight.ready && !(perGame ? RESULT_READINESS_REASONS.has(preflight.reason) : preflight.reason === EWC_PREDICTION_READINESS.MISSING_RESULTS)) {
+    requireReady(preflight);
+  }
+
   // Network resolution completes before the scoring transaction. This keeps the
   // lock short and prevents a Liquipedia request from holding database state.
-  const results = perGame ? (round.results?.length ? round.results : await dependencies.fetchWeekResults(round.games)) : [];
-  const missing = perGame ? pendingEwcGameResults(results, round.games) : [];
-  if (missing.length) throw new Error(`Missing complete placement results for: ${missing.map((row) => row.game || row.event || row.gameKey).join(', ')}.`);
-  if (!perGame && !(round.baseline || []).length) throw new Error('This week has no baseline snapshot yet.');
+  let fetchedResults = [];
+  if (perGame) {
+    const candidates = dueEwcGamesForResults(round.games, round.results || [], now, undefined, readyAt);
+    if (candidates.length) {
+      const fetched = await dependencies.fetchWeekResults(candidates);
+      const fetchedAt = dependencies.nowSec();
+      fetchedResults = (Array.isArray(fetched) ? fetched : []).map((result) => ({ ...result, fetchedAt }));
+    }
+  }
   const final = perGame ? round.final || [] : round.final?.length ? round.final : await currentStandings(season, dependencies);
-  if (!perGame && !final.length) throw new Error('Could not fetch the final standings to score this week. Try again in a moment.');
 
-  const predictions = await dependencies.listWeeklyPredictions(round.id);
-  let malformed = 0;
-  await dependencies.transaction(async (tx) => {
+  const scored = await dependencies.transaction(async (tx) => {
+    const lockedRound = await dependencies.lockWeekForTransition(guildId, season, weekKey, tx);
+    if (!lockedRound) throw new Error(`Week \`${weekKey}\` does not exist.`);
+    if (lockedRound.status === 'scored') return { alreadyCompleted: true, round: lockedRound };
+    if (JSON.stringify(lockedRound.games || []) !== JSON.stringify(round.games || [])) {
+      throw new Error(`Week \`${weekKey}\` changed while scoring. Retry the operation.`);
+    }
+    const lockedPerGame = Array.isArray(lockedRound.games) && lockedRound.games.length > 0;
+    const lockedResults = lockedPerGame ? mergeEwcGameResults(lockedRound.results || [], fetchedResults) : [];
+    const lockedFinal = lockedPerGame ? lockedRound.final || [] : lockedRound.final?.length ? lockedRound.final : final;
+    requireReady(evaluateEwcWeekScoringReadiness(lockedRound, {
+      now: dependencies.nowSec(),
+      results: lockedResults,
+      finalStandings: lockedFinal,
+      scoreAfter: ewcPredictionScoreAfter(lockedRound, config.ewcPredictions.scoreDelayHours),
+    }));
+    const predictions = await dependencies.listWeeklyPredictions(lockedRound.id, tx, { forUpdate: true });
+    let malformed = 0;
     for (const prediction of predictions) {
       try {
-        const scored = perGame
-          ? scorePerGameWeeklyPrediction(prediction.picks, round.games, results)
-          : scoreWeeklyPrediction(prediction.picks, round.baseline, final);
-        await dependencies.saveWeeklyScore(guildId, round.id, prediction.user_id, scored.score, scored.details, tx);
+        const score = lockedPerGame
+          ? scorePerGameWeeklyPrediction(prediction.picks, lockedRound.games, lockedResults)
+          : scoreWeeklyPrediction(prediction.picks, lockedRound.baseline, lockedFinal);
+        await dependencies.saveWeeklyScore(guildId, lockedRound.id, prediction.user_id, score.score, score.details, tx);
       } catch (operationError) {
         malformed += 1;
-        await dependencies.saveWeeklyScore(guildId, round.id, prediction.user_id, 0, malformedDetails(prediction, operationError), tx);
+        await dependencies.saveWeeklyScore(guildId, lockedRound.id, prediction.user_id, 0, malformedDetails(prediction, operationError), tx);
       }
     }
-    if (perGame) await dependencies.markWeekScoredWithResults(round.id, final || [], results, tx);
-    else await dependencies.markWeekScored(round.id, final, tx);
+    if (lockedPerGame) await dependencies.markWeekScoredWithResults(lockedRound.id, lockedFinal || [], lockedResults, tx);
+    else await dependencies.markWeekScored(lockedRound.id, lockedFinal, tx);
+    return { round: lockedRound, predictions, malformed, perGame: lockedPerGame };
   });
+  if (scored.alreadyCompleted) {
+    if (allowAlreadyComplete) return { round: scored.round.week_key, alreadyCompleted: true, message: `${scored.round.label || scored.round.week_key} is already scored.` };
+    throw new Error(`Week \`${weekKey}\` is already scored. Reopen it first if you need to re-score.`);
+  }
   await refresh(effects, guildId);
   return {
-    round: round.week_key,
-    predictions: predictions.length,
-    malformed,
-    mode: perGame ? 'per-game' : 'aggregate',
-    message: `Scored ${round.label || round.week_key} for ${predictions.length} prediction(s).`,
+    round: scored.round.week_key,
+    predictions: scored.predictions.length,
+    malformed: scored.malformed,
+    mode: scored.perGame ? 'per-game' : 'aggregate',
+    message: `Scored ${scored.round.label || scored.round.week_key} for ${scored.predictions.length} prediction(s).`,
   };
 }
 
@@ -103,28 +179,49 @@ async function scoreSeason({ guildId, season, dependencies, effects, allowAlread
     if (allowAlreadyComplete) return { season, alreadyCompleted: true, message: `EWC ${season} season predictions are already scored.` };
     throw new Error(`EWC ${season} season predictions are already scored. Reopen them first if you need to re-score.`);
   }
+  const preflight = evaluateEwcSeasonScoringReadiness(round, round.final || [], {
+    now: dependencies.nowSec(),
+    scoreAfter: ewcPredictionScoreAfter(round, config.ewcPredictions.scoreDelayHours),
+  });
+  if (!preflight.ready && preflight.reason !== EWC_PREDICTION_READINESS.MISSING_RESULTS && preflight.reason !== EWC_PREDICTION_READINESS.INCOMPLETE_RESULT) {
+    requireReady(preflight);
+  }
   const final = await currentStandings(season, dependencies);
-  const predictions = await dependencies.listSeasonPredictions(guildId, season);
-  let malformed = 0;
-  await dependencies.transaction(async (tx) => {
+  const scored = await dependencies.transaction(async (tx) => {
+    const lockedRound = await dependencies.lockSeasonForTransition(guildId, season, tx);
+    if (!lockedRound) throw new Error(`No season round exists for ${season}.`);
+    if (lockedRound.status === 'scored') return { alreadyCompleted: true, round: lockedRound };
+    requireReady(evaluateEwcSeasonScoringReadiness(lockedRound, final, {
+      now: dependencies.nowSec(),
+      scoreAfter: ewcPredictionScoreAfter(lockedRound, config.ewcPredictions.scoreDelayHours),
+    }));
+    const predictions = await dependencies.listSeasonPredictions(guildId, season, tx, { forUpdate: true });
+    let malformed = 0;
     for (const prediction of predictions) {
       try {
-        const scored = scoreSeasonPrediction(prediction.picks, final, round.top_size);
-        await dependencies.saveSeasonScore(guildId, season, prediction.user_id, scored.score, scored.details, tx);
+        const score = scoreSeasonPrediction(prediction.picks, final, lockedRound.top_size);
+        await dependencies.saveSeasonScore(guildId, season, prediction.user_id, score.score, score.details, tx);
       } catch (operationError) {
         malformed += 1;
         await dependencies.saveSeasonScore(guildId, season, prediction.user_id, 0, malformedDetails(prediction, operationError), tx);
       }
     }
     await dependencies.markSeasonScored(guildId, season, final, tx);
+    return { round: lockedRound, predictions, malformed };
   });
+  if (scored.alreadyCompleted) {
+    if (allowAlreadyComplete) return { season, alreadyCompleted: true, message: `EWC ${season} season predictions are already scored.` };
+    throw new Error(`EWC ${season} season predictions are already scored. Reopen them first if you need to re-score.`);
+  }
   await refresh(effects, guildId);
-  return { season, predictions: predictions.length, malformed, message: `Scored EWC ${season} season predictions for ${predictions.length} member(s).` };
+  return { season, predictions: scored.predictions.length, malformed: scored.malformed, message: `Scored EWC ${season} season predictions for ${scored.predictions.length} member(s).` };
 }
 
 const defaults = {
   getWeek: getEwcWeek,
   getSeason: getEwcSeason,
+  lockWeekForTransition: lockEwcWeekForTransition,
+  lockSeasonForTransition: lockEwcSeasonForTransition,
   listWeeklyPredictions,
   listSeasonPredictions,
   saveWeeklyScore: saveWeeklyPredictionScore,
@@ -135,6 +232,7 @@ const defaults = {
   fetchStandings: fetchEwcClubStandings,
   fetchSchedule: fetchEwcEventSchedule,
   fetchWeekResults: fetchEwcWeekGameResults,
+  nowSec: () => Math.floor(Date.now() / 1000),
   generateWeeks: generateEwcWeekWindows,
   upsertWeek: upsertEwcWeek,
   setSnapshot: setEwcWeekSnapshot,
@@ -161,8 +259,15 @@ export async function runEwcPredictionAdminOperation({ guildId, season, operatio
     const schedule = await deps.fetchSchedule(Number(season));
     const weeks = deps.generateWeeks(schedule?.events || [], input);
     if (!weeks.length) throw new Error(`No dated EWC events were found for ${season}.`);
+    const reconciliation = {
+      newWeeks: 0,
+      unchanged: 0,
+      rekeyed: 0,
+      added: 0,
+      removedUnreferenced: 0,
+    };
     for (const week of weeks) {
-      await deps.upsertWeek({
+      const saved = await deps.upsertWeek({
         guildId,
         season,
         weekKey: week.weekKey,
@@ -175,8 +280,22 @@ export async function runEwcPredictionAdminOperation({ guildId, season, operatio
         games: week.events,
         createdBy: actorId,
       });
+      reconciliation.newWeeks += Number(saved?.reconciliation?.newWeek || 0);
+      reconciliation.unchanged += Number(saved?.reconciliation?.unchanged || 0);
+      reconciliation.rekeyed += Number(saved?.reconciliation?.rekeyed || 0);
+      reconciliation.added += Number(saved?.reconciliation?.added || 0);
+      reconciliation.removedUnreferenced += Number(saved?.reconciliation?.removedUnreferenced || 0);
     }
-    return { weeks: weeks.length, events: schedule.events.length, message: `Generated ${weeks.length} EWC ${season} weekly prediction round(s).` };
+    return {
+      weeks: weeks.length,
+      events: schedule.events.length,
+      reconciliation,
+      message:
+        `Generated ${weeks.length} EWC ${season} weekly prediction round(s): ` +
+        `${reconciliation.newWeeks} new, ${reconciliation.unchanged} unchanged, ` +
+        `${reconciliation.rekeyed} rekeyed, ${reconciliation.added} event(s) added, ` +
+        `${reconciliation.removedUnreferenced} unreferenced event(s) removed.`,
+    };
   }
   if (operation === 'snapshot_week') {
     const round = await deps.getWeek(guildId, season, input.weekKey);
@@ -191,8 +310,10 @@ export async function runEwcPredictionAdminOperation({ guildId, season, operatio
     const round = await deps.getWeek(guildId, season, input.weekKey);
     if (!round) throw new Error(`Week \`${input.weekKey}\` does not exist.`);
     await deps.transaction(async (tx) => {
-      await deps.reopenWeek(round.id, tx);
-      await deps.clearWeeklyScores(round.id, tx);
+      const lockedRound = await deps.lockWeekForTransition(guildId, season, input.weekKey, tx);
+      if (!lockedRound) throw new Error(`Week \`${input.weekKey}\` does not exist.`);
+      await deps.reopenWeek(lockedRound.id, tx);
+      await deps.clearWeeklyScores(lockedRound.id, tx);
     });
     await refresh(effects, guildId);
     return { round: round.week_key, message: `Reopened ${round.label || round.week_key} and cleared its prediction scores.` };
@@ -201,6 +322,8 @@ export async function runEwcPredictionAdminOperation({ guildId, season, operatio
     const round = await deps.getSeason(guildId, season);
     if (!round) throw new Error(`No season round exists for ${season}.`);
     await deps.transaction(async (tx) => {
+      const lockedRound = await deps.lockSeasonForTransition(guildId, season, tx);
+      if (!lockedRound) throw new Error(`No season round exists for ${season}.`);
       await deps.reopenSeason(guildId, season, tx);
       await deps.clearSeasonScores(guildId, season, tx);
     });
@@ -213,8 +336,16 @@ export async function runEwcPredictionAdminOperation({ guildId, season, operatio
       if (allowAlreadyComplete) return { round: input.weekKey, alreadyCompleted: true, message: `${input.weekKey} was already deleted.` };
       throw new Error(`Week \`${input.weekKey}\` does not exist.`);
     }
-    if (round.status === 'scored') throw new Error('This week is already scored. Reopen it first if you really want to delete it.');
-    const result = await deps.deleteWeek(round.id);
+    const result = await deps.transaction(async (tx) => {
+      const lockedRound = await deps.lockWeekForTransition(guildId, season, input.weekKey, tx);
+      if (!lockedRound) {
+        if (allowAlreadyComplete) return { alreadyCompleted: true, predictions: 0 };
+        throw new Error(`Week \`${input.weekKey}\` does not exist.`);
+      }
+      if (lockedRound.status === 'scored') throw new Error('This week is already scored. Reopen it first if you really want to delete it.');
+      return deps.deleteWeek(lockedRound.id, tx);
+    });
+    if (result.alreadyCompleted) return { round: input.weekKey, alreadyCompleted: true, message: `${input.weekKey} was already deleted.` };
     await refresh(effects, guildId);
     return { round: round.week_key, predictions: result.predictions, message: `Deleted ${round.label || round.week_key} (${result.predictions} prediction(s) removed).` };
   }

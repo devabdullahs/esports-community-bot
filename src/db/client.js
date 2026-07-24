@@ -1,7 +1,5 @@
-import { readFileSync } from 'node:fs';
-import { dirname, resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
 import pg from 'pg';
+import { resolvePgSslConfig, runPostgresMigrations, sanitizePostgresError } from './postgresMigrations.js';
 
 try {
   process.loadEnvFile?.();
@@ -19,7 +17,6 @@ const { Pool } = pg;
 // silently string-concatenate.
 pg.types.setTypeParser(20, (value) => (value === null ? null : Number(value)));
 
-const rootDir = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const driver = String(process.env.DB_DRIVER || '').toLowerCase();
 const usePostgres = driver === 'postgres' || (!driver && Boolean(process.env.DATABASE_URL));
 const pgPoolKey = Symbol.for('esports-community-bot.pgPool');
@@ -44,17 +41,7 @@ function sqliteParams(sql, params = []) {
 // to the connection string's sslmode or no TLS — documented in .env.example).
 // 'verify-ca'/'verify-full' = encrypt AND verify the certificate, optionally
 // pinned to a CA file (PGSSLROOTCERT). Exported so the mapping is unit-testable.
-export function resolvePgSslConfig(mode, { rootCertPath } = {}) {
-  const m = String(mode || '').toLowerCase();
-  if (m === 'disable') return false;
-  if (m === 'require' || m === 'no-verify') return { rejectUnauthorized: false };
-  if (m === 'verify-ca' || m === 'verify-full') {
-    const ssl = { rejectUnauthorized: true };
-    if (rootCertPath) ssl.ca = readFileSync(rootCertPath, 'utf8');
-    return ssl;
-  }
-  return undefined;
-}
+export { resolvePgSslConfig, sanitizePostgresError };
 
 async function sqliteDb() {
   if (!sqliteDbPromise) {
@@ -206,8 +193,10 @@ export async function closeDbClient() {
   sqliteDbPromise = null;
 }
 
-export async function ensurePostgresAppSchema() {
-  if (!usePostgres) return;
-  const schema = readFileSync(resolve(rootDir, 'scripts/postgres/schema.sql'), 'utf8');
-  await exec(schema);
+export async function ensurePostgresMigrations() {
+  if (!usePostgres) return { skipped: true };
+  return runPostgresMigrations({
+    connectionString: process.env.DATABASE_URL,
+    ssl: resolvePgSslConfig(process.env.PGSSLMODE, { rootCertPath: process.env.PGSSLROOTCERT }),
+  });
 }
