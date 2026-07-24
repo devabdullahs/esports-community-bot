@@ -795,6 +795,18 @@ test('parseMatchlistMatch: unplayed match has status scheduled', () => {
   assert.equal(m.winner, null);
 });
 
+test('parseMatchlistMatch: explicit cancellation overrides schedule inference', () => {
+  const $ = load(`
+    <div class="brkts-matchlist-match" data-status="cancelled">
+      <div class="brkts-matchlist-opponent" aria-label="Alpha"></div>
+      <div class="brkts-matchlist-opponent" aria-label="Bravo"></div>
+      <div class="brkts-matchlist-status">Cancelled</div>
+    </div>
+  `);
+  const match = parseMatchlistMatch($, $('.brkts-matchlist-match')[0], 'valorant');
+  assert.equal(match.status, 'cancelled');
+});
+
 test('parseMatchlistMatch: stale unscored match is finished, not upcoming', () => {
   const pastTs = Math.floor(Date.now() / 1000) - 5 * 3600;
   const html = `
@@ -925,6 +937,18 @@ test('parseBracketMatch: upcoming match with future timestamp has status schedul
   assert.equal(m.winner, null);
 });
 
+test('parseBracketMatch: explicit postponement overrides live-window inference', () => {
+  const $ = load(`
+    <div class="brkts-match" data-status="postponed">
+      <div class="brkts-opponent-entry" aria-label="Alpha"></div>
+      <div class="brkts-opponent-entry" aria-label="Bravo"></div>
+      <div class="brkts-popup">Postponed</div>
+    </div>
+  `);
+  const match = parseBracketMatch($, $('.brkts-match')[0], 'valorant');
+  assert.equal(match.status, 'postponed');
+});
+
 test('parseBracketMatch: explicit LIVE badge is running even without timestamp or score', () => {
   const html = `
     <div class="brkts-match">
@@ -1004,6 +1028,18 @@ test('parseMatchInfo: parses teams, scores, and scheduled time from a match-info
   assert.equal(m.scheduledAt, scheduledAt);
   assert.equal(m.tournamentName, 'EWC 2026');
   assert.equal(m.status, 'finished', 'Bo5 with 3:1 reaches win threshold (winAt=3) → finished');
+});
+
+test('parseMatchInfo: explicit cancellation is retained without scores', () => {
+  const $ = load(`
+    <div class="match-info" data-status="cancelled">
+      <div class="block-team"><span class="name">Alpha</span></div>
+      <div class="block-team"><span class="name">Bravo</span></div>
+      <div class="match-info-status">Canceled</div>
+    </div>
+  `);
+  const match = parseMatchInfo($, $('.match-info')[0], 'valorant');
+  assert.equal(match.status, 'cancelled');
 });
 
 test('parseMatchInfo: no teams, no scores, future schedule → status scheduled', () => {

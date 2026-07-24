@@ -12,6 +12,7 @@ import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { copy, localizedPath, type Locale } from "@/lib/i18n";
 import type { LiveMatchCenter as LiveMatchCenterData, LiveMatchCenterItem } from "@/lib/live-match-center";
+import { matchOutcomeLabel, type MatchLifecycleView } from "@/lib/match-lifecycle";
 import { safeUrlOrUndefined } from "@/lib/safe-url";
 
 const REFETCH_INTERVAL_MS = 75_000;
@@ -23,6 +24,18 @@ function teamLabel(value: string | null, fallback: string) {
 function MatchTime({ value, locale, fallback }: { value: number | null; locale: Locale; fallback: string }) {
   if (value == null || !Number.isFinite(value)) return <span>{fallback}</span>;
   return <LocalDateTime value={new Date(value * 1000).toISOString()} locale={locale} fallback={fallback} />;
+}
+
+function lifecycleView(item: LiveMatchCenterItem): MatchLifecycleView {
+  return {
+    status: item.status,
+    team_a: item.teamA,
+    team_b: item.teamB,
+    score_a: item.scoreA,
+    score_b: item.scoreB,
+    winner_side: item.winnerSide,
+    result_reason: item.resultReason,
+  };
 }
 
 function MatchTeams({ item, locale }: { item: LiveMatchCenterItem; locale: Locale }) {
@@ -173,9 +186,15 @@ function RecentFinished({ items, locale }: { items: LiveMatchCenterItem[]; local
                 <bdi>{teamLabel(item.teamA, text.tbd)}</bdi> <span>{text.vs}</span> <bdi>{teamLabel(item.teamB, text.tbd)}</bdi>
               </p>
             </div>
-            <span className="shrink-0 tabular-nums font-semibold">
-              {item.scoreA ?? "-"} <span className="text-muted-foreground">-</span> {item.scoreB ?? "-"}
-            </span>
+            {item.scoreA != null && item.scoreB != null ? (
+              <span className="shrink-0 tabular-nums font-semibold">
+                {item.scoreA} <span className="text-muted-foreground">-</span> {item.scoreB}
+              </span>
+            ) : (
+              <span className="shrink-0 text-end text-xs font-medium text-muted-foreground">
+                {matchOutcomeLabel(lifecycleView(item), locale)}
+              </span>
+            )}
           </li>
         ))}
       </ol>

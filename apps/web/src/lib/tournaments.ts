@@ -24,6 +24,7 @@ import {
 } from "@bot/db/tournaments.js";
 import { unstable_cache } from "next/cache";
 import { resolveDefaultGuildId } from "@/lib/guild";
+import type { MatchStatus, ResultReason, WinnerSide } from "@/lib/match-lifecycle";
 import { liveCoStreamsByMatch, type MatchCoStream } from "@/lib/match-co-streams";
 import { ewcPlacementPointsForRank, finalTournamentStandingSection } from "@/lib/tournament-standings";
 import { bracketRoundFromStoredMatch } from "@/lib/tournament-brackets";
@@ -37,7 +38,7 @@ import { bracketRoundFromStoredMatch } from "@/lib/tournament-brackets";
 // write from the web process.
 // ---------------------------------------------------------------------------
 
-export type MatchStatus = "running" | "scheduled" | "finished";
+export type { MatchStatus } from "@/lib/match-lifecycle";
 
 export type TournamentRow = {
   id: number;
@@ -54,7 +55,13 @@ export type TournamentRow = {
   last_match_at?: number | null;
 };
 
-export type MatchCounts = { running: number; scheduled: number; finished: number };
+export type MatchCounts = {
+  running: number;
+  scheduled: number;
+  finished: number;
+  postponed: number;
+  cancelled: number;
+};
 
 export type PublicSyncHealth = {
   state: "fresh" | "delayed" | "unavailable" | "final";
@@ -117,6 +124,8 @@ export type MatchRow = {
   score_a: number | null;
   score_b: number | null;
   status: MatchStatus;
+  winner_side?: WinnerSide;
+  result_reason?: ResultReason;
   /** Public stage label derived from saved match data; never exposes provider IDs. */
   round?: string | null;
   scheduled_at: number | null;
@@ -159,7 +168,13 @@ export type TournamentMatches = {
     final_standings_section: string | null;
     syncHealth: PublicSyncHealth;
   };
-  matches: { running: MatchRow[]; scheduled: MatchRow[]; finished: MatchRow[] };
+  matches: {
+    running: MatchRow[];
+    scheduled: MatchRow[];
+    finished: MatchRow[];
+    postponed: MatchRow[];
+    cancelled: MatchRow[];
+  };
   bracketMatches?: MatchRow[];
   standings: StandingRow[];
   totals: MatchCounts & { all: number };
@@ -187,11 +202,11 @@ const getById = _getById as (id: number) => Promise<TournamentRow | undefined>;
 const dedupeMatches = _dedupeMatches as <T extends MatchRow>(rows: T[]) => T[];
 
 function zeroCounts(): MatchCounts {
-  return { running: 0, scheduled: 0, finished: 0 };
+  return { running: 0, scheduled: 0, finished: 0, postponed: 0, cancelled: 0 };
 }
 
 const MATCH_COLUMNS =
-  "id, external_id, name, team_a, team_b, logo_a, logo_b, score_a, score_b, status, scheduled_at, stream_platform, stream_url, updated_at";
+  "id, external_id, name, team_a, team_b, logo_a, logo_b, score_a, score_b, status, winner_side, result_reason, scheduled_at, stream_platform, stream_url, updated_at";
 
 // The official per-match stream is the Liquipedia Special:Stream link, which
 // resolves to the real channel (the path segment is Liquipedia's key, not the
@@ -218,7 +233,13 @@ const MATCHES_SQL = `SELECT ${MATCH_COLUMNS},
    FROM matches
    WHERE tournament_id = $1
      AND NOT (source = 'startgg' AND external_id LIKE 'sgg:preview_%')
-   ORDER BY CASE status WHEN 'running' THEN 0 WHEN 'scheduled' THEN 1 ELSE 2 END,
+   ORDER BY CASE status
+              WHEN 'running' THEN 0
+              WHEN 'scheduled' THEN 1
+              WHEN 'postponed' THEN 2
+              WHEN 'finished' THEN 3
+              ELSE 4
+            END,
             CASE WHEN status = 'finished' THEN scheduled_at END DESC,
             scheduled_at ASC`;
 
@@ -233,6 +254,8 @@ function publicMatch(row: MatchRow): MatchRow {
     score_a: row.score_a,
     score_b: row.score_b,
     status: row.status,
+    winner_side: row.winner_side ?? null,
+    result_reason: row.result_reason ?? "unknown",
     round: bracketRoundFromStoredMatch(row),
     scheduled_at: row.scheduled_at,
     updated_at: row.updated_at,
@@ -344,9 +367,7 @@ async function dedupedTournamentMatches(tournament: TournamentRow): Promise<Matc
 function countsFromRows(rows: MatchRow[]): MatchCounts {
   const counts = zeroCounts();
   for (const row of rows) {
-    if (row.status === "running" || row.status === "scheduled" || row.status === "finished") {
-      counts[row.status] += 1;
-    }
+    counts[row.status] += 1;
   }
   return counts;
 }
@@ -355,7 +376,9 @@ function featuredMatchFromRows(rows: MatchRow[]): MatchRow | null {
   return (
     rows.find((row) => row.status === "running") ??
     rows.find((row) => row.status === "scheduled") ??
+    rows.find((row) => row.status === "postponed") ??
     rows.find((row) => row.status === "finished") ??
+    rows.find((row) => row.status === "cancelled") ??
     null
   );
 }
@@ -477,19 +500,30 @@ export async function getTournamentMatches(
   const finishedAll = rows
     .filter((m) => m.status === "finished")
     .map((m) => withProfileReferences(publicMatch(m), resolveProfile));
+  const postponed = rows
+    .filter((m) => m.status === "postponed")
+    .map((m) => withProfileReferences(publicMatch(m), resolveProfile));
+  const cancelled = rows
+    .filter((m) => m.status === "cancelled")
+    .map((m) => withProfileReferences(publicMatch(m), resolveProfile));
   const finished = finishedAll.slice(offset, offset + limit);
   const ewc = isEwcTournamentReference(tournament);
   const standingsHaveResults = rawStandings.some(
     (row) => /[1-9]/.test(String(row.points ?? "")) || /[1-9]/.test(String(row.extra ?? "")),
   );
   const completed = tournament.archived_at != null || (
-    running.length === 0 && scheduled.length === 0 && (finishedAll.length > 0 || standingsHaveResults)
+    running.length === 0
+    && scheduled.length === 0
+    && postponed.length === 0
+    && (finishedAll.length > 0 || standingsHaveResults)
   );
   const totals = {
     running: running.length,
     scheduled: scheduled.length,
     finished: finishedAll.length,
-    all: running.length + scheduled.length + finishedAll.length,
+    postponed: postponed.length,
+    cancelled: cancelled.length,
+    all: running.length + scheduled.length + finishedAll.length + postponed.length + cancelled.length,
   };
   const finalStandingsSection = ewc && completed ? finalTournamentStandingSection(rawStandings) : null;
   if (finalStandingsSection) {
@@ -511,9 +545,9 @@ export async function getTournamentMatches(
       final_standings_section: finalStandingsSection,
       syncHealth: syncHealthForTournament(tournament, health, rawRunning.length > 0),
     },
-    matches: { running, scheduled, finished },
+    matches: { running, scheduled, finished, postponed, cancelled },
     ...(options.includeBracket
-      ? { bracketMatches: [...running, ...scheduled, ...finishedAll] }
+      ? { bracketMatches: [...running, ...scheduled, ...postponed, ...finishedAll, ...cancelled] }
       : {}),
     standings,
     totals,

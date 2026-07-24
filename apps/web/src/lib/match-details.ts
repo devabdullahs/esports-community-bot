@@ -3,6 +3,7 @@ import "server-only";
 import { get } from "@bot/db/client.js";
 import { getMatchDetails } from "@bot/db/matchDetails.js";
 import { resolveDefaultGuildId } from "@/lib/guild";
+import type { MatchStatus, ResultReason, WinnerSide } from "@/lib/match-lifecycle";
 
 type Side = "a" | "b";
 type SidePlayers<T> = { a: T[]; b: T[] };
@@ -81,7 +82,9 @@ export type MatchPageModel = {
   id: number;
   source: string;
   externalId: string;
-  status: "running" | "scheduled" | "finished";
+  status: MatchStatus;
+  winnerSide: WinnerSide;
+  resultReason: ResultReason;
   teamA: string | null;
   teamB: string | null;
   logoA: string | null;
@@ -257,6 +260,8 @@ type MatchDbRow = {
   logo_b: string | null;
   score_a: number | null;
   score_b: number | null;
+  winner_side: WinnerSide;
+  result_reason: ResultReason;
   scheduled_at: number | null;
   stream_platform: string | null;
   stream_url: string | null;
@@ -270,7 +275,8 @@ export async function getMatchPageModel(matchId: number): Promise<MatchPageModel
   if (!guildId) return null;
   const match = (await get(
     `SELECT m.id, m.source, m.external_id, m.status, m.team_a, m.team_b, m.logo_a, m.logo_b,
-            m.score_a, m.score_b, m.scheduled_at, m.stream_platform, m.stream_url,
+            m.score_a, m.score_b, m.winner_side, m.result_reason,
+            m.scheduled_at, m.stream_platform, m.stream_url,
             t.id AS tournament_id, t.name AS tournament_name, t.game
        FROM matches m
        JOIN tournaments t ON t.id = m.tournament_id
@@ -293,6 +299,8 @@ export async function getMatchPageModel(matchId: number): Promise<MatchPageModel
     logoB: match.logo_b,
     scoreA: match.score_a,
     scoreB: match.score_b,
+    winnerSide: match.winner_side,
+    resultReason: match.result_reason,
     scheduledAt: match.scheduled_at,
     stream: { platform: match.stream_platform, url: match.stream_url },
     tournament: { id: match.tournament_id, name: match.tournament_name, game: match.game },

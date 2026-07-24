@@ -7,9 +7,15 @@ process.env.NODE_ENV = 'test';
 process.env.STARTGG_TOKEN = 'test-token';
 process.env.LOG_LEVEL = 'error';
 
-const { activeCount, armMatch, maxAbsentRunSeconds, shouldRetireAbsentMatch, stopAll } = await import(
-  '../src/jobs/pollingManager.js'
-);
+const {
+  activeCount,
+  armMatch,
+  maxAbsentRunSeconds,
+  shouldRetireAbsentMatch,
+  shouldWatchMatch,
+  stopAll,
+  transitionType,
+} = await import('../src/jobs/pollingManager.js');
 
 function startggMatch(externalId) {
   return {
@@ -66,6 +72,33 @@ test('armMatch can delay the first poll for resumed live rows', (t) => {
 
   assert.equal(armMatch(match, { id: 1, source: 'startgg' }, { initialPollDelayMs: 60_000 }), true);
   assert.equal(activeCount(), 1);
+});
+
+test('watchers admit only scheduled and running lifecycle states', (t) => {
+  t.after(() => stopAll());
+  stopAll();
+
+  assert.equal(shouldWatchMatch({ status: 'scheduled' }), true);
+  assert.equal(shouldWatchMatch({ status: 'running' }), true);
+  assert.equal(shouldWatchMatch({ status: 'postponed' }), false);
+  assert.equal(shouldWatchMatch({ status: 'cancelled' }), false);
+  assert.equal(shouldWatchMatch({ status: 'finished' }), false);
+
+  for (const status of ['postponed', 'cancelled', 'finished']) {
+    const match = startggMatch(`sgg:${status}`);
+    match.status = status;
+    assert.equal(armMatch(match, { id: 1, source: 'startgg' }), false);
+  }
+  assert.equal(activeCount(), 0);
+});
+
+test('only genuine running and finished transitions emit lifecycle notifications', () => {
+  assert.equal(transitionType({ status: 'scheduled' }, { status: 'running' }), 'started');
+  assert.equal(transitionType({ status: 'postponed' }, { status: 'scheduled' }), 'update');
+  assert.equal(transitionType({ status: 'scheduled' }, { status: 'postponed' }), 'update');
+  assert.equal(transitionType({ status: 'running' }, { status: 'cancelled' }), 'update');
+  assert.equal(transitionType({ status: 'running' }, { status: 'finished' }), 'finished');
+  assert.equal(transitionType({ status: 'finished' }, { status: 'finished' }), 'update');
 });
 
 test('absent EA FC matches retire sooner without changing the default safety net', () => {

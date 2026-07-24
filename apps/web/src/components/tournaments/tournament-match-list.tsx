@@ -38,12 +38,19 @@ import { BracketView } from "@/components/tournaments/bracket-view";
 import { MatchReminderButton } from "@/components/tournaments/match-reminder-button";
 import { copy, directionForLocale, formatNumber, localizedPath, type Locale } from "@/lib/i18n";
 import { logoProxyUrl } from "@/lib/logo-url";
+import {
+  matchOutcomeLabel,
+  matchStatusLabel,
+  matchWinner,
+  type MatchStatus,
+  type MatchWinner,
+  type ResultReason,
+  type WinnerSide,
+} from "@/lib/match-lifecycle";
 import { withProfileReturn, type ProfileReturnContext } from "@/lib/profile-navigation";
 import { safeUrlOrUndefined } from "@/lib/safe-url";
 import { projectTournamentBracket } from "@/lib/tournament-brackets";
 
-type MatchStatus = "running" | "scheduled" | "finished";
-type Winner = "a" | "b" | "draw" | null;
 type TournamentCopy = (typeof copy)[Locale]["tournaments"];
 type PublicSyncHealth = {
   state: "fresh" | "delayed" | "unavailable" | "final";
@@ -67,6 +74,8 @@ type MatchRow = {
   score_a: number | null;
   score_b: number | null;
   status: MatchStatus;
+  winner_side?: WinnerSide;
+  result_reason?: ResultReason;
   round?: string | null;
   scheduled_at: number | null;
   updated_at: string | null;
@@ -101,13 +110,21 @@ export type TournamentMatchesPayload = {
     final_standings_section: string | null;
     syncHealth: PublicSyncHealth;
   };
-  matches: { running: MatchRow[]; scheduled: MatchRow[]; finished: MatchRow[] };
+  matches: {
+    running: MatchRow[];
+    scheduled: MatchRow[];
+    finished: MatchRow[];
+    postponed: MatchRow[];
+    cancelled: MatchRow[];
+  };
   bracketMatches?: MatchRow[];
   standings?: StandingRow[];
   totals: {
     running: number;
     scheduled: number;
     finished: number;
+    postponed: number;
+    cancelled: number;
     all: number;
   };
   finishedPage: {
@@ -135,6 +152,7 @@ export function shouldPollTournamentMatches(data: TournamentMatchesPayload): boo
     data.tournament.completed
     && data.matches.running.length === 0
     && data.matches.scheduled.length === 0
+    && data.matches.postponed.length === 0
   ) {
     return false;
   }
@@ -272,13 +290,6 @@ function Logo({ url, alt }: { url: string | null; alt: string }) {
   );
 }
 
-function resultWinner(match: MatchRow): Winner {
-  if (match.status !== "finished" || match.score_a == null || match.score_b == null) return null;
-  if (match.score_a > match.score_b) return "a";
-  if (match.score_b > match.score_a) return "b";
-  return "draw";
-}
-
 function ScoreText({ a, b }: { a: number | null; b: number | null }) {
   if (a == null || b == null) return <span className="text-muted-foreground">-</span>;
   return (
@@ -289,24 +300,24 @@ function ScoreText({ a, b }: { a: number | null; b: number | null }) {
 }
 
 function ResultScoreText({
-  a,
-  b,
+  match,
   winner,
-  fallback,
+  locale,
   drawLabel,
 }: {
-  a: number | null;
-  b: number | null;
-  winner: Winner;
-  fallback: string;
+  match: MatchRow;
+  winner: MatchWinner;
+  locale: Locale;
   drawLabel: string;
 }) {
-  if (a == null || b == null) return <span className="text-muted-foreground">{fallback}</span>;
+  if (match.score_a == null || match.score_b == null) {
+    return <span className="text-muted-foreground">{matchOutcomeLabel(match, locale)}</span>;
+  }
   return (
     <span className="inline-flex items-center gap-2 tabular-nums font-semibold">
-      <span className={winner === "a" ? "text-primary" : "text-foreground"}>{a}</span>
+      <span className={winner === "a" ? "text-primary" : "text-foreground"}>{match.score_a}</span>
       <span className="text-muted-foreground">-</span>
-      <span className={winner === "b" ? "text-primary" : "text-foreground"}>{b}</span>
+      <span className={winner === "b" ? "text-primary" : "text-foreground"}>{match.score_b}</span>
       {winner === "draw" ? (
         <span className="rounded-full border border-border px-2 py-0.5 text-[0.65rem] text-muted-foreground">
           {drawLabel}
@@ -396,7 +407,7 @@ function MatchText({
   locale: Locale;
   tbd: string;
   vs: string;
-  winner?: Winner;
+  winner?: MatchWinner;
   returnContext?: ProfileReturnContext | null;
 }) {
   const aLabel = teamLabel(a, tbd);
@@ -544,7 +555,7 @@ export function TournamentMatchList({
   });
 
   const data = query.data ?? initialData;
-  const { running, scheduled, finished } = data.matches;
+  const { running, scheduled, finished, postponed, cancelled } = data.matches;
   const standings = data.standings ?? [];
   const returnContext: ProfileReturnContext = {
     type: "tournament",
@@ -558,10 +569,12 @@ export function TournamentMatchList({
       ...initialData.matches.running,
       ...initialData.matches.scheduled,
       ...initialData.matches.finished,
+      ...initialData.matches.postponed,
+      ...initialData.matches.cancelled,
     ];
   const bracketMatches = mergeBracketMatchSnapshot(
     initialBracketMatches,
-    [...running, ...scheduled, ...finished],
+    [...running, ...scheduled, ...finished, ...postponed, ...cancelled],
   );
   const bracket = projectTournamentBracket(bracketMatches);
   const tbd = text.tbd;
@@ -578,6 +591,11 @@ export function TournamentMatchList({
   const resultEnd = finished.length > 0
     ? Math.min(data.finishedPage.offset + finished.length, data.totals.finished)
     : 0;
+  const lifecycleUpdates = [...postponed, ...cancelled].sort((a, b) => {
+    const aTime = a.scheduled_at ?? Number.MAX_SAFE_INTEGER;
+    const bTime = b.scheduled_at ?? Number.MAX_SAFE_INTEGER;
+    return aTime - bTime || a.id - b.id;
+  });
   const retainedRefreshError = query.isRefetchError;
   const lastSuccessfulRefresh = query.dataUpdatedAt > 0
     ? new Date(query.dataUpdatedAt).toISOString()
@@ -625,21 +643,12 @@ export function TournamentMatchList({
                 {isLobbySchedule(m) ? (
                   <CardContent className="flex items-center justify-between gap-3 py-2">
                     <LobbyScheduleText match={m} fallback={tbd} locale={locale} />
-                    <div className="flex shrink-0 items-center gap-1.5">
-                      <span className="text-xs text-muted-foreground">
-                        <MatchTime value={m.scheduled_at} locale={locale} fallback={text.timeTbd} />
-                      </span>
-                      <MatchReminderButton
-                        matchId={m.id}
-                        signedIn={reminderState.signedIn}
-                        initialReminded={reminderMatchIds.has(m.id)}
-                        locale={locale}
-                        callbackPath={reminderCallbackPath}
-                      />
-                    </div>
+                    <span className="shrink-0 text-xs text-muted-foreground">
+                      <MatchTime value={m.scheduled_at} locale={locale} fallback={text.timeTbd} />
+                    </span>
                   </CardContent>
                 ) : (
-                  <CardContent className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)_auto] items-center gap-3 py-1">
+                  <CardContent className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-3 py-1">
                     <div
                       className="flex min-w-0 items-center gap-2 text-start text-sm font-medium"
                       dir={directionForLocale(locale)}
@@ -669,13 +678,6 @@ export function TournamentMatchList({
                       />
                       <Logo url={m.logo_b} alt={teamLabel(m.team_b, tbd)} />
                     </div>
-                    <MatchReminderButton
-                      matchId={m.id}
-                      signedIn={reminderState.signedIn}
-                      initialReminded={reminderMatchIds.has(m.id)}
-                      locale={locale}
-                      callbackPath={reminderCallbackPath}
-                    />
                   </CardContent>
                 )}
                 <MatchDetailsLink match={m} locale={locale} text={text} />
@@ -717,6 +719,63 @@ export function TournamentMatchList({
           <p className="text-sm text-muted-foreground">{text.noLive}</p>
         )}
       </section>
+
+      {lifecycleUpdates.length ? (
+        <>
+          <Separator />
+          <section className="flex flex-col gap-3" aria-labelledby="match-lifecycle-updates">
+            <h2 id="match-lifecycle-updates" className="text-lg font-semibold">
+              {locale === "ar" ? "تحديثات المباريات" : "Match updates"}
+            </h2>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>{text.time}</TableHead>
+                  <TableHead>{text.match}</TableHead>
+                  <TableHead className="text-end">{text.result}</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {lifecycleUpdates.map((m) => (
+                  <TableRow id={`tournament-match-${m.id}`} key={m.id}>
+                    <TableCell className="text-muted-foreground tabular-nums">
+                      <MatchTime value={m.scheduled_at} locale={locale} fallback={text.timeTbd} />
+                    </TableCell>
+                    <TableCell className="text-start">
+                      {isLobbySchedule(m) ? (
+                        <LobbyScheduleText match={m} fallback={tbd} locale={locale} />
+                      ) : (
+                        <MatchText
+                          a={m.team_a}
+                          b={m.team_b}
+                          aId={m.team_a_id}
+                          bId={m.team_b_id}
+                          aProfileId={m.team_a_profile_id}
+                          bProfileId={m.team_b_profile_id}
+                          aProfileType={m.team_a_profile_type}
+                          bProfileType={m.team_b_profile_type}
+                          logoA={m.logo_a}
+                          logoB={m.logo_b}
+                          locale={locale}
+                          tbd={tbd}
+                          vs={text.vs}
+                          returnContext={returnContext}
+                        />
+                      )}
+                      <MatchDetailsLink match={m} locale={locale} text={text} />
+                    </TableCell>
+                    <TableCell className="text-end">
+                      <Badge variant={m.status === "postponed" ? "secondary" : "outline"}>
+                        {matchStatusLabel(m.status, locale)}
+                      </Badge>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </section>
+        </>
+      ) : null}
 
       <Separator />
 
@@ -866,7 +925,7 @@ export function TournamentMatchList({
                 <Fragment key={group.key}>
                   <DayHeadingRow label={group.label} columns={3} />
                   {group.matches.map((m) => {
-                    const winner = resultWinner(m);
+                    const winner = matchWinner(m);
                     return (
                       <TableRow id={`tournament-match-${m.id}`} key={m.id}>
                         <TableCell className="text-muted-foreground tabular-nums">
@@ -898,10 +957,9 @@ export function TournamentMatchList({
                         </TableCell>
                         <TableCell className="text-end">
                           <ResultScoreText
-                            a={m.score_a}
-                            b={m.score_b}
+                            match={m}
                             winner={winner}
-                            fallback={text.finished}
+                            locale={locale}
                             drawLabel={text.draw}
                           />
                         </TableCell>

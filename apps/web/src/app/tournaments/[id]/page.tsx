@@ -139,7 +139,7 @@ export default async function TournamentDetailPage({
     searchParams: resolvedSearchParams,
     page: resultsPage,
   });
-  const reminderMatchIds = [...data.matches.running, ...data.matches.scheduled].map((match) => match.id);
+  const reminderMatchIds = data.matches.scheduled.map((match) => match.id);
   const [followState, reminderState] = await Promise.all([
     getViewerFollowState("tournament", String(tournament.id)),
     getViewerMatchReminderState(reminderMatchIds),

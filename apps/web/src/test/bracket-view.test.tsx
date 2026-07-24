@@ -48,10 +48,23 @@ function payload(matches: BracketMatchInput[]): TournamentMatchesPayload {
       final_standings_section: null,
       syncHealth: { state: "fresh", lastSuccessAt: null, source: "liquipedia" },
     },
-    matches: { running: [], scheduled: matches, finished: [] },
+    matches: {
+      running: [],
+      scheduled: matches,
+      finished: [],
+      postponed: [],
+      cancelled: [],
+    },
     bracketMatches: matches,
     standings: [],
-    totals: { running: 0, scheduled: matches.length, finished: 0, all: matches.length },
+    totals: {
+      running: 0,
+      scheduled: matches.length,
+      finished: 0,
+      postponed: 0,
+      cancelled: 0,
+      all: matches.length,
+    },
     finishedPage: { offset: 0, limit: 50, hasMore: false },
     total: matches.length,
   };
@@ -86,6 +99,33 @@ describe("BracketView", () => {
     expect(html).toContain("مسار البطولة");
     expect(html).toContain("ربع النهائي");
     expect(html).toContain('href="/ar/matches/1"');
+  });
+
+  test("renders paused states and scoreless explicit outcomes semantically", () => {
+    const bracket = projectTournamentBracket([
+      match({
+        id: 10,
+        round: "Quarterfinals",
+        status: "cancelled",
+        result_reason: "cancelled",
+        scheduled_at: 100,
+      }),
+      match({
+        id: 11,
+        round: "Semifinals",
+        status: "finished",
+        winner_side: "team2",
+        result_reason: "walkover",
+        scheduled_at: 200,
+      }),
+    ]);
+    if (!bracket) throw new Error("Lifecycle bracket fixture should project");
+
+    const html = renderToStaticMarkup(<BracketView bracket={bracket} locale="en" />);
+
+    expect(html).toContain("Cancelled");
+    expect(html).toContain("Bravo won by walkover");
+    expect(html).not.toContain(">0<");
   });
 
   test("appears above the match sections only when a bracket can be projected", () => {

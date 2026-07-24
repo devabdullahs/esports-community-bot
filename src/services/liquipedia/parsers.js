@@ -92,6 +92,24 @@ export function deriveStatus({
   return 'scheduled';
 }
 
+function explicitLifecycleStatus($, el) {
+  const $match = $(el);
+  const marker = [
+    $match.attr('data-status'),
+    $match.attr('class'),
+    $match
+      .find(
+        '.match-info-status, .match-info-header-scoreholder-lower, .brkts-match-status, .brkts-matchlist-status, .brkts-popup',
+      )
+      .text(),
+  ]
+    .filter(Boolean)
+    .join(' ');
+  if (/\bcancel(?:led|ed)\b/i.test(marker)) return 'cancelled';
+  if (/\bpostponed\b|\bdelayed\b/i.test(marker)) return 'postponed';
+  return null;
+}
+
 // Resolve a team's full name from a Liquipedia team-template cell.
 export function teamName($, cell) {
   const $c = $(cell);
@@ -266,7 +284,7 @@ export function parseMatchInfo($, el, game) {
   );
 
   if (!blocks.length && tournamentName) {
-    const status = deriveStatus({ scheduledAt, live });
+    const status = explicitLifecycleStatus($, el) || deriveStatus({ scheduledAt, live });
     const name = tournamentDetail ? `${tournamentName} — ${tournamentDetail}` : tournamentName;
     return {
       source: 'liquipedia',
@@ -307,7 +325,9 @@ export function parseMatchInfo($, el, game) {
   const matchId = matchHref.split('/').pop() || null;
   const externalId = matchId || `${game}:${scheduledAt}:${teamA}:${teamB}`;
 
-  const status = deriveStatus({ scoreA, scoreB, bestOf, scheduledAt, live });
+  const status =
+    explicitLifecycleStatus($, el) ||
+    deriveStatus({ scoreA, scoreB, bestOf, scheduledAt, live });
 
   return {
     source: 'liquipedia',
@@ -395,16 +415,18 @@ export function parseBracketMatch($, el, game, scope = '') {
   const bestOf = Number($m.find('.brkts-popup').text().match(/\(Bo(\d+)\)/i)?.[1]) || null;
   const live = hasLiveMarker($, el);
 
-  const status = deriveStatus({
-    winA,
-    winB,
-    scoreA,
-    scoreB,
-    bestOf,
-    scheduledAt,
-    placeholder: isPlaceholderTeam(teamA) || isPlaceholderTeam(teamB),
-    live,
-  });
+  const status =
+    explicitLifecycleStatus($, el) ||
+    deriveStatus({
+      winA,
+      winB,
+      scoreA,
+      scoreB,
+      bestOf,
+      scheduledAt,
+      placeholder: isPlaceholderTeam(teamA) || isPlaceholderTeam(teamB),
+      live,
+    });
 
   const matchHref = $m.find('a[href*="/Match:"]').attr('href') || '';
   const externalId = matchHref.split('/').pop() || fallbackMatchId(game, scope, teamA, teamB);
@@ -455,16 +477,18 @@ export function parseMatchlistMatch($, el, game, scope = '') {
   const scheduledAt = Number($m.find('[data-timestamp]').attr('data-timestamp')) || null;
   const bestOf = Number($m.find('.brkts-popup').text().match(/\(Bo(\d+)\)/i)?.[1]) || null;
   const live = hasLiveMarker($, el);
-  const status = deriveStatus({
-    winA,
-    winB,
-    scoreA,
-    scoreB,
-    bestOf,
-    scheduledAt,
-    placeholder: isPlaceholderTeam(teamA) || isPlaceholderTeam(teamB),
-    live,
-  });
+  const status =
+    explicitLifecycleStatus($, el) ||
+    deriveStatus({
+      winA,
+      winB,
+      scoreA,
+      scoreB,
+      bestOf,
+      scheduledAt,
+      placeholder: isPlaceholderTeam(teamA) || isPlaceholderTeam(teamB),
+      live,
+    });
 
   const matchHref = $m.find('a[href*="/Match:"]').attr('href') || '';
   const externalId = matchHref.split('/').pop() || fallbackMatchId(game, scope, teamA, teamB);

@@ -29,15 +29,24 @@ db.exec(`
     team_b         TEXT,
     logo_a         TEXT,
     logo_b         TEXT,
-    score_a        INTEGER DEFAULT 0,
-    score_b        INTEGER DEFAULT 0,
+    score_a        INTEGER,
+    score_b        INTEGER,
     status         TEXT    NOT NULL DEFAULT 'scheduled'
-                     CHECK (status IN ('scheduled','running','finished')),
+                     CHECK (status IN ('scheduled','running','finished','postponed','cancelled')),
+    winner_side    TEXT CHECK (winner_side IN ('team1','team2','draw')),
+    result_reason  TEXT NOT NULL DEFAULT 'unknown'
+                     CHECK (result_reason IN ('normal','walkover','forfeit','cancelled','postponed','unknown')),
     scheduled_at   INTEGER,            -- unix seconds; feeds Discord <t:...> timestamps
     stream_platform TEXT,              -- official per-match broadcast stream (Liquipedia)
     stream_url      TEXT,              -- Liquipedia Special:Stream link (resolves the real channel)
     last_polled_at TEXT,
     updated_at     TEXT    NOT NULL DEFAULT (datetime('now')),
+    CHECK (
+      (status IN ('scheduled','running') AND winner_side IS NULL AND result_reason = 'unknown')
+      OR (status = 'postponed' AND winner_side IS NULL AND result_reason = 'postponed')
+      OR (status = 'cancelled' AND winner_side IS NULL AND result_reason = 'cancelled')
+      OR (status = 'finished' AND result_reason IN ('normal','walkover','forfeit','unknown'))
+    ),
     UNIQUE (source, external_id)
   );
 
@@ -171,6 +180,107 @@ function ensureColumns(table, defs) {
   }
 }
 
+// SQLite cannot alter the matches status CHECK in place. Keep the persisted
+// identity stable while upgrading old installations so dependent details,
+// reminders, and vote nominations continue to point at the same match ids.
+function migrateMatchLifecycleSchema() {
+  const table = db
+    .prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'matches'")
+    .get();
+  const columns = new Set(db.prepare('PRAGMA table_info(matches)').all().map((column) => column.name));
+  if (
+    table?.sql &&
+    /postponed/i.test(table.sql) &&
+    /cancelled/i.test(table.sql) &&
+    columns.has('winner_side') &&
+    columns.has('result_reason')
+  ) {
+    return;
+  }
+
+  const winnerExpression = columns.has('winner_side')
+    ? `CASE
+         WHEN winner_side IN ('team1','team2','draw') THEN winner_side
+         WHEN status = 'finished' AND score_a IS NOT NULL AND score_b IS NOT NULL AND score_a > score_b THEN 'team1'
+         WHEN status = 'finished' AND score_a IS NOT NULL AND score_b IS NOT NULL AND score_b > score_a THEN 'team2'
+         ELSE NULL
+       END`
+    : `CASE
+         WHEN status = 'finished' AND score_a IS NOT NULL AND score_b IS NOT NULL AND score_a > score_b THEN 'team1'
+         WHEN status = 'finished' AND score_a IS NOT NULL AND score_b IS NOT NULL AND score_b > score_a THEN 'team2'
+         ELSE NULL
+       END`;
+  const reasonExpression = columns.has('result_reason')
+    ? `CASE
+         WHEN status = 'finished' AND result_reason IN ('normal','walkover','forfeit','unknown')
+           THEN result_reason
+         WHEN status = 'finished' AND score_a IS NOT NULL AND score_b IS NOT NULL AND score_a <> score_b
+           THEN 'normal'
+         ELSE 'unknown'
+       END`
+    : `CASE
+         WHEN status = 'finished' AND score_a IS NOT NULL AND score_b IS NOT NULL AND score_a <> score_b
+           THEN 'normal'
+         ELSE 'unknown'
+       END`;
+
+  db.pragma('foreign_keys = OFF');
+  try {
+    db.exec('BEGIN');
+    db.exec(`
+      CREATE TABLE matches_lifecycle (
+        id              INTEGER PRIMARY KEY AUTOINCREMENT,
+        tournament_id   INTEGER NOT NULL REFERENCES tournaments(id) ON DELETE CASCADE,
+        source          TEXT NOT NULL,
+        external_id     TEXT NOT NULL,
+        name            TEXT,
+        team_a          TEXT,
+        team_b          TEXT,
+        logo_a          TEXT,
+        logo_b          TEXT,
+        score_a         INTEGER,
+        score_b         INTEGER,
+        status          TEXT NOT NULL DEFAULT 'scheduled'
+                          CHECK (status IN ('scheduled','running','finished','postponed','cancelled')),
+        winner_side     TEXT CHECK (winner_side IN ('team1','team2','draw')),
+        result_reason   TEXT NOT NULL DEFAULT 'unknown'
+                          CHECK (result_reason IN ('normal','walkover','forfeit','cancelled','postponed','unknown')),
+        scheduled_at    INTEGER,
+        stream_platform TEXT,
+        stream_url      TEXT,
+        last_polled_at  TEXT,
+        updated_at      TEXT NOT NULL DEFAULT (datetime('now')),
+        CHECK (
+          (status IN ('scheduled','running') AND winner_side IS NULL AND result_reason = 'unknown')
+          OR (status = 'postponed' AND winner_side IS NULL AND result_reason = 'postponed')
+          OR (status = 'cancelled' AND winner_side IS NULL AND result_reason = 'cancelled')
+          OR (status = 'finished' AND result_reason IN ('normal','walkover','forfeit','unknown'))
+        ),
+        UNIQUE (source, external_id)
+      );
+      INSERT INTO matches_lifecycle
+        (id, tournament_id, source, external_id, name, team_a, team_b, logo_a, logo_b,
+         score_a, score_b, status, winner_side, result_reason, scheduled_at,
+         stream_platform, stream_url, last_polled_at, updated_at)
+      SELECT id, tournament_id, source, external_id, name, team_a, team_b, logo_a, logo_b,
+             score_a, score_b, status, ${winnerExpression}, ${reasonExpression}, scheduled_at,
+             stream_platform, stream_url, last_polled_at, updated_at
+        FROM matches;
+      DROP TABLE matches;
+      ALTER TABLE matches_lifecycle RENAME TO matches;
+      CREATE INDEX idx_matches_status ON matches(status);
+      CREATE INDEX idx_matches_tournament ON matches(tournament_id);
+    `);
+    db.exec('COMMIT');
+    logger.info('[db] expanded the canonical match lifecycle schema');
+  } catch (error) {
+    db.exec('ROLLBACK');
+    throw error;
+  } finally {
+    db.pragma('foreign_keys = ON');
+  }
+}
+
 // SQLite cannot alter a CHECK constraint in place. The temporary table is
 // copied before the old parent is dropped, so child foreign-key definitions
 // continue to refer to ewc_news_posts after the replacement is renamed.
@@ -267,6 +377,7 @@ ensureColumns('matches', [
   ['stream_platform', 'TEXT'],
   ['stream_url', 'TEXT'],
 ]);
+migrateMatchLifecycleSchema();
 
 ensureColumns('teams', [
   ['game', 'TEXT'],

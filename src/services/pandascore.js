@@ -100,6 +100,26 @@ async function fetchPaginated(path, { pageLimit = config.pandascore.profilesMaxP
   return rows;
 }
 
+export function normalizePandaScoreStatus(status) {
+  switch (String(status ?? '').trim().toLowerCase()) {
+    case 'not_started':
+    case 'upcoming':
+      return 'scheduled';
+    case 'running':
+      return 'running';
+    case 'finished':
+      return 'finished';
+    case 'postponed':
+    case 'delayed':
+      return 'postponed';
+    case 'canceled':
+    case 'cancelled':
+      return 'cancelled';
+    default:
+      return null;
+  }
+}
+
 // Normalize a PandaScore match object into the bot's standard match shape.
 export function normalizeMatch(m) {
   const [a, b] = m.opponents ?? [];
@@ -125,7 +145,7 @@ export function normalizeMatch(m) {
     scoreB: scoreOf(idB),
     bestOf: m.number_of_games ?? null,
     scheduledAt: m.begin_at ? Math.floor(new Date(m.begin_at).getTime() / 1000) : null,
-    status: m.status === 'running' ? 'running' : m.status === 'finished' ? 'finished' : 'scheduled',
+    status: normalizePandaScoreStatus(m.status),
     winner: winnerId ? (winnerId === idA ? teamA : winnerId === idB ? teamB : null) : null,
   };
 }

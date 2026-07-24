@@ -141,8 +141,8 @@ test(
     }
 
     const result = await runPostgresMigrations(postgresOptions());
-    assert.deepEqual(result.applied, ['0001']);
-    assert.equal(Number((await queryOne('SELECT COUNT(*)::BIGINT AS count FROM app_schema_migrations')).count), 1);
+    assert.deepEqual(result.applied, ['0001', '0002']);
+    assert.equal(Number((await queryOne('SELECT COUNT(*)::BIGINT AS count FROM app_schema_migrations')).count), 2);
   },
 );
 
@@ -156,7 +156,7 @@ test(
     const second = await runPostgresMigrations(postgresOptions());
 
     assert.deepEqual(second.applied, []);
-    assert.deepEqual(second.alreadyApplied, ['0001']);
+    assert.deepEqual(second.alreadyApplied, ['0001', '0002']);
   },
 );
 

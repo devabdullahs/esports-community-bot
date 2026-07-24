@@ -31,10 +31,27 @@ function siteUrl(path) {
   return base ? `${base}${path}` : '';
 }
 
-function scoreText(match) {
-  return match.score_a != null && match.score_b != null
-    ? `${match.team_a} ${match.score_a}–${match.score_b} ${match.team_b}`
-    : `${match.team_a} vs ${match.team_b}`;
+export function resultText(match) {
+  if (match.score_a != null && match.score_b != null) {
+    return `${match.team_a} ${match.score_a}-${match.score_b} ${match.team_b}`;
+  }
+  if (match.winner_side === 'draw') return `${match.team_a} drew with ${match.team_b}`;
+
+  const winner =
+    match.winner_side === 'team1'
+      ? match.team_a
+      : match.winner_side === 'team2'
+        ? match.team_b
+        : null;
+  if (!winner) return `${match.team_a} vs ${match.team_b}`;
+
+  if (match.result_reason === 'walkover') {
+    return `${winner} won by walkover - ${match.team_a} vs ${match.team_b}`;
+  }
+  if (match.result_reason === 'forfeit') {
+    return `${winner} won by forfeit - ${match.team_a} vs ${match.team_b}`;
+  }
+  return `${winner} won - ${match.team_a} vs ${match.team_b}`;
 }
 
 // Fan a match transition out to followers as inbox rows (+ pending DMs). Fired
@@ -69,7 +86,7 @@ export async function notifyMatchEvent(client, type, match) {
   if (!recipients.length) return { notified: 0 };
 
   const notificationType = type === 'started' ? 'match_start' : 'match_result';
-  const title = type === 'started' ? `${match.team_a} vs ${match.team_b}` : scoreText(match);
+  const title = type === 'started' ? `${match.team_a} vs ${match.team_b}` : resultText(match);
   const inserted = await enqueueNotifications({
     recipients,
     type: notificationType,

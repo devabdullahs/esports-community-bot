@@ -23,7 +23,7 @@ const {
   upsertMatchReminder,
 } = await import('../src/db/userMatchReminders.js');
 const { listNotificationsForUser } = await import('../src/db/userNotifications.js');
-const { notifyMatchEvent } = await import('../src/jobs/notifier.js');
+const { notifyMatchEvent, resultText } = await import('../src/jobs/notifier.js');
 
 const REMINDER_ONLY_USER = '300000000000000001';
 const FOLLOW_AND_REMINDER_USER = '300000000000000002';
@@ -94,6 +94,27 @@ test('active reminders receive start and result notifications without follows', 
   assert.deepEqual(
     (await listNotificationsForUser(REMINDER_ONLY_USER)).map((notification) => notification.type).sort(),
     ['match_result', 'match_start'],
+  );
+});
+
+test('scoreless explicit outcomes remain meaningful in notification copy', () => {
+  const base = {
+    team_a: 'Team Falcons',
+    team_b: 'Team Liquid',
+    score_a: null,
+    score_b: null,
+  };
+  assert.equal(
+    resultText({ ...base, winner_side: 'team1', result_reason: 'walkover' }),
+    'Team Falcons won by walkover - Team Falcons vs Team Liquid',
+  );
+  assert.equal(
+    resultText({ ...base, winner_side: 'team2', result_reason: 'forfeit' }),
+    'Team Liquid won by forfeit - Team Falcons vs Team Liquid',
+  );
+  assert.equal(
+    resultText({ ...base, winner_side: 'draw', result_reason: 'normal' }),
+    'Team Falcons drew with Team Liquid',
   );
 });
 

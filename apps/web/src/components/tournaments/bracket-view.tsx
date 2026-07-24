@@ -3,9 +3,11 @@
 import { TrophyIcon } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
+import { Badge } from "@/components/ui/badge";
 import type { BracketRound, TournamentBracket } from "@/lib/tournament-brackets";
 import { copy, directionForLocale, formatNumber, localizedPath, type Locale } from "@/lib/i18n";
 import { logoProxyUrl } from "@/lib/logo-url";
+import { matchOutcomeLabel, shouldShowOutcomeLabel } from "@/lib/match-lifecycle";
 import { safeUrlOrUndefined } from "@/lib/safe-url";
 
 type TournamentCopy = (typeof copy)[Locale]["tournaments"];
@@ -92,6 +94,9 @@ function BracketMatchCard({
     : `#tournament-match-${match.id}`;
   const winnerA = match.winner === "a";
   const winnerB = match.winner === "b";
+  const lifecycleLabel = shouldShowOutcomeLabel(match)
+    ? matchOutcomeLabel(match, locale)
+    : null;
 
   return (
     <Link
@@ -114,6 +119,16 @@ function BracketMatchCard({
         </span>
         <Score value={match.score_b} winner={winnerB} locale={locale} />
       </span>
+      {lifecycleLabel ? (
+        <span className="pt-0.5">
+          <Badge
+            variant={match.status === "postponed" ? "secondary" : "outline"}
+            className="max-w-full truncate"
+          >
+            {lifecycleLabel}
+          </Badge>
+        </span>
+      ) : null}
     </Link>
   );
 }

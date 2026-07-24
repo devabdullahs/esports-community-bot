@@ -63,10 +63,14 @@ export async function persistFetchedStandings(matches, tournamentId, { replace =
 // The refresh handler ignores the type; the notifier keys on 'started'/'finished'.
 // A row first seen already running still counts as started (mid-match discovery),
 // but a first-seen finished row does not (bulk schedule import, not an event).
-function transitionType(before, row) {
+export function transitionType(before, row) {
   if (row.status === 'running' && (!before || before.status !== 'running')) return 'started';
   if (before && before.status !== 'finished' && row.status === 'finished') return 'finished';
   return 'update';
+}
+
+export function shouldWatchMatch(match) {
+  return match?.status === 'scheduled' || match?.status === 'running';
 }
 
 export function isPlaceholderTeam(value) {
@@ -120,7 +124,7 @@ export function stopAll() {
 
 // Schedule polling for a match: immediately if it has started, else at its start time.
 export function armMatch(match, tournament, { initialPollDelayMs = 0 } = {}) {
-  if (match.status === 'finished') return false;
+  if (!shouldWatchMatch(match)) return false;
   if (watchers.has(match.external_id)) return false; // already armed or polling
   if (isNonPollableMatch(match)) return false;
   if (isPlaceholderTeam(match.team_a) || isPlaceholderTeam(match.team_b)) return false;
@@ -249,10 +253,12 @@ async function pollOnce(match, tournament) {
       before.score_a !== row.score_a ||
       before.score_b !== row.score_b ||
       before.status !== row.status ||
+      before.winner_side !== row.winner_side ||
+      before.result_reason !== row.result_reason ||
       before.logo_a !== row.logo_a ||
       before.logo_b !== row.logo_b;
     if (changed) onUpdate(transitionType(before, row), row);
-    if (!watchers.has(row.external_id) && row.status !== 'finished') armMatch(row, tournament);
+    if (!watchers.has(row.external_id) && shouldWatchMatch(row)) armMatch(row, tournament);
     if (fresh.externalId === match.external_id) polled = row;
   }
   const deleted = await deleteTournamentPlaceholderMatches(match.tournament_id, currentIds);
@@ -281,7 +287,9 @@ async function pollOnce(match, tournament) {
         !before ||
         before.score_a !== row.score_a ||
         before.score_b !== row.score_b ||
-        before.status !== row.status;
+        before.status !== row.status ||
+        before.winner_side !== row.winner_side ||
+        before.result_reason !== row.result_reason;
       if (changed) onUpdate(transitionType(before, row), row);
       polled = row;
     }
@@ -293,9 +301,13 @@ async function pollOnce(match, tournament) {
     queueMatchDetailsRefresh(polled, tournament);
     // Stop watching only on a genuine finish (the bracket marks a winner) — never on a mere
     // disappearance from the page, which previously caused false/early "finished" results.
-    if (polled.status === 'finished') {
+    if (!shouldWatchMatch(polled)) {
       clearWatcher(match.external_id);
-      logger.info(`[poll] stop ${match.external_id} (finished ${polled.score_a}-${polled.score_b})`);
+      const detail =
+        polled.status === 'finished'
+          ? ` ${polled.score_a ?? '?'}-${polled.score_b ?? '?'}`
+          : '';
+      logger.info(`[poll] stop ${match.external_id} (${polled.status}${detail})`);
     }
   } else if (shouldRetireAbsentMatch(match, tournament)) {
     // Safety net: gone from the page and long overdue. Mark it finished (no score) so it

@@ -10,6 +10,7 @@
 
 ## Status
 
+- **State**: DONE
 - **Priority**: P1
 - **Effort**: L
 - **Risk**: HIGH
@@ -265,14 +266,31 @@ the PostgreSQL lane before merge.
 
 ## Done criteria
 
-- [ ] Cancelled and postponed matches are not shown as upcoming.
-- [ ] A trusted scoreless winner survives parsing, persistence, and projection.
-- [ ] Unknown provider states do not overwrite a trusted state.
-- [ ] Polling, reminders, notifications, and pages share one transition model.
-- [ ] SQLite and PostgreSQL remain schema-compatible.
-- [ ] Historical changes are evidence-based and dry-run-first.
-- [ ] No tests access providers.
-- [ ] All repository gates pass.
+- [x] Cancelled and postponed matches are not shown as upcoming.
+- [x] A trusted scoreless winner survives parsing, persistence, and projection.
+- [x] Unknown provider states do not overwrite a trusted state.
+- [x] Polling, reminders, notifications, and pages share one transition model.
+- [x] SQLite and PostgreSQL remain schema-compatible.
+- [x] Historical changes are evidence-based and dry-run-first.
+- [x] No tests access providers.
+- [x] All repository gates pass.
+
+## Verification evidence
+
+- `npm test`: 813 tests, 797 passed, 16 skipped, 0 failed.
+- `npm --workspace @esports-community-bot/web run lint`: passed.
+- `npm --workspace @esports-community-bot/web run typecheck:native`: passed.
+- `npm --workspace @esports-community-bot/web run test`: 127 files and
+  1,275 tests passed.
+- `npm run web:build`: passed with Next.js 16.2.7.
+- `npm run db:pg:schema:check`: generated PostgreSQL schema is current.
+- Lifecycle provider, persistence, reconciliation, schema-parity, reminder,
+  polling, bracket, and localization tests passed without provider network
+  access.
+- The destructive PostgreSQL reset lane was not run locally because
+  `ALLOW_POSTGRES_TEST_RESET=1` was not available. PostgreSQL migration and
+  round-trip tests are registered for the isolated CI lane; static schema
+  parity passed locally.
 
 ## STOP conditions
 
