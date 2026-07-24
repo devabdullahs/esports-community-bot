@@ -28,6 +28,7 @@
     "db:pg:schema": "node scripts/run-postgres-migrations.mjs",
     "db:pg:schema:generate": "node scripts/build-postgres-schema.mjs",
     "db:pg:schema:check": "node scripts/build-postgres-schema.mjs --check",
+    "db:sqlite-to-pg:preflight": "node scripts/migrate-sqlite-to-postgres.mjs --preflight-target",
     "db:sqlite-to-pg": "node scripts/migrate-sqlite-to-postgres.mjs"
   },
   "license": "MIT",

@@ -136,6 +136,9 @@ async function run() {
     await runPostgresMigrations({ connectionString: config.url, ssl: sslForCurrentEnvironment() });
     await assertMigrationLedger(config);
     await runTestFile(config, resolve('tests/postgresDbParity.test.mjs'), forwardedArgs);
+
+    await resetDatabase(config);
+    await runTestFile(config, resolve('tests/sqliteToPostgresImport.test.mjs'), forwardedArgs);
   } catch (error) {
     console.error('[postgres-test] ' + sanitizePostgresError(error, config?.url));
     process.exitCode = 1;
