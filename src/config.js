@@ -143,8 +143,6 @@ export const config = {
   },
   dashboard: {
     publicUrl: get('EWC_DASHBOARD_PUBLIC_URL'),
-    internalUrl: get('EWC_DASHBOARD_INTERNAL_URL'),
-    internalSecret: get('EWC_DASHBOARD_INTERNAL_SECRET'),
   },
   db: {
     path: get('DB_PATH', 'data/bot.sqlite'),

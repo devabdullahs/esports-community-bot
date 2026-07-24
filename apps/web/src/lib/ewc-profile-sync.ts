@@ -341,9 +341,3 @@ export async function unlinkEwcProfileForAuthUser(authUserId: string) {
 
   return { deleted: true };
 }
-
-export async function unlinkEwcProfileForDiscordUser(discordUserId: string) {
-  const link = await getEwcProfileLinkByDiscordUser(discordUserId);
-  if (!link) return { deleted: false };
-  return unlinkEwcProfileForAuthUser(link.authUserId);
-}

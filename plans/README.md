@@ -93,7 +93,7 @@ or optimize for guild counts.
 | 068  | Keep MCP key verifier hashes server-private | P1 | S | - | DONE |
 | 069  | Derive MCP permissions, UI, tests, and docs from one tool manifest | P1 | M | 068 | DONE |
 | 070  | Apply canonical news validation to MCP-created drafts | P1 | S | - | DONE |
-| 071  | Make admin MCP news search honor locale and combined owner filters | P2 | M | - | TODO |
+| 071  | Make admin MCP news search honor locale and combined owner filters | P2 | M | - | DONE |
 | 072  | Make MCP writes atomic, audited, and idempotent | P1 | L | 070 | DONE |
 | 073  | Let admin MCP clients discover usable scopes and resource IDs | P2 | M | 069 | DONE |
 | 074  | Confirm client-side admin navigation when a news draft is dirty | P1 | M | - | DONE |
@@ -243,7 +243,7 @@ untouched.
 | 123  | Add keyword auto-flagging and bulk moderation | P2 | M-L | - | DONE |
 | 124  | Add a cross-post composer for site, Discord, and social drafts | P2 | L | 120 recommended | DONE |
 | 125  | Exercise PostgreSQL behavior in CI | P1 | M | - | DONE |
-| 126  | Bound every web mutation request before parsing | P1 | L | - | TODO |
+| 126  | Bound every web mutation request before parsing | P1 | L | - | DONE |
 | 127  | Preserve CMS content when games or media channels are deleted | P1 | M | - | DONE |
 | 128  | Compute and reconcile official EWC boundaries in Riyadh | P1 | M | - | DONE |
 | 129  | Serialize prediction submissions with round transitions and scoring | P1 | M | 125 | DONE (branch `codex/129-prediction-round-locks`, SQLite/PostgreSQL lock-race coverage) |
@@ -254,6 +254,15 @@ untouched.
 | 134  | Make SQLite-to-PostgreSQL imports fail closed on skipped data | P1 | M | 125, 133 | DONE — exact mappings, empty-target preflight, conflict rollback, and pre-commit count/constraint/identity validation |
 | 135  | Route Liquipedia MediaWiki requests through one scheduler | P1 | M | - | DONE |
 | 136  | Serialize, persist, and paginate LPDB schedule requests | P1 | M | - | DONE |
+| 137  | Close the bot-to-web capability boundary | P1 | M | 126 | DONE |
+| 138  | Test path agreement and shield the application origin | P1 | M | 137 recommended | TODO |
+| 139  | Make API authorization coverage complete and object-aware | P1 | L | 137 | TODO |
+| 140  | Make tournament history complete and trustworthy | P1 | M | - | TODO |
+| 141  | Recompose tournaments as a competition board | P2 | L | 140 recommended | TODO |
+| 142  | Preserve the complete match lifecycle and outcome | P1 | L | 125 recommended | TODO |
+| 143  | Make every match a first-class destination | P1 | M-L | 142 recommended; 141 optional | TODO |
+| 144  | Serialize and audit tournament lifecycle operations | P1 | L | 142; 125 recommended; coordinate 135/136 | TODO |
+| 145  | Build the tournament operations center | P1 | L | 126, 139, 144 | TODO |
 Status values: TODO | IN PROGRESS | DONE | BLOCKED (reason) | REJECTED (rationale) | SUPERSEDED.
 
 ## Deep reliability audit - first planning batch (2026-07-23 @ `0718e2d`)

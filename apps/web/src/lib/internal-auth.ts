@@ -1,13 +1,56 @@
 import "server-only";
-import { timingSafeEqual } from "node:crypto";
-import { internalSecret } from "@/lib/env";
+import { randomUUID, timingSafeEqual } from "node:crypto";
+import {
+  internalCapabilitySecret,
+  type InternalCapability,
+} from "@/lib/env";
 
-export function isInternalRequestAuthorized(request: Request) {
-  const expected = internalSecret();
-  if (!expected) return false; // fail closed when unset
+const MIN_SECRET_LENGTH = 32;
+const REQUEST_ID_PATTERN = /^[A-Za-z0-9._:-]{1,100}$/;
+
+function validSecret(value: string) {
+  if (value.length < MIN_SECRET_LENGTH) return false;
+  if (value !== value.trim() || /[\x00-\x20\x7f]/.test(value)) return false;
+  const normalized = value.trim().toLowerCase();
+  return !normalized.includes("generate-")
+    && !normalized.includes("change-me")
+    && !normalized.includes("placeholder");
+}
+
+export function isInternalRequestAuthorized(
+  request: Request,
+  capability: InternalCapability,
+) {
+  const expected = internalCapabilitySecret(capability);
+  if (!validSecret(expected)) return false;
   const given = request.headers.get("x-ewc-internal-secret") || "";
   const a = Buffer.from(given);
   const b = Buffer.from(expected);
   if (a.length !== b.length) return false;
   return timingSafeEqual(a, b);
+}
+
+export function internalRequestId(request: Request) {
+  const supplied = request.headers.get("x-request-id") || "";
+  return REQUEST_ID_PATTERN.test(supplied) ? supplied : randomUUID();
+}
+
+export function recordInternalOperation({
+  operation,
+  capability,
+  result,
+  requestId,
+}: {
+  operation: "profile-sync" | "news-revalidate";
+  capability: InternalCapability;
+  result: "authorized" | "denied" | "rejected" | "succeeded" | "failed";
+  requestId: string;
+}) {
+  console.info(JSON.stringify({
+    event: "internal-operation",
+    operation,
+    capability,
+    result,
+    requestId,
+  }));
 }

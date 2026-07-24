@@ -56,6 +56,7 @@ import {
 import { resolveEwcGameEventUrl, trackedEwcGamePlacements } from '../lib/ewcGameTeams.js';
 import { renderEwcPredictionLeaderboardCard } from '../lib/ewcPredictionLeaderboardCard.js';
 import { fetchEwcClubStandings, fetchEwcWeekGameResults } from '../services/liquipedia.js';
+import { syncDashboardProfile } from '../services/dashboardInternalClient.js';
 
 const nowSec = () => Math.floor(Date.now() / 1000);
 
@@ -480,29 +481,15 @@ export async function sendDueEwcPredictionReminders(
 }
 
 async function syncLinkedProfileShowcases(guildId = null, season = null) {
-  if (!config.dashboard.internalUrl || !config.dashboard.internalSecret) return;
   const links = await listEwcProfileLinks({ guildId, season });
   if (!links.length) return;
-  const base = config.dashboard.internalUrl.replace(/\/$/, '');
   for (const link of links) {
     try {
-      const response = await fetch(`${base}/api/internal/ewc-profile/sync`, {
-        method: 'POST',
-        signal: AbortSignal.timeout(10_000),
-        headers: {
-          'Content-Type': 'application/json',
-          'x-ewc-internal-secret': config.dashboard.internalSecret,
-        },
-        body: JSON.stringify({
-          discordUserId: link.discordUserId,
-          guildId: guildId || link.guildId,
-          season: season || link.season,
-        }),
+      await syncDashboardProfile({
+        discordUserId: link.discordUserId,
+        guildId: guildId || link.guildId,
+        season: season || link.season,
       });
-      if (!response.ok) {
-        const body = await response.text().catch(() => '');
-        throw new Error(body || `HTTP ${response.status}`);
-      }
     } catch (error) {
       logger.warn(`[ewc-predictions] profile showcase sync failed for ${link.discordUserId}: ${error.message}`);
     }

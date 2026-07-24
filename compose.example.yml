@@ -9,7 +9,9 @@ services:
     restart: unless-stopped
     # .env.docker holds DISCORD_TOKEN (+ bot vars) AND the web/dashboard vars:
     #   BETTER_AUTH_SECRET, BETTER_AUTH_URL=https://<domain>,
-    #   EWC_DASHBOARD_PUBLIC_URL=https://<domain>, EWC_DASHBOARD_INTERNAL_SECRET,
+    #   EWC_DASHBOARD_PUBLIC_URL=https://<domain>,
+    #   EWC_DASHBOARD_INTERNAL_PROFILE_SYNC_SECRET,
+    #   EWC_DASHBOARD_INTERNAL_NEWS_REVALIDATE_SECRET,
     #   EWC_DASHBOARD_SUPER_ADMIN_DISCORD_IDS, DISCORD_CLIENT_ID/SECRET,
     #   CLOUDFLARE_TUNNEL_TOKEN, and (optional) R2_* upload vars.
     env_file:
