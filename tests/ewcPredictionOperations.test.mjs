@@ -22,8 +22,10 @@ const {
 const { runEwcPredictionAdminOperation, validateEwcPredictionAdminOperation } = await import('../src/lib/ewcPredictionAdmin.js');
 const { drainEwcPredictionOperations } = await import('../src/jobs/ewcPredictionOperations.js');
 const {
+  getEwcWeek,
   getWeeklyPrediction,
   saveWeeklyPredictionScore,
+  setEwcWeekSnapshot,
   upsertEwcWeek,
   upsertWeeklyPrediction,
 } = await import('../src/db/ewcPredictions.js');
@@ -101,6 +103,35 @@ test('shared service reopens a scored round atomically without Discord and clear
   assert.equal(result.round, 'week-reopen');
   assert.equal(refreshed, 1);
   assert.equal((await getWeeklyPrediction(guildId, week.id, '200000000000000303')).score, null);
+});
+
+test('shared admin scoring locks and enumerates the committed weekly predictions in one transaction', async () => {
+  const guildId = '920000000000000305';
+  const week = await upsertEwcWeek({ guildId, season: '2026', weekKey: 'week-score', label: 'Week score', createdBy: 'test' });
+  const baseline = [
+    { team: 'Team Falcons', rank: 1, points: 100 },
+    { team: 'T1', rank: 2, points: 90 },
+    { team: 'Team Liquid', rank: 3, points: 80 },
+  ];
+  const final = [
+    { team: 'Team Falcons', rank: 1, points: 130 },
+    { team: 'T1', rank: 2, points: 110 },
+    { team: 'Team Liquid', rank: 3, points: 100 },
+  ];
+  await setEwcWeekSnapshot(week.id, 'baseline', baseline);
+  await upsertWeeklyPrediction({ guildId, weekId: week.id, userId: '200000000000000305', picks: ['Falcons', 'T1', 'Liquid'] });
+
+  const result = await runEwcPredictionAdminOperation({
+    guildId,
+    season: '2026',
+    operation: 'score_week',
+    args: { weekKey: 'week-score' },
+    dependencies: { fetchStandings: async () => ({ exists: true, standings: final }) },
+  });
+
+  assert.equal(result.predictions, 1);
+  assert.equal((await getEwcWeek(guildId, '2026', 'week-score')).status, 'scored');
+  assert.equal((await getWeeklyPrediction(guildId, week.id, '200000000000000305')).score, 370);
 });
 
 test('bot consumer completes a durable refresh operation and keeps the completion audit linked to the operation id', async () => {

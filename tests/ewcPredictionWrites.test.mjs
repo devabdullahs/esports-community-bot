@@ -10,13 +10,16 @@ process.env.LOG_LEVEL = 'error';
 
 const { closeDb } = await import('../src/db/index.js');
 const {
+  getEwcWeek,
   getSeasonPrediction,
   getWeeklyPrediction,
+  listWeeklyPredictions,
   setEwcWeekStatus,
   upsertEwcSeason,
   upsertEwcWeek,
   upsertWeeklyGamePick,
 } = await import('../src/db/ewcPredictions.js');
+const { transaction } = await import('../src/db/client.js');
 const { scorePerGameWeeklyPrediction } = await import('../src/lib/ewcPredictions.js');
 const {
   submitSeasonSlot,
@@ -37,6 +40,14 @@ function resolverBarrier(count = 2) {
       if (waiters.length === count) waiters.splice(0).forEach((release) => release());
     });
   };
+}
+
+function deferred() {
+  let resolve;
+  const promise = new Promise((resolvePromise) => {
+    resolve = resolvePromise;
+  });
+  return { promise, resolve };
 }
 
 const immediateResolvers = {
@@ -93,6 +104,60 @@ test('concurrent weekly changes preserve different game picks and exactly one fi
   assert.equal(results.filter((result) => result.firstPick).length, 1);
   const saved = await getWeeklyPrediction(guildId, week.id, '200000000000000001');
   assert.deepEqual(saved.picks.map((pick) => pick.gameKey).toSorted(), ['game-a', 'game-b']);
+});
+
+test('a round transition waits for an admitted weekly submission and scores its committed pick', async () => {
+  const guildId = 'guild-write-round-transition';
+  const week = await openWeek(guildId, 'week-round-transition', [{ key: 'game-a', game: 'Game A', lockAt: 500 }]);
+  const submissionLocked = deferred();
+  const releaseSubmission = deferred();
+  const submission = submitWeeklyGamePick({
+    ...weeklyInput(guildId, week.week_key, 'game-a', 'Falcons'),
+    onRoundLocked: async () => {
+      submissionLocked.resolve();
+      await releaseSubmission.promise;
+    },
+  });
+  await submissionLocked.promise;
+
+  let closed = false;
+  const close = setEwcWeekStatus(week.id, 'closed').then(() => {
+    closed = true;
+  });
+  await Promise.resolve();
+  assert.equal(closed, false);
+
+  releaseSubmission.resolve();
+  assert.equal((await submission).ok, true);
+  await close;
+
+  assert.equal((await getEwcWeek(guildId, '2026', week.week_key)).status, 'closed');
+  const scoredInputs = await transaction((client) => listWeeklyPredictions(week.id, client, { forUpdate: true }));
+  assert.deepEqual(scoredInputs.map((prediction) => prediction.picks[0].pick), ['Falcons']);
+});
+
+test('a submission that resolves after close re-reads the locked round and is rejected', async () => {
+  const guildId = 'guild-write-round-closed';
+  const week = await openWeek(guildId, 'week-round-closed', [{ key: 'game-a', game: 'Game A', lockAt: 500 }]);
+  const resolutionStarted = deferred();
+  const releaseResolution = deferred();
+  const submission = submitWeeklyGamePick(
+    weeklyInput(guildId, week.week_key, 'game-a', 'Falcons', 100, {
+      ...immediateResolvers,
+      club: async (rawPick) => {
+        resolutionStarted.resolve();
+        await releaseResolution.promise;
+        return { ok: true, name: rawPick };
+      },
+    }),
+  );
+  await resolutionStarted.promise;
+  await setEwcWeekStatus(week.id, 'closed');
+  releaseResolution.resolve();
+
+  const rejected = await submission;
+  assert.deepEqual({ ok: rejected.ok, code: rejected.code }, { ok: false, code: 'round_closed' });
+  assert.equal(await getWeeklyPrediction(guildId, week.id, '200000000000000001'), null);
 });
 
 test('replacing one weekly game preserves every other game', async () => {
@@ -170,6 +235,29 @@ test('concurrent season updates and swaps preserve every selected club', async (
   ]);
   const saved = await getSeasonPrediction(guildId, '2026', '200000000000000001');
   assert.deepEqual(saved.picks.toSorted(), ['Heretics', 'Spirit']);
+});
+
+test('concurrent season slots reject aliases and preserve fill order from the locked member row', async () => {
+  const guildId = 'guild-write-season-aliases';
+  await upsertEwcSeason({ guildId, season: '2026', label: 'Season', topSize: 4, openAt: 10, closeAt: 1_000, createdBy: 'admin' });
+  await submitSeasonSlot({
+    guildId, season: '2026', userId: '200000000000000001', index: 0, rawPick: 'Team Falcons', submittedAt: 100, resolvers: immediateResolvers,
+  });
+  const barrier = resolverBarrier();
+  const resolvers = {
+    ...immediateResolvers,
+    club: async (rawPick) => {
+      await barrier();
+      return { ok: true, name: rawPick };
+    },
+  };
+  const attempts = await Promise.all([
+    submitSeasonSlot({ guildId, season: '2026', userId: '200000000000000001', index: 1, rawPick: 'Falcons', submittedAt: 100, resolvers }),
+    submitSeasonSlot({ guildId, season: '2026', userId: '200000000000000001', index: 2, rawPick: 'Liquid', submittedAt: 100, resolvers }),
+  ]);
+
+  assert.deepEqual(attempts.map((attempt) => attempt.code).toSorted(), ['duplicate_pick', 'slot_locked']);
+  assert.deepEqual((await getSeasonPrediction(guildId, '2026', '200000000000000001')).picks, ['Team Falcons']);
 });
 
 test('late stored picks score zero while legacy picks without pickedAt remain compatible', () => {

@@ -9,6 +9,14 @@ const BASE_ENV = {
   DATABASE_URL: 'postgresql://postgres:postgres@127.0.0.1:5432/ecb_ci_test',
 };
 
+function deferred() {
+  let resolve;
+  const promise = new Promise((resolvePromise) => {
+    resolve = resolvePromise;
+  });
+  return { promise, resolve };
+}
+
 test('PostgreSQL test guard rejects missing reset opt-in', () => {
   assert.throws(
     () => validatePostgresTestConfig({ DATABASE_URL: BASE_ENV.DATABASE_URL }),
@@ -322,5 +330,109 @@ test('PostgreSQL DB parity', { skip: postgresEnabled ? false : 'run through npm 
         ['valorant', 'Team Liquid'],
       ],
     );
+  });
+
+  await t.test('a PostgreSQL transition waits for an admitted submission before scoring its pick', async () => {
+    const writes = await import('../src/lib/ewcPredictionWrites.js');
+    const weekKey = 'ci-lock-race';
+    const userId = 'postgres-ci-lock-user';
+    const raceWeek = await predictions.upsertEwcWeek({
+      guildId,
+      season,
+      weekKey,
+      label: 'PostgreSQL lock race',
+      openAt: 10,
+      closeAt: 1_000,
+      games: [{ key: 'valorant', game: 'Valorant', lockAt: 500 }],
+      createdBy: 'postgres-ci',
+    });
+    const submissionLocked = deferred();
+    const releaseSubmission = deferred();
+    const submission = writes.submitWeeklyGamePick({
+      guildId,
+      season,
+      userId,
+      weekKey,
+      gameKey: 'valorant',
+      rawPick: 'Team Falcons',
+      submittedAt: 100,
+      resolvers: {
+        participants: async () => [],
+        club: async (rawPick) => ({ ok: true, name: rawPick }),
+      },
+      onRoundLocked: async () => {
+        submissionLocked.resolve();
+        await releaseSubmission.promise;
+      },
+    });
+    await submissionLocked.promise;
+
+    await assert.rejects(
+      db.transaction(async (client) => {
+        await client.exec("SET LOCAL lock_timeout = '100ms'");
+        await predictions.lockEwcWeekForTransition(guildId, season, weekKey, client);
+      }),
+      /lock timeout/,
+    );
+
+    releaseSubmission.resolve();
+    assert.equal((await submission).ok, true);
+
+    await db.transaction(async (client) => {
+      const lockedRound = await predictions.lockEwcWeekForTransition(guildId, season, weekKey, client);
+      assert.equal(lockedRound.status, 'open');
+      await predictions.setEwcWeekStatus(raceWeek.id, 'closed', client);
+      const admitted = await predictions.listWeeklyPredictions(raceWeek.id, client, { forUpdate: true });
+      assert.equal(admitted.length, 1);
+      await predictions.saveWeeklyPredictionScore(guildId, raceWeek.id, admitted[0].user_id, 321, { source: 'lock-race' }, client);
+      await predictions.markEwcWeekScored(raceWeek.id, [], client);
+    });
+
+    assert.equal((await predictions.getEwcWeek(guildId, season, weekKey)).status, 'scored');
+    assert.equal((await predictions.getWeeklyPrediction(guildId, raceWeek.id, userId)).score, 321);
+  });
+
+  await t.test('concurrent PostgreSQL season slots reject aliases and a skipped rank', async () => {
+    const writes = await import('../src/lib/ewcPredictionWrites.js');
+    const raceSeason = 'ci-2026-lock-season';
+    const userId = 'postgres-ci-season-lock-user';
+    await predictions.upsertEwcSeason({
+      guildId,
+      season: raceSeason,
+      label: 'PostgreSQL lock season',
+      openAt: 10,
+      closeAt: 1_000,
+      topSize: 4,
+      createdBy: 'postgres-ci',
+    });
+    const resolvers = {
+      participants: async () => [],
+      club: async (rawPick) => ({ ok: true, name: rawPick }),
+    };
+    assert.equal(
+      (
+        await writes.submitSeasonSlot({
+          guildId, season: raceSeason, userId, index: 0, rawPick: 'Team Falcons', submittedAt: 100, resolvers,
+        })
+      ).ok,
+      true,
+    );
+    let arrivals = 0;
+    const bothResolved = deferred();
+    const concurrentResolvers = {
+      ...resolvers,
+      club: async (rawPick) => {
+        arrivals += 1;
+        if (arrivals === 2) bothResolved.resolve();
+        await bothResolved.promise;
+        return { ok: true, name: rawPick };
+      },
+    };
+    const attempts = await Promise.all([
+      writes.submitSeasonSlot({ guildId, season: raceSeason, userId, index: 1, rawPick: 'Falcons', submittedAt: 100, resolvers: concurrentResolvers }),
+      writes.submitSeasonSlot({ guildId, season: raceSeason, userId, index: 2, rawPick: 'Team Liquid', submittedAt: 100, resolvers: concurrentResolvers }),
+    ]);
+    assert.deepEqual(attempts.map((attempt) => attempt.code).toSorted(), ['duplicate_pick', 'slot_locked']);
+    assert.deepEqual((await predictions.getSeasonPrediction(guildId, raceSeason, userId)).picks, ['Team Falcons']);
   });
 });

@@ -12,9 +12,12 @@ process.env.DISCORD_CLIENT_ID = 'test-client-id';
 
 const { closeDb } = await import('../src/db/index.js');
 const {
+  getEwcSeason,
   getEwcWeek,
   getWeeklyPrediction,
+  reopenEwcWeek,
   setEwcWeekResults,
+  upsertEwcSeason,
   upsertEwcWeek,
   upsertWeeklyPrediction,
 } = await import('../src/db/ewcPredictions.js');
@@ -71,7 +74,7 @@ test('automation keeps partial results provisional and finalizes a complete fres
   });
   await setEwcWeekResults(partial.id, [resultFor('partial-game', 'Partial', false, now)]);
 
-  await runEwcPredictionAutomation();
+  await Promise.all([runEwcPredictionAutomation(), runEwcPredictionAutomation()]);
 
   assert.equal((await getEwcWeek(guildId, '2026', 'partial')).status, 'closed');
   assert.equal((await getWeeklyPrediction(guildId, partial.id, 'member-partial')).details.provisional, true);
@@ -94,7 +97,7 @@ test('automation keeps partial results provisional and finalizes a complete fres
   });
   await setEwcWeekResults(final.id, [resultFor('final-game', 'Final', true, now)]);
 
-  await runEwcPredictionAutomation();
+  await Promise.all([runEwcPredictionAutomation(), runEwcPredictionAutomation()]);
 
   const scored = await getEwcWeek(guildId, '2026', 'final');
   assert.equal(scored.status, 'scored');
@@ -104,4 +107,101 @@ test('automation keeps partial results provisional and finalizes a complete fres
   await runEwcPredictionAutomation();
 
   assert.equal((await getEwcWeek(guildId, '2026', 'final')).scored_at, scoredAt);
+});
+
+test('automation revalidates edited week and season deadlines after locking', async () => {
+  const now = Math.floor(Date.now() / 1000);
+  const guildId = 'ewc-automation-deadline';
+  const weekKey = 'edited-deadline';
+
+  await upsertEwcWeek({
+    guildId,
+    season: '2026',
+    weekKey,
+    label: 'Edited deadline',
+    closeAt: now - 60,
+    scoreAfter: now - 30,
+    games: [{ key: 'edited-game', game: 'Edited Game', event: 'Edited', lockAt: now - 60, endAt: now + 3600 }],
+    createdBy: 'test',
+  });
+  await upsertEwcSeason({
+    guildId,
+    season: '2026',
+    label: 'Edited season deadline',
+    closeAt: now - 60,
+    scoreAfter: now - 30,
+    createdBy: 'test',
+  });
+
+  let weekEdited = false;
+  let seasonEdited = false;
+  await runEwcPredictionAutomation(null, {
+    beforeWeekClose: async (round) => {
+      if (weekEdited || round.guild_id !== guildId || round.week_key !== weekKey) return;
+      weekEdited = true;
+      await upsertEwcWeek({
+        guildId,
+        season: '2026',
+        weekKey,
+        label: 'Edited deadline',
+        closeAt: now + 3600,
+        scoreAfter: now + 7200,
+        games: [{ key: 'edited-game', game: 'Edited Game', event: 'Edited', lockAt: now + 3600, endAt: now + 7200 }],
+        createdBy: 'test',
+      });
+    },
+    beforeSeasonClose: async (round) => {
+      if (seasonEdited || round.guild_id !== guildId || round.season !== '2026') return;
+      seasonEdited = true;
+      await upsertEwcSeason({
+        guildId,
+        season: '2026',
+        label: 'Edited season deadline',
+        closeAt: now + 3600,
+        scoreAfter: now + 7200,
+        createdBy: 'test',
+      });
+    },
+  });
+
+  assert.equal(weekEdited, true);
+  assert.equal((await getEwcWeek(guildId, '2026', weekKey)).status, 'open');
+  assert.equal(seasonEdited, true);
+  assert.equal((await getEwcSeason(guildId, '2026')).status, 'open');
+});
+
+test('automation does not score a week reopened before the scoring transaction', async () => {
+  const now = Math.floor(Date.now() / 1000);
+  const guildId = 'ewc-automation-reopen';
+  const weekKey = 'reopened-during-scoring';
+  const round = await upsertEwcWeek({
+    guildId,
+    season: '2026',
+    weekKey,
+    label: 'Reopened during scoring',
+    closeAt: now - 60,
+    scoreAfter: now - 30,
+    games: [{ key: 'reopen-game', game: 'Reopen Game', event: 'Reopen', lockAt: now - 60, endAt: now - 30 }],
+    createdBy: 'test',
+  });
+  await upsertWeeklyPrediction({
+    guildId,
+    weekId: round.id,
+    userId: 'member-reopen',
+    picks: [{ gameKey: 'reopen-game', pick: 'Reopen One' }],
+  });
+  await setEwcWeekResults(round.id, [resultFor('reopen-game', 'Reopen', true, now)]);
+
+  let reopened = false;
+  await runEwcPredictionAutomation(null, {
+    beforeWeekScoringTransaction: async (lockedRound) => {
+      if (reopened || lockedRound.guild_id !== guildId || lockedRound.week_key !== weekKey) return;
+      reopened = true;
+      await reopenEwcWeek(lockedRound.id);
+    },
+  });
+
+  assert.equal(reopened, true);
+  assert.equal((await getEwcWeek(guildId, '2026', weekKey)).status, 'open');
+  assert.equal((await getWeeklyPrediction(guildId, round.id, 'member-reopen')).score, null);
 });
