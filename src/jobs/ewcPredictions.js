@@ -42,8 +42,10 @@ import {
   effectiveEwcWeekStatus,
   dueEwcGamesForResults,
   evaluateEwcGameResultCompleteness,
-  evaluateEwcGameResultsFinalReadiness,
+  evaluateEwcSeasonScoringReadiness,
+  evaluateEwcWeekScoringReadiness,
   ewcPlacementCoveredRanks,
+  ewcPredictionScoreAfter,
   mergeEwcGameResults,
   pendingEwcGameResults,
   perGamePredictionRoundLocked,
@@ -58,9 +60,7 @@ import { fetchEwcClubStandings, fetchEwcWeekGameResults } from '../services/liqu
 const nowSec = () => Math.floor(Date.now() / 1000);
 
 function scoreAfter(round) {
-  if (round.score_after) return round.score_after;
-  if (!round.close_at) return null;
-  return round.close_at + config.ewcPredictions.scoreDelayHours * 3600;
+  return ewcPredictionScoreAfter(round, config.ewcPredictions.scoreDelayHours);
 }
 
 async function standingsFor(season) {
@@ -655,10 +655,14 @@ async function processWeek(client, round, hooks = {}) {
     const lockedResults = perGame ? mergeEwcGameResults(lockedRound.results || [], results) : [];
     const predictions = await listWeeklyPredictions(lockedRound.id, tx, { forUpdate: true });
     const missingResults = perGame ? pendingEwcGameResults(lockedResults, lockedRound.games) : [];
-    const finalReadiness = perGame
-      ? evaluateEwcGameResultsFinalReadiness(lockedResults, lockedRound.games, nowSec(), scoreAfter(lockedRound))
-      : null;
-    const finalReady = perGame && finalReadiness.ready;
+    const lockedFinal = perGame ? lockedRound.final || [] : lockedRound.final?.length ? lockedRound.final : final;
+    const finalReadiness = evaluateEwcWeekScoringReadiness(lockedRound, {
+      now: nowSec(),
+      results: lockedResults,
+      finalStandings: lockedFinal,
+      scoreAfter: scoreAfter(lockedRound),
+    });
+    const finalReady = finalReadiness.ready;
     const resultsChanged = JSON.stringify(lockedResults) !== JSON.stringify(lockedRound.results || []);
     const hasCompletedResult = lockedResults.some((entry) => entry?.placements?.length);
 
@@ -684,10 +688,12 @@ async function processWeek(client, round, hooks = {}) {
     }
 
     if (missingResults.length) return { kind: 'pending', missingResults, finalReadiness, round: lockedRound };
-    if (perGame && !finalReady) return { kind: 'not_ready', finalReadiness, round: lockedRound };
-
-    const lockedFinal = perGame ? lockedRound.final || [] : lockedRound.final?.length ? lockedRound.final : final;
-    if (!perGame && !lockedFinal?.length) return { kind: 'final_pending', round: lockedRound };
+    if (!finalReady) {
+      const kind = finalReadiness.reason === 'missing_results' || finalReadiness.reason === 'incomplete_result'
+        ? 'final_pending'
+        : 'not_ready';
+      return { kind, finalReadiness, round: lockedRound };
+    }
 
     for (const prediction of predictions) {
       try {
@@ -728,7 +734,9 @@ async function processWeek(client, round, hooks = {}) {
     return;
   }
   if (outcome.kind === 'final_pending') {
-    logger.warn(`[ewc-predictions] final pending for ${outcome.round.guild_id}/${outcome.round.season}/${outcome.round.week_key}: standings unavailable`);
+    logger.warn(
+      `[ewc-predictions] final pending for ${outcome.round.guild_id}/${outcome.round.season}/${outcome.round.week_key}: ${outcome.finalReadiness?.reason || 'standings unavailable'}`,
+    );
     return;
   }
   if (outcome.kind !== 'scored') return;
@@ -772,6 +780,11 @@ async function processSeason(client, round, hooks = {}) {
   const outcome = await transaction(async (tx) => {
     const lockedRound = await lockEwcSeasonForTransition(round.guild_id, round.season, tx);
     if (!lockedRound || lockedRound.status !== 'closed' || !seasonDueForScoring(lockedRound)) return { scored: false };
+    const readiness = evaluateEwcSeasonScoringReadiness(lockedRound, final, {
+      now: nowSec(),
+      scoreAfter: scoreAfter(lockedRound),
+    });
+    if (!readiness.ready) return { scored: false, readiness, round: lockedRound };
     const predictions = await listSeasonPredictions(lockedRound.guild_id, lockedRound.season, tx, { forUpdate: true });
     for (const prediction of predictions) {
       try {
@@ -788,7 +801,14 @@ async function processSeason(client, round, hooks = {}) {
     const marked = await markEwcSeasonScored(lockedRound.guild_id, lockedRound.season, final, tx);
     return { scored: marked, round: lockedRound, predictions };
   });
-  if (!outcome.scored) return;
+  if (!outcome.scored) {
+    if (outcome.readiness) {
+      logger.warn(
+        `[ewc-predictions] season scoring pending for ${outcome.round.guild_id}/${outcome.round.season}: ${outcome.readiness.reason}`,
+      );
+    }
+    return;
+  }
   logger.info(`[ewc-predictions] scored ${outcome.predictions.length} season prediction(s) for ${outcome.round.guild_id}/${outcome.round.season}`);
   const scored = await seasonLeaderboard(outcome.round.guild_id, outcome.round.season, 10, 0);
   await announce(

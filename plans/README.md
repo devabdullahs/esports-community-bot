@@ -249,7 +249,7 @@ untouched.
 | 129  | Serialize prediction submissions with round transitions and scoring | P1 | M | 125 | DONE (branch `codex/129-prediction-round-locks`, SQLite/PostgreSQL lock-race coverage) |
 | 130  | Give EWC prediction games stable identities and migrate references | P1 | L | 129 | DONE |
 | 131  | Require authoritative and complete EWC results before final scoring | P1 | M | - | DONE |
-| 132  | Make manual prediction scoring honor automation readiness | P1 | M | 129, 131 | TODO |
+| 132  | Make manual prediction scoring honor automation readiness | P1 | M | 129, 131 | DONE |
 | 133  | Gate every service startup on versioned PostgreSQL migrations | P1 | L | 125 | DONE |
 | 134  | Make SQLite-to-PostgreSQL imports fail closed on skipped data | P1 | M | 125, 133 | DONE — exact mappings, empty-target preflight, conflict rollback, and pre-commit count/constraint/identity validation |
 | 135  | Route Liquipedia MediaWiki requests through one scheduler | P1 | M | - | DONE |

@@ -44,6 +44,11 @@ describe("admin prediction operations API", () => {
     mockAccess.mockResolvedValue(superAdmin());
     expect((await POST(request("POST", { operation: "drop_table", args: {}, idempotencyKey: "x".repeat(20) }))).status).toBe(400);
     expect((await POST(request("POST", { operation: "delete_week", args: { weekKey: "week-1", confirmationWeekKey: "other" }, idempotencyKey: "y".repeat(20) }))).status).toBe(400);
+    expect((await POST(request("POST", {
+      operation: "score_week",
+      args: { weekKey: "week-1", force: true },
+      idempotencyKey: "z".repeat(20),
+    }))).status).toBe(400);
   });
 
   test("queues a closed, idempotent operation without importing a Discord client", async () => {
