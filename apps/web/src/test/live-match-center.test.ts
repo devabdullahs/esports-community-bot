@@ -113,7 +113,7 @@ describe("live match center projection", () => {
     });
   });
 
-  test("adds match-detail URLs and omits raw database/provider fields", () => {
+  test("adds canonical match URLs for rich and thin matches and omits provider fields", () => {
     const center = buildLiveMatchCenter([
       tournament(7, "valorant", {
         running: [match({
@@ -125,13 +125,22 @@ describe("live match center projection", () => {
           stream_url: "https://private.example/stream",
           coStreams: [{ platform: "twitch", handle: "caster", label: "Caster", url: "https://twitch.tv/caster" }],
         })],
+        scheduled: [match({
+          id: 71,
+          status: "scheduled",
+          has_details: false,
+        })],
       }),
     ]);
 
     expect(center.running[0]).toMatchObject({
-      detailsHref: "/matches/70",
+      matchHref: "/matches/70",
       tournamentHref: "/tournaments/7",
       coStreams: [{ platform: "twitch", handle: "caster" }],
+    });
+    expect(center.upcoming[0]).toMatchObject({
+      id: 71,
+      matchHref: "/matches/71",
     });
     expect(JSON.stringify(center)).not.toMatch(/external_id|stream_platform|stream_url|guild_id|updated_at/i);
   });
@@ -150,7 +159,7 @@ describe("GET /api/live", () => {
     expect(response.status).toBe(200);
     expect(response.headers.get("Cache-Control")).toBe("public, s-maxage=30, stale-while-revalidate=30");
     expect(body).toEqual({
-      running: [expect.objectContaining({ id: 50, detailsHref: "/matches/50" })],
+      running: [expect.objectContaining({ id: 50, matchHref: "/matches/50" })],
       upcoming: [],
       recentFinished: [],
     });

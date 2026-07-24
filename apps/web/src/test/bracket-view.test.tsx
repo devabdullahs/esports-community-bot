@@ -79,7 +79,7 @@ function renderMatchList(data: TournamentMatchesPayload) {
 }
 
 describe("BracketView", () => {
-  test("renders responsive columns and uses detail or list-anchor links", () => {
+  test("renders responsive columns and links every match to its canonical page", () => {
     const html = renderToStaticMarkup(<BracketView bracket={bracketFixture()} locale="en" />);
 
     expect(html).toContain('data-bracket-view="true"');
@@ -87,7 +87,7 @@ describe("BracketView", () => {
     expect(html).toContain("snap-x snap-mandatory");
     expect(html).toContain("lg:min-w-full");
     expect(html).toContain('href="/matches/1"');
-    expect(html).toContain('href="#tournament-match-2"');
+    expect(html).toContain('href="/matches/2"');
     expect(html).toContain("Quarterfinals");
     expect(html).toContain("Grand final");
   });
@@ -99,6 +99,7 @@ describe("BracketView", () => {
     expect(html).toContain("مسار البطولة");
     expect(html).toContain("ربع النهائي");
     expect(html).toContain('href="/ar/matches/1"');
+    expect(html).toContain('href="/ar/matches/2"');
   });
 
   test("renders paused states and scoreless explicit outcomes semantically", () => {
@@ -138,7 +139,7 @@ describe("BracketView", () => {
 
     expect(bracketHtml).toContain('data-bracket-view="true"');
     expect(bracketHtml.indexOf('data-bracket-view="true"')).toBeLessThan(bracketHtml.indexOf("Live now"));
-    expect(bracketHtml).toContain('href="#tournament-match-1"');
+    expect(bracketHtml).toContain('href="/matches/1"');
     expect(bracketHtml).toContain('id="tournament-match-1"');
     expect(regularHtml).not.toContain('data-bracket-view="true"');
   });

@@ -140,11 +140,9 @@ function MatchCard({ item, locale, live }: { item: LiveMatchCenterItem; locale: 
         <MatchTeams item={item} locale={locale} />
         <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
           <bdi className="min-w-0 truncate text-muted-foreground">{title}</bdi>
-          {item.detailsHref ? (
-            <Link href={localizedPath(item.detailsHref, locale)} className="shrink-0 font-medium text-primary hover:underline">
-              {text.matchDetails}
-            </Link>
-          ) : null}
+          <Link href={localizedPath(item.matchHref, locale)} className="shrink-0 font-medium text-primary hover:underline">
+            {text.matchDetails}
+          </Link>
         </div>
       </CardContent>
       <StreamLinks item={item} locale={locale} />

@@ -333,7 +333,6 @@ function MatchTime({ value, locale, fallback }: { value: number | null; locale: 
 }
 
 function MatchDetailsLink({ match, locale, text }: { match: MatchRow; locale: Locale; text: TournamentCopy }) {
-  if (!match.has_details) return null;
   return (
     <Link
       href={localizedPath(`/matches/${match.id}`, locale)}

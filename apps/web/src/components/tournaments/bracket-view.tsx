@@ -89,9 +89,7 @@ function BracketMatchCard({
 }) {
   const teamA = teamLabel(match.team_a, text.tbd);
   const teamB = teamLabel(match.team_b, text.tbd);
-  const href = match.has_details
-    ? localizedPath(`/matches/${match.id}`, locale)
-    : `#tournament-match-${match.id}`;
+  const href = localizedPath(`/matches/${match.id}`, locale);
   const winnerA = match.winner === "a";
   const winnerB = match.winner === "b";
   const lifecycleLabel = shouldShowOutcomeLabel(match)

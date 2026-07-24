@@ -11,6 +11,7 @@ import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "@/components/u
 import { copy, localizedPath } from "@/lib/i18n";
 import { gameTitleForSlug, listGamesCached } from "@/lib/games";
 import { getMatchPageModel } from "@/lib/match-details";
+import { getViewerMatchReminderState } from "@/lib/match-reminders";
 import { absoluteUrl, buildPageMetadata } from "@/lib/metadata";
 import { getRequestLocale } from "@/lib/request-locale";
 import { isIndexableMatch } from "@/lib/seo-indexability";
@@ -77,11 +78,15 @@ export default async function MatchDetailPage({
   const matchId = /^\d+$/.test(id) ? Number(id) : NaN;
   if (!Number.isSafeInteger(matchId) || matchId <= 0) notFound();
 
-  const [model, locale] = await Promise.all([
+  const [model, locale, games] = await Promise.all([
     getMatchPageModel(matchId),
     getRequestLocale(),
+    listGamesCached(),
   ]);
   if (!model) notFound();
+  const reminderState = model.status === "scheduled"
+    ? await getViewerMatchReminderState([model.id])
+    : { signedIn: false, reminderMatchIds: [] as number[] };
   const text = copy[locale].tournaments;
   const teamA = model.teamA || text.tbd;
   const teamB = model.teamB || text.tbd;
@@ -92,6 +97,7 @@ export default async function MatchDetailPage({
     localizedPath(`/tournaments/${model.tournament.id}`, locale),
   );
   const matchName = `${teamA} ${text.vs} ${teamB}`;
+  const gameTitle = gameTitleForSlug(model.tournament.game, games, locale);
   const breadcrumbLabels = localizedBreadcrumbLabels(locale);
   const pageStructuredData = structuredDataGraph([
     breadcrumbList([
@@ -121,7 +127,13 @@ export default async function MatchDetailPage({
         {text.back}
       </Button>
 
-      <MatchHeader model={model} locale={locale} liveLabel={text.live} />
+      <MatchHeader
+        model={model}
+        locale={locale}
+        gameTitle={gameTitle}
+        reminderState={reminderState}
+        callbackPath={pagePath}
+      />
 
       {model.details ? (
         <MatchDetailTabs details={model.details} teamA={teamA} teamB={teamB} locale={locale} />
@@ -136,7 +148,9 @@ export default async function MatchDetailPage({
 
       <CommentsSection target={{ type: "match", id: model.id }} locale={locale} />
 
-      <LiquipediaAttribution locale={locale} />
+      {model.tournament.source === "liquipedia" || model.source === "liquipedia" ? (
+        <LiquipediaAttribution locale={locale} />
+      ) : null}
     </main>
   );
 }

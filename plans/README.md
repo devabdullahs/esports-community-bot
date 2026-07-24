@@ -260,7 +260,7 @@ untouched.
 | 140  | Make tournament history complete and trustworthy | P1 | M | - | DONE |
 | 141  | Recompose tournaments as a competition board | P2 | L | 140 recommended | DONE |
 | 142  | Preserve the complete match lifecycle and outcome | P1 | L | 125 recommended | DONE - canonical states/outcomes, dual-schema parity, safe reconciliation, and unified public/notification behavior |
-| 143  | Make every match a first-class destination | P1 | M-L | 142 recommended; 141 optional | TODO |
+| 143  | Make every match a first-class destination | P1 | M-L | 142 recommended; 141 optional | DONE |
 | 144  | Serialize and audit tournament lifecycle operations | P1 | L | 142; 125 recommended; coordinate 135/136 | TODO |
 | 145  | Build the tournament operations center | P1 | L | 126, 139, 144 | TODO |
 Status values: TODO | IN PROGRESS | DONE | BLOCKED (reason) | REJECTED (rationale) | SUPERSEDED.

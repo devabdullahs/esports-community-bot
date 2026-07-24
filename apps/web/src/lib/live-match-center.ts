@@ -3,7 +3,6 @@ import "server-only";
 import { unstable_cache } from "next/cache";
 import {
   getTournamentMatchesCached,
-  matchHasDetails,
   listTournamentSummariesCached,
   type MatchStream,
   type TournamentMatches,
@@ -31,7 +30,7 @@ export type LiveMatchCenterItem = {
   winnerSide: WinnerSide;
   resultReason: ResultReason;
   scheduledAt: number | null;
-  detailsHref: string | null;
+  matchHref: string;
   stream: MatchStream | null;
   coStreams: MatchCoStream[];
 };
@@ -75,7 +74,7 @@ function toPublicMatch(
     winnerSide: match.winner_side ?? null,
     resultReason: match.result_reason ?? "unknown",
     scheduledAt: match.scheduled_at,
-    detailsHref: matchHasDetails(match.has_details) ? `/matches/${match.id}` : null,
+    matchHref: `/matches/${match.id}`,
     stream: match.stream ?? null,
     coStreams: (match.coStreams ?? []).map(({ platform, handle, label, url }) => ({
       platform,
