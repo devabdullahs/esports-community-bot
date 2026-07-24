@@ -188,7 +188,8 @@ function canonicalClientIp(raw: string): string | null {
 
 export function clientIp(request: Request): string {
   const mode = (process.env.EWC_TRUSTED_PROXY || "none").trim().toLowerCase();
-  if (mode !== "cloudflare") return "direct";
+  const shielded = (process.env.EWC_ORIGIN_SHIELDED || "").trim().toLowerCase() === "true";
+  if (mode !== "cloudflare" || !shielded) return "direct";
   const raw = request.headers.get("cf-connecting-ip");
   if (!raw) return "direct";
   return canonicalClientIp(raw) ?? "invalid";

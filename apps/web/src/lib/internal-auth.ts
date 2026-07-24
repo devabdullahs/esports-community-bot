@@ -1,5 +1,6 @@
 import "server-only";
 import { randomUUID, timingSafeEqual } from "node:crypto";
+import { NextResponse } from "next/server";
 import {
   internalCapabilitySecret,
   type InternalCapability,
@@ -33,6 +34,23 @@ export function isInternalRequestAuthorized(
 export function internalRequestId(request: Request) {
   const supplied = request.headers.get("x-request-id") || "";
   return REQUEST_ID_PATTERN.test(supplied) ? supplied : randomUUID();
+}
+
+export function internalUnauthorizedResponse(
+  capability: InternalCapability,
+  requestId: string,
+) {
+  return NextResponse.json(
+    { error: "Unauthorized" },
+    {
+      status: 401,
+      headers: {
+        "Cache-Control": "private, no-store",
+        "X-EC-Internal-Capability": capability,
+        "X-Request-Id": requestId,
+      },
+    },
+  );
 }
 
 export function recordInternalOperation({

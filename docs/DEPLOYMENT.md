@@ -43,6 +43,14 @@ gates `/me` and `/admin`. To restrict the whole site to specific people later,
 add a Cloudflare **Access** policy on the hostname (e.g. by email or Discord
 identity) — no code change needed.
 
+The example compose file deliberately publishes **no host port**. Cloudflared
+reaches `esports-bot:3000` over the private Compose network. Do not add a
+`0.0.0.0:3000:3000` mapping while `EWC_TRUSTED_PROXY=cloudflare`; a direct
+client could otherwise supply headers that should be authored only by
+Cloudflare. For temporary diagnostics, use an SSH tunnel or a loopback-only
+override such as `127.0.0.1:3000:3000`, set `EWC_TRUSTED_PROXY=none`, and
+remove the override when finished.
+
 ## 3. `.env.docker` checklist (the web half — bot vars unchanged)
 
 ```
@@ -54,6 +62,11 @@ EWC_DASHBOARD_PUBLIC_URL=https://dashboard.yourdomain.com
 BETTER_AUTH_SECRET=...
 EWC_DASHBOARD_INTERNAL_PROFILE_SYNC_SECRET=...
 EWC_DASHBOARD_INTERNAL_NEWS_REVALIDATE_SECRET=...
+
+# Enable proxy-authored client identity only after the origin-shield checklist
+# below passes. The tunnel compose topology has no host-published listener.
+EWC_TRUSTED_PROXY=cloudflare
+EWC_ORIGIN_SHIELDED=true
 
 # Discord OAuth app (same application as the bot)
 DISCORD_CLIENT_ID=...
@@ -100,6 +113,32 @@ docker compose ps                            # esports-bot + ecb-cloudflared up
 - Visit `https://dashboard.yourdomain.com/` → home renders over HTTPS.
 - Click **Login** → Discord OAuth round-trips back successfully.
 - A super-admin Discord ID can reach `/admin`.
+
+### Origin-shield checklist
+
+Before enabling trusted proxy mode, the deployment owner must record:
+
+- the service binds privately or has no provider-assigned direct public URL;
+- no host or LAN port publishes the application listener;
+- only the Cloudflare/CranL ingress can reach the service;
+- alternate provider hostnames are disabled or access-restricted;
+- `npm run security:boundary` passes for the built application;
+- an explicitly approved comparison using
+  `npm run security:boundary -- --public-base <url> --origin-base <url>`
+  shows that an origin, when one exists for verification, is not reachable by
+  untrusted traffic.
+
+Never infer or scan for an origin. If CranL does not expose an authorized
+origin URL, keep the local report and obtain ingress-policy evidence from
+CranL instead. Recheck after ingress, proxy-mode, internal-route, framework,
+or URL-rewrite changes. The deployment owner retains the redacted report with
+the release notes.
+
+The boundary report may show a 308 for duplicate slashes, literal backslashes,
+or an absolute-form request target. That is Next's pre-router canonicalization,
+not an internal handler response. The probe never follows redirects, pins the
+exact redirect fingerprint, and separately proves that the canonical internal
+route still requires its capability.
 
 ## 7. Updating later
 

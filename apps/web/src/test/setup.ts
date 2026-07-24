@@ -9,3 +9,4 @@ process.env.LOG_LEVEL = "error";
 // Production is behind Cloudflare/CranL. Tests that exercise direct mode
 // override this explicitly; the shared default must stay deny-by-default.
 process.env.EWC_TRUSTED_PROXY = "cloudflare";
+process.env.EWC_ORIGIN_SHIELDED = "true";

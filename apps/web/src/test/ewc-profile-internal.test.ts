@@ -74,14 +74,17 @@ describe("internal route capability boundary", () => {
     process.env.EWC_DASHBOARD_INTERNAL_SECRET = "l".repeat(64);
     const candidates = [undefined, "wrong", "l".repeat(64), "p".repeat(63)];
     const bodies = [];
+    const capabilities = [];
 
     for (const secret of candidates) {
       const response = await syncProfile(request({ secret, body: "{not-json" }));
       expect(response.status).toBe(401);
+      capabilities.push(response.headers.get("x-ec-internal-capability"));
       bodies.push(await json(response));
     }
 
     expect(bodies).toEqual(candidates.map(() => ({ error: "Unauthorized" })));
+    expect(capabilities).toEqual(candidates.map(() => "profile-sync"));
     expect(mocks.sync).not.toHaveBeenCalled();
   });
 

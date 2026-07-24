@@ -75,6 +75,19 @@ describe("path-authoritative locale proxy", () => {
     expect(response.cookies.get("ewc_locale")).toBeUndefined();
   });
 
+  test("an Arabic-prefixed API path is not redirected into the API namespace", () => {
+    const response = proxy(request("/ar/api/internal/ewc-profile/sync", {
+      accept: "application/json",
+      method: "POST",
+    }));
+
+    expect(response.headers.get("x-middleware-next")).toBe("1");
+    expect(response.headers.get("location")).toBeNull();
+    expect(response.headers.get("x-middleware-rewrite")).toBeNull();
+    expect(forwardedLocale(response)).toBeNull();
+    expect(response.cookies.get("ewc_locale")).toBeUndefined();
+  });
+
   test.each([
     ["/games", "en"],
     ["/ar/games", "ar"],

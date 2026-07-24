@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import {
   internalRequestId,
+  internalUnauthorizedResponse,
   isInternalRequestAuthorized,
   recordInternalOperation,
 } from "@/lib/internal-auth";
@@ -30,7 +31,7 @@ export async function POST(request: Request) {
 
   if (!isInternalRequestAuthorized(request, CAPABILITY)) {
     record("denied");
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    return internalUnauthorizedResponse(CAPABILITY, requestId);
   }
   const parsed = await readBoundedJson<Record<string, unknown>>(
     request,

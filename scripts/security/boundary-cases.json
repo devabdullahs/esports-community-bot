@@ -1,0 +1,422 @@
+{
+  "version": 1,
+  "fingerprints": {
+    "public-deployment-version": {
+      "routeClass": "public",
+      "status": 200,
+      "contentType": "json",
+      "bodyShape": "json:keys=version",
+      "location": null,
+      "capability": null,
+      "allow": null,
+      "publicCache": false
+    },
+    "public-api-catalog": {
+      "routeClass": "public",
+      "status": 200,
+      "contentType": "json",
+      "bodyShape": "json:keys=linkset",
+      "location": null,
+      "capability": null,
+      "allow": null,
+      "publicCache": true
+    },
+    "public-docs": {
+      "routeClass": "public",
+      "status": 200,
+      "contentType": "html",
+      "bodyShape": "html",
+      "location": null,
+      "capability": null,
+      "allow": null,
+      "publicCache": true
+    },
+    "admin-auth-required": {
+      "routeClass": "admin",
+      "status": 401,
+      "contentType": "json",
+      "bodyShape": "json:error=Unauthorized;keys=error",
+      "location": null,
+      "capability": null,
+      "allow": null,
+      "publicCache": false
+    },
+    "member-auth-required": {
+      "routeClass": "member",
+      "status": 401,
+      "contentType": "json",
+      "bodyShape": "json:code=unauthenticated;error=Sign in to continue.;keys=code,error",
+      "location": null,
+      "capability": null,
+      "allow": null,
+      "publicCache": false
+    },
+    "admin-mcp-auth-required": {
+      "routeClass": "admin-mcp",
+      "status": 401,
+      "contentType": "json",
+      "bodyShape": "json:error=Missing MCP bearer key;keys=error",
+      "location": null,
+      "capability": null,
+      "allow": null,
+      "publicCache": false
+    },
+    "internal-profile-sync-auth-required": {
+      "routeClass": "internal:profile-sync",
+      "status": 401,
+      "contentType": "json",
+      "bodyShape": "json:error=Unauthorized;keys=error",
+      "location": null,
+      "capability": "profile-sync",
+      "allow": null,
+      "publicCache": false
+    },
+    "internal-news-revalidate-auth-required": {
+      "routeClass": "internal:news-revalidate",
+      "status": 401,
+      "contentType": "json",
+      "bodyShape": "json:error=Unauthorized;keys=error",
+      "location": null,
+      "capability": "news-revalidate",
+      "allow": null,
+      "publicCache": false
+    },
+    "unmatched": {
+      "routeClass": "unmatched",
+      "status": 404,
+      "contentType": "html",
+      "bodyShape": "html",
+      "location": null,
+      "capability": null,
+      "allow": null,
+      "publicCache": false
+    },
+    "unmatched-text": {
+      "routeClass": "unmatched",
+      "status": 404,
+      "contentType": "text",
+      "bodyShape": "text",
+      "location": null,
+      "capability": null,
+      "allow": null,
+      "publicCache": false
+    },
+    "bad-request": {
+      "routeClass": "unmatched",
+      "status": 400,
+      "contentType": "empty",
+      "bodyShape": "empty",
+      "location": null,
+      "capability": null,
+      "allow": null,
+      "publicCache": false
+    },
+    "method-not-allowed": {
+      "routeClass": "unmatched",
+      "status": 405,
+      "contentType": "empty",
+      "bodyShape": "empty",
+      "location": null,
+      "capability": null,
+      "allow": null,
+      "publicCache": false
+    },
+    "redirect-to-profile-sync": {
+      "routeClass": "internal:profile-sync",
+      "status": 308,
+      "contentType": "empty",
+      "bodyShape": "text",
+      "location": "/api/internal/ewc-profile/sync",
+      "capability": null,
+      "allow": null,
+      "publicCache": false
+    }
+  },
+  "cases": [
+    {
+      "id": "public-deployment-version",
+      "method": "GET",
+      "target": "/api/deployment-version",
+      "expected": {
+        "local": "public-deployment-version",
+        "public": "public-deployment-version",
+        "origin": "public-deployment-version"
+      }
+    },
+    {
+      "id": "public-api-catalog",
+      "method": "GET",
+      "target": "/.well-known/api-catalog",
+      "expected": {
+        "local": "public-api-catalog",
+        "public": "public-api-catalog",
+        "origin": "public-api-catalog"
+      }
+    },
+    {
+      "id": "public-mcp-docs",
+      "method": "GET",
+      "target": "/docs/mcp",
+      "expected": {
+        "local": "public-docs",
+        "public": "public-docs",
+        "origin": "public-docs"
+      }
+    },
+    {
+      "id": "admin-mcp-setup-docs",
+      "method": "GET",
+      "target": "/docs/admin-mcp",
+      "expected": {
+        "local": "public-docs",
+        "public": "public-docs",
+        "origin": "public-docs"
+      }
+    },
+    {
+      "id": "unclassified-openapi-root",
+      "method": "GET",
+      "target": "/openapi.json",
+      "expected": {
+        "local": "unmatched-text",
+        "public": "unmatched-text",
+        "origin": "unmatched-text"
+      }
+    },
+    {
+      "id": "unclassified-openapi-well-known",
+      "method": "GET",
+      "target": "/.well-known/openapi.json",
+      "expected": {
+        "local": "unmatched",
+        "public": "unmatched",
+        "origin": "unmatched"
+      }
+    },
+    {
+      "id": "unclassified-swagger",
+      "method": "GET",
+      "target": "/swagger.json",
+      "expected": {
+        "local": "unmatched-text",
+        "public": "unmatched-text",
+        "origin": "unmatched-text"
+      }
+    },
+    {
+      "id": "unclassified-api-docs",
+      "method": "GET",
+      "target": "/api-docs",
+      "expected": {
+        "local": "unmatched-text",
+        "public": "unmatched-text",
+        "origin": "unmatched-text"
+      }
+    },
+    {
+      "id": "admin-games",
+      "method": "GET",
+      "target": "/api/admin/games",
+      "expected": {
+        "local": "admin-auth-required",
+        "public": "admin-auth-required",
+        "origin": "admin-auth-required"
+      }
+    },
+    {
+      "id": "member-today",
+      "method": "GET",
+      "target": "/api/me/today",
+      "expected": {
+        "local": "member-auth-required",
+        "public": "member-auth-required",
+        "origin": "member-auth-required"
+      }
+    },
+    {
+      "id": "admin-mcp",
+      "method": "POST",
+      "target": "/api/mcp",
+      "body": "{}",
+      "expected": {
+        "local": "admin-mcp-auth-required",
+        "public": "admin-mcp-auth-required",
+        "origin": "admin-mcp-auth-required"
+      }
+    },
+    {
+      "id": "internal-profile-sync",
+      "method": "POST",
+      "target": "/api/internal/ewc-profile/sync",
+      "body": "{}",
+      "expected": {
+        "local": "internal-profile-sync-auth-required",
+        "public": "internal-profile-sync-auth-required",
+        "origin": "internal-profile-sync-auth-required"
+      }
+    },
+    {
+      "id": "internal-news-revalidate",
+      "method": "POST",
+      "target": "/api/internal/news/revalidate",
+      "body": "",
+      "expected": {
+        "local": "internal-news-revalidate-auth-required",
+        "public": "internal-news-revalidate-auth-required",
+        "origin": "internal-news-revalidate-auth-required"
+      }
+    },
+    {
+      "id": "unknown-internal",
+      "method": "GET",
+      "target": "/api/internal/not-a-capability",
+      "expected": {
+        "local": "unmatched",
+        "public": "unmatched",
+        "origin": "unmatched"
+      }
+    },
+    {
+      "id": "locale-prefixed-internal",
+      "method": "POST",
+      "target": "/ar/api/internal/ewc-profile/sync",
+      "body": "{}",
+      "expected": {
+        "local": "unmatched",
+        "public": "unmatched",
+        "origin": "unmatched"
+      }
+    },
+    {
+      "id": "encoded-api-prefix",
+      "method": "POST",
+      "target": "/%61pi/internal/ewc-profile/sync",
+      "body": "{}",
+      "expected": {
+        "local": "unmatched",
+        "public": "unmatched",
+        "origin": "unmatched"
+      }
+    },
+    {
+      "id": "encoded-separator",
+      "method": "POST",
+      "target": "/api/internal/ewc-profile%2fsync",
+      "body": "{}",
+      "expected": {
+        "local": "unmatched",
+        "public": "unmatched",
+        "origin": "unmatched"
+      }
+    },
+    {
+      "id": "double-encoded-separator",
+      "method": "POST",
+      "target": "/api/internal/ewc-profile%252fsync",
+      "body": "{}",
+      "expected": {
+        "local": "unmatched",
+        "public": "unmatched",
+        "origin": "unmatched"
+      }
+    },
+    {
+      "id": "encoded-dot-segment",
+      "method": "GET",
+      "target": "/api/internal/%2e%2e/admin/games",
+      "expected": {
+        "local": "admin-auth-required",
+        "public": "admin-auth-required",
+        "origin": "admin-auth-required"
+      }
+    },
+    {
+      "id": "double-encoded-dot-segment",
+      "method": "GET",
+      "target": "/api/internal/%252e%252e/admin/games",
+      "expected": {
+        "local": "unmatched",
+        "public": "unmatched",
+        "origin": "unmatched"
+      }
+    },
+    {
+      "id": "duplicate-separator",
+      "method": "POST",
+      "target": "/api//internal/ewc-profile/sync",
+      "body": "{}",
+      "expected": {
+        "local": "redirect-to-profile-sync",
+        "public": "redirect-to-profile-sync",
+        "origin": "redirect-to-profile-sync"
+      }
+    },
+    {
+      "id": "backslash-separator",
+      "method": "POST",
+      "target": "/api\\internal\\ewc-profile\\sync",
+      "body": "{}",
+      "expected": {
+        "local": "redirect-to-profile-sync",
+        "public": "redirect-to-profile-sync",
+        "origin": "redirect-to-profile-sync"
+      }
+    },
+    {
+      "id": "encoded-backslash",
+      "method": "POST",
+      "target": "/api%5cinternal%5cewc-profile%5csync",
+      "body": "{}",
+      "expected": {
+        "local": "method-not-allowed",
+        "public": "method-not-allowed",
+        "origin": "method-not-allowed"
+      }
+    },
+    {
+      "id": "matrix-suffix",
+      "method": "POST",
+      "target": "/api/internal/ewc-profile/sync;ignored",
+      "body": "{}",
+      "expected": {
+        "local": "unmatched",
+        "public": "unmatched",
+        "origin": "unmatched"
+      }
+    },
+    {
+      "id": "trailing-dot",
+      "method": "POST",
+      "target": "/api/internal/ewc-profile/sync.",
+      "body": "{}",
+      "expected": {
+        "local": "unmatched",
+        "public": "unmatched",
+        "origin": "unmatched"
+      }
+    },
+    {
+      "id": "encoded-control-byte",
+      "method": "POST",
+      "target": "/api/internal/ewc-profile/sync%0d%0a",
+      "body": "{}",
+      "expected": {
+        "local": "unmatched",
+        "public": "unmatched",
+        "origin": "unmatched"
+      }
+    },
+    {
+      "id": "absolute-form-conflicting-host",
+      "method": "POST",
+      "target": "{{BASE_ORIGIN}}/api/internal/ewc-profile/sync",
+      "host": "conflicting.invalid",
+      "body": "{}",
+      "expected": {
+        "local": "redirect-to-profile-sync",
+        "public": "redirect-to-profile-sync",
+        "origin": "redirect-to-profile-sync"
+      }
+    }
+  ]
+}

@@ -6,14 +6,18 @@ function req(headers: Record<string, string> = {}) {
 }
 
 const ORIGINAL_MODE = process.env.EWC_TRUSTED_PROXY;
+const ORIGINAL_SHIELDED = process.env.EWC_ORIGIN_SHIELDED;
 
 beforeEach(() => {
   process.env.EWC_TRUSTED_PROXY = "cloudflare";
+  process.env.EWC_ORIGIN_SHIELDED = "true";
 });
 
 afterEach(() => {
   if (ORIGINAL_MODE === undefined) delete process.env.EWC_TRUSTED_PROXY;
   else process.env.EWC_TRUSTED_PROXY = ORIGINAL_MODE;
+  if (ORIGINAL_SHIELDED === undefined) delete process.env.EWC_ORIGIN_SHIELDED;
+  else process.env.EWC_ORIGIN_SHIELDED = ORIGINAL_SHIELDED;
 });
 
 describe("clientIp trusted resolver", () => {
@@ -57,6 +61,14 @@ describe("clientIp trusted resolver", () => {
 
   test("EWC_TRUSTED_PROXY=none ignores proxy headers entirely", () => {
     process.env.EWC_TRUSTED_PROXY = "none";
+    expect(clientIp(req({ "cf-connecting-ip": "203.0.113.9" }))).toBe("direct");
+  });
+
+  test("cloudflare mode ignores proxy headers unless the origin is explicitly shielded", () => {
+    delete process.env.EWC_ORIGIN_SHIELDED;
+    expect(clientIp(req({ "cf-connecting-ip": "203.0.113.9" }))).toBe("direct");
+
+    process.env.EWC_ORIGIN_SHIELDED = "false";
     expect(clientIp(req({ "cf-connecting-ip": "203.0.113.9" }))).toBe("direct");
   });
 });

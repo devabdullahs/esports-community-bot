@@ -2,6 +2,7 @@ import { revalidateTag } from "next/cache";
 import { NextResponse } from "next/server";
 import {
   internalRequestId,
+  internalUnauthorizedResponse,
   isInternalRequestAuthorized,
   recordInternalOperation,
 } from "@/lib/internal-auth";
@@ -20,7 +21,7 @@ export async function POST(request: Request) {
       result: "denied",
       requestId,
     });
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    return internalUnauthorizedResponse(CAPABILITY, requestId);
   }
   try {
     revalidateTag("cms-news", { expire: 0 });

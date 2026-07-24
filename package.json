@@ -23,6 +23,7 @@
     "web:e2e": "node scripts/run-web-e2e.mjs",
     "web:e2e:install": "npm --workspace @esports-community-bot/web exec -- playwright install --with-deps chromium",
     "web:smoke:local": "node scripts/run-web-e2e.mjs --smoke",
+    "security:boundary": "node scripts/security/probe-boundaries.mjs",
     "web:auth:migrate": "npm --workspace @esports-community-bot/web run auth:migrate",
     "seed:dev": "node scripts/seed-dev.mjs",
     "db:pg:schema": "node scripts/run-postgres-migrations.mjs",
