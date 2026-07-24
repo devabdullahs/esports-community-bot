@@ -5,6 +5,7 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
+    "prestart": "node ../../scripts/run-postgres-migrations.mjs",
     "start": "next start",
     "lint": "eslint",
     "typecheck:native": "tsc --project tsconfig.native.json --pretty false",

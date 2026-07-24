@@ -1,9 +1,8 @@
 import assert from 'node:assert/strict';
-import { readFile } from 'node:fs/promises';
-import { resolve } from 'node:path';
 import test from 'node:test';
 
 import { validatePostgresTestConfig } from '../scripts/run-postgres-tests.mjs';
+import { listPostgresMigrations } from '../src/db/postgresMigrations.js';
 
 const BASE_ENV = {
   ALLOW_POSTGRES_TEST_RESET: '1',
@@ -92,10 +91,12 @@ test('PostgreSQL DB parity', { skip: postgresEnabled ? false : 'run through npm 
     await db.closeDbClient();
   });
 
-  await t.test('schema is idempotent', async () => {
-    const schema = await readFile(resolve('scripts/postgres/schema.sql'), 'utf8');
-    await db.exec(schema);
-    await db.exec(schema);
+  await t.test('migrations are idempotent and ledgered', async () => {
+    await db.ensurePostgresMigrations();
+    await db.ensurePostgresMigrations();
+    const expected = listPostgresMigrations().map(({ version, checksum }) => ({ version, checksum }));
+    const ledger = await db.all('SELECT version, checksum FROM app_schema_migrations ORDER BY version ASC');
+    assert.deepEqual(ledger, expected);
     const row = await db.get(
       `SELECT COUNT(*)::BIGINT AS count
        FROM information_schema.tables

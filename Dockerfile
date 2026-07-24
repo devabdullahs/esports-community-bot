@@ -43,8 +43,10 @@ COPY --from=build --chown=node:node /app/node_modules ./node_modules
 COPY --from=build --chown=node:node /app/package*.json ./
 COPY --from=build --chown=node:node /app/apps/web ./apps/web
 COPY --from=build --chown=node:node /app/src ./src
-# Postgres path reads scripts/postgres/schema.sql at boot (ensurePostgresAppSchema).
+# Postgres startup runs versioned migrations; the generated schema snapshot is
+# kept for inspection and parity checks.
 COPY --from=build --chown=node:node /app/scripts/postgres ./scripts/postgres
+COPY --from=build --chown=node:node /app/scripts/run-postgres-migrations.mjs ./scripts/run-postgres-migrations.mjs
 
 USER node
 

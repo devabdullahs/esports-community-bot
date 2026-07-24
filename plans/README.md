@@ -250,7 +250,7 @@ untouched.
 | 130  | Give EWC prediction games stable identities and migrate references | P1 | L | 129 | TODO |
 | 131  | Require authoritative and complete EWC results before final scoring | P1 | M | - | DONE |
 | 132  | Make manual prediction scoring honor automation readiness | P1 | M | 129, 131 | TODO |
-| 133  | Gate every service startup on versioned PostgreSQL migrations | P1 | L | 125 | TODO |
+| 133  | Gate every service startup on versioned PostgreSQL migrations | P1 | L | 125 | DONE |
 | 134  | Make SQLite-to-PostgreSQL imports fail closed on skipped data | P1 | M | 125, 133 | TODO |
 | 135  | Route Liquipedia MediaWiki requests through one scheduler | P1 | M | - | DONE |
 | 136  | Serialize, persist, and paginate LPDB schedule requests | P1 | M | - | DONE |

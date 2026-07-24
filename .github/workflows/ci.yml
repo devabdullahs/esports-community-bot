@@ -57,6 +57,7 @@ jobs:
           node-version: 24
           cache: npm
       - run: npm ci
+      - run: npm run db:pg:schema:check
       - run: npm run test:postgres
 
   web:

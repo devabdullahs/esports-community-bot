@@ -1,8 +1,13 @@
-import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { spawn } from 'node:child_process';
 import pg from 'pg';
+import {
+  listPostgresMigrations,
+  resolvePgSslConfig,
+  runPostgresMigrations,
+  sanitizePostgresError,
+} from '../src/db/postgresMigrations.js';
 
 const LOOPBACK_HOSTS = new Set(['localhost', '127.0.0.1', '::1']);
 const TRUE_VALUES = new Set(['1', 'true']);
@@ -60,70 +65,81 @@ export function validatePostgresTestConfig(env = process.env) {
   };
 }
 
-function safeErrorMessage(error, config) {
-  let message = error instanceof Error ? error.message : String(error);
-  message = message.replace(/postgres(?:ql)?:\/\/\S+/gi, '[redacted-url]');
-  message = message.replace(/password\s*=\s*[^\s,;]+/gi, 'password=[redacted]');
-  if (config?.url) message = message.split(config.url).join('[redacted-url]');
-  try {
-    const password = config?.url ? new URL(config.url).password : '';
-    if (password) message = message.split(decodeURIComponent(password)).join('[redacted]');
-  } catch {
-    // The validated URL was already parsed; this is only defensive redaction.
-  }
-  return message;
+function sslForCurrentEnvironment() {
+  return resolvePgSslConfig(process.env.PGSSLMODE, { rootCertPath: process.env.PGSSLROOTCERT });
 }
 
-async function resetAndApplySchema(config) {
-  const client = new pg.Client({ connectionString: config.url });
+async function resetDatabase(config) {
+  const client = new pg.Client({ connectionString: config.url, ssl: sslForCurrentEnvironment() });
   await client.connect();
   try {
     await client.query('DROP SCHEMA IF EXISTS public CASCADE');
     await client.query('CREATE SCHEMA public');
-    const schema = await readFile(resolve('scripts/postgres/schema.sql'), 'utf8');
-    await client.query(schema);
   } finally {
     await client.end();
   }
+}
+
+async function assertMigrationLedger(config) {
+  const expected = listPostgresMigrations().map(({ version, checksum }) => ({ version, checksum }));
+  const client = new pg.Client({ connectionString: config.url, ssl: sslForCurrentEnvironment() });
+  await client.connect();
+  try {
+    const result = await client.query('SELECT version, checksum FROM app_schema_migrations ORDER BY version ASC');
+    const actual = result.rows.map(({ version, checksum }) => ({ version, checksum }));
+    if (JSON.stringify(actual) !== JSON.stringify(expected)) {
+      throw new Error('PostgreSQL migration ledger does not match the checked-in migration set.');
+    }
+  } finally {
+    await client.end();
+  }
+}
+
+function runTestFile(config, testFile, forwardedArgs) {
+  return new Promise((resolveRun, rejectRun) => {
+    const child = spawn(process.execPath, ['--test', ...forwardedArgs, testFile], {
+      stdio: 'inherit',
+      env: {
+        ...process.env,
+        DB_DRIVER: 'postgres',
+        DATABASE_URL: config.url,
+        ALLOW_POSTGRES_TEST_RESET: '1',
+        PGSSLMODE: process.env.PGSSLMODE || 'disable',
+      },
+    });
+
+    child.once('error', rejectRun);
+    child.once('exit', (code, signal) => {
+      if (signal) {
+        rejectRun(new Error('Node test runner exited after signal ' + signal + '.'));
+      } else if (code !== 0) {
+        rejectRun(new Error('Node test runner exited with code ' + code + '.'));
+      } else {
+        resolveRun();
+      }
+    });
+  });
 }
 
 async function run() {
   let config;
   try {
     config = validatePostgresTestConfig();
-    console.log(`[postgres-test] resetting disposable database ${config.database} on ${config.host}`);
-    await resetAndApplySchema(config);
+    console.log('[postgres-test] resetting disposable database ' + config.database + ' on ' + config.host);
+    const forwardedArgs = process.argv.slice(2);
+
+    await resetDatabase(config);
+    await runTestFile(config, resolve('tests/postgresMigrations.test.mjs'), forwardedArgs);
+
+    await resetDatabase(config);
+    await runPostgresMigrations({ connectionString: config.url, ssl: sslForCurrentEnvironment() });
+    await runPostgresMigrations({ connectionString: config.url, ssl: sslForCurrentEnvironment() });
+    await assertMigrationLedger(config);
+    await runTestFile(config, resolve('tests/postgresDbParity.test.mjs'), forwardedArgs);
   } catch (error) {
-    console.error(`[postgres-test] ${safeErrorMessage(error, config)}`);
+    console.error('[postgres-test] ' + sanitizePostgresError(error, config?.url));
     process.exitCode = 1;
-    return;
   }
-
-  const forwardedArgs = process.argv.slice(2);
-  const testFile = resolve('tests/postgresDbParity.test.mjs');
-  const child = spawn(process.execPath, ['--test', ...forwardedArgs, testFile], {
-    stdio: 'inherit',
-    env: {
-      ...process.env,
-      DB_DRIVER: 'postgres',
-      DATABASE_URL: config.url,
-      ALLOW_POSTGRES_TEST_RESET: '1',
-      PGSSLMODE: process.env.PGSSLMODE || 'disable',
-    },
-  });
-
-  child.once('error', (error) => {
-    console.error(`[postgres-test] unable to start Node test runner: ${safeErrorMessage(error, config)}`);
-    process.exitCode = 1;
-  });
-  child.once('exit', (code, signal) => {
-    if (signal) {
-      console.error(`[postgres-test] Node test runner exited after signal ${signal}.`);
-      process.exitCode = 1;
-      return;
-    }
-    process.exitCode = code ?? 1;
-  });
 }
 
 const invokedPath = process.argv[1] ? pathToFileURL(resolve(process.argv[1])).href : '';
