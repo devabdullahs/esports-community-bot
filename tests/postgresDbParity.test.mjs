@@ -4,6 +4,9 @@ import test from 'node:test';
 import { validatePostgresTestConfig } from '../scripts/run-postgres-tests.mjs';
 import { listPostgresMigrations } from '../src/db/postgresMigrations.js';
 
+process.env.DISCORD_TOKEN ||= 'test-token';
+process.env.DISCORD_CLIENT_ID ||= 'test-client-id';
+
 const BASE_ENV = {
   ALLOW_POSTGRES_TEST_RESET: '1',
   DATABASE_URL: 'postgresql://postgres:postgres@127.0.0.1:5432/ecb_ci_test',
@@ -280,6 +283,74 @@ test('PostgreSQL DB parity', { skip: postgresEnabled ? false : 'run through npm 
     assert.equal(seasonPrediction.score, 900);
     assert.deepEqual(seasonPrediction.picks, ['Team Falcons', 'Team Liquid', 'T1']);
     assert.deepEqual(seasonPrediction.details, { exact: 1 });
+  });
+
+  await t.test('manual scoring readiness and writes have PostgreSQL parity', async () => {
+    const { runEwcPredictionAdminOperation } = await import('../src/lib/ewcPredictionAdmin.js');
+    const now = 100_000;
+    const readinessWeek = await predictions.upsertEwcWeek({
+      guildId,
+      season,
+      weekKey: 'ci-manual-readiness',
+      label: 'PostgreSQL manual readiness',
+      openAt: now - 2000,
+      closeAt: now - 1000,
+      scoreAfter: now - 500,
+      createdBy: 'postgres-ci',
+    });
+    await predictions.setEwcWeekSnapshot(readinessWeek.id, 'baseline', [
+      { team: 'Team Falcons', rank: 1, points: 100 },
+      { team: 'T1', rank: 2, points: 90 },
+      { team: 'Team Liquid', rank: 3, points: 80 },
+    ]);
+    await predictions.upsertWeeklyPrediction({
+      guildId,
+      weekId: readinessWeek.id,
+      userId: 'postgres-ci-manual-user',
+      picks: ['Team Falcons', 'T1', 'Team Liquid'],
+    });
+
+    await assert.rejects(
+      runEwcPredictionAdminOperation({
+        guildId,
+        season,
+        operation: 'score_week',
+        args: { weekKey: 'ci-manual-readiness' },
+        dependencies: {
+          nowSec: () => now,
+          fetchStandings: async () => ({
+            exists: true,
+            standings: [
+              { team: 'Team Falcons', rank: 1, points: 130 },
+              { team: 'T1', rank: 2, points: 110 },
+              { team: 'Team Liquid', rank: 3, points: 100 },
+            ],
+          }),
+        },
+      }),
+      (error) => error?.reasonCode === 'round_not_closed',
+    );
+
+    await predictions.closeEwcWeek(readinessWeek.id);
+    const result = await runEwcPredictionAdminOperation({
+      guildId,
+      season,
+      operation: 'score_week',
+      args: { weekKey: 'ci-manual-readiness' },
+      dependencies: {
+        nowSec: () => now,
+        fetchStandings: async () => ({
+          exists: true,
+          standings: [
+            { team: 'Team Falcons', rank: 1, points: 130 },
+            { team: 'T1', rank: 2, points: 110 },
+            { team: 'Team Liquid', rank: 3, points: 100 },
+          ],
+        }),
+      },
+    });
+    assert.equal(result.predictions, 1);
+    assert.equal((await predictions.getEwcWeek(guildId, season, 'ci-manual-readiness')).status, 'scored');
   });
 
   await t.test('stable game-key reconciliation is atomic and idempotent on PostgreSQL', async () => {

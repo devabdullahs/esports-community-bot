@@ -30,6 +30,19 @@ const EWC_AUTHORITATIVE_RESULT_KINDS = new Set([
   'tracked-final-standings',
 ]);
 
+export const EWC_PREDICTION_READINESS = Object.freeze({
+  READY: 'ready',
+  NOT_OPEN: 'not_open',
+  GAMES_UNLOCKED: 'games_unlocked',
+  ROUND_NOT_CLOSED: 'round_not_closed',
+  SCORE_DELAY_PENDING: 'score_delay_pending',
+  MISSING_BASELINE: 'missing_baseline',
+  MISSING_RESULTS: 'missing_results',
+  UNTRUSTED_RESULT: 'untrusted_result',
+  INCOMPLETE_RESULT: 'incomplete_result',
+  STALE_RESULT: 'stale_result',
+});
+
 export const EWC_2026_OFFICIAL_WEEKS = [
   ['week-1', 'Week 1', '2026-07-06', '2026-07-12'],
   ['week-2', 'Week 2', '2026-07-13', '2026-07-19'],
@@ -190,6 +203,136 @@ export function perGamePredictionRoundLocked(games = [], now = Math.floor(Date.n
     const lockAt = Number(game?.lockAt);
     return Number.isFinite(lockAt) && now >= lockAt;
   });
+}
+
+function roundTime(round, snakeKey, camelKey) {
+  const value = Number(round?.[snakeKey] ?? round?.[camelKey]);
+  return Number.isFinite(value) ? value : null;
+}
+
+function readiness(ready, reason, details = {}) {
+  return { ready, reason, ...details };
+}
+
+export function ewcPredictionScoreAfter(round, defaultDelayHours = 24) {
+  const configured = roundTime(round, 'score_after', 'scoreAfter');
+  if (configured != null) return configured;
+  const closeAt = roundTime(round, 'close_at', 'closeAt');
+  if (closeAt == null) return null;
+  return closeAt + Math.max(0, Number(defaultDelayHours) || 0) * 3600;
+}
+
+function resultReadiness(result, gameKey) {
+  if (!result || !Array.isArray(result.placements) || !result.placements.length) {
+    return readiness(false, EWC_PREDICTION_READINESS.MISSING_RESULTS, { gameKey });
+  }
+  const completeness = evaluateEwcGameResultCompleteness(result);
+  if (completeness.ready) return null;
+  if (completeness.reason === 'untrusted_source') {
+    return readiness(false, EWC_PREDICTION_READINESS.UNTRUSTED_RESULT, { gameKey });
+  }
+  return readiness(false, EWC_PREDICTION_READINESS.INCOMPLETE_RESULT, { gameKey });
+}
+
+export function evaluateEwcWeekScoringReadiness(
+  round,
+  {
+    now = Math.floor(Date.now() / 1000),
+    results = round?.results || [],
+    finalStandings = round?.final || [],
+    scoreAfter = ewcPredictionScoreAfter(round),
+  } = {},
+) {
+  const openAt = roundTime(round, 'open_at', 'openAt');
+  if (openAt != null && now < openAt) {
+    return readiness(false, EWC_PREDICTION_READINESS.NOT_OPEN);
+  }
+
+  const games = Array.isArray(round?.games) ? round.games : [];
+  if (games.length && !perGamePredictionRoundLocked(games, now)) {
+    return readiness(false, EWC_PREDICTION_READINESS.GAMES_UNLOCKED);
+  }
+
+  const closeAt = roundTime(round, 'close_at', 'closeAt');
+  if (round?.status !== 'closed' || (!games.length && (closeAt == null || now < closeAt))) {
+    return readiness(false, EWC_PREDICTION_READINESS.ROUND_NOT_CLOSED);
+  }
+  if (scoreAfter != null && now < Number(scoreAfter)) {
+    return readiness(false, EWC_PREDICTION_READINESS.SCORE_DELAY_PENDING, { readyAt: Number(scoreAfter) });
+  }
+
+  if (!games.length) {
+    if (!Array.isArray(round?.baseline) || !round.baseline.length) {
+      return readiness(false, EWC_PREDICTION_READINESS.MISSING_BASELINE);
+    }
+    if (!Array.isArray(finalStandings) || !finalStandings.length) {
+      return readiness(false, EWC_PREDICTION_READINESS.MISSING_RESULTS);
+    }
+    return readiness(true, EWC_PREDICTION_READINESS.READY);
+  }
+
+  const byKey = new Map((results || []).map((result) => [String(result?.gameKey || ''), result]));
+  for (const game of games) {
+    const gameKey = String(game?.key || '');
+    const decision = resultReadiness(byKey.get(gameKey), gameKey);
+    if (decision) return decision;
+  }
+
+  const finalReadiness = evaluateEwcGameResultsFinalReadiness(results, games, now, scoreAfter);
+  if (!finalReadiness.ready) {
+    return readiness(false, EWC_PREDICTION_READINESS.STALE_RESULT, {
+      gameKey: finalReadiness.gameKey || null,
+    });
+  }
+  return readiness(true, EWC_PREDICTION_READINESS.READY);
+}
+
+export function canonicalEwcFinalStandings(finalStandings = [], topSize = 10) {
+  const size = Math.max(1, Number(topSize) || 10);
+  const seen = new Set();
+  const rows = [];
+  for (const row of Array.isArray(finalStandings) ? finalStandings : []) {
+    const team = String(row?.team ?? row?.club ?? '').replace(/\s+/g, ' ').trim();
+    const rank = Number(row?.rank);
+    const key = normalizeClubName(team);
+    if (!key || !Number.isInteger(rank) || rank < 1 || rank > size || seen.has(key)) continue;
+    seen.add(key);
+    rows.push({ ...row, team, rank });
+  }
+  return rows.sort((left, right) => left.rank - right.rank);
+}
+
+export function evaluateEwcSeasonScoringReadiness(
+  round,
+  finalStandings = round?.final || [],
+  {
+    now = Math.floor(Date.now() / 1000),
+    scoreAfter = ewcPredictionScoreAfter(round),
+  } = {},
+) {
+  const openAt = roundTime(round, 'open_at', 'openAt');
+  if (openAt != null && now < openAt) {
+    return readiness(false, EWC_PREDICTION_READINESS.NOT_OPEN);
+  }
+  const closeAt = roundTime(round, 'close_at', 'closeAt');
+  if (round?.status !== 'closed' || closeAt == null || now < closeAt) {
+    return readiness(false, EWC_PREDICTION_READINESS.ROUND_NOT_CLOSED);
+  }
+  if (scoreAfter != null && now < Number(scoreAfter)) {
+    return readiness(false, EWC_PREDICTION_READINESS.SCORE_DELAY_PENDING, { readyAt: Number(scoreAfter) });
+  }
+  if (!Array.isArray(finalStandings) || !finalStandings.length) {
+    return readiness(false, EWC_PREDICTION_READINESS.MISSING_RESULTS);
+  }
+  const requiredRows = Math.max(1, Number(round?.top_size ?? round?.topSize) || 10);
+  const availableRows = canonicalEwcFinalStandings(finalStandings, requiredRows).length;
+  if (availableRows < requiredRows) {
+    return readiness(false, EWC_PREDICTION_READINESS.INCOMPLETE_RESULT, {
+      availableRows,
+      requiredRows,
+    });
+  }
+  return readiness(true, EWC_PREDICTION_READINESS.READY);
 }
 
 export function dueEwcGamesForResults(

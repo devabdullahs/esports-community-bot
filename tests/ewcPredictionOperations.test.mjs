@@ -22,11 +22,14 @@ const {
 const { runEwcPredictionAdminOperation, validateEwcPredictionAdminOperation } = await import('../src/lib/ewcPredictionAdmin.js');
 const { drainEwcPredictionOperations } = await import('../src/jobs/ewcPredictionOperations.js');
 const {
+  closeEwcSeason,
+  closeEwcWeek,
   getEwcWeek,
   getWeeklyPrediction,
   saveWeeklyPredictionScore,
   setEwcWeekResults,
   setEwcWeekSnapshot,
+  upsertEwcSeason,
   upsertEwcWeek,
   upsertWeeklyGamePick,
   upsertWeeklyPrediction,
@@ -41,6 +44,7 @@ test.after(() => {
 test('operation validation is closed and destructive deletion requires the exact week key', () => {
   assert.equal(validateEwcPredictionAdminOperation('drop_table', {}).ok, false);
   assert.equal(validateEwcPredictionAdminOperation('score_week', { weekKey: 'week-1', userId: 'member' }).ok, false);
+  assert.equal(validateEwcPredictionAdminOperation('score_week', { weekKey: 'week-1', force: true }).ok, false);
   assert.equal(validateEwcPredictionAdminOperation('delete_week', { weekKey: 'week-1', confirmationWeekKey: 'week-2' }).ok, false);
   assert.deepEqual(validateEwcPredictionAdminOperation('delete_week', { weekKey: 'week-1', confirmationWeekKey: 'week-1' }), {
     ok: true,
@@ -110,7 +114,17 @@ test('shared service reopens a scored round atomically without Discord and clear
 
 test('shared admin scoring locks and enumerates the committed weekly predictions in one transaction', async () => {
   const guildId = '920000000000000305';
-  const week = await upsertEwcWeek({ guildId, season: '2026', weekKey: 'week-score', label: 'Week score', createdBy: 'test' });
+  const now = 50_000;
+  const week = await upsertEwcWeek({
+    guildId,
+    season: '2026',
+    weekKey: 'week-score',
+    label: 'Week score',
+    openAt: now - 2000,
+    closeAt: now - 1000,
+    scoreAfter: now - 500,
+    createdBy: 'test',
+  });
   const baseline = [
     { team: 'Team Falcons', rank: 1, points: 100 },
     { team: 'T1', rank: 2, points: 90 },
@@ -122,6 +136,7 @@ test('shared admin scoring locks and enumerates the committed weekly predictions
     { team: 'Team Liquid', rank: 3, points: 100 },
   ];
   await setEwcWeekSnapshot(week.id, 'baseline', baseline);
+  await closeEwcWeek(week.id);
   await upsertWeeklyPrediction({ guildId, weekId: week.id, userId: '200000000000000305', picks: ['Falcons', 'T1', 'Liquid'] });
 
   const result = await runEwcPredictionAdminOperation({
@@ -129,12 +144,173 @@ test('shared admin scoring locks and enumerates the committed weekly predictions
     season: '2026',
     operation: 'score_week',
     args: { weekKey: 'week-score' },
-    dependencies: { fetchStandings: async () => ({ exists: true, standings: final }) },
+    dependencies: {
+      fetchStandings: async () => ({ exists: true, standings: final }),
+      nowSec: () => now,
+    },
   });
 
   assert.equal(result.predictions, 1);
   assert.equal((await getEwcWeek(guildId, '2026', 'week-score')).status, 'scored');
   assert.equal((await getWeeklyPrediction(guildId, week.id, '200000000000000305')).score, 370);
+});
+
+test('manual per-game scoring fetches only unresolved due games and never fetches inside the transaction', async () => {
+  const guildId = '920000000000000307';
+  const now = 70_000;
+  const games = [
+    { key: 'ready-game', game: 'Ready', event: 'Ready event', lockAt: now - 1000, endAt: now - 500 },
+    { key: 'missing-game', game: 'Missing', event: 'Missing event', lockAt: now - 900, endAt: now - 400 },
+  ];
+  const placements = (prefix) => [
+    { club: `${prefix} One`, place: '1', points: 1000 },
+    { club: `${prefix} Two`, place: '2', points: 750 },
+    { club: `${prefix} Three`, place: '3', points: 500 },
+    { club: `${prefix} Four`, place: '4', points: 300 },
+    { club: `${prefix} Five`, place: '5-8', points: 200 },
+  ];
+  const result = (gameKey, prefix) => ({
+    gameKey,
+    placements: placements(prefix),
+    evidence: { kind: 'club-points-prize-table', authoritative: true, coveredRanks: [1, 2, 3, 4, 5, 6, 7, 8] },
+    fetchedAt: now,
+  });
+  const week = await upsertEwcWeek({
+    guildId,
+    season: '2026',
+    weekKey: 'manual-per-game',
+    label: 'Manual per-game',
+    openAt: now - 2000,
+    closeAt: now - 800,
+    scoreAfter: now - 300,
+    games,
+    createdBy: 'test',
+  });
+  await closeEwcWeek(week.id);
+  await setEwcWeekResults(week.id, [result('ready-game', 'Ready')]);
+  await upsertWeeklyPrediction({
+    guildId,
+    weekId: week.id,
+    userId: '200000000000000307',
+    picks: [
+      { gameKey: 'ready-game', pick: 'Ready One' },
+      { gameKey: 'missing-game', pick: 'Missing One' },
+    ],
+  });
+
+  let inTransaction = false;
+  let fetchedKeys = [];
+  const { transaction: realTransaction } = await import('../src/db/client.js');
+  const scored = await runEwcPredictionAdminOperation({
+    guildId,
+    season: '2026',
+    operation: 'score_week',
+    args: { weekKey: 'manual-per-game' },
+    dependencies: {
+      nowSec: () => now,
+      fetchWeekResults: async (candidates) => {
+        assert.equal(inTransaction, false);
+        fetchedKeys = candidates.map((game) => game.key);
+        return [result('missing-game', 'Missing')];
+      },
+      transaction: async (callback) => realTransaction(async (client) => {
+        inTransaction = true;
+        try {
+          return await callback(client);
+        } finally {
+          inTransaction = false;
+        }
+      }),
+    },
+  });
+
+  assert.deepEqual(fetchedKeys, ['missing-game']);
+  assert.equal(scored.predictions, 1);
+  assert.equal((await getWeeklyPrediction(guildId, week.id, '200000000000000307')).score, 2300);
+});
+
+test('manual scoring fails closed when the round changes after its external fetch', async () => {
+  const now = 80_000;
+  const round = {
+    id: 1,
+    guild_id: 'race-guild',
+    season: '2026',
+    week_key: 'race-week',
+    label: 'Race week',
+    status: 'closed',
+    open_at: now - 2000,
+    close_at: now - 1000,
+    score_after: now - 500,
+    games: [{ key: 'race-game', game: 'Race', event: 'Race', lockAt: now - 1000, endAt: now - 600 }],
+    results: [],
+    final: [],
+  };
+  const fetched = {
+    gameKey: 'race-game',
+    placements: [
+      { club: 'One', place: '1', points: 1000 },
+      { club: 'Two', place: '2', points: 750 },
+      { club: 'Three', place: '3', points: 500 },
+      { club: 'Four', place: '4', points: 300 },
+      { club: 'Five', place: '5-8', points: 200 },
+    ],
+    evidence: { kind: 'club-points-prize-table', authoritative: true, coveredRanks: [1, 2, 3, 4, 5, 6, 7, 8] },
+  };
+  let wrote = false;
+  await assert.rejects(
+    runEwcPredictionAdminOperation({
+      guildId: round.guild_id,
+      season: round.season,
+      operation: 'score_week',
+      args: { weekKey: round.week_key },
+      dependencies: {
+        nowSec: () => now,
+        getWeek: async () => round,
+        fetchWeekResults: async () => [fetched],
+        transaction: async (callback) => callback({}),
+        lockWeekForTransition: async () => ({ ...round, status: 'open' }),
+        listWeeklyPredictions: async () => [],
+        markWeekScoredWithResults: async () => { wrote = true; },
+      },
+    }),
+    (error) => error?.reasonCode === 'round_not_closed',
+  );
+  assert.equal(wrote, false);
+});
+
+test('manual season scoring rejects an undersized final table without writing scores', async () => {
+  const guildId = '920000000000000308';
+  const now = 90_000;
+  await upsertEwcSeason({
+    guildId,
+    season: '2027',
+    label: 'Undersized season',
+    openAt: now - 2000,
+    closeAt: now - 1000,
+    scoreAfter: now - 500,
+    topSize: 3,
+    createdBy: 'test',
+  });
+  await closeEwcSeason(guildId, '2027');
+  await assert.rejects(
+    runEwcPredictionAdminOperation({
+      guildId,
+      season: '2027',
+      operation: 'score_season',
+      args: {},
+      dependencies: {
+        nowSec: () => now,
+        fetchStandings: async () => ({
+          exists: true,
+          standings: [
+            { team: 'Team Falcons', rank: 1 },
+            { team: 'T1', rank: 2 },
+          ],
+        }),
+      },
+    }),
+    (error) => error?.reasonCode === 'incomplete_result',
+  );
 });
 
 test('week generation reports aggregate reconciliation and preserves references across insertion', async () => {
@@ -260,4 +436,38 @@ test('bot consumer completes a durable refresh operation and keeps the completio
   assert.equal(completed.status, 'succeeded');
   const { listAdminAuditLog } = await import('../src/db/ewcAdminAuditLog.js');
   assert.equal((await listAdminAuditLog(10)).some((entry) => entry.target === queued.operation.id && entry.action === 'prediction.operation.completed'), true);
+});
+
+test('bot consumer records a safe readiness reason when a manual scoring operation is rejected', async () => {
+  const guildId = '920000000000000309';
+  const week = await upsertEwcWeek({
+    guildId,
+    season: '2026',
+    weekKey: 'week-not-ready',
+    label: 'Week not ready',
+    status: 'open',
+    createdBy: 'test',
+  });
+  const queued = await enqueueEwcPredictionOperation({
+    guildId,
+    season: '2026',
+    operation: 'score_week',
+    args: { weekKey: 'week-not-ready' },
+    idempotencyKey: 'operation-readiness-key-04',
+    requestedActorId: '200000000000000309',
+  });
+
+  assert.equal(await drainEwcPredictionOperations(null, { now: Math.floor(Date.now() / 1000) }), 0);
+  const failed = await getEwcPredictionOperation(queued.operation.id);
+  assert.equal(failed.status, 'failed');
+  assert.match(failed.error, /not closed/i);
+
+  const { listAdminAuditLog } = await import('../src/db/ewcAdminAuditLog.js');
+  const audit = (await listAdminAuditLog(20)).find(
+    (entry) => entry.target === queued.operation.id && entry.action === 'prediction.operation.completed',
+  );
+  assert.equal(audit?.details?.status, 'failed');
+  assert.equal(audit?.details?.reasonCode, 'round_not_closed');
+  assert.equal(JSON.stringify(audit?.details).includes('placements'), false);
+  assert.equal(JSON.stringify(audit?.details).includes('picks'), false);
 });
