@@ -5,9 +5,11 @@ import { sameOriginOr403 } from "@/lib/community";
 import { getCommentById, moderateComment } from "@/lib/comments";
 import { parseId, parseModerationAction } from "@/lib/comment-validation";
 import { rateLimitOr429 } from "@/lib/rate-limit";
+import { readBoundedJson, requestBodyErrorResponse } from "@/lib/request-body";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+const MODERATION_BODY_MAX_BYTES = 8 * 1024;
 
 export async function POST(request: Request, context: { params: Promise<{ id: string }> }) {
   const origin = sameOriginOr403(request);
@@ -25,7 +27,9 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
   const limited = await rateLimitOr429({ key: `comment:moderate:${access.discordUserId}`, limit: 60, windowSec: 600 });
   if (limited) return limited;
 
-  const body = await request.json().catch(() => ({}));
+  const parsed = await readBoundedJson<Record<string, unknown>>(request, MODERATION_BODY_MAX_BYTES);
+  if (!parsed.ok) return requestBodyErrorResponse(parsed.reason);
+  const body = parsed.value;
   const action = parseModerationAction(body?.action);
   if (!action) return NextResponse.json({ error: "Unknown moderation action" }, { status: 400 });
   const reason = typeof body?.reason === "string" ? body.reason.slice(0, 500) : null;

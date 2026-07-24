@@ -74,6 +74,23 @@ describe("web EWC prediction write routes", () => {
     expect(mockWeekly).not.toHaveBeenCalled();
   });
 
+  test("returns stable errors for malformed and oversized member JSON", async () => {
+    const malformed = new Request("http://localhost/api/me/ewc/picks/weekly", {
+      method: "POST",
+      headers: { "content-type": "application/json", origin: "http://localhost", host: "localhost" },
+      body: "{not-json",
+    });
+    expect((await weeklyPOST(malformed)).status).toBe(400);
+
+    const oversized = request(
+      "/api/me/ewc/picks/weekly",
+      { weekKey: "week", gameKey: "game", pick: "Falcons" },
+    );
+    oversized.headers.set("Content-Length", "9000");
+    expect((await weeklyPOST(oversized)).status).toBe(413);
+    expect(mockWeekly).not.toHaveBeenCalled();
+  });
+
   test("enforces per-member and IP rate-limit checks with their Retry-After response", async () => {
     mockLimit.mockResolvedValueOnce(new Response(null, { status: 429, headers: { "Retry-After": "30" } }) as never);
     const response = await weeklyPOST(request("/api/me/ewc/picks/weekly", { weekKey: "week", gameKey: "game", pick: "Falcons" }));
@@ -92,12 +109,23 @@ describe("web EWC prediction write routes", () => {
   test("timestamps a web pick only after its complete request body is received", async () => {
     let now = 1_000;
     const clock = vi.spyOn(Date, "now").mockImplementation(() => now);
-    const delayed = {
-      json: vi.fn(async () => {
+    const body = new ReadableStream<Uint8Array>({
+      pull(controller) {
         now = 9_000;
-        return { weekKey: "week-one", gameKey: "valorant", pick: "Team Falcons" };
-      }),
-    } as unknown as Request;
+        controller.enqueue(new TextEncoder().encode(JSON.stringify({
+          weekKey: "week-one",
+          gameKey: "valorant",
+          pick: "Team Falcons",
+        })));
+        controller.close();
+      },
+    });
+    const delayed = new Request("http://localhost/api/me/ewc/picks/weekly", {
+      method: "POST",
+      headers: { "content-type": "application/json", origin: "http://localhost", host: "localhost" },
+      body,
+      duplex: "half",
+    } as RequestInit & { duplex: "half" });
 
     await weeklyPOST(delayed);
     expect(mockWeekly).toHaveBeenCalledWith(expect.objectContaining({ submittedAt: 9 }));

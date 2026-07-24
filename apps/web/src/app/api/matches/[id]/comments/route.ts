@@ -5,9 +5,11 @@ import { createMatchComment, getTargetCommentsView } from "@/lib/comments";
 import { parseId, validateCommentBody } from "@/lib/comment-validation";
 import { getMatchPageModel } from "@/lib/match-details";
 import { rateLimitOr429 } from "@/lib/rate-limit";
+import { readBoundedJson, requestBodyErrorResponse } from "@/lib/request-body";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+const MATCH_COMMENT_BODY_MAX_BYTES = 8 * 1024;
 
 async function matchExists(matchId: number) {
   // Match comments follow the same public visibility boundary as the match page:
@@ -69,7 +71,12 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
   const ipLimited = await rateLimitOr429({ key: `comment:create:ip:${clientIp(request)}`, limit: 15, windowSec: 600 });
   if (ipLimited) return ipLimited;
 
-  const body = await request.json().catch(() => ({}));
+  const parsed = await readBoundedJson<{ body?: unknown; parentCommentId?: unknown }>(
+    request,
+    MATCH_COMMENT_BODY_MAX_BYTES,
+  );
+  if (!parsed.ok) return requestBodyErrorResponse(parsed.reason);
+  const body = parsed.value;
   const validated = validateCommentBody(body?.body);
   if (!validated.ok) return NextResponse.json({ error: validated.error }, { status: 400 });
 

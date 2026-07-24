@@ -1,5 +1,5 @@
-import { describe, expect, test } from "vitest";
-import { readBoundedJson } from "@/lib/request-body";
+import { afterEach, describe, expect, test, vi } from "vitest";
+import { readBoundedFormData, readBoundedJson } from "@/lib/request-body";
 
 function jsonRequest(body: string, headers: Record<string, string> = {}) {
   return new Request("http://localhost/api/test", {
@@ -64,5 +64,59 @@ describe("readBoundedJson", () => {
   test("missing body is invalid", async () => {
     const request = new Request("http://localhost/api/test", { method: "POST" });
     expect(await readBoundedJson(request, 1024)).toEqual({ ok: false, reason: "invalid" });
+  });
+
+  test("enforces UTF-8 byte length instead of JavaScript character length", async () => {
+    const payload = JSON.stringify({ text: "مرحبا" });
+    const bytes = new TextEncoder().encode(payload).byteLength;
+    expect(payload.length).toBeLessThan(bytes);
+    expect(await readBoundedJson(jsonRequest(payload), bytes - 1)).toEqual({
+      ok: false,
+      reason: "too_large",
+    });
+    expect(await readBoundedJson(jsonRequest(payload), bytes)).toEqual({
+      ok: true,
+      value: { text: "مرحبا" },
+    });
+  });
+});
+
+describe("readBoundedFormData", () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  test("parses multipart form data after bounded admission", async () => {
+    const form = new FormData();
+    form.set("label", "EWC graphic");
+    form.set("asset", new File(["image-bytes"], "graphic.png", { type: "image/png" }));
+    const request = new Request("http://localhost/api/test", { method: "POST", body: form });
+    const size = (await request.clone().arrayBuffer()).byteLength;
+
+    const result = await readBoundedFormData(request, size);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.get("label")).toBe("EWC graphic");
+    const file = result.value.get("asset");
+    expect(file).toBeInstanceOf(File);
+    expect((file as File).name).toBe("graphic.png");
+  });
+
+  test("rejects chunked overflow before native multipart parsing", async () => {
+    const formDataSpy = vi.spyOn(Request.prototype, "formData");
+    const request = chunkedRequest(["x".repeat(16), "y".repeat(16)]);
+    const result = await readBoundedFormData(request, 20);
+    expect(result).toEqual({ ok: false, reason: "too_large" });
+    expect(formDataSpy).not.toHaveBeenCalled();
+  });
+
+  test("returns invalid for malformed multipart within the cap", async () => {
+    const request = new Request("http://localhost/api/test", {
+      method: "POST",
+      headers: { "Content-Type": "multipart/form-data; boundary=missing" },
+      body: "not-a-multipart-body",
+    });
+    expect(await readBoundedFormData(request, 1024)).toEqual({
+      ok: false,
+      reason: "invalid",
+    });
   });
 });

@@ -8,10 +8,12 @@ import { getAdminPredictionOperationsModel } from "@/lib/admin-predictions";
 import { DEFAULT_SEASON } from "@/lib/env";
 import { resolveDefaultGuildId } from "@/lib/guild";
 import { rateLimitOr429 } from "@/lib/rate-limit";
+import { readBoundedJson, requestBodyErrorResponse } from "@/lib/request-body";
 import { isSeason } from "@/lib/validate";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+const PREDICTION_OPERATION_BODY_MAX_BYTES = 64 * 1024;
 
 const IDEMPOTENCY_KEY = /^[a-zA-Z0-9_-]{16,120}$/;
 
@@ -57,7 +59,9 @@ export async function POST(request: Request) {
   });
   if (limited) return limited;
 
-  const body = await request.json().catch(() => null);
+  const parsed = await readBoundedJson<unknown>(request, PREDICTION_OPERATION_BODY_MAX_BYTES);
+  if (!parsed.ok) return requestBodyErrorResponse(parsed.reason);
+  const body = parsed.value;
   if (!exactOperationBody(body) || !IDEMPOTENCY_KEY.test(body.idempotencyKey)) {
     return NextResponse.json({ error: "Invalid operation request." }, { status: 400 });
   }

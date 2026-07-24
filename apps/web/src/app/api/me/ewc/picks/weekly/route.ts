@@ -2,9 +2,11 @@ import { NextResponse } from "next/server";
 import { clientIp, requireVerifiedMember, sameOriginOr403 } from "@/lib/community";
 import { submitWebWeeklyPick, mapPredictionWriteStatus } from "@/lib/ewc-prediction-writes";
 import { rateLimitOr429 } from "@/lib/rate-limit";
+import { readBoundedJson, requestBodyErrorResponse } from "@/lib/request-body";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+const WEEKLY_PICK_BODY_MAX_BYTES = 8 * 1024;
 
 function exactWeeklyBody(value: unknown): { weekKey?: unknown; gameKey?: unknown; pick?: unknown } | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
@@ -26,7 +28,9 @@ export async function POST(request: Request) {
   const ipLimit = await rateLimitOr429({ key: `ewc-pick-weekly-ip:${clientIp(request)}`, limit: 60, windowSec: 60 });
   if (ipLimit) return ipLimit;
 
-  const body = exactWeeklyBody(await request.json().catch(() => null));
+  const parsed = await readBoundedJson<unknown>(request, WEEKLY_PICK_BODY_MAX_BYTES);
+  if (!parsed.ok) return requestBodyErrorResponse(parsed.reason);
+  const body = exactWeeklyBody(parsed.value);
   if (!body) return NextResponse.json({ error: "Invalid prediction request.", code: "invalid_input" }, { status: 400 });
 
   // The payload must be fully received before its trusted timestamp is taken.

@@ -3,10 +3,12 @@ import { sameOriginOr403 } from "@/lib/community";
 import { DEFAULT_SEASON } from "@/lib/env";
 import { ensureEwcProfileLink, getEwcMePayload } from "@/lib/ewc-profile-sync";
 import { getOptionalSession } from "@/lib/session";
+import { readBoundedJson, requestBodyErrorResponse } from "@/lib/request-body";
 import { isSnowflake, isSeason } from "@/lib/validate";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+const EWC_PROFILE_LINK_BODY_MAX_BYTES = 8 * 1024;
 
 export async function GET(request: Request) {
   const session = await getOptionalSession();
@@ -43,7 +45,12 @@ export async function POST(request: Request) {
   const session = await getOptionalSession();
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const body = await request.json().catch(() => ({}));
+  const parsed = await readBoundedJson<Record<string, unknown>>(
+    request,
+    EWC_PROFILE_LINK_BODY_MAX_BYTES,
+  );
+  if (!parsed.ok) return requestBodyErrorResponse(parsed.reason);
+  const body = parsed.value;
   const guildId = body.guildId ?? null;
   const seasonParam = body.season ?? null;
 

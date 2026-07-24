@@ -5,9 +5,11 @@ import { recordAdminAudit } from "@/lib/audit";
 import { sameOriginOr403 } from "@/lib/community";
 import { createGame, getGame, listGames } from "@/lib/games";
 import { normalizeSlug, validateGameContent } from "@/lib/game-validation";
+import { readBoundedJson, requestBodyErrorResponse } from "@/lib/request-body";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+const GAME_CONTENT_BODY_MAX_BYTES = 64 * 1024;
 
 export async function GET() {
   const access = await getAdminAccess();
@@ -24,7 +26,9 @@ export async function POST(request: Request) {
   if (!access.session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   if (!isSuper(access)) return NextResponse.json({ error: "Super admin only" }, { status: 403 });
 
-  const body = await request.json().catch(() => ({}));
+  const parsed = await readBoundedJson<Record<string, unknown>>(request, GAME_CONTENT_BODY_MAX_BYTES);
+  if (!parsed.ok) return requestBodyErrorResponse(parsed.reason);
+  const body = parsed.value;
   const slug = normalizeSlug(typeof body.slug === "string" ? body.slug : "");
   if (!slug) return NextResponse.json({ error: "A URL slug is required" }, { status: 400 });
   if (await getGame(slug)) {

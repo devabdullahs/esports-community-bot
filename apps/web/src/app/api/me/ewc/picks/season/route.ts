@@ -2,9 +2,11 @@ import { NextResponse } from "next/server";
 import { clientIp, requireVerifiedMember, sameOriginOr403 } from "@/lib/community";
 import { submitWebSeasonPick, mapPredictionWriteStatus } from "@/lib/ewc-prediction-writes";
 import { rateLimitOr429 } from "@/lib/rate-limit";
+import { readBoundedJson, requestBodyErrorResponse } from "@/lib/request-body";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+const SEASON_PICK_BODY_MAX_BYTES = 8 * 1024;
 
 function exactSeasonBody(value: unknown): { action?: unknown; index?: unknown; a?: unknown; b?: unknown; pick?: unknown } | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
@@ -28,7 +30,9 @@ export async function POST(request: Request) {
   const ipLimit = await rateLimitOr429({ key: `ewc-pick-season-ip:${clientIp(request)}`, limit: 60, windowSec: 60 });
   if (ipLimit) return ipLimit;
 
-  const body = exactSeasonBody(await request.json().catch(() => null));
+  const parsed = await readBoundedJson<unknown>(request, SEASON_PICK_BODY_MAX_BYTES);
+  if (!parsed.ok) return requestBodyErrorResponse(parsed.reason);
+  const body = exactSeasonBody(parsed.value);
   if (!body) return NextResponse.json({ error: "Invalid prediction request.", code: "invalid_input" }, { status: 400 });
 
   const submittedAt = Math.floor(Date.now() / 1000);

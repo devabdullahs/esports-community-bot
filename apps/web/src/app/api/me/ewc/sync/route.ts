@@ -6,11 +6,13 @@ import {
 } from "@/lib/ewc-profile-sync";
 import { sameOriginOr403 } from "@/lib/community";
 import { rateLimitOr429 } from "@/lib/rate-limit";
+import { readBoundedJson, requestBodyErrorResponse } from "@/lib/request-body";
 import { getOptionalSession } from "@/lib/session";
 import { isSnowflake, isSeason } from "@/lib/validate";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+const EWC_PROFILE_SYNC_BODY_MAX_BYTES = 8 * 1024;
 
 export async function POST(request: Request) {
   const origin = sameOriginOr403(request);
@@ -22,7 +24,12 @@ export async function POST(request: Request) {
   const limited = await rateLimitOr429({ key: `ewc-sync:${session.user.id}`, limit: 3, windowSec: 300 });
   if (limited) return limited;
 
-  const body = await request.json().catch(() => ({}));
+  const parsed = await readBoundedJson<{ guildId?: unknown; season?: unknown }>(
+    request,
+    EWC_PROFILE_SYNC_BODY_MAX_BYTES,
+  );
+  if (!parsed.ok) return requestBodyErrorResponse(parsed.reason);
+  const body = parsed.value;
 
   if (body.guildId !== undefined && body.guildId !== null && !isSnowflake(body.guildId)) {
     return NextResponse.json({ error: "Invalid guildId." }, { status: 400 });

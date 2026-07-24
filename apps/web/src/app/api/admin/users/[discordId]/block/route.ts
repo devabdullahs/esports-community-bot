@@ -4,10 +4,12 @@ import { getAdminAccess } from "@/lib/admin";
 import { recordAdminAudit } from "@/lib/audit";
 import { sameOriginOr403 } from "@/lib/community";
 import { rateLimitOr429 } from "@/lib/rate-limit";
+import { readBoundedJson, requestBodyErrorResponse } from "@/lib/request-body";
 import { isSnowflake } from "@/lib/validate";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+const USER_BLOCK_BODY_MAX_BYTES = 8 * 1024;
 
 // The bot DB module is plain JS; its param defaults (= null) make TS infer the
 // optional fields as `null | undefined`. Give it an explicit signature so the
@@ -54,7 +56,12 @@ export async function POST(request: Request, context: Ctx) {
   if (g.error) return g.error;
   const { access, discordId } = g;
 
-  const body = await request.json().catch(() => ({}));
+  const parsed = await readBoundedJson<{ reason?: unknown }>(
+    request,
+    USER_BLOCK_BODY_MAX_BYTES,
+  );
+  if (!parsed.ok) return requestBodyErrorResponse(parsed.reason);
+  const body = parsed.value;
   const reason = typeof body?.reason === "string" ? body.reason.slice(0, 500) : null;
 
   await blockUser({

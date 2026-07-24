@@ -9,9 +9,11 @@ import { getMediaChannel } from "@/lib/media";
 import { indexNowUrlsForPost, scheduleIndexNowUrls } from "@/lib/indexnow";
 import { createNewsPost, listAdminNewsPosts, type NewsStatus } from "@/lib/news";
 import { validateNewsInput } from "@/lib/news-validation";
+import { readBoundedJson, requestBodyErrorResponse } from "@/lib/request-body";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+const NEWS_EDITOR_BODY_MAX_BYTES = 512 * 1024;
 
 export async function GET(request: Request) {
   const access = await getAdminAccess();
@@ -47,7 +49,9 @@ export async function POST(request: Request) {
   if (!access.session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   if (!access.allowed) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
-  const body = await request.json().catch(() => ({}));
+  const parsed = await readBoundedJson<unknown>(request, NEWS_EDITOR_BODY_MAX_BYTES);
+  if (!parsed.ok) return requestBodyErrorResponse(parsed.reason);
+  const body = parsed.value;
   const validated = validateNewsInput(body);
   if (!validated.ok) return NextResponse.json({ error: validated.error }, { status: 400 });
   const v = validated.value;

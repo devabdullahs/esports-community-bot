@@ -3,9 +3,11 @@ import { clientIp, requireVerifiedMember, sameOriginOr403 } from "@/lib/communit
 import { getCommentById, reportPostComment } from "@/lib/comments";
 import { COMMENT_REPORT_DETAIL_MAX, parseId, parseReportReason } from "@/lib/comment-validation";
 import { rateLimitOr429 } from "@/lib/rate-limit";
+import { readBoundedJson, requestBodyErrorResponse } from "@/lib/request-body";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+const COMMENT_REPORT_BODY_MAX_BYTES = 8 * 1024;
 
 // Verified members can report a comment they can see. One report per user per
 // comment (a repeat is a silent no-op). Enough distinct reports auto-hold the
@@ -26,7 +28,12 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
   const ipLimited = await rateLimitOr429({ key: `comment:report:ip:${clientIp(request)}`, limit: 30, windowSec: 3600 });
   if (ipLimited) return ipLimited;
 
-  const body = await request.json().catch(() => ({}));
+  const parsed = await readBoundedJson<{ reason?: unknown; detail?: unknown }>(
+    request,
+    COMMENT_REPORT_BODY_MAX_BYTES,
+  );
+  if (!parsed.ok) return requestBodyErrorResponse(parsed.reason);
+  const body = parsed.value;
   const reason = parseReportReason(body?.reason);
   if (!reason) return NextResponse.json({ error: "Choose a reason for the report." }, { status: 400 });
   const detail = typeof body?.detail === "string" ? body.detail.slice(0, COMMENT_REPORT_DETAIL_MAX) : "";

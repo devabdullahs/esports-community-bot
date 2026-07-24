@@ -3,9 +3,11 @@ import { requireVerifiedMember, sameOriginOr403 } from "@/lib/community";
 import { editOwnComment, getCommentById, softDeleteComment } from "@/lib/comments";
 import { parseId, validateCommentBody } from "@/lib/comment-validation";
 import { rateLimitOr429 } from "@/lib/rate-limit";
+import { readBoundedJson, requestBodyErrorResponse } from "@/lib/request-body";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+const COMMENT_EDIT_BODY_MAX_BYTES = 8 * 1024;
 
 export async function PATCH(request: Request, context: { params: Promise<{ id: string }> }) {
   const origin = sameOriginOr403(request);
@@ -38,7 +40,12 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
   const limited = await rateLimitOr429({ key: `comment:edit:${member.discordUserId}`, limit: 10, windowSec: 600 });
   if (limited) return limited;
 
-  const body = await request.json().catch(() => ({}));
+  const parsed = await readBoundedJson<{ body?: unknown }>(
+    request,
+    COMMENT_EDIT_BODY_MAX_BYTES,
+  );
+  if (!parsed.ok) return requestBodyErrorResponse(parsed.reason);
+  const body = parsed.value;
   const validated = validateCommentBody(body?.body);
   if (!validated.ok) return NextResponse.json({ error: validated.error }, { status: 400 });
 

@@ -9,9 +9,11 @@ import {
 import { parseId, validateCommentBody } from "@/lib/comment-validation";
 import { getPublishedNewsPostCached } from "@/lib/news";
 import { rateLimitOr429 } from "@/lib/rate-limit";
+import { readBoundedJson, requestBodyErrorResponse } from "@/lib/request-body";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+const NEWS_COMMENT_BODY_MAX_BYTES = 8 * 1024;
 
 // GET is public: anyone can read the visible comment thread + post-like count.
 export async function GET(request: Request, context: { params: Promise<{ postId: string }> }) {
@@ -72,7 +74,12 @@ export async function POST(request: Request, context: { params: Promise<{ postId
   const ipLimited = await rateLimitOr429({ key: `comment:create:ip:${clientIp(request)}`, limit: 15, windowSec: 600 });
   if (ipLimited) return ipLimited;
 
-  const body = await request.json().catch(() => ({}));
+  const parsed = await readBoundedJson<{ body?: unknown; parentCommentId?: unknown }>(
+    request,
+    NEWS_COMMENT_BODY_MAX_BYTES,
+  );
+  if (!parsed.ok) return requestBodyErrorResponse(parsed.reason);
+  const body = parsed.value;
   const validated = validateCommentBody(body?.body);
   if (!validated.ok) return NextResponse.json({ error: validated.error }, { status: 400 });
 

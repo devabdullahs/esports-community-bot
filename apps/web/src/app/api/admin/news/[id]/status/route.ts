@@ -6,10 +6,12 @@ import { sameOriginOr403 } from "@/lib/community";
 import { getNewsPost, setNewsPostStatus } from "@/lib/news";
 import { indexNowUrlsForPost, scheduleIndexNowUrls } from "@/lib/indexnow";
 import { parsePostId } from "@/lib/news-validation";
+import { readBoundedJson, requestBodyErrorResponse } from "@/lib/request-body";
 import { validateNewsContentInput } from "@bot/lib/ewcNewsContent.js";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+const NEWS_STATUS_BODY_MAX_BYTES = 8 * 1024;
 
 export async function POST(
   request: Request,
@@ -26,7 +28,9 @@ export async function POST(
   const postId = parsePostId(id);
   if (postId === null) return NextResponse.json({ error: "Invalid id" }, { status: 400 });
 
-  const body = await request.json().catch(() => ({}));
+  const parsed = await readBoundedJson<Record<string, unknown>>(request, NEWS_STATUS_BODY_MAX_BYTES);
+  if (!parsed.ok) return requestBodyErrorResponse(parsed.reason);
+  const body = parsed.value;
   const status = body.status;
   if (status !== "draft" && status !== "scheduled" && status !== "published") {
     return NextResponse.json({ error: "Invalid status" }, { status: 400 });

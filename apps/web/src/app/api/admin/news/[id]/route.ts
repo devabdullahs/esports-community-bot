@@ -9,9 +9,11 @@ import { getMediaChannel } from "@/lib/media";
 import { indexNowUrlsForPost, scheduleIndexNowUrls } from "@/lib/indexnow";
 import { deleteNewsPost, getNewsPost, updateNewsPost } from "@/lib/news";
 import { parsePostId, validateNewsInput } from "@/lib/news-validation";
+import { readBoundedJson, requestBodyErrorResponse } from "@/lib/request-body";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+const NEWS_EDITOR_BODY_MAX_BYTES = 512 * 1024;
 
 // A post is managed by whoever manages its owner — the media channel for media
 // posts, otherwise the game.
@@ -42,7 +44,9 @@ export async function PATCH(
   const existing = await getNewsPost(postId);
   if (!existing) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
-  const body = await request.json().catch(() => ({}));
+  const parsed = await readBoundedJson<unknown>(request, NEWS_EDITOR_BODY_MAX_BYTES);
+  if (!parsed.ok) return requestBodyErrorResponse(parsed.reason);
+  const body = parsed.value;
   const validated = validateNewsInput(body);
   if (!validated.ok) return NextResponse.json({ error: validated.error }, { status: 400 });
   const v = validated.value;

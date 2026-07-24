@@ -11,10 +11,12 @@ import {
 } from "@/lib/admins";
 import { listGames } from "@/lib/games";
 import { listMediaChannels } from "@/lib/media";
+import { readBoundedJson, requestBodyErrorResponse } from "@/lib/request-body";
 import { isSnowflake } from "@/lib/validate";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+const ADMIN_SCOPE_BODY_MAX_BYTES = 64 * 1024;
 
 function sanitizeScopes(input: unknown, valid: string[]): string[] {
   if (!Array.isArray(input)) return [];
@@ -39,7 +41,9 @@ export async function PATCH(
   }
   if (!(await getAdmin(discordId))) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
-  const body = await request.json().catch(() => ({}));
+  const parsed = await readBoundedJson<Record<string, unknown>>(request, ADMIN_SCOPE_BODY_MAX_BYTES);
+  if (!parsed.ok) return requestBodyErrorResponse(parsed.reason);
+  const body = parsed.value;
   const rawDisplayName = typeof body.displayName === "string" ? body.displayName.trim() : "";
   if (rawDisplayName.length > 100) {
     return NextResponse.json({ error: "Display name must be 100 characters or fewer" }, { status: 400 });

@@ -6,6 +6,7 @@ import { sameOriginOr403 } from "@/lib/community";
 import { rateLimitOr429 } from "@/lib/rate-limit";
 import { isR2Configured, uploadToR2 } from "@/lib/r2";
 import { matchesMagicBytes } from "@/lib/image-upload";
+import { readBoundedFormData, requestBodyErrorResponse } from "@/lib/request-body";
 
 export { matchesMagicBytes } from "@/lib/image-upload";
 
@@ -22,6 +23,7 @@ const ALLOWED_TYPES: Record<string, string> = {
 };
 
 const MAX_BYTES = 8 * 1024 * 1024; // 8 MB
+const NEWS_UPLOAD_MULTIPART_MAX_BYTES = MAX_BYTES + 64 * 1024;
 
 export async function POST(request: Request) {
   const origin = sameOriginOr403(request);
@@ -49,8 +51,9 @@ export async function POST(request: Request) {
     );
   }
 
-  const form = await request.formData().catch(() => null);
-  const file = form?.get("file");
+  const parsed = await readBoundedFormData(request, NEWS_UPLOAD_MULTIPART_MAX_BYTES);
+  if (!parsed.ok) return requestBodyErrorResponse(parsed.reason);
+  const file = parsed.value.get("file");
   if (!(file instanceof File)) {
     return NextResponse.json({ error: "No file provided" }, { status: 400 });
   }
