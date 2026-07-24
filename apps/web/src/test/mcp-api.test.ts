@@ -514,6 +514,102 @@ describe("/api/mcp tools", () => {
     expect(entry?.details).toMatchObject({ keyPrefix: key.key.keyPrefix, gameSlug: GAME_ALLOWED });
   });
 
+  test("searches admin news with composable owner filters and the requested locale", async () => {
+    const { createEwcNewsPost } = await import("@bot/db/ewcNewsPosts.js");
+    const marker = `mcp-scope-${Date.now()}`;
+    const translated = (english: string, arabic: string) => ({
+      contentMode: "translated",
+      defaultLocale: "en",
+      translations: {
+        en: { title: english, summary: `${marker} English summary`, body: `${marker} English body` },
+        ar: { title: arabic, summary: `${marker} ملخص عربي`, body: `${marker} محتوى عربي` },
+      },
+    });
+
+    await createEwcNewsPost({
+      gameSlug: GAME_ALLOWED,
+      status: "draft",
+      ewc: true,
+      ...translated(`${marker} game owned`, `${marker} خبر اللعبة`),
+    });
+    await createEwcNewsPost({
+      gameSlug: GAME_ALLOWED,
+      mediaSlug: MEDIA_ALLOWED,
+      status: "draft",
+      ewc: true,
+      ...translated(`${marker} related media`, `${marker} خبر المنصة المرتبط`),
+    });
+    await createEwcNewsPost({
+      gameSlug: GAME_OUTSIDE_SCOPE,
+      mediaSlug: MEDIA_ALLOWED,
+      status: "published",
+      ewc: false,
+      ...translated(`${marker} other game media`, `${marker} خبر منصة آخر`),
+    });
+    await createEwcNewsPost({
+      gameSlug: GAME_ALLOWED,
+      mediaSlug: MEDIA_OUTSIDE_SCOPE,
+      status: "draft",
+      ewc: true,
+      ...translated(`${marker} forbidden media`, `${marker} خبر منصة ممنوعة`),
+    });
+
+    const key = await createKey({
+      ownerDiscordId: SCOPED_ID,
+      tools: ["search_news"],
+      games: [GAME_ALLOWED],
+      media: [MEDIA_ALLOWED],
+    });
+    const search = async (args: Record<string, unknown>) => {
+      const body = await callMcpTool(key.secret, "search_news", args);
+      expect(body.result.isError).not.toBe(true);
+      return body.result.structuredContent.posts as Array<{
+        title: string;
+        gameSlug: string | null;
+        mediaSlug: string | null;
+        status: string;
+      }>;
+    };
+
+    const gameOnly = await search({ gameSlug: GAME_ALLOWED, query: marker, limit: 25 });
+    expect(gameOnly.map((post) => post.title)).toEqual([`${marker} game owned`]);
+
+    const mediaOnly = await search({ mediaSlug: MEDIA_ALLOWED, query: marker, limit: 25 });
+    expect(mediaOnly.map((post) => post.title).sort()).toEqual(
+      [`${marker} other game media`, `${marker} related media`].sort(),
+    );
+
+    const combined = await search({
+      gameSlug: GAME_ALLOWED,
+      mediaSlug: MEDIA_ALLOWED,
+      query: "خبر المنصة المرتبط",
+      locale: "ar",
+      status: "draft",
+      ewcOnly: true,
+      limit: 25,
+    });
+    expect(combined).toEqual([
+      expect.objectContaining({
+        title: `${marker} خبر المنصة المرتبط`,
+        gameSlug: GAME_ALLOWED,
+        mediaSlug: MEDIA_ALLOWED,
+        status: "draft",
+      }),
+    ]);
+
+    const english = await search({
+      gameSlug: GAME_ALLOWED,
+      mediaSlug: MEDIA_ALLOWED,
+      query: "related media",
+      locale: "en",
+      limit: 25,
+    });
+    expect(english.map((post) => post.title)).toEqual([`${marker} related media`]);
+
+    const allVisible = await search({ query: marker, limit: 25 });
+    expect(allVisible.some((post) => post.mediaSlug === MEDIA_OUTSIDE_SCOPE)).toBe(false);
+  });
+
   test("retries a lost create_news_draft response without duplicating the post or audit", async () => {
     const key = await createKey({ tools: ["create_news_draft"], games: [GAME_ALLOWED] });
     const idempotencyKey = nextIdempotencyKey("draft-replay");

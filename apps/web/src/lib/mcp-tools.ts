@@ -263,9 +263,9 @@ export function createAdminMcpServer(access: McpAccess) {
         status: status ?? null,
         gameSlug: cleanGame || null,
         mediaSlug: cleanMedia || null,
+        locale: locale ?? null,
       }))
         .filter((post) => postVisibleToAccess(access, post))
-        .filter((post) => !locale || post.locale === locale)
         .filter((post) => !ewcOnly || post.ewc)
         .filter((post) => {
           if (!q) return true;

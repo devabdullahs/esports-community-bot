@@ -250,12 +250,18 @@ export async function getPublishedEwcNewsPost(id, locale = 'en') {
 // Admin list. Filter by game (game-owned posts only), by media channel (its posts),
 // or neither (all, for supers). game_slug filters exclude media posts so the game
 // admin view stays game-only.
-export async function listEwcNewsPostsForAdmin({ gameSlug = null, mediaSlug = null, status = null } = {}) {
+export async function listEwcNewsPostsForAdmin({
+  gameSlug = null,
+  mediaSlug = null,
+  status = null,
+  locale = null,
+} = {}) {
   const where = [];
   const params = [];
   if (gameSlug) {
     params.push(gameSlug);
-    where.push(`game_slug = $${params.length}`, 'media_slug IS NULL');
+    where.push(`game_slug = $${params.length}`);
+    if (!mediaSlug) where.push('media_slug IS NULL');
   }
   if (mediaSlug) {
     params.push(mediaSlug);
@@ -269,7 +275,7 @@ export async function listEwcNewsPostsForAdmin({ gameSlug = null, mediaSlug = nu
     where.length ? ` WHERE ${where.join(' AND ')}` : ''
   } ORDER BY updated_at DESC, id DESC`;
   const rows = await all(sql, params);
-  return Promise.all(rows.map((row) => hydrate(row)));
+  return Promise.all(rows.map((row) => hydrate(row, locale || undefined)));
 }
 
 // Public game news: only game-owned posts (media posts live on the media page).
