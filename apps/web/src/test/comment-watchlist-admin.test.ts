@@ -106,27 +106,58 @@ describe("keyword watchlist admin APIs", () => {
     expect((await bulkPOST(request("POST", { ids: [1], action: "hold" }))).status).toBe(403);
   });
 
-  test("bulk hold is best-effort, per-comment audited, and reports invalid ids", async () => {
+  test("bulk hold rejects malformed batches without partial writes", async () => {
     mockAccess.mockResolvedValue(superAdmin());
     const { firstId, secondId } = await seedComments();
     const response = await bulkPOST(request("POST", {
       ids: [firstId, "not-an-id", 999999999, firstId, secondId],
       action: "hold",
     }));
-    expect(response.status).toBe(200);
+    expect(response.status).toBe(400);
     const result = await response.json() as {
       updated: Array<{ id: number; status: string }>;
       failed: Array<{ id: string | number; error: string }>;
     };
-    expect(result.updated).toEqual(expect.arrayContaining([
-      { id: firstId, status: "pending" },
-      { id: secondId, status: "pending" },
-    ]));
+    expect(result.updated).toEqual([]);
     expect(result.failed).toEqual(expect.arrayContaining([
       { id: "not-an-id", error: "invalid-id" },
-      { id: 999999999, error: "not-found" },
       { id: firstId, error: "duplicate-id" },
     ]));
+
+    const { getComment } = await import("@bot/db/postComments.js") as {
+      getComment: (id: number) => Promise<{ status: string; autoApproveAt: number | null }>;
+    };
+    expect(await getComment(firstId)).toMatchObject({ status: "visible" });
+    expect(await getComment(secondId)).toMatchObject({ status: "visible" });
+
+    const missing = await bulkPOST(request("POST", {
+      ids: [firstId, 999999999, secondId],
+      action: "hold",
+    }));
+    expect(missing.status).toBe(409);
+    expect(await missing.json()).toEqual({
+      updated: [],
+      failed: [{ id: 999999999, error: "not-found" }],
+    });
+    expect(await getComment(firstId)).toMatchObject({ status: "visible" });
+    expect(await getComment(secondId)).toMatchObject({ status: "visible" });
+  });
+
+  test("bulk hold commits and audits every comment when the whole batch is valid", async () => {
+    mockAccess.mockResolvedValue(superAdmin());
+    const { firstId, secondId } = await seedComments();
+    const response = await bulkPOST(request("POST", {
+      ids: [firstId, secondId],
+      action: "hold",
+    }));
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({
+      updated: [
+        { id: firstId, status: "pending" },
+        { id: secondId, status: "pending" },
+      ],
+      failed: [],
+    });
 
     const { getComment } = await import("@bot/db/postComments.js") as {
       getComment: (id: number) => Promise<{ status: string; autoApproveAt: number | null }>;
@@ -162,7 +193,7 @@ describe("keyword watchlist admin APIs", () => {
     await setCommentStatus(firstId, "deleted", { deletedBy: "author" });
 
     const response = await bulkPOST(request("POST", { ids: [firstId], action: "approve" }));
-    expect(response.status).toBe(200);
+    expect(response.status).toBe(409);
     expect(await response.json()).toEqual({
       updated: [],
       failed: [{ id: firstId, error: "invalid-status" }],

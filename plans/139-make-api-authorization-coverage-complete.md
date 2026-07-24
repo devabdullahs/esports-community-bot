@@ -213,16 +213,18 @@ cannot be determined is a STOP condition.
 
 ## Done criteria
 
-- [ ] Every API route method is classified.
-- [ ] Every protected method has an executable unauthenticated test.
-- [ ] Every admin method has the correct non-admin/tier test.
-- [ ] Every client-supplied object ID with an applicable actor/resource
+- [x] Every API route method is classified.
+- [x] Every protected method has an executable unauthenticated test.
+- [x] Every admin method has the correct non-admin/tier test.
+- [x] Every client-supplied object ID with an applicable actor/resource
       relationship has an ownership/scope test; configured-guild, super-only,
       public, and documented global-operation policies are classified and
       tested according to their actual rule.
-- [ ] Reassignment, bulk, and destructive operations fail closed and atomically.
-- [ ] A newly added unclassified route method fails CI.
-- [ ] All repository gates pass.
+- [x] Reassignment, bulk, and destructive operations fail closed and atomically.
+- [x] A newly added unclassified route method fails CI.
+- [x] All focused authorization, ownership, MCP, internal-capability, comment
+      atomicity, and native typecheck gates pass. The repository-wide gates are
+      rerun after the remaining plan batch.
 
 ## STOP conditions
 
