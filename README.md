@@ -110,11 +110,16 @@ The app can migrate an existing SQLite bot database into PostgreSQL:
 
 ```bash
 npm run db:sqlite-to-pg -- --dry-run --sqlite backups/nas-2026-06-13/bot.sqlite
+npm run db:sqlite-to-pg:preflight -- --sqlite backups/nas-2026-06-13/bot.sqlite
 npm run db:sqlite-to-pg -- --sqlite backups/nas-2026-06-13/bot.sqlite
 ```
 
-Use a dry run first to confirm source table counts. The real run applies the
-Postgres schema, copies rows, and prints target counts for verification.
+Set `DATABASE_URL` in the environment for preflight and import; it is not
+accepted as a command-line value. The dry run is a source-only inventory.
+Preflight applies versioned migrations, validates exact source-to-target column
+mapping, and requires every selected target table to be empty. The real import
+uses one transaction and commits only after per-table counts, constraints, and
+identity sequences have all been validated.
 
 ## Discord Commands
 
