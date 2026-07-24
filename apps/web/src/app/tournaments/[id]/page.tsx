@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { notFound, permanentRedirect } from "next/navigation";
+import { notFound, permanentRedirect, redirect } from "next/navigation";
 import { ArrowLeftIcon, ExternalLinkIcon, RadioIcon } from "lucide-react";
 import { FollowButton } from "@/components/follows/follow-button";
 import { TournamentMark } from "@/components/tournaments/tournament-directory";
@@ -31,6 +31,45 @@ import { sourceLabel } from "@/lib/tournament-directory";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+const RESULTS_PAGE_SIZE = 50;
+
+type TournamentSearchParams = Record<string, string | string[] | undefined>;
+
+function parseResultsPage(searchParams: TournamentSearchParams): number {
+  const raw = Array.isArray(searchParams.resultsPage)
+    ? searchParams.resultsPage[0]
+    : searchParams.resultsPage;
+  if (!raw || !/^\d+$/.test(raw)) return 1;
+  const value = Number(raw);
+  return Number.isSafeInteger(value) && value > 0 ? value : 1;
+}
+
+function resultsPageHref({
+  tournamentId,
+  locale,
+  searchParams,
+  page,
+}: {
+  tournamentId: number;
+  locale: "en" | "ar";
+  searchParams: TournamentSearchParams;
+  page: number;
+}) {
+  const params = new URLSearchParams();
+  for (const [key, value] of Object.entries(searchParams)) {
+    if (key === "resultsPage" || value == null) continue;
+    if (Array.isArray(value)) {
+      for (const item of value) params.append(key, item);
+    } else {
+      params.set(key, value);
+    }
+  }
+  if (page > 1) params.set("resultsPage", String(page));
+  const query = params.toString();
+  const pathname = localizedPath(`/tournaments/${tournamentId}`, locale);
+  return `${pathname}${query ? `?${query}` : ""}#results`;
+}
+
 export async function generateMetadata({
   params,
 }: {
@@ -56,18 +95,27 @@ export async function generateMetadata({
 
 export default async function TournamentDetailPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>;
+  searchParams: Promise<TournamentSearchParams>;
 }) {
   const { id } = await params;
+  const resolvedSearchParams = await searchParams;
   const locale = await getRequestLocale();
   const text = copy[locale].tournaments;
 
   const tournamentId = /^\d+$/.test(id) ? Number(id) : NaN;
   if (!Number.isSafeInteger(tournamentId) || tournamentId <= 0) notFound();
 
+  const resultsPage = parseResultsPage(resolvedSearchParams);
+  const finishedOffset = (resultsPage - 1) * RESULTS_PAGE_SIZE;
   const [data, games] = await Promise.all([
-    getTournamentMatchesCached(tournamentId),
+    getTournamentMatchesCached(tournamentId, {
+      limit: RESULTS_PAGE_SIZE,
+      offset: finishedOffset,
+      includeBracket: true,
+    }),
     listGamesCached(),
   ]);
   if (!data) notFound();
@@ -76,6 +124,21 @@ export default async function TournamentDetailPage({
   if (tournament.id !== tournamentId) {
     permanentRedirect(localizedPath(`/tournaments/${tournament.id}`, locale));
   }
+  const lastResultsPage = Math.max(1, Math.ceil(data.totals.finished / RESULTS_PAGE_SIZE));
+  if (resultsPage > lastResultsPage) {
+    redirect(resultsPageHref({
+      tournamentId: tournament.id,
+      locale,
+      searchParams: resolvedSearchParams,
+      page: lastResultsPage,
+    }));
+  }
+  const currentResultsHref = resultsPageHref({
+    tournamentId: tournament.id,
+    locale,
+    searchParams: resolvedSearchParams,
+    page: resultsPage,
+  });
   const reminderMatchIds = [...data.matches.running, ...data.matches.scheduled].map((match) => match.id);
   const [followState, reminderState] = await Promise.all([
     getViewerFollowState("tournament", String(tournament.id)),
@@ -86,7 +149,7 @@ export default async function TournamentDetailPage({
   // Standings-format events (battle royale, TFT groups) have no head-to-head
   // matches; a 0/0/0 metric card would read like empty data. Before any results
   // land the rows are a seeded participants list rather than real standings.
-  const standingsOnly = data.standings.length > 0 && data.total === 0;
+  const standingsOnly = data.standings.length > 0 && data.totals.all === 0;
   const standingsHaveResults = data.standings.some(
     (s) => /[1-9]/.test(String(s.points ?? "")) || /[1-9]/.test(String(s.extra ?? "")),
   );
@@ -184,7 +247,7 @@ export default async function TournamentDetailPage({
               <CardContent className="grid grid-cols-3 gap-2 p-3">
                 <DetailMetric label={text.live} value={data.matches.running.length} locale={locale} live />
                 <DetailMetric label={text.upcoming} value={data.matches.scheduled.length} locale={locale} />
-                <DetailMetric label={text.results} value={data.matches.finished.length} locale={locale} />
+                <DetailMetric label={text.results} value={data.totals.finished} locale={locale} />
               </CardContent>
             )}
           </Card>
@@ -198,6 +261,31 @@ export default async function TournamentDetailPage({
         locale={locale}
         initialData={data}
         reminderState={reminderState}
+        callbackPath={currentResultsHref.replace(/#results$/, "")}
+        resultsNavigation={{
+          newestHref: resultsPageHref({
+            tournamentId: tournament.id,
+            locale,
+            searchParams: resolvedSearchParams,
+            page: 1,
+          }),
+          previousHref: resultsPage > 1
+            ? resultsPageHref({
+                tournamentId: tournament.id,
+                locale,
+                searchParams: resolvedSearchParams,
+                page: resultsPage - 1,
+              })
+            : null,
+          nextHref: data.finishedPage.hasMore
+            ? resultsPageHref({
+                tournamentId: tournament.id,
+                locale,
+                searchParams: resolvedSearchParams,
+                page: resultsPage + 1,
+              })
+            : null,
+        }}
       />
 
       <LiquipediaAttribution locale={locale} />

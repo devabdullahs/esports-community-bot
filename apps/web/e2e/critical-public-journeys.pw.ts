@@ -1,8 +1,16 @@
 import { expect, test } from "./fixtures";
+import type { Page } from "@playwright/test";
 
 // Vitest only discovers its test/spec suffixes, so this Playwright suite uses .pw.ts.
 const seededTournament = /EWC 2026.*Valorant/;
 const arabicSwitchLabel = /^\u0627\u0644\u0639\u0631\u0628\u064a\u0629$/;
+
+async function reconnectPage(page: Page) {
+  await page.context().setOffline(true);
+  await page.waitForTimeout(100);
+  await page.context().setOffline(false);
+  await page.evaluate(() => window.dispatchEvent(new Event("online")));
+}
 
 test("English home reaches the seeded tournament detail through the directory", async ({ page }, testInfo) => {
   await page.goto("/");
@@ -36,7 +44,7 @@ test("English home reaches the seeded tournament detail through the directory", 
     const response = await fetch(`/api${path}/matches`);
     return response.json();
   }, tournamentPath);
-  await page.route(`**/api${tournamentPath}/matches`, async (route) => {
+  await page.route(`**/api${tournamentPath}/matches?*`, async (route) => {
     await route.fulfill({
       contentType: "application/json",
       body: JSON.stringify({
@@ -52,10 +60,48 @@ test("English home reaches the seeded tournament detail through the directory", 
       }),
     });
   });
-  await page.waitForTimeout(16_000);
-  await page.evaluate(() => window.dispatchEvent(new Event("visibilitychange")));
+  await reconnectPage(page);
   await expect(page.locator("[data-sync-health]")).toHaveAttribute("data-sync-health", "delayed");
   await expect(page.getByText("Displayed data may lag", { exact: false })).toBeVisible();
+});
+
+test("tournament result history is complete, shareable, and retains data on refresh failure", async ({ page }, testInfo) => {
+  await page.goto("/tournaments");
+  const tournamentLink = page.getByRole("link", { name: seededTournament }).first();
+  await Promise.all([
+    page.waitForURL(/\/tournaments\/\d+$/),
+    tournamentLink.click(),
+  ]);
+
+  await expect(page.getByText("1-50 of 85", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Next", exact: true }).click();
+  await page.waitForURL(/resultsPage=2#results$/);
+  await expect(page.getByText("51-85 of 85", { exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Previous", exact: true })).toHaveAttribute(
+    "href",
+    /\/tournaments\/\d+#results$/,
+  );
+
+  const tournamentPath = new URL(page.url()).pathname;
+  const matchesPattern = `**/api${tournamentPath}/matches?*`;
+  await page.route(matchesPattern, async (route) => {
+    await route.fulfill({
+      status: 503,
+      contentType: "application/json",
+      body: JSON.stringify({ error: "temporary fixture failure" }),
+    });
+  });
+  await reconnectPage(page);
+  await expect(page.getByText("Tournament refresh failed", { exact: true })).toBeVisible();
+  await expect(page.getByText("51-85 of 85", { exact: true })).toBeVisible();
+
+  await page.unroute(matchesPattern);
+  await page.getByRole("button", { name: "Retry" }).click();
+  await expect(page.getByText("Tournament refresh failed", { exact: true })).toBeHidden();
+
+  if (testInfo.project.name === "mobile-chromium") {
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  }
 });
 
 test("Arabic tournament navigation preserves RTL at the mobile layout", async ({ page }, testInfo) => {
@@ -78,6 +124,7 @@ test("Arabic tournament navigation preserves RTL at the mobile layout", async ({
   await expect(page.getByRole("heading", { level: 1 })).toContainText("EWC 2026");
   await expect(page.locator("[data-sync-health]")).toHaveAttribute("data-sync-health", "fresh");
   await expect(page.getByText("\u0645\u062d\u062f\u0651\u062b", { exact: true })).toBeVisible();
+  await expect(page.getByText("\u0645\u0646 \u0668\u0665", { exact: false })).toBeVisible();
 
   if (testInfo.project.name === "mobile-chromium") {
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);

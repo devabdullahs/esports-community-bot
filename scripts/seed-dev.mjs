@@ -196,7 +196,7 @@ const seededTeam = await upsertTeam({
 });
 console.log(`team seeded: ${seededTeam.name} (#${seededTeam.id})`);
 
-// 3c) One tracked tournament + a few matches so /tournaments has data to render.
+// 3c) One tracked tournament with enough history to exercise public pagination.
 // addTournament/upsertMatch upsert on their unique keys, so re-running is idempotent.
 const tournament = await addTournament({
   source: 'liquipedia',
@@ -210,6 +210,15 @@ const tMatches = [
   { external_id: 'Match:val-run', team_a: 'Team Falcons', team_b: 'Team Liquid', score_a: 1, score_b: 0, status: 'running', scheduled_at: nowSeconds - 1800 },
   { external_id: 'Match:val-sch', team_a: 'Team Vitality', team_b: 'Gen.G', score_a: null, score_b: null, status: 'scheduled', scheduled_at: nowSeconds + 7200 },
   { external_id: 'Match:val-fin', team_a: 'T1', team_b: 'FaZe Clan', score_a: 2, score_b: 1, status: 'finished', scheduled_at: nowSeconds - 86400 },
+  ...Array.from({ length: 84 }, (_, index) => ({
+    external_id: `Match:val-history-${index + 1}`,
+    team_a: `History Alpha ${index + 1}`,
+    team_b: `History Bravo ${index + 1}`,
+    score_a: 2,
+    score_b: index % 2,
+    status: 'finished',
+    scheduled_at: nowSeconds - 90_000 - index * 3600,
+  })),
 ];
 let matchCount = 0;
 for (const m of tMatches) {

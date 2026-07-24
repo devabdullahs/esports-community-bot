@@ -11,6 +11,7 @@
 
 ## Status
 
+- **State**: DONE
 - **Priority**: P1
 - **Effort**: M
 - **Risk**: MED
@@ -225,13 +226,13 @@ provider.
 
 ## Done criteria
 
-- [ ] No finished match is silently unreachable.
-- [ ] Result counts describe the full deduplicated set.
-- [ ] History navigation is URL-addressable and works without client state.
-- [ ] Live polling does not reset or duplicate paged history.
-- [ ] Final snapshots stop interval polling.
-- [ ] Refresh failures are visible without discarding retained data.
-- [ ] All repository gates pass.
+- [x] No finished match is silently unreachable.
+- [x] Result counts describe the full deduplicated set.
+- [x] History navigation is URL-addressable and works without client state.
+- [x] Live polling does not reset or duplicate paged history.
+- [x] Final snapshots stop interval polling.
+- [x] Refresh failures are visible without discarding retained data.
+- [x] All repository gates pass.
 
 ## STOP conditions
 

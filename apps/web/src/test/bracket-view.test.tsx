@@ -49,7 +49,10 @@ function payload(matches: BracketMatchInput[]): TournamentMatchesPayload {
       syncHealth: { state: "fresh", lastSuccessAt: null, source: "liquipedia" },
     },
     matches: { running: [], scheduled: matches, finished: [] },
+    bracketMatches: matches,
     standings: [],
+    totals: { running: 0, scheduled: matches.length, finished: 0, all: matches.length },
+    finishedPage: { offset: 0, limit: 50, hasMore: false },
     total: matches.length,
   };
 }

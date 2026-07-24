@@ -257,7 +257,7 @@ untouched.
 | 137  | Close the bot-to-web capability boundary | P1 | M | 126 | DONE |
 | 138  | Test path agreement and shield the application origin | P1 | M | 137 recommended | BLOCKED (local/CI corpus and tunnel-safe config complete; deployment owner must provide CranL ingress evidence or an explicitly authorized origin URL) |
 | 139  | Make API authorization coverage complete and object-aware | P1 | L | 137 | DONE |
-| 140  | Make tournament history complete and trustworthy | P1 | M | - | TODO |
+| 140  | Make tournament history complete and trustworthy | P1 | M | - | DONE |
 | 141  | Recompose tournaments as a competition board | P2 | L | 140 recommended | TODO |
 | 142  | Preserve the complete match lifecycle and outcome | P1 | L | 125 recommended | TODO |
 | 143  | Make every match a first-class destination | P1 | M-L | 142 recommended; 141 optional | TODO |

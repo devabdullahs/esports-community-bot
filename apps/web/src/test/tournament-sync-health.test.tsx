@@ -19,6 +19,8 @@ function payload(state: TournamentMatchesPayload["tournament"]["syncHealth"]["st
     },
     matches: { running: [], scheduled: [], finished: [] },
     standings: [],
+    totals: { running: 0, scheduled: 0, finished: 0, all: 0 },
+    finishedPage: { offset: 0, limit: 50, hasMore: false },
     total: 0,
   };
 }

@@ -160,8 +160,22 @@ export type TournamentMatches = {
     syncHealth: PublicSyncHealth;
   };
   matches: { running: MatchRow[]; scheduled: MatchRow[]; finished: MatchRow[] };
+  bracketMatches?: MatchRow[];
   standings: StandingRow[];
+  totals: MatchCounts & { all: number };
+  finishedPage: {
+    offset: number;
+    limit: number;
+    hasMore: boolean;
+  };
+  /** Compatibility alias for totals.all. */
   total: number;
+};
+
+export type TournamentMatchOptions = {
+  limit?: number;
+  offset?: number;
+  includeBracket?: boolean;
 };
 
 const listActive = _listActive as (guildId?: string) => Promise<TournamentRow[]>;
@@ -421,8 +435,12 @@ export async function listArchivedTournamentSummaries({
  */
 export async function getTournamentMatches(
   id: number,
-  { limit = 50, offset = 0 }: { limit?: number; offset?: number } = {},
+  options: TournamentMatchOptions = {},
 ): Promise<TournamentMatches | null> {
+  const requestedLimit = Number.isFinite(options.limit) ? Math.trunc(options.limit as number) : 50;
+  const requestedOffset = Number.isFinite(options.offset) ? Math.trunc(options.offset as number) : 0;
+  const limit = Math.min(200, Math.max(1, requestedLimit));
+  const offset = Math.min(100_000, Math.max(0, requestedOffset));
   const guildId = await resolveDefaultGuildId();
   if (!guildId) return null;
   const canonicalId = await _resolveCanonicalTournamentId(id);
@@ -467,6 +485,12 @@ export async function getTournamentMatches(
   const completed = tournament.archived_at != null || (
     running.length === 0 && scheduled.length === 0 && (finishedAll.length > 0 || standingsHaveResults)
   );
+  const totals = {
+    running: running.length,
+    scheduled: scheduled.length,
+    finished: finishedAll.length,
+    all: running.length + scheduled.length + finishedAll.length,
+  };
   const finalStandingsSection = ewc && completed ? finalTournamentStandingSection(rawStandings) : null;
   if (finalStandingsSection) {
     standings = standings.map((row) => ({
@@ -488,8 +512,17 @@ export async function getTournamentMatches(
       syncHealth: syncHealthForTournament(tournament, health, rawRunning.length > 0),
     },
     matches: { running, scheduled, finished },
+    ...(options.includeBracket
+      ? { bracketMatches: [...running, ...scheduled, ...finishedAll] }
+      : {}),
     standings,
-    total: running.length + scheduled.length + finishedAll.length,
+    totals,
+    finishedPage: {
+      offset,
+      limit,
+      hasMore: offset + finished.length < finishedAll.length,
+    },
+    total: totals.all,
   };
 }
 
@@ -506,7 +539,7 @@ export const listTournamentSummariesCached = unstable_cache(
 );
 
 export const getTournamentMatchesCached = unstable_cache(
-  async (id: number, opts?: { limit?: number; offset?: number }) => getTournamentMatches(id, opts),
+  async (id: number, opts?: TournamentMatchOptions) => getTournamentMatches(id, opts),
   ["tournament-matches"],
   { tags: ["cms-tournaments"], revalidate: 60 },
 );

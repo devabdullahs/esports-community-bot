@@ -1,7 +1,13 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { RadioIcon } from "lucide-react";
+import {
+  ChevronLeftIcon,
+  ChevronRightIcon,
+  RadioIcon,
+  RefreshCwIcon,
+  TriangleAlertIcon,
+} from "lucide-react";
 import Link from "next/link";
 import { Fragment, useState, useSyncExternalStore } from "react";
 import {
@@ -15,6 +21,8 @@ import {
   AccordionTrigger,
 } from "@/components/ui/accordion";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Separator } from "@/components/ui/separator";
 import {
   Table,
@@ -94,14 +102,140 @@ export type TournamentMatchesPayload = {
     syncHealth: PublicSyncHealth;
   };
   matches: { running: MatchRow[]; scheduled: MatchRow[]; finished: MatchRow[] };
+  bracketMatches?: MatchRow[];
   standings?: StandingRow[];
+  totals: {
+    running: number;
+    scheduled: number;
+    finished: number;
+    all: number;
+  };
+  finishedPage: {
+    offset: number;
+    limit: number;
+    hasMore: boolean;
+  };
   total: number;
+};
+
+export type TournamentResultsNavigation = {
+  newestHref: string;
+  previousHref: string | null;
+  nextHref: string | null;
 };
 
 // Live data: poll the matches API every 90s. The bot polls at most every 5 min,
 // so 90s keeps the page fresh without adding source-site load.
 const REFETCH_INTERVAL_MS = 90_000;
 const NUMBER_LOCALE: Record<Locale, string> = { en: "en-US", ar: "ar-SA" };
+
+export function shouldPollTournamentMatches(data: TournamentMatchesPayload): boolean {
+  if (data.tournament.syncHealth.state === "final") return false;
+  if (
+    data.tournament.completed
+    && data.matches.running.length === 0
+    && data.matches.scheduled.length === 0
+  ) {
+    return false;
+  }
+  return true;
+}
+
+export function mergeBracketMatchSnapshot(
+  initialMatches: MatchRow[],
+  refreshedMatches: MatchRow[],
+): MatchRow[] {
+  const refreshedById = new Map(refreshedMatches.map((match) => [match.id, match]));
+  const merged = initialMatches.map((match) => refreshedById.get(match.id) ?? match);
+  const knownIds = new Set(initialMatches.map((match) => match.id));
+  for (const match of refreshedMatches) {
+    if (!knownIds.has(match.id)) merged.push(match);
+  }
+  return merged;
+}
+
+export function tournamentMatchesQueryKey(
+  tournamentId: number,
+  data: TournamentMatchesPayload,
+) {
+  return [
+    "tournament-matches",
+    tournamentId,
+    data.finishedPage.offset,
+    data.finishedPage.limit,
+  ] as const;
+}
+
+export async function fetchTournamentMatchesPage(
+  tournamentId: number,
+  initialData: TournamentMatchesPayload,
+): Promise<TournamentMatchesPayload> {
+  const params = new URLSearchParams({
+    limit: String(initialData.finishedPage.limit),
+    offset: String(initialData.finishedPage.offset),
+  });
+  const response = await fetch(`/api/tournaments/${tournamentId}/matches?${params}`);
+  if (!response.ok) throw new Error("Failed to load matches");
+  const refreshed = await response.json() as TournamentMatchesPayload;
+  if (
+    initialData.finishedPage.offset > 0
+    && refreshed.totals.finished !== initialData.totals.finished
+  ) {
+    return {
+      ...refreshed,
+      matches: {
+        ...refreshed.matches,
+        finished: initialData.matches.finished,
+      },
+      finishedPage: initialData.finishedPage,
+    };
+  }
+  return refreshed;
+}
+
+export function TournamentRefreshFailureAlert({
+  locale,
+  lastSuccessfulRefresh,
+  onRetry,
+}: {
+  locale: Locale;
+  lastSuccessfulRefresh: string | null;
+  onRetry: () => void;
+}) {
+  const text = copy[locale].tournaments;
+  return (
+    <Alert variant="destructive">
+      <TriangleAlertIcon />
+      <AlertTitle>{text.pageRefreshFailed}</AlertTitle>
+      <AlertDescription className="flex flex-col gap-2 pe-0 sm:flex-row sm:items-center sm:justify-between">
+        <span>
+          {text.pageRefreshRetained}
+          {lastSuccessfulRefresh ? (
+            <>
+              {" "}
+              {text.pageRefreshLastSuccess}:{" "}
+              <LocalDateTime
+                value={lastSuccessfulRefresh}
+                locale={locale}
+                fallback={text.syncTimestampLoading}
+              />
+            </>
+          ) : null}
+        </span>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="w-fit"
+          onClick={onRetry}
+        >
+          <RefreshCwIcon data-icon="inline-start" />
+          {text.retryRefresh}
+        </Button>
+      </AlertDescription>
+    </Alert>
+  );
+}
 
 function useHasHydrated() {
   return useSyncExternalStore(
@@ -377,50 +511,93 @@ export function TournamentMatchList({
   locale,
   initialData,
   reminderState = { signedIn: false, reminderMatchIds: [] },
+  callbackPath,
+  resultsNavigation,
 }: {
   tournamentId: number;
   locale: Locale;
   initialData: TournamentMatchesPayload;
   reminderState?: { signedIn: boolean; reminderMatchIds: number[] };
+  callbackPath?: string;
+  resultsNavigation?: TournamentResultsNavigation;
 }) {
   const hasHydrated = useHasHydrated();
   const text = copy[locale].tournaments;
   const query = useQuery<TournamentMatchesPayload>({
-    queryKey: ["tournament-matches", tournamentId],
-    queryFn: async () => {
-      const res = await fetch(`/api/tournaments/${tournamentId}/matches`);
-      if (!res.ok) throw new Error("Failed to load matches");
-      return res.json();
-    },
+    queryKey: tournamentMatchesQueryKey(tournamentId, initialData),
+    queryFn: () => fetchTournamentMatchesPage(tournamentId, initialData),
     initialData,
-    refetchInterval: REFETCH_INTERVAL_MS,
+    staleTime: 0,
+    refetchOnMount: false,
+    refetchInterval: (current) => {
+      const data = current.state.data as TournamentMatchesPayload | undefined;
+      return data && shouldPollTournamentMatches(data) ? REFETCH_INTERVAL_MS : false;
+    },
+    refetchOnReconnect: (current) => {
+      const data = current.state.data as TournamentMatchesPayload | undefined;
+      return data ? shouldPollTournamentMatches(data) : true;
+    },
+    refetchOnWindowFocus: (current) => {
+      const data = current.state.data as TournamentMatchesPayload | undefined;
+      return data ? shouldPollTournamentMatches(data) : true;
+    },
   });
 
-  const { running, scheduled, finished } = query.data.matches;
-  const standings = query.data.standings ?? [];
+  const data = query.data ?? initialData;
+  const { running, scheduled, finished } = data.matches;
+  const standings = data.standings ?? [];
   const returnContext: ProfileReturnContext = {
     type: "tournament",
-    href: `/tournaments/${query.data.tournament.id}`,
-    label: query.data.tournament.name || `#${query.data.tournament.id}`,
+    href: `/tournaments/${data.tournament.id}`,
+    label: data.tournament.name || `#${data.tournament.id}`,
   };
   const scheduledGroups = groupMatchesByLocalDay(scheduled, locale, text, hasHydrated);
   const finishedGroups = groupMatchesByLocalDay(finished, locale, text, hasHydrated);
-  const bracket = projectTournamentBracket([...running, ...scheduled, ...finished]);
+  const initialBracketMatches = initialData.bracketMatches
+    ?? [
+      ...initialData.matches.running,
+      ...initialData.matches.scheduled,
+      ...initialData.matches.finished,
+    ];
+  const bracketMatches = mergeBracketMatchSnapshot(
+    initialBracketMatches,
+    [...running, ...scheduled, ...finished],
+  );
+  const bracket = projectTournamentBracket(bracketMatches);
   const tbd = text.tbd;
   const reminderMatchIds = new Set(reminderState.reminderMatchIds);
-  const reminderCallbackPath = localizedPath(`/tournaments/${query.data.tournament.id}`, locale);
+  const reminderCallbackPath = callbackPath
+    ?? localizedPath(`/tournaments/${data.tournament.id}`, locale);
   // Standings-format events (battle royale, TFT groups) often have zero
   // head-to-head matches; the standings ARE the tournament, so skip the empty
   // match sections instead of stacking three "no matches" placeholders.
-  const standingsOnly = standings.length > 0 && query.data.total === 0;
+  const standingsOnly = standings.length > 0 && data.totals.all === 0;
+  const historyChanged = initialData.finishedPage.offset > 0
+    && data.totals.finished !== initialData.totals.finished;
+  const resultStart = finished.length > 0 ? data.finishedPage.offset + 1 : 0;
+  const resultEnd = finished.length > 0
+    ? Math.min(data.finishedPage.offset + finished.length, data.totals.finished)
+    : 0;
+  const retainedRefreshError = query.isRefetchError;
+  const lastSuccessfulRefresh = query.dataUpdatedAt > 0
+    ? new Date(query.dataUpdatedAt).toISOString()
+    : null;
 
   return (
     <div className="flex flex-col gap-8">
+      {retainedRefreshError ? (
+        <TournamentRefreshFailureAlert
+          locale={locale}
+          lastSuccessfulRefresh={lastSuccessfulRefresh}
+          onRetry={() => void query.refetch()}
+        />
+      ) : null}
+
       {standings.length ? (
         <StandingsSection
           standings={standings}
           running={running}
-          finalSection={query.data.tournament.final_standings_section}
+           finalSection={data.tournament.final_standings_section}
           locale={locale}
           text={text}
           returnContext={returnContext}
@@ -608,8 +785,73 @@ export function TournamentMatchList({
 
       <Separator />
 
-      <section className="flex flex-col gap-3">
-        <h2 className="text-lg font-semibold">{text.results}</h2>
+      <section id="results" className="flex scroll-mt-20 flex-col gap-3">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h2 className="flex items-center gap-2 text-lg font-semibold">
+            {text.results}
+            <Badge variant="outline">
+              {text.resultsRange(resultStart, resultEnd, data.totals.finished)}
+            </Badge>
+          </h2>
+          {resultsNavigation ? (
+            <nav
+              aria-label={text.resultsNavigation}
+              className="flex max-w-full items-center gap-2"
+              dir={directionForLocale(locale)}
+            >
+              {resultsNavigation.previousHref ? (
+                <Button
+                  render={<Link href={resultsNavigation.previousHref} />}
+                  nativeButton={false}
+                  variant="outline"
+                  size="sm"
+                >
+                  <ChevronLeftIcon className="rtl:rotate-180" />
+                  {text.previousResults}
+                </Button>
+              ) : (
+                <Button type="button" variant="outline" size="sm" disabled>
+                  <ChevronLeftIcon className="rtl:rotate-180" />
+                  {text.previousResults}
+                </Button>
+              )}
+              {resultsNavigation.nextHref ? (
+                <Button
+                  render={<Link href={resultsNavigation.nextHref} />}
+                  nativeButton={false}
+                  variant="outline"
+                  size="sm"
+                >
+                  {text.nextResults}
+                  <ChevronRightIcon className="rtl:rotate-180" />
+                </Button>
+              ) : (
+                <Button type="button" variant="outline" size="sm" disabled>
+                  {text.nextResults}
+                  <ChevronRightIcon className="rtl:rotate-180" />
+                </Button>
+              )}
+            </nav>
+          ) : null}
+        </div>
+        {historyChanged && resultsNavigation ? (
+          <Alert>
+            <TriangleAlertIcon />
+            <AlertTitle>{text.newResultsAvailable}</AlertTitle>
+            <AlertDescription className="flex flex-col gap-2 pe-0 sm:flex-row sm:items-center sm:justify-between">
+              <span>{text.newResultsRetained}</span>
+              <Button
+                render={<Link href={resultsNavigation.newestHref} />}
+                nativeButton={false}
+                variant="outline"
+                size="sm"
+                className="w-fit"
+              >
+                {text.viewNewestResults}
+              </Button>
+            </AlertDescription>
+          </Alert>
+        ) : null}
         {finished.length ? (
           <Table>
             <TableHeader>
@@ -675,7 +917,7 @@ export function TournamentMatchList({
         )}
       </section>
 
-      {query.data.total === 0 ? (
+      {data.totals.all === 0 ? (
         <p className="text-sm text-muted-foreground">{text.noMatches}</p>
       ) : null}
         </>
