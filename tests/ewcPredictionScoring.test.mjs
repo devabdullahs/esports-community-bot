@@ -321,8 +321,8 @@ test('generateEwcWeekWindows: gap week (no events) is skipped; index does not ad
   // Week 1: [T, T+WEEK-1] — has event 1. Week 2 (T+WEEK): [T+7d, T+14d-1] — no events → SKIPPED.
   // Week 3 (T+14d): has event 2 → becomes week-2 (index advances only for non-empty weeks).
   const events = [
-    { startAt: T, endAt: T + 6 * DAY },
-    { startAt: T + 14 * DAY, endAt: T + 20 * DAY },
+    { game: 'Game A', event: 'Event A', startAt: T, endAt: T + 6 * DAY },
+    { game: 'Game B', event: 'Event B', startAt: T + 14 * DAY, endAt: T + 20 * DAY },
   ];
   const windows = generateEwcWeekWindows(events);
   // Documents gap-week behavior: only 2 output weeks for 3 calendar weeks,
@@ -334,8 +334,8 @@ test('generateEwcWeekWindows: gap week (no events) is skipped; index does not ad
 
 test('generateEwcWeekWindows: week 1 openAt/closeAt/scoreAfter offsets are correct', () => {
   const events = [
-    { startAt: T, endAt: T + 6 * DAY },
-    { startAt: T + 14 * DAY, endAt: T + 20 * DAY },
+    { game: 'Game A', event: 'Event A', startAt: T, endAt: T + 6 * DAY },
+    { game: 'Game B', event: 'Event B', startAt: T + 14 * DAY, endAt: T + 20 * DAY },
   ];
   const windows = generateEwcWeekWindows(events);
   const w1 = windows[0];

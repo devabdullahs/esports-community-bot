@@ -25,10 +25,13 @@ const {
   getEwcWeek,
   getWeeklyPrediction,
   saveWeeklyPredictionScore,
+  setEwcWeekResults,
   setEwcWeekSnapshot,
   upsertEwcWeek,
+  upsertWeeklyGamePick,
   upsertWeeklyPrediction,
 } = await import('../src/db/ewcPredictions.js');
+const { stableEwcGameKey } = await import('../src/lib/ewcPredictions.js');
 
 test.after(() => {
   closeDb();
@@ -132,6 +135,119 @@ test('shared admin scoring locks and enumerates the committed weekly predictions
   assert.equal(result.predictions, 1);
   assert.equal((await getEwcWeek(guildId, '2026', 'week-score')).status, 'scored');
   assert.equal((await getWeeklyPrediction(guildId, week.id, '200000000000000305')).score, 370);
+});
+
+test('week generation reports aggregate reconciliation and preserves references across insertion', async () => {
+  const guildId = '920000000000000306';
+  const legacyGame = {
+    key: 'valorant-1',
+    game: 'Valorant',
+    gameWiki: 'valorant',
+    event: 'EWC Valorant',
+    eventUrl: 'https://liquipedia.net/valorant/Esports_World_Cup/2026',
+    startAt: 1_800_000_000,
+    endAt: 1_800_086_400,
+    lockAt: 1_799_996_400,
+  };
+  const insertedGame = {
+    game: 'Dota 2',
+    gameWiki: 'dota2',
+    event: 'EWC Dota 2',
+    eventUrl: 'https://liquipedia.net/dota2/Esports_World_Cup/2026',
+    startAt: 1_800_100_000,
+    endAt: 1_800_186_400,
+    lockAt: 1_800_096_400,
+  };
+  const week = await upsertEwcWeek({
+    guildId,
+    season: '2026',
+    weekKey: 'week-admin-rekey',
+    label: 'Week admin rekey',
+    games: [legacyGame],
+    createdBy: 'test',
+  });
+  await upsertWeeklyGamePick({
+    guildId,
+    weekId: week.id,
+    userId: '200000000000000306',
+    gameKey: legacyGame.key,
+    game: legacyGame.game,
+    event: legacyGame.event,
+    pick: 'Team Falcons',
+    pickedAt: legacyGame.lockAt - 10,
+  });
+  await setEwcWeekResults(week.id, [{ gameKey: legacyGame.key, winner: 'Team Falcons' }]);
+
+  const regenerated = [
+    { ...insertedGame, key: stableEwcGameKey(insertedGame) },
+    { ...legacyGame, key: stableEwcGameKey(legacyGame) },
+  ];
+  const result = await runEwcPredictionAdminOperation({
+    guildId,
+    season: '2026',
+    operation: 'generate_weeks',
+    args: {},
+    dependencies: {
+      fetchSchedule: async () => ({ events: [insertedGame, legacyGame] }),
+      generateWeeks: () => [
+        {
+          weekKey: 'week-admin-rekey',
+          label: 'Week admin rekey updated',
+          events: regenerated,
+        },
+      ],
+    },
+  });
+
+  assert.deepEqual(result.reconciliation, {
+    newWeeks: 0,
+    unchanged: 0,
+    rekeyed: 1,
+    added: 1,
+    removedUnreferenced: 0,
+  });
+  assert.doesNotMatch(result.message, /200000000000000306|Team Falcons/);
+  const saved = await getEwcWeek(guildId, '2026', 'week-admin-rekey');
+  assert.deepEqual(saved.games.map((game) => game.key), regenerated.map((game) => game.key));
+  assert.equal((await getWeeklyPrediction(guildId, week.id, '200000000000000306')).picks[0].gameKey, stableEwcGameKey(legacyGame));
+  assert.equal(saved.results[0].gameKey, stableEwcGameKey(legacyGame));
+
+  const before = JSON.stringify({
+    games: saved.games,
+    results: saved.results,
+    picks: (await getWeeklyPrediction(guildId, week.id, '200000000000000306')).picks,
+  });
+  await assert.rejects(
+    runEwcPredictionAdminOperation({
+      guildId,
+      season: '2026',
+      operation: 'generate_weeks',
+      args: {},
+      dependencies: {
+        fetchSchedule: async () => ({ events: [legacyGame, legacyGame] }),
+        generateWeeks: () => [
+          {
+            weekKey: 'week-admin-rekey',
+            label: 'Ambiguous schedule',
+            events: [
+              { ...legacyGame, key: stableEwcGameKey(legacyGame) },
+              { ...legacyGame, key: 'duplicate-event-key' },
+            ],
+          },
+        ],
+      },
+    }),
+    /ambiguous event/i,
+  );
+  const after = await getEwcWeek(guildId, '2026', 'week-admin-rekey');
+  assert.equal(
+    JSON.stringify({
+      games: after.games,
+      results: after.results,
+      picks: (await getWeeklyPrediction(guildId, week.id, '200000000000000306')).picks,
+    }),
+    before,
+  );
 });
 
 test('bot consumer completes a durable refresh operation and keeps the completion audit linked to the operation id', async () => {

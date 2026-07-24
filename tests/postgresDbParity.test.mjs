@@ -282,6 +282,127 @@ test('PostgreSQL DB parity', { skip: postgresEnabled ? false : 'run through npm 
     assert.deepEqual(seasonPrediction.details, { exact: 1 });
   });
 
+  await t.test('stable game-key reconciliation is atomic and idempotent on PostgreSQL', async () => {
+    const { stableEwcGameKey } = await import('../src/lib/ewcPredictions.js');
+    const legacy = {
+      key: 'valorant-legacy-1',
+      game: 'Valorant',
+      gameWiki: 'valorant',
+      event: 'EWC Valorant',
+      eventUrl: 'https://liquipedia.net/valorant/Esports_World_Cup/2026',
+      startAt: 1_800_000_000,
+      endAt: 1_800_086_400,
+      lockAt: 1_799_996_400,
+    };
+    const added = {
+      game: 'Dota 2',
+      gameWiki: 'dota2',
+      event: 'EWC Dota 2',
+      eventUrl: 'https://liquipedia.net/dota2/Esports_World_Cup/2026',
+      startAt: 1_800_100_000,
+      endAt: 1_800_186_400,
+      lockAt: 1_800_096_400,
+    };
+    const stableLegacy = { ...legacy, key: stableEwcGameKey(legacy) };
+    const stableAdded = { ...added, key: stableEwcGameKey(added) };
+    const keyWeek = await predictions.upsertEwcWeek({
+      guildId,
+      season,
+      weekKey: 'ci-stable-keys',
+      label: 'PostgreSQL stable keys',
+      games: [legacy],
+      createdBy: 'postgres-ci',
+    });
+    await predictions.upsertWeeklyGamePick({
+      guildId,
+      weekId: keyWeek.id,
+      userId: 'postgres-ci-key-user',
+      gameKey: legacy.key,
+      game: legacy.game,
+      event: legacy.event,
+      pick: 'Team Falcons',
+      pickedAt: legacy.lockAt - 10,
+    });
+    await predictions.saveWeeklyPredictionScore(guildId, keyWeek.id, 'postgres-ci-key-user', 500, { total: 500 });
+    await predictions.setEwcWeekResults(keyWeek.id, [{ gameKey: legacy.key, winner: 'Team Falcons' }]);
+    await predictions.claimEwcPredictionReminder({
+      guildId,
+      weekId: keyWeek.id,
+      gameKey: legacy.key,
+      kind: 'pre_lock',
+      nowSec: 100,
+    });
+
+    const migrated = await predictions.upsertEwcWeek({
+      guildId,
+      season,
+      weekKey: 'ci-stable-keys',
+      label: 'PostgreSQL stable keys updated',
+      games: [stableAdded, stableLegacy],
+      createdBy: 'postgres-ci',
+    });
+    assert.deepEqual(migrated.reconciliation, {
+      newWeek: 0,
+      unchanged: 0,
+      rekeyed: 1,
+      added: 1,
+      removedUnreferenced: 0,
+    });
+    const migratedPrediction = await predictions.getWeeklyPrediction(guildId, keyWeek.id, 'postgres-ci-key-user');
+    assert.equal(migratedPrediction.picks[0].gameKey, stableLegacy.key);
+    assert.equal(migratedPrediction.score, 500);
+    assert.deepEqual(migratedPrediction.details, { total: 500 });
+    assert.equal(migrated.results[0].gameKey, stableLegacy.key);
+    assert.equal(
+      (
+        await predictions.getEwcPredictionReminder({
+          guildId,
+          weekId: keyWeek.id,
+          gameKey: stableLegacy.key,
+          kind: 'pre_lock',
+        })
+      ).attempts,
+      1,
+    );
+
+    const beforeAmbiguous = JSON.stringify({
+      games: migrated.games,
+      results: migrated.results,
+      picks: migratedPrediction.picks,
+    });
+    await assert.rejects(
+      predictions.upsertEwcWeek({
+        guildId,
+        season,
+        weekKey: 'ci-stable-keys',
+        label: 'Must roll back',
+        games: [stableLegacy, { ...stableLegacy, key: 'duplicate-identity-key' }],
+        createdBy: 'postgres-ci',
+      }),
+      /ambiguous event/i,
+    );
+    const afterAmbiguous = await predictions.getEwcWeek(guildId, season, 'ci-stable-keys');
+    assert.equal(
+      JSON.stringify({
+        games: afterAmbiguous.games,
+        results: afterAmbiguous.results,
+        picks: (await predictions.getWeeklyPrediction(guildId, keyWeek.id, 'postgres-ci-key-user')).picks,
+      }),
+      beforeAmbiguous,
+    );
+
+    const repeated = await predictions.upsertEwcWeek({
+      guildId,
+      season,
+      weekKey: 'ci-stable-keys',
+      label: 'PostgreSQL stable keys updated',
+      games: [stableAdded, stableLegacy],
+      createdBy: 'postgres-ci',
+    });
+    assert.equal(repeated.reconciliation.rekeyed, 0);
+    assert.equal(repeated.reconciliation.unchanged, 2);
+  });
+
   await t.test('concurrent FOR UPDATE writes preserve both game picks', async () => {
     const userId = 'postgres-ci-concurrent-user';
     await predictions.upsertWeeklyPrediction({

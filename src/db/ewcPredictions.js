@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 
+import { reconcileEwcPredictionGames } from '../lib/ewcPredictions.js';
 import { all, dbDriver, get, run, transaction } from './client.js';
 
 const parseJson = (value, fallback) => {
@@ -11,6 +12,48 @@ const parseJson = (value, fallback) => {
 };
 
 const stringify = (value) => JSON.stringify(value ?? null);
+
+function parseJsonArrayStrict(value, label, { allowNull = true } = {}) {
+  if ((value == null || value === '') && allowNull) return [];
+  let parsed;
+  try {
+    parsed = JSON.parse(value);
+  } catch {
+    throw new Error(`${label} contains malformed JSON.`);
+  }
+  if (!Array.isArray(parsed)) throw new Error(`${label} must contain a JSON array.`);
+  return parsed;
+}
+
+function mappedGameKeyEntries(entries, mapping, label, { allowStrings = false } = {}) {
+  let referenceCount = 0;
+  const mapped = entries.map((entry, index) => {
+    if (allowStrings && typeof entry === 'string') return entry;
+    if (!entry || typeof entry !== 'object' || Array.isArray(entry)) {
+      throw new Error(`${label}[${index}] must be an object with a gameKey.`);
+    }
+    const gameKey = String(entry.gameKey || '').trim();
+    if (!gameKey) throw new Error(`${label}[${index}] is missing gameKey.`);
+    const nextKey = mapping[gameKey];
+    if (!nextKey) throw new Error(`${label}[${index}] references unknown game key ${gameKey}.`);
+    referenceCount += 1;
+    return nextKey === gameKey ? entry : { ...entry, gameKey: nextKey };
+  });
+  return { mapped, referenceCount };
+}
+
+function reminderSemanticState(row) {
+  return JSON.stringify({
+    guildId: row.guild_id,
+    weekId: Number(row.week_id),
+    gameKey: row.game_key,
+    kind: row.kind,
+    sentAt: row.sent_at ?? null,
+    claimToken: row.claim_token ?? null,
+    claimExpiresAt: row.claim_expires_at == null ? null : Number(row.claim_expires_at),
+    attempts: Number(row.attempts || 0),
+  });
+}
 
 function nowText() {
   return new Date().toISOString().slice(0, 19).replace('T', ' ');
@@ -126,20 +169,11 @@ export async function upsertEwcWeek({
   createdBy,
 }) {
   return transaction(async (client) => {
-    await lockEwcWeekForTransition(guildId, season, weekKey, client);
-    await client.run(
+    const inserted = await client.run(
       `INSERT INTO ewc_prediction_weeks
          (guild_id, season, week_key, label, start_at, end_at, open_at, close_at, score_after, games_json, created_by, status, created_at)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, 'open', $12)
-       ON CONFLICT (guild_id, season, week_key) DO UPDATE SET
-         label = excluded.label,
-         start_at = excluded.start_at,
-         end_at = excluded.end_at,
-         open_at = excluded.open_at,
-         close_at = excluded.close_at,
-         score_after = excluded.score_after,
-         games_json = excluded.games_json,
-         status = CASE WHEN ewc_prediction_weeks.status = 'scored' THEN 'scored' ELSE 'open' END`,
+       ON CONFLICT (guild_id, season, week_key) DO NOTHING`,
       [
         guildId,
         season,
@@ -150,13 +184,223 @@ export async function upsertEwcWeek({
         openAt ?? null,
         closeAt ?? null,
         scoreAfter ?? null,
-        games ? stringify(games) : null,
+        games !== undefined ? stringify(games) : null,
         createdBy ?? null,
         nowText(),
       ],
     );
-    return getEwcWeek(guildId, season, weekKey, client);
+    const round = await lockEwcWeekForTransition(guildId, season, weekKey, client);
+    if (!round) throw new Error('EWC prediction week could not be created or locked.');
+
+    let reconciliation = {
+      newWeek: changes(inserted) ? 1 : 0,
+      unchanged: 0,
+      rekeyed: 0,
+      added: Array.isArray(games) && changes(inserted) ? games.length : 0,
+      removedUnreferenced: 0,
+    };
+    if (!changes(inserted) && games !== undefined) {
+      reconciliation = await reconcileEwcWeekGamesLocked(round, games, client);
+    }
+
+    await client.run(
+      `UPDATE ewc_prediction_weeks
+       SET label = $1,
+           start_at = $2,
+           end_at = $3,
+           open_at = $4,
+           close_at = $5,
+           score_after = $6,
+           status = CASE WHEN status = 'scored' THEN 'scored' ELSE 'open' END
+       WHERE id = $7`,
+      [label, startAt ?? null, endAt ?? null, openAt ?? null, closeAt ?? null, scoreAfter ?? null, round.id],
+    );
+    const saved = await getEwcWeek(guildId, season, weekKey, client);
+    return { ...saved, reconciliation };
   });
+}
+
+function reconciliationFailure(report) {
+  const reasons = [];
+  if (report.ambiguous.length) reasons.push(`${report.ambiguous.length} ambiguous event(s)`);
+  if (report.removedReferenced.length) reasons.push(`${report.removedReferenced.length} referenced removal(s)`);
+  if (report.unknownReferences.length) reasons.push(`${report.unknownReferences.length} unknown reference(s)`);
+  return reasons.join(', ') || 'unsafe event mapping';
+}
+
+async function loadEwcWeekGameReferences(round, client, { forUpdate = false } = {}) {
+  const suffix = forUpdate && dbDriver() === 'postgres' ? ' FOR UPDATE' : '';
+  const predictionRows = await allWith(
+    client,
+    `SELECT guild_id, week_id, user_id, picks_json
+     FROM ewc_weekly_predictions
+     WHERE week_id = $1
+     ORDER BY user_id${suffix}`,
+    [round.id],
+  );
+  const reminderRows = await allWith(
+    client,
+    `SELECT guild_id, week_id, game_key, kind, sent_at, claim_token, claim_expires_at, attempts
+     FROM ewc_prediction_reminders
+     WHERE week_id = $1
+     ORDER BY game_key, kind${suffix}`,
+    [round.id],
+  );
+  const parsedPicks = predictionRows.map((row) => ({
+    row,
+    picks: parseJsonArrayStrict(row.picks_json, `ewc_weekly_predictions.picks_json for ${row.user_id}`, { allowNull: false }),
+  }));
+  const results = parseJsonArrayStrict(round.results_json, 'ewc_prediction_weeks.results_json');
+  const referencedKeys = new Set(reminderRows.map((row) => String(row.game_key)));
+  for (const { picks } of parsedPicks) {
+    for (const entry of picks) {
+      if (entry && typeof entry === 'object' && !Array.isArray(entry) && entry.gameKey) {
+        referencedKeys.add(String(entry.gameKey));
+      }
+    }
+  }
+  for (const entry of results) {
+    if (entry && typeof entry === 'object' && !Array.isArray(entry) && entry.gameKey) {
+      referencedKeys.add(String(entry.gameKey));
+    }
+  }
+  return { predictionRows, reminderRows, parsedPicks, results, referencedKeys };
+}
+
+async function reconcileEwcWeekGamesLocked(round, regeneratedGames, client) {
+  requireTransactionClient(client, 'reconcileEwcWeekGamesLocked');
+  if (!Array.isArray(regeneratedGames)) throw new Error('Regenerated EWC prediction games must be an array.');
+
+  const storedGames = parseJsonArrayStrict(round.games_json, 'ewc_prediction_weeks.games_json');
+  const { reminderRows, parsedPicks, results, referencedKeys } = await loadEwcWeekGameReferences(round, client, {
+    forUpdate: true,
+  });
+
+  const report = reconcileEwcPredictionGames(storedGames, regeneratedGames, { referencedKeys: [...referencedKeys] });
+  if (!report.ok) throw new Error(`EWC prediction game reconciliation stopped: ${reconciliationFailure(report)}.`);
+  if (round.status === 'scored' && (report.rekeyed.length || report.added.length || report.removedUnreferenced.length)) {
+    throw new Error('Scored EWC prediction weeks cannot change game keys or membership.');
+  }
+
+  let pickReferencesBefore = 0;
+  const mappedPredictions = parsedPicks.map(({ row, picks }) => {
+    const mapped = mappedGameKeyEntries(picks, report.mapping, `ewc_weekly_predictions.picks_json for ${row.user_id}`, {
+      allowStrings: true,
+    });
+    pickReferencesBefore += mapped.referenceCount;
+    return { row, picks: mapped.mapped, referenceCount: mapped.referenceCount };
+  });
+  const mappedResults = mappedGameKeyEntries(results, report.mapping, 'ewc_prediction_weeks.results_json');
+
+  const mappedReminderRows = new Map();
+  for (const row of reminderRows) {
+    const nextKey = report.mapping[row.game_key];
+    if (!nextKey) throw new Error(`Reminder references unknown game key ${row.game_key}.`);
+    const mapped = { ...row, game_key: nextKey };
+    const composite = `${mapped.guild_id}\0${mapped.week_id}\0${mapped.game_key}\0${mapped.kind}`;
+    const existing = mappedReminderRows.get(composite);
+    if (existing && reminderSemanticState(existing) !== reminderSemanticState(mapped)) {
+      throw new Error(`Reminder rekey collision for ${mapped.game_key}/${mapped.kind} has different delivery state.`);
+    }
+    if (!existing) mappedReminderRows.set(composite, mapped);
+  }
+
+  for (const prediction of mappedPredictions) {
+    await client.run(
+      `UPDATE ewc_weekly_predictions
+       SET picks_json = $1, updated_at = $2
+       WHERE guild_id = $3 AND week_id = $4 AND user_id = $5`,
+      [stringify(prediction.picks), nowText(), prediction.row.guild_id, prediction.row.week_id, prediction.row.user_id],
+    );
+  }
+  await client.run('UPDATE ewc_prediction_weeks SET games_json = $1, results_json = $2 WHERE id = $3', [
+    stringify(regeneratedGames),
+    stringify(mappedResults.mapped),
+    round.id,
+  ]);
+  await client.run('DELETE FROM ewc_prediction_reminders WHERE week_id = $1', [round.id]);
+  for (const row of mappedReminderRows.values()) {
+    await client.run(
+      `INSERT INTO ewc_prediction_reminders
+         (guild_id, week_id, game_key, kind, sent_at, claim_token, claim_expires_at, attempts)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+      [
+        row.guild_id,
+        row.week_id,
+        row.game_key,
+        row.kind,
+        row.sent_at ?? null,
+        row.claim_token ?? null,
+        row.claim_expires_at ?? null,
+        Number(row.attempts || 0),
+      ],
+    );
+  }
+
+  const savedPredictions = await client.all(
+    'SELECT user_id, picks_json FROM ewc_weekly_predictions WHERE week_id = $1 ORDER BY user_id',
+    [round.id],
+  );
+  const pickReferencesAfter = savedPredictions.reduce((count, row) => {
+    const picks = parseJsonArrayStrict(row.picks_json, `saved picks_json for ${row.user_id}`, { allowNull: false });
+    return count + mappedGameKeyEntries(picks, Object.fromEntries(regeneratedGames.map((game) => [game.key, game.key])), `saved picks_json for ${row.user_id}`, {
+      allowStrings: true,
+    }).referenceCount;
+  }, 0);
+  const savedRound = await client.get('SELECT games_json, results_json FROM ewc_prediction_weeks WHERE id = $1', [round.id]);
+  parseJsonArrayStrict(savedRound?.games_json, 'saved games_json', { allowNull: false });
+  const savedResults = parseJsonArrayStrict(savedRound?.results_json, 'saved results_json');
+  const savedResultReferences = mappedGameKeyEntries(
+    savedResults,
+    Object.fromEntries(regeneratedGames.map((game) => [game.key, game.key])),
+    'saved results_json',
+  ).referenceCount;
+  const savedReminderCount = Number(
+    (await client.get('SELECT COUNT(*) AS count FROM ewc_prediction_reminders WHERE week_id = $1', [round.id]))?.count || 0,
+  );
+  if (pickReferencesAfter !== pickReferencesBefore || savedResultReferences !== mappedResults.referenceCount) {
+    throw new Error('EWC prediction game reconciliation reference-count assertion failed.');
+  }
+  if (savedReminderCount !== mappedReminderRows.size) {
+    throw new Error('EWC prediction game reconciliation reminder-count assertion failed.');
+  }
+
+  return {
+    newWeek: 0,
+    unchanged: report.unchanged.length,
+    rekeyed: report.rekeyed.length,
+    added: report.added.length,
+    removedUnreferenced: report.removedUnreferenced.length,
+  };
+}
+
+export async function reconcileEwcWeekGames({ guildId, season = '2026', weekKey, games }, client = null) {
+  return transactionWith(client)(async (runner) => {
+    const round = await lockEwcWeekForTransition(guildId, season, weekKey, runner);
+    if (!round) throw new Error(`EWC prediction week ${weekKey} does not exist.`);
+    return reconcileEwcWeekGamesLocked(round, games, runner);
+  });
+}
+
+export async function inspectEwcWeekGameReconciliation(
+  { guildId, season = '2026', weekKey, games },
+  { client = null, forUpdate = false } = {},
+) {
+  if (forUpdate && !client) {
+    return transaction(async (runner) =>
+      inspectEwcWeekGameReconciliation({ guildId, season, weekKey, games }, { client: runner, forUpdate: true }),
+    );
+  }
+  const round = forUpdate
+    ? await lockEwcWeekForTransition(guildId, season, weekKey, client)
+    : await getEwcWeek(guildId, season, weekKey, client);
+  if (!round) throw new Error(`EWC prediction week ${weekKey} does not exist.`);
+  const storedGames = parseJsonArrayStrict(round.games_json, 'ewc_prediction_weeks.games_json');
+  const { referencedKeys } = await loadEwcWeekGameReferences(round, client, { forUpdate });
+  return {
+    round,
+    report: reconcileEwcPredictionGames(storedGames, games, { referencedKeys: [...referencedKeys] }),
+  };
 }
 
 export async function getEwcWeek(guildId, season, weekKey, client = null) {
@@ -187,6 +431,11 @@ export async function listEwcWeeksForTimezoneReconciliation(season = '2026', { c
       [season],
     )
   ).map(hydrateWeek);
+}
+
+export async function listEwcWeeksForGameKeyReconciliation({ client = null, forUpdate = false } = {}) {
+  const suffix = forUpdate && dbDriver() === 'postgres' ? ' FOR UPDATE' : '';
+  return (await allWith(client, `SELECT * FROM ewc_prediction_weeks ORDER BY id${suffix}`, [])).map(hydrateWeek);
 }
 
 export async function listEwcWeeksForAutomation(nowSec) {
@@ -247,6 +496,7 @@ export async function claimEwcPredictionReminder({ guildId, weekId, gameKey, kin
   if (!Number.isSafeInteger(claimedAt)) throw new Error('A valid reminder claim time is required.');
   const token = randomUUID();
   return transaction(async (client) => {
+    await lockEwcWeekForMemberWriteById(weekId, client);
     await client.run(
       `INSERT INTO ewc_prediction_reminders
          (guild_id, week_id, game_key, kind, claim_token, claim_expires_at, attempts)
@@ -267,25 +517,31 @@ export async function claimEwcPredictionReminder({ guildId, weekId, gameKey, kin
 }
 
 export async function markEwcPredictionReminderSent({ guildId, weekId, gameKey, kind, claimToken }) {
-  const result = await run(
-    `UPDATE ewc_prediction_reminders
-     SET sent_at = $1, claim_token = NULL, claim_expires_at = NULL
-     WHERE guild_id = $2 AND week_id = $3 AND game_key = $4 AND kind = $5
-       AND sent_at IS NULL AND claim_token = $6`,
-    [nowText(), ...reminderParams({ guildId, weekId, gameKey, kind }), claimToken],
-  );
-  return Boolean(changes(result));
+  return transaction(async (client) => {
+    await lockEwcWeekForMemberWriteById(weekId, client);
+    const result = await client.run(
+      `UPDATE ewc_prediction_reminders
+       SET sent_at = $1, claim_token = NULL, claim_expires_at = NULL
+       WHERE guild_id = $2 AND week_id = $3 AND game_key = $4 AND kind = $5
+         AND sent_at IS NULL AND claim_token = $6`,
+      [nowText(), ...reminderParams({ guildId, weekId, gameKey, kind }), claimToken],
+    );
+    return Boolean(changes(result));
+  });
 }
 
 export async function releaseEwcPredictionReminderClaim({ guildId, weekId, gameKey, kind, claimToken }) {
-  const result = await run(
-    `UPDATE ewc_prediction_reminders
-     SET claim_token = NULL, claim_expires_at = NULL
-     WHERE guild_id = $1 AND week_id = $2 AND game_key = $3 AND kind = $4
-       AND sent_at IS NULL AND claim_token = $5`,
-    [...reminderParams({ guildId, weekId, gameKey, kind }), claimToken],
-  );
-  return Boolean(changes(result));
+  return transaction(async (client) => {
+    await lockEwcWeekForMemberWriteById(weekId, client);
+    const result = await client.run(
+      `UPDATE ewc_prediction_reminders
+       SET claim_token = NULL, claim_expires_at = NULL
+       WHERE guild_id = $1 AND week_id = $2 AND game_key = $3 AND kind = $4
+         AND sent_at IS NULL AND claim_token = $5`,
+      [...reminderParams({ guildId, weekId, gameKey, kind }), claimToken],
+    );
+    return Boolean(changes(result));
+  });
 }
 
 export async function getEwcPredictionReminder({ guildId, weekId, gameKey, kind }) {
