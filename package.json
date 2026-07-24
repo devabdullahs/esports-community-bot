@@ -25,7 +25,9 @@
     "web:smoke:local": "node scripts/run-web-e2e.mjs --smoke",
     "web:auth:migrate": "npm --workspace @esports-community-bot/web run auth:migrate",
     "seed:dev": "node scripts/seed-dev.mjs",
-    "db:pg:schema": "node scripts/migrate-sqlite-to-postgres.mjs --schema-only",
+    "db:pg:schema": "node scripts/run-postgres-migrations.mjs",
+    "db:pg:schema:generate": "node scripts/build-postgres-schema.mjs",
+    "db:pg:schema:check": "node scripts/build-postgres-schema.mjs --check",
     "db:sqlite-to-pg": "node scripts/migrate-sqlite-to-postgres.mjs"
   },
   "license": "MIT",

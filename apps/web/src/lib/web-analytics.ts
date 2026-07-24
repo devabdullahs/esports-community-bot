@@ -1,7 +1,7 @@
 import "server-only";
 
 import {
-  ensurePostgresAppSchema as _ensurePostgresAppSchema,
+  ensurePostgresMigrations as _ensurePostgresMigrations,
 } from "@bot/db/client.js";
 import {
   getWebAnalyticsDashboard as _getWebAnalyticsDashboard,
@@ -137,7 +137,7 @@ type ProductAnalyticsEventInput = Omit<AnalyticsEventInput, "eventType" | "durat
   eventName: ProductEventName;
 };
 
-const ensurePostgresAppSchema = _ensurePostgresAppSchema as unknown as () => Promise<void>;
+const ensurePostgresMigrations = _ensurePostgresMigrations as unknown as () => Promise<void>;
 const recordWebAnalyticsEvent = _recordWebAnalyticsEvent as unknown as (input: AnalyticsEventInput) => Promise<void>;
 const recordWebProductEvent = _recordWebProductEvent as unknown as (input: ProductAnalyticsEventInput) => Promise<void>;
 const getWebAnalyticsDashboard = _getWebAnalyticsDashboard as unknown as (input?: {
@@ -156,11 +156,11 @@ const getNewsPostAnalytics = _getNewsPostAnalytics as unknown as (input?: {
   days?: number;
 }) => Promise<PostAnalyticsDashboard>;
 
-let schemaPromise: Promise<void> | null = null;
+let migrationsPromise: Promise<void> | null = null;
 
 async function ensureSchemaOnce() {
-  schemaPromise ??= ensurePostgresAppSchema();
-  await schemaPromise;
+  migrationsPromise ??= ensurePostgresMigrations();
+  await migrationsPromise;
 }
 
 export async function ensureAnalyticsSchema(): Promise<void> {

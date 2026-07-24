@@ -1,8 +1,9 @@
-import { existsSync, readFileSync } from 'node:fs';
-import { dirname, resolve } from 'node:path';
-import { fileURLToPath, pathToFileURL } from 'node:url';
+import { existsSync } from 'node:fs';
+import { resolve } from 'node:path';
+import { pathToFileURL } from 'node:url';
 import Database from 'better-sqlite3';
 import pg from 'pg';
+import { resolvePgSslConfig, runPostgresMigrations, sanitizePostgresError } from '../src/db/postgresMigrations.js';
 
 try {
   process.loadEnvFile?.();
@@ -11,10 +12,7 @@ try {
 }
 
 const { Pool } = pg;
-const rootDir = resolve(dirname(fileURLToPath(import.meta.url)), '..');
-const schemaPath = resolve(rootDir, 'scripts/postgres/schema.sql');
-
-// Every app table, in schema.sql declaration order. That order is FK-safe: a
+// Every app table, in migration snapshot declaration order. That order is FK-safe: a
 // referenced table always appears before the tables that reference it, so both
 // CREATE and the row copy below (one whole table at a time) satisfy foreign
 // keys. KEEP THIS IN SYNC with scripts/postgres/schema.sql — a table missing
@@ -153,8 +151,8 @@ Options:
   --sqlite <path>       SQLite source path. Defaults to SQLITE_PATH, DB_PATH, then data/bot.sqlite.
   --database-url <url>  PostgreSQL target URL. Defaults to DATABASE_URL.
   --dry-run             Inspect source counts only. Does not connect to PostgreSQL.
-  --schema-only         Apply scripts/postgres/schema.sql and exit.
-  --skip-schema         Do not apply scripts/postgres/schema.sql before copying.
+  --schema-only         Apply versioned app migrations and exit.
+  --skip-schema         Do not apply app migrations before copying.
   --include-auth        Also copy Better Auth tables if they already exist in PostgreSQL.
 
 Environment:
@@ -202,18 +200,6 @@ async function postgresColumns(client, table) {
 async function postgresCount(client, table) {
   const result = await client.query(`SELECT COUNT(*) AS count FROM ${quoteIdent(table)}`);
   return Number(result.rows[0]?.count || 0);
-}
-
-async function applySchema(client) {
-  const sql = readFileSync(schemaPath, 'utf8');
-  await client.query(sql);
-}
-
-function postgresSslConfig() {
-  const mode = String(process.env.PGSSLMODE || '').toLowerCase();
-  if (mode === 'disable') return false;
-  if (mode === 'require' || mode === 'no-verify') return { rejectUnauthorized: false };
-  return undefined;
 }
 
 function readRows(sqlite, table, sourceColumns) {
@@ -313,19 +299,20 @@ async function main() {
     throw new Error('DATABASE_URL is required unless --dry-run is used.');
   }
 
+  const ssl = resolvePgSslConfig(process.env.PGSSLMODE, { rootCertPath: process.env.PGSSLROOTCERT });
+  if (!args.skipSchema) {
+    console.log('Applying versioned PostgreSQL app migrations...');
+    await runPostgresMigrations({ connectionString: args.databaseUrl, ssl });
+  }
+
   const pool = new Pool({
     connectionString: args.databaseUrl,
-    ssl: postgresSslConfig(),
+    ssl,
   });
   const client = await pool.connect();
 
   try {
     await client.query('BEGIN');
-    if (!args.skipSchema) {
-      console.log('Applying PostgreSQL app schema...');
-      await applySchema(client);
-    }
-
     if (!args.schemaOnly) {
       console.log('Copying rows...');
       for (const table of tables) {
@@ -366,7 +353,7 @@ export { appTables, identityColumns };
 // when imported by a test.
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   main().catch((error) => {
-    console.error(error);
+    console.error(sanitizePostgresError(error, process.env.DATABASE_URL));
     process.exitCode = 1;
   });
 }
