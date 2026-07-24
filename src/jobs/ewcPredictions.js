@@ -6,6 +6,10 @@ import {
   listEwcSeasonsForAutomation,
   listEwcWeeksForAutomation,
   listEwcWeeksToAnnounceOpen,
+  closeEwcSeason,
+  closeEwcWeek,
+  lockEwcSeasonForTransition,
+  lockEwcWeekForTransition,
   markEwcWeekOpenAnnounced,
   claimEwcPredictionReminder,
   markEwcPredictionReminderSent,
@@ -20,10 +24,8 @@ import {
   seasonLeaderboard,
   saveSeasonPredictionScore,
   saveWeeklyPredictionScore,
-  setEwcSeasonStatus,
   setEwcWeekSnapshot,
   setEwcWeekResults,
-  setEwcWeekStatus,
   weeklyLeaderboard,
 } from '../db/ewcPredictions.js';
 import { listEwcProfileLinks, upsertPublicEwcPredictorIdentity } from '../db/ewcProfileLinks.js';
@@ -509,40 +511,77 @@ async function syncLinkedProfileShowcases(guildId = null, season = null) {
 
 let initialProfileShowcaseSyncComplete = false;
 
-async function processWeek(client, round) {
+function weekDueForScoring(round, now = nowSec()) {
+  const games = Array.isArray(round?.games) ? round.games : [];
+  return games.length > 0
+    ? perGamePredictionRoundLocked(games, now)
+    : Boolean(round?.close_at && now >= round.close_at);
+}
+
+function seasonDueForScoring(round, now = nowSec()) {
+  return Boolean(round?.close_at && now >= round.close_at);
+}
+
+async function closeWeekForScoring(round, now = nowSec()) {
+  return transaction(async (tx) => {
+    const lockedRound = await lockEwcWeekForTransition(round.guild_id, round.season, round.week_key, tx);
+    if (!lockedRound) return { round: null, closed: false, due: false };
+    const due = weekDueForScoring(lockedRound, now);
+    if (!due || lockedRound.status !== 'open') return { round: lockedRound, closed: false, due };
+    return { ...(await closeEwcWeek(lockedRound.id, tx)), due: true };
+  });
+}
+
+async function closeSeasonForScoring(round, now = nowSec()) {
+  return transaction(async (tx) => {
+    const lockedRound = await lockEwcSeasonForTransition(round.guild_id, round.season, tx);
+    if (!lockedRound) return { round: null, closed: false, due: false };
+    const due = seasonDueForScoring(lockedRound, now);
+    if (!due || lockedRound.status !== 'open') return { round: lockedRound, closed: false, due };
+    return { ...(await closeEwcSeason(round.guild_id, round.season, tx)), due: true };
+  });
+}
+
+async function processWeek(client, round, hooks = {}) {
   const now = nowSec();
+
+  // Per-game picks lock independently. Once every lock has passed, start
+  // collecting official placements even if the calendar-day close is later.
+  if (!weekDueForScoring(round, now)) return;
+
+  await hooks.beforeWeekClose?.(round);
+  const closed = await closeWeekForScoring(round, now);
+  if (!closed.due || !closed.round || closed.round.status === 'scored') return;
+  round = closed.round;
+  if (closed.closed) {
+    logger.info(`[ewc-predictions] closed picks for ${round.guild_id}/${round.season}/${round.week_key}`);
+  }
+
   const perGame = Array.isArray(round.games) && round.games.length > 0;
+  const readyAt = scoreAfter(round);
+  if (!perGame && readyAt && now < readyAt) {
+    logger.debug(`[ewc-predictions] scoring waits until ${readyAt} for ${round.guild_id}/${round.season}/${round.week_key}`);
+    return;
+  }
 
   // Aggregate (3-club) weeks need a baseline snapshot; per-game weeks do not.
-  const baselineAt = round.close_at || round.open_at;
-  if (!perGame && !round.baseline?.length && baselineAt && now >= baselineAt) {
+  // Fetch outside the transaction, then re-lock before persisting so a reopen
+  // or deadline edit cannot attach an early snapshot to a changed round.
+  if (!perGame && !round.baseline?.length) {
     const baseline = await standingsFor(round.season);
     if (!baseline) {
       logger.warn(`[ewc-predictions] baseline pending for ${round.guild_id}/${round.season}/${round.week_key}: standings unavailable`);
       return;
     }
-    await setEwcWeekSnapshot(round.id, 'baseline', baseline);
-    round.baseline = baseline;
+    const baselineRound = await transaction(async (tx) => {
+      const lockedRound = await lockEwcWeekForTransition(round.guild_id, round.season, round.week_key, tx);
+      if (!lockedRound || lockedRound.status !== 'closed' || !weekDueForScoring(lockedRound)) return null;
+      if (!lockedRound.baseline?.length) await setEwcWeekSnapshot(lockedRound.id, 'baseline', baseline, tx);
+      return { ...lockedRound, baseline: lockedRound.baseline?.length ? lockedRound.baseline : baseline };
+    });
+    if (!baselineRound) return;
+    round = baselineRound;
     logger.info(`[ewc-predictions] saved baseline for ${round.guild_id}/${round.season}/${round.week_key}`);
-  }
-
-  // Per-game picks lock independently. Once every lock has passed, start
-  // collecting official placements even if the calendar-day close is later.
-  const lockedForScoring = perGame
-    ? perGamePredictionRoundLocked(round.games, now)
-    : Boolean(round.close_at && now >= round.close_at);
-  if (!lockedForScoring) return;
-
-  if (round.status === 'open') {
-    await setEwcWeekStatus(round.id, 'closed');
-    round.status = 'closed';
-    logger.info(`[ewc-predictions] closed picks for ${round.guild_id}/${round.season}/${round.week_key}`);
-  }
-
-  const readyAt = scoreAfter(round);
-  if (!perGame && readyAt && now < readyAt) {
-    logger.debug(`[ewc-predictions] scoring waits until ${readyAt} for ${round.guild_id}/${round.season}/${round.week_key}`);
-    return;
   }
 
   if (!perGame && !round.baseline?.length) {
@@ -554,7 +593,6 @@ async function processWeek(client, round) {
   // lands. Poll only events near their scheduled finish, and keep completed
   // snapshots so later runs never spend another Liquipedia request on them.
   let results = perGame ? round.results || [] : [];
-  let resultsChanged = false;
   if (perGame) {
     const candidates = dueEwcGamesForResults(
       round.games,
@@ -597,57 +635,8 @@ async function processWeek(client, round) {
           fetchedAt,
         };
       }));
-      const merged = mergeEwcGameResults(results, fetched);
-      resultsChanged = JSON.stringify(merged) !== JSON.stringify(results);
-      results = merged;
-      round.results = results;
+      results = mergeEwcGameResults(results, fetched);
     }
-  }
-
-  const missingResults = perGame ? pendingEwcGameResults(results, round.games) : [];
-  const predictions = await listWeeklyPredictions(round.id);
-
-  const hasCompletedResult = results.some((result) => result?.placements?.length);
-  const finalReadiness = perGame ? evaluateEwcGameResultsFinalReadiness(results, round.games, now, readyAt) : null;
-  const finalReady = perGame && finalReadiness.ready;
-  if (perGame && !finalReady && hasCompletedResult && (resultsChanged || predictions.some((prediction) => prediction.score == null))) {
-    await transaction(async (tx) => {
-      for (const prediction of predictions) {
-        try {
-          const provisional = scorePerGameWeeklyPrediction(prediction.picks, round.games, results);
-          await saveWeeklyPredictionScore(round.guild_id, round.id, prediction.user_id, provisional.score, {
-            ...provisional.details,
-            provisional: true,
-          }, tx);
-        } catch (error) {
-          logger.warn(`[ewc-predictions] skipped malformed provisional pick ${prediction.user_id}/${round.week_key}: ${error.message}`);
-          await saveWeeklyPredictionScore(round.guild_id, round.id, prediction.user_id, 0, {
-            error: error.message,
-            picks: prediction.picks,
-            provisional: true,
-          }, tx);
-        }
-      }
-      await setEwcWeekResults(round.id, results, tx);
-    });
-    await updateEwcPredictionLeaderboard(client, round.guild_id);
-    await syncLinkedProfileShowcases(round.guild_id, round.season);
-  }
-
-  if (missingResults.length) {
-    logger.warn(
-      `[ewc-predictions] results pending for ${round.guild_id}/${round.season}/${round.week_key}: ${missingResults
-        .map((result) => result.game || result.event || result.gameKey)
-        .join(', ')} (${finalReadiness?.reason || 'missing_rank'})`,
-    );
-    return;
-  }
-
-  if (perGame && !finalReady) {
-    logger.debug(
-      `[ewc-predictions] final placement snapshots are not ready for ${round.guild_id}/${round.season}/${round.week_key}: ${finalReadiness.reason}${finalReadiness.gameKey ? `/${finalReadiness.gameKey}` : ''}`,
-    );
-    return;
   }
 
   const final = perGame ? round.final || [] : round.final?.length ? round.final : await standingsFor(round.season);
@@ -656,41 +645,114 @@ async function processWeek(client, round) {
     return;
   }
 
-  // Wrap all writes in a transaction so a mid-loop crash leaves scores consistent.
-  await transaction(async (tx) => {
+  await hooks.beforeWeekScoringTransaction?.(round);
+  const outcome = await transaction(async (tx) => {
+    const lockedRound = await lockEwcWeekForTransition(round.guild_id, round.season, round.week_key, tx);
+    if (!lockedRound || lockedRound.status === 'scored') return { kind: 'skipped' };
+    if (lockedRound.status !== 'closed' || !weekDueForScoring(lockedRound)) return { kind: 'changed' };
+    if (JSON.stringify(lockedRound.games || []) !== JSON.stringify(round.games || [])) return { kind: 'changed' };
+
+    const lockedResults = perGame ? mergeEwcGameResults(lockedRound.results || [], results) : [];
+    const predictions = await listWeeklyPredictions(lockedRound.id, tx, { forUpdate: true });
+    const missingResults = perGame ? pendingEwcGameResults(lockedResults, lockedRound.games) : [];
+    const finalReadiness = perGame
+      ? evaluateEwcGameResultsFinalReadiness(lockedResults, lockedRound.games, nowSec(), scoreAfter(lockedRound))
+      : null;
+    const finalReady = perGame && finalReadiness.ready;
+    const resultsChanged = JSON.stringify(lockedResults) !== JSON.stringify(lockedRound.results || []);
+    const hasCompletedResult = lockedResults.some((entry) => entry?.placements?.length);
+
+    if (perGame && !finalReady && hasCompletedResult && (resultsChanged || predictions.some((prediction) => prediction.score == null))) {
+      for (const prediction of predictions) {
+        try {
+          const provisional = scorePerGameWeeklyPrediction(prediction.picks, lockedRound.games, lockedResults);
+          await saveWeeklyPredictionScore(lockedRound.guild_id, lockedRound.id, prediction.user_id, provisional.score, {
+            ...provisional.details,
+            provisional: true,
+          }, tx);
+        } catch (error) {
+          logger.warn(`[ewc-predictions] skipped malformed provisional pick ${prediction.user_id}/${lockedRound.week_key}: ${error.message}`);
+          await saveWeeklyPredictionScore(lockedRound.guild_id, lockedRound.id, prediction.user_id, 0, {
+            error: error.message,
+            picks: prediction.picks,
+            provisional: true,
+          }, tx);
+        }
+      }
+      await setEwcWeekResults(lockedRound.id, lockedResults, tx);
+      return { kind: 'provisional', round: lockedRound, predictions };
+    }
+
+    if (missingResults.length) return { kind: 'pending', missingResults, finalReadiness, round: lockedRound };
+    if (perGame && !finalReady) return { kind: 'not_ready', finalReadiness, round: lockedRound };
+
+    const lockedFinal = perGame ? lockedRound.final || [] : lockedRound.final?.length ? lockedRound.final : final;
+    if (!perGame && !lockedFinal?.length) return { kind: 'final_pending', round: lockedRound };
+
     for (const prediction of predictions) {
       try {
-        const result = perGame
-          ? scorePerGameWeeklyPrediction(prediction.picks, round.games, results)
-          : scoreWeeklyPrediction(prediction.picks, round.baseline, final);
-        await saveWeeklyPredictionScore(round.guild_id, round.id, prediction.user_id, result.score, result.details, tx);
+        const score = perGame
+          ? scorePerGameWeeklyPrediction(prediction.picks, lockedRound.games, lockedResults)
+          : scoreWeeklyPrediction(prediction.picks, lockedRound.baseline, lockedFinal);
+        await saveWeeklyPredictionScore(lockedRound.guild_id, lockedRound.id, prediction.user_id, score.score, score.details, tx);
       } catch (error) {
-        logger.warn(`[ewc-predictions] skipped malformed weekly pick ${prediction.user_id}/${round.week_key}: ${error.message}`);
-        await saveWeeklyPredictionScore(round.guild_id, round.id, prediction.user_id, 0, {
+        logger.warn(`[ewc-predictions] skipped malformed weekly pick ${prediction.user_id}/${lockedRound.week_key}: ${error.message}`);
+        await saveWeeklyPredictionScore(lockedRound.guild_id, lockedRound.id, prediction.user_id, 0, {
           error: error.message,
           picks: prediction.picks,
         }, tx);
       }
     }
-    if (perGame) await markEwcWeekScoredWithResults(round.id, final || [], results, tx);
-    else await markEwcWeekScored(round.id, final, tx);
+    const marked = perGame
+      ? await markEwcWeekScoredWithResults(lockedRound.id, lockedFinal || [], lockedResults, tx)
+      : await markEwcWeekScored(lockedRound.id, lockedFinal, tx);
+    return { kind: marked ? 'scored' : 'skipped', round: lockedRound, predictions };
   });
+
+  if (outcome.kind === 'provisional') {
+    await updateEwcPredictionLeaderboard(client, outcome.round.guild_id);
+    await syncLinkedProfileShowcases(outcome.round.guild_id, outcome.round.season);
+  }
+  if (outcome.kind === 'pending') {
+    logger.warn(
+      `[ewc-predictions] results pending for ${outcome.round.guild_id}/${outcome.round.season}/${outcome.round.week_key}: ${outcome.missingResults
+        .map((entry) => entry.game || entry.event || entry.gameKey)
+        .join(', ')} (${outcome.finalReadiness?.reason || 'missing_rank'})`,
+    );
+    return;
+  }
+  if (outcome.kind === 'not_ready') {
+    logger.debug(
+      `[ewc-predictions] final placement snapshots are not ready for ${outcome.round.guild_id}/${outcome.round.season}/${outcome.round.week_key}: ${outcome.finalReadiness.reason}${outcome.finalReadiness.gameKey ? `/${outcome.finalReadiness.gameKey}` : ''}`,
+    );
+    return;
+  }
+  if (outcome.kind === 'final_pending') {
+    logger.warn(`[ewc-predictions] final pending for ${outcome.round.guild_id}/${outcome.round.season}/${outcome.round.week_key}: standings unavailable`);
+    return;
+  }
+  if (outcome.kind !== 'scored') return;
   logger.info(
-    `[ewc-predictions] scored ${predictions.length} weekly prediction(s) for ${round.guild_id}/${round.season}/${round.week_key} (${perGame ? 'per-game' : 'aggregate'})`,
+    `[ewc-predictions] scored ${outcome.predictions.length} weekly prediction(s) for ${outcome.round.guild_id}/${outcome.round.season}/${outcome.round.week_key} (${perGame ? 'per-game' : 'aggregate'})`,
   );
-  const scored = await weeklyLeaderboard(round.id, 10, 0);
+  const scored = await weeklyLeaderboard(outcome.round.id, 10, 0);
   await announce(
     client,
-    round.guild_id,
-    `## EWC Weekly Predictions Scored - ${round.label || round.week_key}\n${topPredictionLines(scored)}\n\nUse \`/ewc_predict leaderboard type:weekly week:${round.week_key}\` for the full board.`,
+    outcome.round.guild_id,
+    `## EWC Weekly Predictions Scored - ${outcome.round.label || outcome.round.week_key}\n${topPredictionLines(scored)}\n\nUse \`/ewc_predict leaderboard type:weekly week:${outcome.round.week_key}\` for the full board.`,
   );
-  await updateEwcPredictionLeaderboard(client, round.guild_id);
-  await syncLinkedProfileShowcases(round.guild_id, round.season);
+  await updateEwcPredictionLeaderboard(client, outcome.round.guild_id);
+  await syncLinkedProfileShowcases(outcome.round.guild_id, outcome.round.season);
 }
 
-async function processSeason(client, round) {
-  if (round.status === 'open') {
-    await setEwcSeasonStatus(round.guild_id, round.season, 'closed');
+async function processSeason(client, round, hooks = {}) {
+  const now = nowSec();
+  if (!seasonDueForScoring(round, now)) return;
+  await hooks.beforeSeasonClose?.(round);
+  const closed = await closeSeasonForScoring(round, now);
+  if (!closed.due || !closed.round || closed.round.status === 'scored') return;
+  round = closed.round;
+  if (closed.closed) {
     logger.info(`[ewc-predictions] closed season picks for ${round.guild_id}/${round.season}`);
   }
 
@@ -706,35 +768,39 @@ async function processSeason(client, round) {
     return;
   }
 
-  const predictions = await listSeasonPredictions(round.guild_id, round.season);
-  // Wrap all writes in a transaction so a mid-loop crash leaves scores consistent.
-  await transaction(async (tx) => {
+  await hooks.beforeSeasonScoringTransaction?.(round);
+  const outcome = await transaction(async (tx) => {
+    const lockedRound = await lockEwcSeasonForTransition(round.guild_id, round.season, tx);
+    if (!lockedRound || lockedRound.status !== 'closed' || !seasonDueForScoring(lockedRound)) return { scored: false };
+    const predictions = await listSeasonPredictions(lockedRound.guild_id, lockedRound.season, tx, { forUpdate: true });
     for (const prediction of predictions) {
       try {
-        const result = scoreSeasonPrediction(prediction.picks, final, round.top_size);
-        await saveSeasonPredictionScore(round.guild_id, round.season, prediction.user_id, result.score, result.details, tx);
+        const result = scoreSeasonPrediction(prediction.picks, final, lockedRound.top_size);
+        await saveSeasonPredictionScore(lockedRound.guild_id, lockedRound.season, prediction.user_id, result.score, result.details, tx);
       } catch (error) {
-        logger.warn(`[ewc-predictions] skipped malformed season pick ${prediction.user_id}/${round.season}: ${error.message}`);
-        await saveSeasonPredictionScore(round.guild_id, round.season, prediction.user_id, 0, {
+        logger.warn(`[ewc-predictions] skipped malformed season pick ${prediction.user_id}/${lockedRound.season}: ${error.message}`);
+        await saveSeasonPredictionScore(lockedRound.guild_id, lockedRound.season, prediction.user_id, 0, {
           error: error.message,
           picks: prediction.picks,
         }, tx);
       }
     }
-    await markEwcSeasonScored(round.guild_id, round.season, final, tx);
+    const marked = await markEwcSeasonScored(lockedRound.guild_id, lockedRound.season, final, tx);
+    return { scored: marked, round: lockedRound, predictions };
   });
-  logger.info(`[ewc-predictions] scored ${predictions.length} season prediction(s) for ${round.guild_id}/${round.season}`);
-  const scored = await seasonLeaderboard(round.guild_id, round.season, 10, 0);
+  if (!outcome.scored) return;
+  logger.info(`[ewc-predictions] scored ${outcome.predictions.length} season prediction(s) for ${outcome.round.guild_id}/${outcome.round.season}`);
+  const scored = await seasonLeaderboard(outcome.round.guild_id, outcome.round.season, 10, 0);
   await announce(
     client,
-    round.guild_id,
-    `## EWC ${round.season} Season Predictions Scored\n${topPredictionLines(scored)}\n\nUse \`/ewc_predict leaderboard type:season\` for the full board.`,
+    outcome.round.guild_id,
+    `## EWC ${outcome.round.season} Season Predictions Scored\n${topPredictionLines(scored)}\n\nUse \`/ewc_predict leaderboard type:season\` for the full board.`,
   );
-  await updateEwcPredictionLeaderboard(client, round.guild_id);
-  await syncLinkedProfileShowcases(round.guild_id, round.season);
+  await updateEwcPredictionLeaderboard(client, outcome.round.guild_id);
+  await syncLinkedProfileShowcases(outcome.round.guild_id, outcome.round.season);
 }
 
-export async function runEwcPredictionAutomation(client = null) {
+export async function runEwcPredictionAutomation(client = null, hooks = {}) {
   const now = nowSec();
   await announceOpenWeeks(client);
   await sendDueEwcPredictionReminders(client, { now });
@@ -745,7 +811,7 @@ export async function runEwcPredictionAutomation(client = null) {
 
   for (const round of weeks) {
     try {
-      await processWeek(client, round);
+      await processWeek(client, round, hooks);
       await recordEwcPredictionAutomationHealth({ guildId: round.guild_id, season: round.season, ok: true }).catch((error) =>
         logger.warn(`[ewc-predictions] health ${round.guild_id}/${round.season}: ${error.message}`),
       );
@@ -759,7 +825,7 @@ export async function runEwcPredictionAutomation(client = null) {
 
   for (const round of seasons) {
     try {
-      await processSeason(client, round);
+      await processSeason(client, round, hooks);
       await recordEwcPredictionAutomationHealth({ guildId: round.guild_id, season: round.season, ok: true }).catch((error) =>
         logger.warn(`[ewc-predictions] health ${round.guild_id}/${round.season}: ${error.message}`),
       );

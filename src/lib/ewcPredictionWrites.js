@@ -2,11 +2,12 @@ import { transaction } from '../db/client.js';
 import {
   getEwcSeason,
   getEwcWeek,
-  getSeasonPrediction,
-  swapSeasonClubPicks,
-  upsertSeasonClubPick,
+  lockEwcSeasonForMemberWrite,
+  lockEwcWeekForMemberWrite,
+  mutateLockedSeasonPrediction,
   upsertWeeklyGamePick,
 } from '../db/ewcPredictions.js';
+import { clubNameKeys } from './ewcPredictions.js';
 
 function result(ok, code, message, extra = {}) {
   return { ok, code, message, ...extra };
@@ -79,6 +80,7 @@ export async function submitWeeklyGamePick({
   rawPick,
   submittedAt,
   resolvers = null,
+  onRoundLocked = null,
 }) {
   const submittedSecondValue = submittedSecond(submittedAt);
   if (!submittedSecondValue || !String(rawPick || '').trim()) return result(false, 'invalid_input', 'Choose a club before saving your pick.');
@@ -93,10 +95,11 @@ export async function submitWeeklyGamePick({
   if (!canonical.ok) return canonical;
 
   return transaction(async (client) => {
-    const round = await getEwcWeek(guildId, season, weekKey, client);
+    const round = await lockEwcWeekForMemberWrite(guildId, season, weekKey, client);
     const game = gameForKey(round, gameKey);
     const writeError = weeklyRoundError(round, game, submittedSecondValue);
     if (writeError) return writeError;
+    if (typeof onRoundLocked === 'function') await onRoundLocked(round);
     const saved = await upsertWeeklyGamePick({
       guildId,
       weekId: round.id,
@@ -135,22 +138,41 @@ export async function submitSeasonSlot({
   if (!canonical.ok) return canonical;
 
   return transaction(async (client) => {
-    const round = await getEwcSeason(guildId, season, client);
+    const round = await lockEwcSeasonForMemberWrite(guildId, season, client);
     const writeError = seasonRoundError(round, submittedSecondValue);
     if (writeError) return writeError;
     if (slot >= Number(round.top_size || 0)) return result(false, 'invalid_input', 'That season rank is not configured.');
-    const existing = await getSeasonPrediction(guildId, season, userId, client);
-    const picks = nonEmptyPicks(existing?.picks);
-    const filled = picks.length;
-    if (slot > filled) return result(false, 'slot_locked', `Set Pick #${filled + 1} first — season picks fill in order.`);
-    const existingIndex = picks.findIndex((pick, pickIndex) => pickIndex !== slot && pick === canonical.pick);
-    if (existingIndex !== -1) {
-      if (slot >= filled) return result(false, 'duplicate_pick', `**${canonical.pick}** is already your Pick #${existingIndex + 1}.`);
-      const saved = await swapSeasonClubPicks({ guildId, season, userId, a: slot, b: existingIndex, client });
-      return result(true, 'swapped', 'Season picks reordered.', { prediction: saved, firstPick: false, round });
+    const saved = await mutateLockedSeasonPrediction({
+      guildId,
+      season,
+      userId,
+      client,
+      mutate: async (existing) => {
+        const picks = nonEmptyPicks(existing?.picks);
+        const filled = picks.length;
+        if (slot > filled) return { error: result(false, 'slot_locked', `Set Pick #${filled + 1} first — season picks fill in order.`) };
+        const canonicalKeys = new Set(clubNameKeys(canonical.pick));
+        const existingIndex = picks.findIndex(
+          (pick, pickIndex) => pickIndex !== slot && clubNameKeys(pick).some((key) => canonicalKeys.has(key)),
+        );
+        if (existingIndex !== -1) {
+          if (slot >= filled) {
+            return { error: result(false, 'duplicate_pick', `**${canonical.pick}** is already your Pick #${existingIndex + 1}.`) };
+          }
+          const swapped = [...picks];
+          [swapped[slot], swapped[existingIndex]] = [swapped[existingIndex], swapped[slot]];
+          return { picks: swapped, outcome: 'swapped' };
+        }
+        const next = [...picks];
+        next[slot] = canonical.pick;
+        return { picks: next, outcome: 'saved' };
+      },
+    });
+    if (saved.mutation?.error) return saved.mutation.error;
+    if (saved.mutation?.outcome === 'swapped') {
+      return result(true, 'swapped', 'Season picks reordered.', { prediction: saved.prediction, firstPick: false, round });
     }
-    const saved = await upsertSeasonClubPick({ guildId, season, userId, index: slot, pick: canonical.pick, client });
-    return result(true, 'saved', 'Season pick saved.', { prediction: saved, firstPick: saved.firstPick, round });
+    return result(true, 'saved', 'Season pick saved.', { prediction: saved.prediction, firstPick: saved.firstPick, round });
   });
 }
 
@@ -162,13 +184,25 @@ export async function swapSeasonPicks({ guildId, season = '2026', userId, a, b, 
     return result(false, 'invalid_input', 'Choose two valid season ranks.');
   }
   return transaction(async (client) => {
-    const round = await getEwcSeason(guildId, season, client);
+    const round = await lockEwcSeasonForMemberWrite(guildId, season, client);
     const writeError = seasonRoundError(round, submittedSecondValue);
     if (writeError) return writeError;
-    const existing = await getSeasonPrediction(guildId, season, userId, client);
-    const picks = nonEmptyPicks(existing?.picks);
-    if (first >= picks.length || second >= picks.length) return result(false, 'invalid_input', 'Both season ranks need a pick before they can be swapped.');
-    const saved = await swapSeasonClubPicks({ guildId, season, userId, a: first, b: second, client });
-    return result(true, 'saved', 'Season picks reordered.', { prediction: saved, firstPick: false, round });
+    const saved = await mutateLockedSeasonPrediction({
+      guildId,
+      season,
+      userId,
+      client,
+      mutate: async (existing) => {
+        const picks = nonEmptyPicks(existing?.picks);
+        if (first >= picks.length || second >= picks.length) {
+          return { error: result(false, 'invalid_input', 'Both season ranks need a pick before they can be swapped.') };
+        }
+        const next = [...picks];
+        [next[first], next[second]] = [next[second], next[first]];
+        return { picks: next };
+      },
+    });
+    if (saved.mutation?.error) return saved.mutation.error;
+    return result(true, 'saved', 'Season picks reordered.', { prediction: saved.prediction, firstPick: false, round });
   });
 }
