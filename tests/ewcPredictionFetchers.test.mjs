@@ -33,6 +33,11 @@ test('successful EWC result fetches normalize the configured key to gameKey', as
   assert.deepEqual(result.placements, [
     { club: 'UNLIMIT', place: '1', points: 1000, participant: null },
   ]);
+  assert.deepEqual(result.evidence, {
+    kind: 'final-standings-panel',
+    authoritative: true,
+    coveredRanks: [1],
+  });
 });
 
 test('failed EWC result fetches still retain gameKey for pending-result tracking', async () => {
@@ -44,5 +49,6 @@ test('failed EWC result fetches still retain gameKey for pending-result tracking
 
   assert.equal(result.gameKey, 'fatal-fury-3');
   assert.deepEqual(result.placements, []);
+  assert.deepEqual(result.evidence, { kind: 'untrusted', authoritative: false, coveredRanks: [] });
   assert.equal(result.error, 'Empty event page');
 });

@@ -73,7 +73,10 @@ export async function drainEwcPredictionOperations(client, { now = nowSec(), max
           await recordEwcPredictionAutomationHealth({ guildId: operation.guildId, season: operation.season, ok: false, error: error.message }).catch((healthError) =>
             logger.error(`[ewc-prediction-operations] health ${operation.id}: ${healthError.message}`),
           );
-          await executionAudit(operation, 'failed', { attempts: operation.attempts + 1 }).catch((auditError) =>
+          await executionAudit(operation, 'failed', {
+            attempts: operation.attempts + 1,
+            ...(error?.reasonCode ? { reasonCode: error.reasonCode } : {}),
+          }).catch((auditError) =>
             logger.error(`[ewc-prediction-operations] audit ${operation.id}: ${auditError.message}`),
           );
         }

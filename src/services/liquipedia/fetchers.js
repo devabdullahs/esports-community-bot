@@ -16,13 +16,14 @@ import {
   parseClubStandings,
   parseClubPrizepool,
   parseEwcClubs,
+  parseEwcEventResult,
   parseEwcPlayerList,
-  parseEwcEventPlacements,
   parseEwcEventSchedule,
   parseTournamentEwcAffiliation,
   VRS_REGIONS,
   normalizeValveRankingRegion,
   parseValveRankingTable,
+  matchResultRank,
   mergeLiveWidgetMatch,
 } from './parsers.js';
 import { alignMatchDetailsSides, parseMatchDetails } from './matchDetailsParsers.js';
@@ -151,24 +152,28 @@ export async function fetchMatchDetails(game, matchPage, { teamA, teamB, maxAgeM
 // Matches for a tracked tournament, parsed from its OWN page's bracket/matchlist
 // (external_id = "<game>/<Page_Path>"). Stable + authoritative: upcoming, live, and finished
 // (with final scores + winners), so results are correct and corrections propagate.
-export async function fetchSchedule(tournament) {
+export async function fetchSchedule(tournament, { lpdbService = lpdb, loadPage = loadTournamentPage } = {}) {
   const [game, ...rest] = tournament.external_id.split('/');
   const page = rest.join('/');
   if (!page) return [];
 
-  // Prefer the structured LPDB API when a key is configured; fall back to HTML parsing on any
-  // error or empty result, so enabling LPDB can never break tracking.
-  if (lpdb.isEnabled()) {
+  // Prefer LPDB when configured. Backoff/rate/truncation failures must not
+  // amplify into an immediate second request to Liquipedia's MediaWiki API.
+  if (lpdbService.isEnabled()) {
     try {
-      const viaApi = await lpdb.fetchSchedule(tournament);
+      const viaApi = await lpdbService.fetchSchedule(tournament);
       if (viaApi.length) return viaApi;
-      logger.debug(`[lpdb] no matches for ${tournament.external_id}; using HTML parse`);
+      logger.debug('[lpdb] no matches; using HTML parse');
     } catch (e) {
-      logger.warn(`[lpdb] ${tournament.external_id} failed, using HTML parse: ${e.message}`);
+      if (lpdb.isLpdbProviderBlock(e)) {
+        logger.warn(`[lpdb] schedule retrieval deferred (${e.code})`);
+        throw e;
+      }
+      logger.warn(`[lpdb] schedule request failed (${e.code || 'request_failed'}); using HTML parse`);
     }
   }
 
-  const loaded = await loadTournamentPage(game, page);
+  const loaded = await loadPage(game, page);
   if (!loaded) return [];
   const { $ } = loaded;
 
@@ -218,13 +223,6 @@ export async function fetchSchedule(tournament) {
     }
     return matches.length === 1 ? matches[0] : null;
   };
-  const resultRank = (m) => {
-    const hasScore = m.scoreA != null && m.scoreB != null;
-    if (m.status === 'finished' && hasScore) return 4;
-    if (m.status === 'running') return 3;
-    if (m.status === 'finished') return 2;
-    return hasScore ? 1 : 0;
-  };
   const addAuthoritative = ($page, el, parser, structuralScope, widget) => {
     const m = parser($page, el, game, structuralScope || page);
     if (!m || seenIds.has(m.externalId)) return;
@@ -232,7 +230,7 @@ export async function fetchSchedule(tournament) {
     const kept = key ? (authByKey.get(key) || []).find((entry) => entry.widget !== widget)?.match : null;
     if (kept) {
       // Same match from the sibling widget: fold in a richer result, drop the dup.
-      if (resultRank(m) > resultRank(kept)) {
+      if (matchResultRank(m) > matchResultRank(kept)) {
         kept.status = m.status;
         kept.scoreA = m.scoreA;
         kept.scoreB = m.scoreB;
@@ -262,7 +260,7 @@ export async function fetchSchedule(tournament) {
   const pages = [{ page, $, stageTitle: '' }];
 
   for (const child of childStagePages($, game, page)) {
-    const childLoaded = await loadTournamentPage(game, child);
+    const childLoaded = await loadPage(game, child);
     if (!childLoaded) continue;
     pages.push({ page: child, $: childLoaded.$, stageTitle: titleFromPageSegment(child) });
   }
@@ -396,13 +394,13 @@ function liquipediaEventPage(event) {
 export async function fetchEwcEventPlacements(event, players = [], { parse = parsePage } = {}) {
   const normalizedEvent = { ...event, gameKey: event?.gameKey || event?.key };
   const page = liquipediaEventPage(normalizedEvent);
-  if (!page) return { ...normalizedEvent, placements: [], error: 'Missing Liquipedia event URL' };
+  if (!page) return { ...normalizedEvent, placements: [], evidence: { kind: 'untrusted', authoritative: false, coveredRanks: [] }, error: 'Missing Liquipedia event URL' };
   const data = await parse(page.wiki, page.page);
   const html = data?.parse?.text?.['*'];
-  if (!html) return { ...normalizedEvent, placements: [], error: 'Empty event page' };
+  if (!html) return { ...normalizedEvent, placements: [], evidence: { kind: 'untrusted', authoritative: false, coveredRanks: [] }, error: 'Empty event page' };
   return {
     ...normalizedEvent,
-    placements: parseEwcEventPlacements(cheerio.load(html), normalizedEvent, players),
+    ...parseEwcEventResult(cheerio.load(html), normalizedEvent, players),
   };
 }
 
@@ -421,7 +419,13 @@ export async function fetchEwcWeekGameResults(games) {
       results.push(await fetchEwcEventPlacements(game, playerData.players || []));
     } catch (error) {
       logger.warn(`[ewc] placements unavailable for ${game?.gameKey || game?.key || game?.game || 'event'}: ${error.message}`);
-      results.push({ ...game, gameKey: game?.gameKey || game?.key, placements: [], error: error.message });
+      results.push({
+        ...game,
+        gameKey: game?.gameKey || game?.key,
+        placements: [],
+        evidence: { kind: 'untrusted', authoritative: false, coveredRanks: [] },
+        error: error.message,
+      });
     }
   }
   return results;

@@ -1,3 +1,7 @@
+-- GENERATED FILE. DO NOT EDIT.
+-- Source: scripts/postgres/migrations/*.sql
+-- Regenerate with: npm run db:pg:schema:generate
+-- BEGIN MIGRATION 0001-baseline.sql
 -- PostgreSQL schema for the app-owned tables in the current SQLite database.
 -- This intentionally preserves the app's current row shapes:
 -- - *_json columns remain text
@@ -1171,3 +1175,4 @@ CREATE INDEX IF NOT EXISTS idx_tournament_sync_health_source
   ON tournament_sync_health(source);
 CREATE INDEX IF NOT EXISTS idx_tournament_sync_health_last_success
   ON tournament_sync_health(last_success_at DESC);
+-- END MIGRATION 0001-baseline.sql

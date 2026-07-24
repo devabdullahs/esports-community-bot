@@ -85,8 +85,12 @@ Keep these values/data during cutover:
    - `npm run db:pg:schema` applies that app schema to `DATABASE_URL`.
    - `npm run db:sqlite-to-pg -- --dry-run --sqlite <backup.sqlite>` previews a
      source backup without opening a PostgreSQL connection.
+   - `DATABASE_URL=<external-url> npm run db:sqlite-to-pg:preflight -- --sqlite
+     <backup.sqlite>` validates exact schema mapping and confirms that every
+     selected target table is empty.
    - `DATABASE_URL=<external-url> npm run db:sqlite-to-pg -- --sqlite <backup.sqlite>`
-     imports app-owned tables into PostgreSQL.
+     imports app-owned tables into one transaction. It commits only after
+     source/inserted/target counts, constraints, and identity sequences match.
 
 2. Add PostgreSQL support behind the existing DB module boundaries.
    - Add `pg`.
@@ -173,6 +177,8 @@ For local migration from your machine, use the external Cranl connection URL:
 ```powershell
 $env:DATABASE_URL = "postgresql://ecb_app:<password>@130.94.57.8:40003/esports_community"
 npm run db:sqlite-to-pg -- --dry-run --sqlite C:\path\to\bot.sqlite
+npm run db:sqlite-to-pg:preflight -- --sqlite C:\path\to\bot.sqlite
+npm run db:sqlite-to-pg -- --sqlite C:\path\to\bot.sqlite
 ```
 
 Then remove the shell variable after use:
@@ -226,6 +232,10 @@ further porting.
    internal URL), `PGSSLMODE=disable`. `BETTER_AUTH_SECRET` must be preserved.
 3. Better Auth tables: `npm run web:auth:migrate` against the Cranl `DATABASE_URL`
    (ensurePostgresAppSchema only creates the 22 app tables, not auth tables).
-4. Data: one-time `npm run db:sqlite-to-pg` from the final NAS SQLite backup, or
-   accept an empty PG start. Reset identity sequences + validate row counts.
+4. Data: stop writers, take and retain the final NAS SQLite backup, run the
+   source-only dry run, run target preflight against a clean target, then run
+   the one-time `npm run db:sqlite-to-pg`. The importer rejects non-empty
+   targets, schema drift, conflicts, skipped rows, count mismatches, invalid
+   constraints, and incorrect identity positions; any failure rolls back the
+   complete copy.
 5. Confirm Cranl build type is `dockerfile` (multi-stage runs start-production.js).

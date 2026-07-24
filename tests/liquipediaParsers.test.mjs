@@ -6,6 +6,7 @@
 //   or: node --test tests/liquipediaParsers.test.mjs
 
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import test from 'node:test';
 
 // Set required env vars before any imports that trigger config.js.
@@ -15,6 +16,8 @@ process.env.DISCORD_CLIENT_ID = 'test-client-id';
 process.env.DB_PATH = ':memory:';
 
 import { load } from 'cheerio';
+
+const fixture = (name) => readFileSync(new URL(`./fixtures/${name}`, import.meta.url), 'utf8');
 
 const {
   clubChampionshipStandingsPage,
@@ -26,8 +29,10 @@ const {
   parseBracketMatch,
   parseMatchInfo,
   parseMatchStream,
+  matchResultRank,
   mergeLiveWidgetMatch,
   parseTournamentEwcAffiliation,
+  parseEwcEventResult,
   parseEwcEventPlacements,
 } = await import('../src/services/liquipedia.js');
 
@@ -87,6 +92,84 @@ test('parseEwcEventPlacements: maps an Apex finals panel table to EWC points', (
     { club: 'UNLIMIT', place: '1', points: 1000, participant: null },
     { club: 'Team Vision', place: '2', points: 750, participant: null },
   ]);
+});
+
+test('parseEwcEventResult: qualifier-only tables are untrusted and cannot supply final placements', () => {
+  const $ = load(`
+    <table class="prizepooltable">
+      <tr><th>Place</th><th>Participant</th></tr>
+      <tr><td class="prizepooltable-place">1</td><td class="prizepooltable-col-team"><span data-highlightingclass="Qualifier One">Qualifier One</span></td></tr>
+    </table>`);
+
+  assert.deepEqual(parseEwcEventResult($, { game: 'Fighter Games' }), {
+    placements: [],
+    evidence: { kind: 'untrusted', authoritative: false, coveredRanks: [] },
+  });
+});
+
+test('parseEwcEventResult: authoritative prize tables retain partial rank coverage', () => {
+  const $ = load(`
+    <table class="prizepooltable">
+      <tr><th>Place</th><th>Participant</th><th>Prize</th></tr>
+      <tr><td class="prizepooltable-place">1</td><td class="prizepooltable-col-team"><span data-highlightingclass="Champion">Champion</span></td><td>$250,000</td></tr>
+      <tr><td class="prizepooltable-place">2</td><td class="prizepooltable-col-team"><span data-highlightingclass="Runner Up">Runner Up</span></td><td>$125,000</td></tr>
+      <tr><td class="prizepooltable-place">3</td><td class="prizepooltable-col-team"><span data-highlightingclass="Third">Third</span></td><td>$75,000</td></tr>
+      <tr><td class="prizepooltable-place">4</td><td class="prizepooltable-col-team"><span data-highlightingclass="Fourth">Fourth</span></td><td>$50,000</td></tr>
+    </table>`);
+
+  const result = parseEwcEventResult($, { game: 'Fighter Games' });
+  assert.equal(result.evidence.kind, 'prize-table');
+  assert.equal(result.evidence.authoritative, true);
+  assert.deepEqual(result.evidence.coveredRanks, [1, 2, 3, 4]);
+  assert.equal(result.placements[0].club, 'Champion');
+});
+
+test('parseEwcEventResult: Club Points range labels cover every awarded rank', () => {
+  const $ = load(`
+    <table class="prizepooltable">
+      <tr><th>Place</th><th>Participant</th><th>Club Points</th></tr>
+      <tr><td class="prizepooltable-place">1</td><td class="prizepooltable-col-team"><span data-highlightingclass="Club One">Club One</span></td><td>1,000</td></tr>
+      <tr><td class="prizepooltable-place">2</td><td class="prizepooltable-col-team"><span data-highlightingclass="Club Two">Club Two</span></td><td>750</td></tr>
+      <tr><td class="prizepooltable-place">3</td><td class="prizepooltable-col-team"><span data-highlightingclass="Club Three">Club Three</span></td><td>500</td></tr>
+      <tr><td class="prizepooltable-place">4</td><td class="prizepooltable-col-team"><span data-highlightingclass="Club Four">Club Four</span></td><td>300</td></tr>
+      <tr><td class="prizepooltable-place">5-8</td><td class="prizepooltable-col-team"><span data-highlightingclass="Club Five">Club Five</span></td><td>200</td></tr>
+    </table>`);
+
+  const result = parseEwcEventResult($, { game: 'Fighter Games' });
+  assert.equal(result.evidence.kind, 'club-points-prize-table');
+  assert.equal(result.evidence.authoritative, true);
+  assert.deepEqual(result.evidence.coveredRanks, [1, 2, 3, 4, 5, 6, 7, 8]);
+});
+
+test('parseEwcEventResult: full final-standings panels are authoritative', () => {
+  const rows = Array.from({ length: 8 }, (_, index) => `
+    <div class="panel-table__row">
+      <div class="cell--rank" data-sort-val="${index + 1}">${index + 1}</div>
+      <div class="cell--team" data-sort-val="Panel Club ${index + 1}">Panel Club ${index + 1}</div>
+    </div>`).join('');
+  const $ = load(`<div class="panel-table"><div class="panel-table__row row--header"></div>${rows}</div>`);
+
+  const result = parseEwcEventResult($, { game: 'Apex Legends' });
+  assert.equal(result.evidence.kind, 'final-standings-panel');
+  assert.equal(result.evidence.authoritative, true);
+  assert.deepEqual(result.evidence.coveredRanks, [1, 2, 3, 4, 5, 6, 7, 8]);
+});
+
+test('parseEwcEventResult: preserves duplicate apparent champions for readiness validation', () => {
+  const rows = [
+    ['1', 'Champion One'],
+    ['1', 'Champion Two'],
+    ['2', 'Club Two'],
+    ['3', 'Club Three'],
+    ['4', 'Club Four'],
+    ['5-8', 'Club Five'],
+  ].map(([place, club]) => `
+    <tr><td class="prizepooltable-place">${place}</td><td class="prizepooltable-col-team"><span data-highlightingclass="${club}">${club}</span></td><td>1,000</td></tr>`).join('');
+  const $ = load(`<table class="prizepooltable"><tr><th>Place</th><th>Participant</th><th>Club Points</th></tr>${rows}</table>`);
+
+  const result = parseEwcEventResult($, { game: 'Fighter Games' });
+  assert.equal(result.placements.filter((placement) => placement.place === '1').length, 2);
+  assert.deepEqual(result.evidence.coveredRanks, [1, 2, 3, 4, 5, 6, 7, 8]);
 });
 
 // ---------------------------------------------------------------------------
@@ -511,6 +594,49 @@ test('parseSwissMatches: table with no played rounds returns []', () => {
   `;
   const $ = load(html);
   assert.deepEqual(parseSwissMatches($, 'rl'), []);
+});
+
+test('parseSwissMatches: current div grid returns finished scores and dedupes mirrored player rows', () => {
+  const $ = load(`${fixture('liquipedia-modern-swiss.html')}
+    <table class="swisstable">
+      <tr><th>#</th><th>Player</th><th>Round 1</th></tr>
+      <tr>
+        <th>1</th>
+        <td><span data-highlightingclass="Samugamer 07">Samugamer 07</span></td>
+        <td class="swisstable-bgc-win">
+          <span data-highlightingclass="Adida">Adida</span>
+          9:3
+        </td>
+      </tr>
+    </table>
+  `);
+  const matches = parseSwissMatches($, 'easportsfc');
+
+  assert.equal(matches.length, 1);
+  assert.deepEqual(
+    {
+      externalId: matches[0].externalId,
+      teamA: matches[0].teamA,
+      teamB: matches[0].teamB,
+      scoreA: matches[0].scoreA,
+      scoreB: matches[0].scoreB,
+      status: matches[0].status,
+      winner: matches[0].winner,
+      roundIndex: matches[0].roundIndex,
+    },
+    {
+      externalId: 'easportsfc:swiss:0|adida|samugamer07',
+      teamA: 'Samugamer 07',
+      teamB: 'Adida',
+      scoreA: 9,
+      scoreB: 3,
+      status: 'finished',
+      winner: 'Samugamer 07',
+      roundIndex: 0,
+    },
+  );
+  assert.match(matches[0].logoA, /it\.png$/);
+  assert.match(matches[0].logoB, /us\.png$/);
 });
 
 // ---------------------------------------------------------------------------
@@ -1002,6 +1128,33 @@ test('mergeLiveWidgetMatch does not reopen an authoritative scored result', () =
   assert.equal(existing.status, 'finished');
   assert.equal(existing.scoreA, 1);
   assert.equal(existing.scoreB, 1);
+});
+
+test('mergeLiveWidgetMatch does not reopen an authoritative winner without numeric scores', () => {
+  const existing = {
+    teamA: 'DFernandes',
+    teamB: 'MarwanMC9',
+    scoreA: null,
+    scoreB: null,
+    status: 'finished',
+    scheduledAt: 1_784_744_400,
+    winner: 'DFernandes',
+  };
+  const liveWidget = {
+    teamA: 'DFernandes',
+    teamB: 'MarwanMC9',
+    scoreA: null,
+    scoreB: null,
+    status: 'running',
+    scheduledAt: 1_784_744_400,
+  };
+
+  assert.ok(matchResultRank(existing) > matchResultRank(liveWidget));
+  assert.equal(mergeLiveWidgetMatch(existing, liveWidget), false);
+  assert.equal(existing.status, 'finished');
+  assert.equal(existing.winner, 'DFernandes');
+  assert.equal(existing.scoreA, null);
+  assert.equal(existing.scoreB, null);
 });
 
 test('mergeLiveWidgetMatch can still start and enrich an unresolved row', () => {

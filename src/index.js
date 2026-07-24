@@ -4,7 +4,7 @@ import { Client, Collection, GatewayIntentBits } from 'discord.js';
 import { config } from './config.js';
 import { logger } from './lib/logger.js';
 import { loadModules } from './lib/loaders.js';
-import { closeDbClient, ensurePostgresAppSchema } from './db/client.js';
+import { closeDbClient, ensurePostgresMigrations, sanitizePostgresError } from './db/client.js';
 import { stopAll } from './jobs/pollingManager.js';
 import { stopClubChampionship } from './jobs/clubChampionship.js';
 import { stopCsRankings } from './jobs/csRankings.js';
@@ -20,6 +20,7 @@ import { stopLiquipediaEnrichment } from './jobs/liquipediaEnrichment.js';
 import { stopStandingsSync } from './jobs/standingsSync.js';
 import { startWebAnalyticsRetention, stopWebAnalyticsRetention } from './jobs/webAnalyticsRetention.js';
 import { deployCommands } from './lib/commandRegistry.js';
+import { backfillIndividualCompetitorProfiles } from './db/players.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 
@@ -32,7 +33,23 @@ const client = new Client({
 });
 client.commands = new Collection();
 
-await ensurePostgresAppSchema();
+try {
+  await ensurePostgresMigrations();
+} catch (error) {
+  logger.error('[start] PostgreSQL migrations failed: ' + sanitizePostgresError(error, process.env.DATABASE_URL));
+  await closeDbClient().catch(() => {});
+  process.exit(1);
+}
+try {
+  const profileBackfill = await backfillIndividualCompetitorProfiles();
+  if (profileBackfill.created) {
+    logger.info(
+      `[profiles] created ${profileBackfill.created} individual competitor profile(s) across ${profileBackfill.games} game(s).`,
+    );
+  }
+} catch (err) {
+  logger.warn(`[profiles] individual competitor backfill failed: ${err.message}`);
+}
 startWebAnalyticsRetention();
 
 // --- Load commands ---

@@ -139,13 +139,43 @@ export async function updateEwcMediaChannel(slug, {
   return getEwcMediaChannel(slug);
 }
 
-// Deleting a channel also clears any admin scope rows and its Discord-post link.
+// A media channel owns its posts. Refuse deletion until an editor explicitly
+// moves or removes them so the articles cannot become unreachable or unmanaged.
 export async function deleteEwcMediaChannel(slug) {
   return transaction(async (tx) => {
+    const existing = await tx.get(
+      'SELECT slug FROM ewc_media_channels WHERE slug = $1',
+      [slug],
+    );
+    if (!existing) {
+      return {
+        deleted: 0,
+        conflict: null,
+        postCount: 0,
+      };
+    }
+
+    const postRow = await tx.get(
+      'SELECT COUNT(*) AS count FROM ewc_news_posts WHERE media_slug = $1',
+      [slug],
+    );
+    const postCount = Number(postRow?.count || 0);
+    if (postCount > 0) {
+      return {
+        deleted: 0,
+        conflict: 'media_has_posts',
+        postCount,
+      };
+    }
+
     await tx.run('DELETE FROM ewc_admin_media_scopes WHERE media_slug = $1', [slug]);
     await tx.run('DELETE FROM ewc_media_discord_posts WHERE slug = $1', [slug]);
     const result = await tx.run('DELETE FROM ewc_media_channels WHERE slug = $1', [slug]);
-    return { deleted: result.changes };
+    return {
+      deleted: result.changes,
+      conflict: null,
+      postCount: 0,
+    };
   });
 }
 

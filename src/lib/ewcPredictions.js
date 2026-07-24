@@ -1,7 +1,9 @@
+import { createHash } from 'node:crypto';
+
 import { normalizeTeamName } from './render.js';
 
-const RIYADH_OFFSET = '+03:00';
-const EWC_EVENT_TIME_ZONE = 'Europe/Paris';
+const RIYADH_UTC_OFFSET = '+03:00';
+const EWC_SCHEDULE_TIME_ZONE = 'Asia/Riyadh';
 
 export const WEEKLY_TOP_THREE_SWEEP_BONUS = 300;
 export const WEEKLY_ALL_GAME_WINNERS_BONUS = 300;
@@ -20,6 +22,27 @@ export const EWC_POINTS_BY_RANK = new Map([
   [8, 50],
 ]);
 
+const EWC_AWARDED_RANKS = [...EWC_POINTS_BY_RANK.keys()];
+const EWC_AUTHORITATIVE_RESULT_KINDS = new Set([
+  'club-points-prize-table',
+  'prize-table',
+  'final-standings-panel',
+  'tracked-final-standings',
+]);
+
+export const EWC_PREDICTION_READINESS = Object.freeze({
+  READY: 'ready',
+  NOT_OPEN: 'not_open',
+  GAMES_UNLOCKED: 'games_unlocked',
+  ROUND_NOT_CLOSED: 'round_not_closed',
+  SCORE_DELAY_PENDING: 'score_delay_pending',
+  MISSING_BASELINE: 'missing_baseline',
+  MISSING_RESULTS: 'missing_results',
+  UNTRUSTED_RESULT: 'untrusted_result',
+  INCOMPLETE_RESULT: 'incomplete_result',
+  STALE_RESULT: 'stale_result',
+});
+
 export const EWC_2026_OFFICIAL_WEEKS = [
   ['week-1', 'Week 1', '2026-07-06', '2026-07-12'],
   ['week-2', 'Week 2', '2026-07-13', '2026-07-19'],
@@ -30,7 +53,7 @@ export const EWC_2026_OFFICIAL_WEEKS = [
   ['week-7', 'Week 7', '2026-08-17', '2026-08-23'],
 ];
 
-const EWC_2026_OFFICIAL_EVENT_DATES = [
+export const EWC_2026_OFFICIAL_EVENT_DATES = [
   { test: /\bvalorant\b/i, start: '2026-07-09', end: '2026-07-12' },
   { test: /\balgs\b|\bapex\b/i, start: '2026-07-07', end: '2026-07-11' },
   { test: /fatal fury/i, start: '2026-07-08', end: '2026-07-11' },
@@ -114,6 +137,52 @@ export function ewcPlacementPoints(place) {
   return EWC_POINTS_BY_RANK.get(firstRank) || 0;
 }
 
+export function ewcPlacementCoveredRanks(place) {
+  const text = String(place ?? '').trim();
+  const match = text.match(/^(\d+)(?:st|nd|rd|th)?\s*(?:-|\u2013|\u2014|to)?\s*(\d+)?(?:st|nd|rd|th)?$/i);
+  if (!match) return [];
+  const first = Number(match[1]);
+  const last = Number(match[2] || match[1]);
+  if (!EWC_POINTS_BY_RANK.has(first) || !EWC_POINTS_BY_RANK.has(last) || last < first) return [];
+  return EWC_AWARDED_RANKS.filter((rank) => rank >= first && rank <= last);
+}
+
+function resultEvidenceCoveredRanks(evidence) {
+  return new Set(
+    (Array.isArray(evidence?.coveredRanks) ? evidence.coveredRanks : [])
+      .map(Number)
+      .filter((rank) => EWC_POINTS_BY_RANK.has(rank)),
+  );
+}
+
+function completenessResult(ready, reason, coveredRanks) {
+  return { ready, reason, coveredRanks: [...coveredRanks].sort((a, b) => a - b) };
+}
+
+export function evaluateEwcGameResultCompleteness(result = {}) {
+  const evidence = result?.evidence;
+  if (!evidence?.authoritative || !EWC_AUTHORITATIVE_RESULT_KINDS.has(evidence.kind)) {
+    return completenessResult(false, 'untrusted_source', []);
+  }
+
+  const evidenceCoverage = resultEvidenceCoveredRanks(evidence);
+  const placementCoverage = new Set();
+  const champions = new Set();
+  for (const row of Array.isArray(result?.placements) ? result.placements : []) {
+    const ranks = ewcPlacementCoveredRanks(row?.place);
+    if (!ranks.length) continue;
+    const club = normalizeClubName(row?.club);
+    if (!club) return completenessResult(false, 'invalid_club', placementCoverage);
+    for (const rank of ranks) placementCoverage.add(rank);
+    if (ranks.includes(1)) champions.add(club);
+  }
+
+  if (champions.size !== 1) return completenessResult(false, 'multiple_champions', placementCoverage);
+  const missing = EWC_AWARDED_RANKS.filter((rank) => !evidenceCoverage.has(rank) || !placementCoverage.has(rank));
+  if (missing.length) return completenessResult(false, 'missing_rank', placementCoverage);
+  return completenessResult(true, 'ready', placementCoverage);
+}
+
 export function ewcGameResultPending(result) {
   const placements = result?.placements || [];
   if (!placements.length) return true;
@@ -125,7 +194,7 @@ export function pendingEwcGameResults(results, games = []) {
   const expected = (games || []).length
     ? games.map((game) => byKey.get(game.key) || { gameKey: game.key, game: game.game, event: game.event, placements: [] })
     : results || [];
-  return expected.filter(ewcGameResultPending);
+  return expected.filter((result) => !evaluateEwcGameResultCompleteness(result).ready);
 }
 
 export function perGamePredictionRoundLocked(games = [], now = Math.floor(Date.now() / 1000)) {
@@ -134,6 +203,136 @@ export function perGamePredictionRoundLocked(games = [], now = Math.floor(Date.n
     const lockAt = Number(game?.lockAt);
     return Number.isFinite(lockAt) && now >= lockAt;
   });
+}
+
+function roundTime(round, snakeKey, camelKey) {
+  const value = Number(round?.[snakeKey] ?? round?.[camelKey]);
+  return Number.isFinite(value) ? value : null;
+}
+
+function readiness(ready, reason, details = {}) {
+  return { ready, reason, ...details };
+}
+
+export function ewcPredictionScoreAfter(round, defaultDelayHours = 24) {
+  const configured = roundTime(round, 'score_after', 'scoreAfter');
+  if (configured != null) return configured;
+  const closeAt = roundTime(round, 'close_at', 'closeAt');
+  if (closeAt == null) return null;
+  return closeAt + Math.max(0, Number(defaultDelayHours) || 0) * 3600;
+}
+
+function resultReadiness(result, gameKey) {
+  if (!result || !Array.isArray(result.placements) || !result.placements.length) {
+    return readiness(false, EWC_PREDICTION_READINESS.MISSING_RESULTS, { gameKey });
+  }
+  const completeness = evaluateEwcGameResultCompleteness(result);
+  if (completeness.ready) return null;
+  if (completeness.reason === 'untrusted_source') {
+    return readiness(false, EWC_PREDICTION_READINESS.UNTRUSTED_RESULT, { gameKey });
+  }
+  return readiness(false, EWC_PREDICTION_READINESS.INCOMPLETE_RESULT, { gameKey });
+}
+
+export function evaluateEwcWeekScoringReadiness(
+  round,
+  {
+    now = Math.floor(Date.now() / 1000),
+    results = round?.results || [],
+    finalStandings = round?.final || [],
+    scoreAfter = ewcPredictionScoreAfter(round),
+  } = {},
+) {
+  const openAt = roundTime(round, 'open_at', 'openAt');
+  if (openAt != null && now < openAt) {
+    return readiness(false, EWC_PREDICTION_READINESS.NOT_OPEN);
+  }
+
+  const games = Array.isArray(round?.games) ? round.games : [];
+  if (games.length && !perGamePredictionRoundLocked(games, now)) {
+    return readiness(false, EWC_PREDICTION_READINESS.GAMES_UNLOCKED);
+  }
+
+  const closeAt = roundTime(round, 'close_at', 'closeAt');
+  if (round?.status !== 'closed' || (!games.length && (closeAt == null || now < closeAt))) {
+    return readiness(false, EWC_PREDICTION_READINESS.ROUND_NOT_CLOSED);
+  }
+  if (scoreAfter != null && now < Number(scoreAfter)) {
+    return readiness(false, EWC_PREDICTION_READINESS.SCORE_DELAY_PENDING, { readyAt: Number(scoreAfter) });
+  }
+
+  if (!games.length) {
+    if (!Array.isArray(round?.baseline) || !round.baseline.length) {
+      return readiness(false, EWC_PREDICTION_READINESS.MISSING_BASELINE);
+    }
+    if (!Array.isArray(finalStandings) || !finalStandings.length) {
+      return readiness(false, EWC_PREDICTION_READINESS.MISSING_RESULTS);
+    }
+    return readiness(true, EWC_PREDICTION_READINESS.READY);
+  }
+
+  const byKey = new Map((results || []).map((result) => [String(result?.gameKey || ''), result]));
+  for (const game of games) {
+    const gameKey = String(game?.key || '');
+    const decision = resultReadiness(byKey.get(gameKey), gameKey);
+    if (decision) return decision;
+  }
+
+  const finalReadiness = evaluateEwcGameResultsFinalReadiness(results, games, now, scoreAfter);
+  if (!finalReadiness.ready) {
+    return readiness(false, EWC_PREDICTION_READINESS.STALE_RESULT, {
+      gameKey: finalReadiness.gameKey || null,
+    });
+  }
+  return readiness(true, EWC_PREDICTION_READINESS.READY);
+}
+
+export function canonicalEwcFinalStandings(finalStandings = [], topSize = 10) {
+  const size = Math.max(1, Number(topSize) || 10);
+  const seen = new Set();
+  const rows = [];
+  for (const row of Array.isArray(finalStandings) ? finalStandings : []) {
+    const team = String(row?.team ?? row?.club ?? '').replace(/\s+/g, ' ').trim();
+    const rank = Number(row?.rank);
+    const key = normalizeClubName(team);
+    if (!key || !Number.isInteger(rank) || rank < 1 || rank > size || seen.has(key)) continue;
+    seen.add(key);
+    rows.push({ ...row, team, rank });
+  }
+  return rows.sort((left, right) => left.rank - right.rank);
+}
+
+export function evaluateEwcSeasonScoringReadiness(
+  round,
+  finalStandings = round?.final || [],
+  {
+    now = Math.floor(Date.now() / 1000),
+    scoreAfter = ewcPredictionScoreAfter(round),
+  } = {},
+) {
+  const openAt = roundTime(round, 'open_at', 'openAt');
+  if (openAt != null && now < openAt) {
+    return readiness(false, EWC_PREDICTION_READINESS.NOT_OPEN);
+  }
+  const closeAt = roundTime(round, 'close_at', 'closeAt');
+  if (round?.status !== 'closed' || closeAt == null || now < closeAt) {
+    return readiness(false, EWC_PREDICTION_READINESS.ROUND_NOT_CLOSED);
+  }
+  if (scoreAfter != null && now < Number(scoreAfter)) {
+    return readiness(false, EWC_PREDICTION_READINESS.SCORE_DELAY_PENDING, { readyAt: Number(scoreAfter) });
+  }
+  if (!Array.isArray(finalStandings) || !finalStandings.length) {
+    return readiness(false, EWC_PREDICTION_READINESS.MISSING_RESULTS);
+  }
+  const requiredRows = Math.max(1, Number(round?.top_size ?? round?.topSize) || 10);
+  const availableRows = canonicalEwcFinalStandings(finalStandings, requiredRows).length;
+  if (availableRows < requiredRows) {
+    return readiness(false, EWC_PREDICTION_READINESS.INCOMPLETE_RESULT, {
+      availableRows,
+      requiredRows,
+    });
+  }
+  return readiness(true, EWC_PREDICTION_READINESS.READY);
 }
 
 export function dueEwcGamesForResults(
@@ -150,7 +349,7 @@ export function dueEwcGamesForResults(
     const endAt = Number(game?.endAt);
     if (!Number.isFinite(endAt) || now < endAt - Math.max(0, Number(earlyWindowSec) || 0)) return false;
     const result = byKey.get(key);
-    if (ewcGameResultPending(result)) return true;
+    if (!evaluateEwcGameResultCompleteness(result).ready) return true;
 
     // Live battle-royale standings already contain a first-place row. A good
     // snapshot taken before the scheduled finish must therefore be refreshed
@@ -163,14 +362,55 @@ export function dueEwcGamesForResults(
 }
 
 export function ewcGameResultsFinalReady(results = [], games = [], now = Math.floor(Date.now() / 1000), scoreAfter = null) {
+  return evaluateEwcGameResultsFinalReadiness(results, games, now, scoreAfter).ready;
+}
+
+export function evaluateEwcGameResultsFinalReadiness(results = [], games = [], now = Math.floor(Date.now() / 1000), scoreAfter = null) {
   const byKey = new Map((results || []).map((result) => [String(result?.gameKey || ''), result]));
-  return (games || []).length > 0 && (games || []).every((game) => {
+  if (!(games || []).length) return { ready: false, reason: 'missing_rank', gameKey: null };
+  for (const game of games || []) {
     const result = byKey.get(String(game?.key || ''));
-    if (ewcGameResultPending(result)) return false;
+    const completeness = evaluateEwcGameResultCompleteness(result);
+    if (!completeness.ready) return { ...completeness, gameKey: String(game?.key || '') };
     const endAt = Number(game?.endAt) || 0;
     const finalAt = Math.max(endAt, Number(scoreAfter) || 0);
-    return now >= finalAt && (Number(result?.fetchedAt) || 0) >= finalAt;
-  });
+    if (now < finalAt || (Number(result?.fetchedAt) || 0) < finalAt) {
+      return { ready: false, reason: 'stale', coveredRanks: completeness.coveredRanks, gameKey: String(game?.key || '') };
+    }
+  }
+  return { ready: true, reason: 'ready', coveredRanks: EWC_AWARDED_RANKS, gameKey: null };
+}
+
+function resultSnapshotQuality(result) {
+  const completeness = evaluateEwcGameResultCompleteness(result);
+  const evidence = result?.evidence;
+  const authoritative = Boolean(
+    evidence?.authoritative && EWC_AUTHORITATIVE_RESULT_KINDS.has(evidence.kind),
+  );
+  const placementCoverage = new Set(
+    (Array.isArray(result?.placements) ? result.placements : [])
+      .flatMap((placement) => ewcPlacementCoveredRanks(placement?.place)),
+  );
+  return [
+    completeness.ready ? 1 : 0,
+    authoritative ? 1 : 0,
+    placementCoverage.size,
+    ewcGameResultPending(result) ? 0 : 1,
+    Array.isArray(result?.placements) ? result.placements.length : 0,
+    Number(result?.fetchedAt) || 0,
+  ];
+}
+
+function incomingSnapshotIsBetter(current, incoming) {
+  if (!current) return true;
+  const currentQuality = resultSnapshotQuality(current);
+  const incomingQuality = resultSnapshotQuality(incoming);
+  for (let index = 0; index < currentQuality.length; index += 1) {
+    if (incomingQuality[index] !== currentQuality[index]) {
+      return incomingQuality[index] > currentQuality[index];
+    }
+  }
+  return true;
 }
 
 export function mergeEwcGameResults(existing = [], incoming = []) {
@@ -183,7 +423,7 @@ export function mergeEwcGameResults(existing = [], incoming = []) {
     const key = String(result?.gameKey || '');
     if (!key) continue;
     const current = merged.get(key);
-    if (!current || !ewcGameResultPending(result) || ewcGameResultPending(current)) merged.set(key, result);
+    if (incomingSnapshotIsBetter(current, result)) merged.set(key, result);
   }
   return [...merged.values()];
 }
@@ -197,7 +437,7 @@ export function parsePredictionDate(input) {
   if (/^\d{13}$/.test(value)) return Math.floor(Number(value) / 1000);
 
   const normalized = value.includes('T') ? value : value.replace(' ', 'T');
-  const withZone = /(?:Z|[+-]\d{2}:?\d{2})$/i.test(normalized) ? normalized : `${normalized}${RIYADH_OFFSET}`;
+  const withZone = /(?:Z|[+-]\d{2}:?\d{2})$/i.test(normalized) ? normalized : `${normalized}${RIYADH_UTC_OFFSET}`;
   const time = Date.parse(withZone);
   if (Number.isNaN(time)) throw new Error('Use a Discord timestamp, Unix seconds, or `YYYY-MM-DD HH:mm` Riyadh time.');
   return Math.floor(time / 1000);
@@ -405,7 +645,7 @@ function formatEwcShortDate(seconds) {
   return new Intl.DateTimeFormat('en-GB', {
     day: '2-digit',
     month: 'short',
-    timeZone: EWC_EVENT_TIME_ZONE,
+    timeZone: EWC_SCHEDULE_TIME_ZONE,
   }).format(new Date(seconds * 1000));
 }
 
@@ -425,10 +665,10 @@ function timeZoneOffsetMs(date, timeZone) {
   return sign * (hours * 60 + minutes) * 60_000;
 }
 
-function ewcEventDay(dateText, endOfDay = false) {
+export function officialEwcDateBoundary(dateText, endOfDay = false) {
   const [year, month, day] = String(dateText).split('-').map(Number);
   const utcGuess = new Date(Date.UTC(year, month - 1, day, 0, 0, 0));
-  const seconds = Math.floor((utcGuess.getTime() - timeZoneOffsetMs(utcGuess, EWC_EVENT_TIME_ZONE)) / 1000);
+  const seconds = Math.floor((utcGuess.getTime() - timeZoneOffsetMs(utcGuess, EWC_SCHEDULE_TIME_ZONE)) / 1000);
   return endOfDay ? seconds + 24 * 3600 - 1 : seconds;
 }
 
@@ -441,8 +681,8 @@ export function defaultEwcSeasonPredictionWindow(
   } = {},
 ) {
   if (String(season) !== '2026') return null;
-  const starts = EWC_2026_OFFICIAL_EVENT_DATES.map((event) => ewcEventDay(event.start));
-  const ends = EWC_2026_OFFICIAL_EVENT_DATES.map((event) => ewcEventDay(event.end, true));
+  const starts = EWC_2026_OFFICIAL_EVENT_DATES.map((event) => officialEwcDateBoundary(event.start));
+  const ends = EWC_2026_OFFICIAL_EVENT_DATES.map((event) => officialEwcDateBoundary(event.end, true));
   const firstEventAt = Math.min(...starts);
   const finalEventEndAt = Math.max(...ends);
   return {
@@ -485,30 +725,203 @@ export function effectiveEwcWeekStatusText(round, now = Math.floor(Date.now() / 
 }
 
 function applyOfficialEwc2026EventDates(event) {
-  const hay = `${event.game || ''} ${event.event || ''}`;
-  const override = EWC_2026_OFFICIAL_EVENT_DATES.find((rule) => rule.test.test(hay));
+  const [override] = matchingOfficialEwc2026EventDates(event);
   if (!override) return event;
   return {
     ...event,
-    startAt: ewcEventDay(override.start),
-    endAt: ewcEventDay(override.end, true),
+    startAt: officialEwcDateBoundary(override.start),
+    endAt: officialEwcDateBoundary(override.end, true),
     dateLabel: `${override.start} - ${override.end}`,
   };
 }
 
-function slugifyGameKey(value) {
+function matchingOfficialEwc2026EventDates(event) {
+  const hay = `${event?.game || ''} ${event?.event || ''}`;
+  return EWC_2026_OFFICIAL_EVENT_DATES.filter((rule) => rule.test.test(hay));
+}
+
+function slugifyGameKey(value, maxLength = 48) {
   return String(value || 'event')
     .toLowerCase()
     .replace(/&/g, 'and')
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-+|-+$/g, '')
-    .slice(0, 48) || 'event';
+    .slice(0, maxLength) || 'event';
+}
+
+function normalizeEventIdentityText(value) {
+  return String(value || '')
+    .normalize('NFKC')
+    .trim()
+    .toLowerCase()
+    .replace(/[_\s]+/g, ' ')
+    .replace(/\s+/g, ' ');
+}
+
+function normalizedLiquipediaPath(value) {
+  const raw = String(value || '').trim();
+  if (!raw) return null;
+  try {
+    const url = new URL(raw, 'https://liquipedia.net');
+    if (url.hostname && url.hostname !== 'liquipedia.net' && !url.hostname.endsWith('.liquipedia.net')) return null;
+    let pathname;
+    try {
+      pathname = decodeURIComponent(url.pathname);
+    } catch {
+      pathname = url.pathname;
+    }
+    pathname = pathname
+      .normalize('NFKC')
+      .replace(/\/+/g, '/')
+      .replace(/\/$/, '')
+      .toLowerCase();
+    return pathname && pathname !== '/' ? pathname : null;
+  } catch {
+    return null;
+  }
+}
+
+export function canonicalEwcEventIdentity(event) {
+  const path = normalizedLiquipediaPath(event?.eventUrl);
+  if (path) return `liquipedia:${path}`;
+
+  const gameWiki = normalizeEventIdentityText(event?.gameWiki);
+  const title = normalizeEventIdentityText(event?.event);
+  const game = normalizeEventIdentityText(event?.game);
+  if (!gameWiki && !title && !game) {
+    throw new Error('EWC prediction event is missing the fields required for a stable identity.');
+  }
+  return `fallback:${gameWiki}|${title}|${game}`;
+}
+
+function persistedEwcEventIdentity(event) {
+  const persisted = String(event?.eventIdentity || '').normalize('NFKC').trim().toLowerCase();
+  return persisted || canonicalEwcEventIdentity(event);
+}
+
+export function stableEwcGameKey(event) {
+  const identity = canonicalEwcEventIdentity(event);
+  const readable = slugifyGameKey(event?.game || event?.event || event?.gameWiki, 21);
+  const hash = createHash('sha256').update(identity).digest('hex').slice(0, 10);
+  return `${readable}-${hash}`;
+}
+
+function indexGamesByIdentity(games, side) {
+  const identities = new Map();
+  const keys = new Map();
+  const invalid = [];
+  for (const [index, game] of (games || []).entries()) {
+    if (!game || typeof game !== 'object' || Array.isArray(game)) {
+      invalid.push({ side, index, reason: 'not-an-object' });
+      continue;
+    }
+    const key = String(game.key || '').trim();
+    if (!key) {
+      invalid.push({ side, index, reason: 'missing-key' });
+      continue;
+    }
+    let identity;
+    try {
+      identity = persistedEwcEventIdentity(game);
+    } catch (error) {
+      invalid.push({ side, index, key, reason: error.message });
+      continue;
+    }
+    if (!identities.has(identity)) identities.set(identity, []);
+    identities.get(identity).push({ game, index, key, identity });
+    if (!keys.has(key)) keys.set(key, []);
+    keys.get(key).push({ game, index, key, identity });
+  }
+  return { identities, keys, invalid };
+}
+
+export function reconcileEwcPredictionGames(storedGames, regeneratedGames, { referencedKeys = [] } = {}) {
+  if (!Array.isArray(storedGames) || !Array.isArray(regeneratedGames)) {
+    throw new Error('Stored and regenerated EWC prediction games must be arrays.');
+  }
+
+  const stored = indexGamesByIdentity(storedGames, 'stored');
+  const regenerated = indexGamesByIdentity(regeneratedGames, 'regenerated');
+  const references = new Set((referencedKeys || []).map((key) => String(key || '').trim()).filter(Boolean));
+  const ambiguous = [...stored.invalid, ...regenerated.invalid];
+
+  for (const [key, rows] of stored.keys) {
+    if (rows.length > 1) ambiguous.push({ side: 'stored', key, reason: 'duplicate-key' });
+  }
+  for (const [key, rows] of regenerated.keys) {
+    if (rows.length > 1) ambiguous.push({ side: 'regenerated', key, reason: 'duplicate-key' });
+  }
+  for (const [identity, rows] of stored.identities) {
+    if (rows.length > 1) ambiguous.push({ side: 'stored', identity, reason: 'duplicate-identity' });
+  }
+  for (const [identity, rows] of regenerated.identities) {
+    if (rows.length > 1) ambiguous.push({ side: 'regenerated', identity, reason: 'duplicate-identity' });
+  }
+
+  const mapping = {};
+  const unchanged = [];
+  const rekeyed = [];
+  const removedReferenced = [];
+  const removedUnreferenced = [];
+  const added = [];
+
+  for (const [identity, storedRows] of stored.identities) {
+    if (storedRows.length !== 1) continue;
+    const storedRow = storedRows[0];
+    const regeneratedRows = regenerated.identities.get(identity) || [];
+    if (regeneratedRows.length === 1) {
+      const regeneratedRow = regeneratedRows[0];
+      mapping[storedRow.key] = regeneratedRow.key;
+      const entry = { identity, oldKey: storedRow.key, newKey: regeneratedRow.key };
+      if (storedRow.key === regeneratedRow.key) unchanged.push(entry);
+      else rekeyed.push(entry);
+      continue;
+    }
+    const removed = { identity, oldKey: storedRow.key };
+    if (references.has(storedRow.key)) removedReferenced.push(removed);
+    else removedUnreferenced.push(removed);
+  }
+
+  for (const [identity, regeneratedRows] of regenerated.identities) {
+    if (regeneratedRows.length !== 1) continue;
+    if (!stored.identities.has(identity)) {
+      added.push({ identity, newKey: regeneratedRows[0].key });
+    }
+  }
+
+  const unknownReferences = [...references]
+    .filter((key) => !stored.keys.has(key))
+    .sort()
+    .map((key) => ({ key }));
+
+  return {
+    ok: ambiguous.length === 0 && removedReferenced.length === 0 && unknownReferences.length === 0,
+    mapping,
+    unchanged,
+    rekeyed,
+    added,
+    removedReferenced,
+    removedUnreferenced,
+    ambiguous,
+    unknownReferences,
+  };
+}
+
+function assertUniqueGeneratedEventIdentities(events) {
+  const seen = new Map();
+  for (const [index, event] of events.entries()) {
+    const identity = canonicalEwcEventIdentity(event);
+    if (seen.has(identity)) {
+      throw new Error(`Duplicate EWC prediction event identity at schedule rows ${seen.get(identity) + 1} and ${index + 1}: ${identity}`);
+    }
+    seen.set(identity, index);
+  }
 }
 
 function officialWeekWindows2026() {
   return EWC_2026_OFFICIAL_WEEKS.map(([weekKey, name, start, end], index) => {
-    const startAt = ewcEventDay(start);
-    const endAt = ewcEventDay(end, true);
+    const startAt = officialEwcDateBoundary(start);
+    const endAt = officialEwcDateBoundary(end, true);
     return {
       index: index + 1,
       weekKey,
@@ -524,10 +937,11 @@ function weekForEventEnd(event, windows) {
   return windows.find((week) => event.endAt >= week.startAt && event.endAt <= week.endAt) || null;
 }
 
-function compactEvent(event, index, lockBeforeHours) {
-  const keyBase = slugifyGameKey(event.game || event.event || event.gameWiki || `event-${index + 1}`);
+function compactEvent(event, lockBeforeHours) {
+  const eventIdentity = canonicalEwcEventIdentity(event);
   return {
-    key: `${keyBase}-${index + 1}`,
+    key: stableEwcGameKey(event),
+    eventIdentity,
     game: event.game,
     gameWiki: event.gameWiki || null,
     event: event.event,
@@ -539,20 +953,136 @@ function compactEvent(event, index, lockBeforeHours) {
   };
 }
 
+const EWC_WEEK_TIMING_FIELDS = [
+  ['startAt', 'start_at'],
+  ['endAt', 'end_at'],
+  ['openAt', 'open_at'],
+  ['closeAt', 'close_at'],
+  ['scoreAfter', 'score_after'],
+];
+
+function unixSeconds(value) {
+  if (value == null || value === '') return null;
+  const seconds = Number(value);
+  return Number.isFinite(seconds) ? seconds : null;
+}
+
+function shiftedTime(value, oldReference, newReference) {
+  const seconds = unixSeconds(value);
+  return seconds == null ? null : newReference + (seconds - oldReference);
+}
+
+function changedFields(fields) {
+  return fields.filter((field) => field.oldValue !== field.newValue);
+}
+
+export function reconcileStoredEwc2026Week(week) {
+  if (String(week?.season) !== '2026') {
+    throw new Error('Only stored EWC 2026 weeks can be reconciled.');
+  }
+
+  const officialWeek = officialWeekWindows2026().find((candidate) => candidate.weekKey === (week.week_key ?? week.weekKey));
+  if (!officialWeek) {
+    throw new Error('Stored EWC 2026 week cannot be matched to an official week.');
+  }
+
+  const storedGames = Array.isArray(week.games) ? week.games : [];
+  if (!storedGames.length) {
+    throw new Error('Stored EWC 2026 week has no event metadata to reconcile.');
+  }
+
+  const correctedGames = storedGames.map((game) => {
+    const matches = matchingOfficialEwc2026EventDates(game);
+    if (matches.length !== 1) {
+      throw new Error('Stored EWC 2026 event cannot be uniquely matched to an official override.');
+    }
+
+    const oldStartAt = unixSeconds(game.startAt);
+    const oldEndAt = unixSeconds(game.endAt);
+    const oldLockAt = unixSeconds(game.lockAt);
+    if (oldStartAt == null || oldEndAt == null || oldLockAt == null) {
+      throw new Error('Stored EWC 2026 event is missing a timing value required for reconciliation.');
+    }
+
+    const override = matches[0];
+    const startAt = officialEwcDateBoundary(override.start);
+    const endAt = officialEwcDateBoundary(override.end, true);
+    const lockAt = startAt + (oldLockAt - oldStartAt);
+    return {
+      ...game,
+      startAt,
+      endAt,
+      lockAt,
+      _reconciliation: { oldStartAt, oldEndAt, oldLockAt },
+    };
+  });
+
+  const oldFirstLock = Math.min(...correctedGames.map((game) => game._reconciliation.oldLockAt));
+  const newFirstLock = Math.min(...correctedGames.map((game) => game.lockAt));
+  const oldLastLock = Math.max(...correctedGames.map((game) => game._reconciliation.oldLockAt));
+  const newLastLock = Math.max(...correctedGames.map((game) => game.lockAt));
+  const oldLastEnd = Math.max(...correctedGames.map((game) => game._reconciliation.oldEndAt));
+  const newLastEnd = Math.max(...correctedGames.map((game) => game.endAt));
+  const correctedTiming = {
+    startAt: officialWeek.startAt,
+    endAt: officialWeek.endAt,
+    openAt: shiftedTime(week.open_at ?? week.openAt, oldFirstLock, newFirstLock),
+    closeAt: shiftedTime(week.close_at ?? week.closeAt, oldLastLock, newLastLock),
+    scoreAfter: shiftedTime(week.score_after ?? week.scoreAfter, oldLastEnd, newLastEnd),
+  };
+
+  const corrected = {
+    ...correctedTiming,
+    games: correctedGames.map(({ _reconciliation, ...game }) => game),
+  };
+  const weekDiff = changedFields(
+    EWC_WEEK_TIMING_FIELDS.map(([key, column]) => ({
+      field: column,
+      oldValue: unixSeconds(week[column] ?? week[key]),
+      newValue: correctedTiming[key],
+    })),
+  );
+  const gameDiff = correctedGames
+    .map((game, index) => ({
+      gameKey: game.key ?? null,
+      fields: changedFields([
+        { field: 'startAt', oldValue: game._reconciliation.oldStartAt, newValue: game.startAt },
+        { field: 'endAt', oldValue: game._reconciliation.oldEndAt, newValue: game.endAt },
+        { field: 'lockAt', oldValue: game._reconciliation.oldLockAt, newValue: game.lockAt },
+      ]),
+      index,
+    }))
+    .filter((game) => game.fields.length);
+  const invalidSubmissionIntervals = correctedGames
+    .filter((game) => game.lockAt < game._reconciliation.oldLockAt)
+    .map((game) => ({
+      gameKey: game.key ?? null,
+      newLockAt: game.lockAt,
+      oldLockAt: game._reconciliation.oldLockAt,
+    }));
+
+  return {
+    corrected,
+    diff: { week: weekDiff, games: gameDiff },
+    invalidSubmissionIntervals,
+  };
+}
+
 export function generateEwcWeekWindows(events, { openBeforeHours = 48, lockBeforeHours = 24, scoreDelayHours = 24 } = {}) {
   const normalizedEvents = (events || []).map(applyOfficialEwc2026EventDates);
   const dated = normalizedEvents.filter((event) => event.startAt && event.endAt).sort((a, b) => a.startAt - b.startAt);
   if (!dated.length) return [];
+  assertUniqueGeneratedEventIdentities(dated);
 
   lockBeforeHours = Math.max(0, Number(lockBeforeHours) || 0);
-  const year = new Date(dated[0].startAt * 1000).toLocaleString('en-GB', { timeZone: EWC_EVENT_TIME_ZONE, year: 'numeric' });
+  const year = new Date(dated[0].startAt * 1000).toLocaleString('en-GB', { timeZone: EWC_SCHEDULE_TIME_ZONE, year: 'numeric' });
   if (year === '2026') {
     const windows = officialWeekWindows2026();
     const byWeek = windows.map((week) => ({ ...week, events: [] }));
-    dated.forEach((event, eventIndex) => {
+    dated.forEach((event) => {
       const week = weekForEventEnd(event, byWeek);
       if (!week) return;
-      week.events.push(compactEvent(event, eventIndex, lockBeforeHours));
+      week.events.push(compactEvent(event, lockBeforeHours));
     });
     return byWeek
       .filter((week) => week.events.length)
@@ -585,7 +1115,7 @@ export function generateEwcWeekWindows(events, { openBeforeHours = 48, lockBefor
     const end = start + weekSeconds - 1;
     const weekEvents = dated
       .filter((event) => event.startAt <= end && event.endAt >= start)
-      .map((event, eventIndex) => compactEvent(event, eventIndex, lockBeforeHours));
+      .map((event) => compactEvent(event, lockBeforeHours));
     if (weekEvents.length) {
       weeks.push({
         weekKey: `week-${index}`,
