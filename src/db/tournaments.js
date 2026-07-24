@@ -229,24 +229,114 @@ export async function archiveTournament(id, guildId, archivedAt = Math.floor(Dat
   );
 }
 
-export async function listArchivedTournaments(guildId, { limit = 25, offset = 0 } = {}) {
+function archivedTournamentWhere(
+  guildId,
+  { ewcOnly = false, game = '', source = '', query = '', status = 'all' } = {},
+) {
+  const clauses = ['a.guild_id = $1', 'a.archived_at IS NOT NULL'];
+  const params = [guildId];
+  const add = (clause, value) => {
+    params.push(value);
+    clauses.push(clause.replace('?', `$${params.length}`));
+  };
+
+  if (ewcOnly) {
+    clauses.push(`(
+      a.ewc = 1
+      OR LOWER(COALESCE(a.name, '')) LIKE '%esports world cup%'
+      OR LOWER(COALESCE(a.url, '')) LIKE '%esports_world_cup%'
+    )`);
+  }
+  if (game) add('a.game = ?', String(game));
+  if (source) add('a.source = ?', String(source));
+  if (query) add(
+    `(LOWER(COALESCE(a.name, '')) LIKE ?
+      OR LOWER(COALESCE(a.game, '')) LIKE ?
+      OR LOWER(COALESCE(a.source, '')) LIKE ?)`,
+    `%${String(query).trim().toLowerCase()}%`,
+  );
+  // The same parameter is intentionally reused for all text fields.
+  if (query) {
+    const placeholder = `$${params.length}`;
+    clauses[clauses.length - 1] = clauses[clauses.length - 1].replaceAll('?', placeholder);
+  }
+
+  if (status === 'live') clauses.push('a.running_count > 0');
+  if (status === 'upcoming') clauses.push('a.running_count = 0 AND a.scheduled_count > 0');
+  if (status === 'results') {
+    clauses.push('a.running_count = 0 AND a.scheduled_count = 0 AND a.finished_count > 0');
+  }
+  return { where: clauses.join(' AND '), params };
+}
+
+const ARCHIVED_TOURNAMENTS_CTE = `WITH archived_tournaments AS (
+  SELECT t.*, lm.last_match_at,
+         COALESCE(lm.running_count, 0) AS running_count,
+         COALESCE(lm.scheduled_count, 0) AS scheduled_count,
+         COALESCE(lm.finished_count, 0) AS finished_count,
+         COALESCE(lm.postponed_count, 0) AS postponed_count,
+         COALESCE(lm.cancelled_count, 0) AS cancelled_count
+  FROM tournaments t
+  LEFT JOIN (
+    SELECT tournament_id,
+           MAX(scheduled_at) AS last_match_at,
+           SUM(CASE WHEN status = 'running' THEN 1 ELSE 0 END) AS running_count,
+           SUM(CASE WHEN status = 'scheduled' THEN 1 ELSE 0 END) AS scheduled_count,
+           SUM(CASE WHEN status = 'finished' THEN 1 ELSE 0 END) AS finished_count,
+           SUM(CASE WHEN status = 'postponed' THEN 1 ELSE 0 END) AS postponed_count,
+           SUM(CASE WHEN status = 'cancelled' THEN 1 ELSE 0 END) AS cancelled_count
+    FROM matches
+    WHERE NOT (source = 'startgg' AND external_id LIKE 'sgg:preview_%')
+    GROUP BY tournament_id
+  ) lm ON lm.tournament_id = t.id
+)`;
+
+export async function listArchivedTournamentFacets(guildId) {
+  return all(
+    `${ARCHIVED_TOURNAMENTS_CTE}
+     SELECT id, name, game, source, url, ewc, archived_at, last_match_at,
+            running_count, scheduled_count, finished_count, postponed_count, cancelled_count
+     FROM archived_tournaments a
+     WHERE a.guild_id = $1 AND a.archived_at IS NOT NULL
+     ORDER BY COALESCE(a.last_match_at, a.archived_at) DESC, a.id DESC`,
+    [guildId],
+  );
+}
+
+export async function listArchivedTournaments(
+  guildId,
+  {
+    limit = 25,
+    offset = 0,
+    ewcOnly = false,
+    game = '',
+    source = '',
+    query = '',
+    status = 'all',
+  } = {},
+) {
   const safeLimit = Math.max(1, Math.min(100, Number(limit) || 25));
   const safeOffset = Math.max(0, Number(offset) || 0);
+  const filters = archivedTournamentWhere(guildId, {
+    ewcOnly,
+    game,
+    source,
+    query: String(query).slice(0, 120),
+    status,
+  });
+  filters.params.push(safeLimit, safeOffset);
+  const limitPlaceholder = `$${filters.params.length - 1}`;
+  const offsetPlaceholder = `$${filters.params.length}`;
   return all(
-    `SELECT t.*, lm.last_match_at
-     FROM tournaments t
-     LEFT JOIN (
-       SELECT tournament_id, MAX(scheduled_at) AS last_match_at
-       FROM matches
-       WHERE NOT (source = 'startgg' AND external_id LIKE 'sgg:preview_%')
-       GROUP BY tournament_id
-     ) lm ON lm.tournament_id = t.id
-     WHERE t.guild_id = $1 AND t.archived_at IS NOT NULL
-     ORDER BY COALESCE(lm.last_match_at, t.archived_at) DESC,
-              t.archived_at DESC,
-              t.id DESC
-     LIMIT $2 OFFSET $3`,
-    [guildId, safeLimit, safeOffset],
+    `${ARCHIVED_TOURNAMENTS_CTE}
+     SELECT a.*
+     FROM archived_tournaments a
+     WHERE ${filters.where}
+     ORDER BY COALESCE(a.last_match_at, a.archived_at) DESC,
+              a.archived_at DESC,
+              a.id DESC
+     LIMIT ${limitPlaceholder} OFFSET ${offsetPlaceholder}`,
+    filters.params,
   );
 }
 

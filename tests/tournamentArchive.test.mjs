@@ -14,6 +14,7 @@ const {
   archiveTournament,
   getTournamentById,
   listActiveTournaments,
+  listArchivedTournamentFacets,
   listArchivedTournaments,
   listEndedTournaments,
 } = await import('../src/db/tournaments.js');
@@ -97,4 +98,65 @@ test('re-adding an archived tournament clears archived_at and returns it to acti
 
   const active = await listActiveTournaments(guildId);
   assert.equal(active.some((row) => row.id === first.id), true);
+});
+
+test('archive filters are applied before pagination and facets preserve lifecycle counts', async () => {
+  const guildId = 'guild-filtered-archive';
+  const now = Math.floor(Date.now() / 1000);
+  const ewc = await addTournament({
+    source: 'liquipedia',
+    external_id: 'archive/ewc-filter',
+    game: 'fighters',
+    name: 'Fighter Games at Esports World Cup 2026',
+    url: 'https://liquipedia.net/fighters/Esports_World_Cup/2026/Test',
+    guild_id: guildId,
+  });
+  const regional = await addTournament({
+    source: 'startgg',
+    external_id: 'archive/regional-filter',
+    game: 'fighters',
+    name: 'Regional Open',
+    url: 'https://start.gg/tournament/regional-open',
+    guild_id: guildId,
+  });
+  await upsertMatch({
+    tournament_id: ewc.id,
+    source: 'liquipedia',
+    external_id: 'Match:ewc-filter',
+    team_a: 'Alpha',
+    team_b: 'Bravo',
+    score_a: 2,
+    score_b: 1,
+    status: 'finished',
+    scheduled_at: now - 100,
+  });
+  await upsertMatch({
+    tournament_id: regional.id,
+    source: 'startgg',
+    external_id: 'regional-filter-set',
+    team_a: 'Charlie',
+    team_b: 'Delta',
+    score_a: 3,
+    score_b: 0,
+    status: 'finished',
+    scheduled_at: now - 200,
+  });
+  await archiveTournament(ewc.id, guildId, now);
+  await archiveTournament(regional.id, guildId, now);
+
+  const filtered = await listArchivedTournaments(guildId, {
+    limit: 1,
+    ewcOnly: true,
+    game: 'fighters',
+    source: 'liquipedia',
+    query: 'world cup',
+    status: 'results',
+  });
+  assert.deepEqual(filtered.map((row) => row.id), [ewc.id]);
+
+  const facets = await listArchivedTournamentFacets(guildId);
+  const ewcFacet = facets.find((row) => row.id === ewc.id);
+  assert.equal(Number(ewcFacet.finished_count), 1);
+  assert.equal(Number(ewcFacet.running_count), 0);
+  assert.equal(facets.length, 2);
 });

@@ -19,6 +19,15 @@ vi.mock("@/lib/request-locale", () => ({
   getRequestLocale: async () => "en",
 }));
 
+vi.mock("next/navigation", () => ({
+  usePathname: () => "/tournaments/archive",
+  useRouter: () => ({
+    push: vi.fn(),
+    replace: vi.fn(),
+  }),
+  useSearchParams: () => new URLSearchParams(),
+}));
+
 import { GET as listGET } from "@/app/api/tournaments/route";
 import { GET as matchesGET } from "@/app/api/tournaments/[id]/matches/route";
 import TournamentArchivePage from "@/app/tournaments/archive/page";

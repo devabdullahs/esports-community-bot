@@ -10,6 +10,7 @@
 
 ## Status
 
+- **State**: DONE
 - **Priority**: P2
 - **Effort**: L
 - **Risk**: MED
@@ -259,15 +260,15 @@ record any deliberate behavior changes in the PR description.
 
 ## Done criteria
 
-- [ ] The page has a clear live-to-upcoming-to-results hierarchy.
-- [ ] Search and every filter have names and selected-state semantics.
-- [ ] Filter counts consistently mean tournaments.
-- [ ] Filter state is shareable and back/forward safe.
-- [ ] Finished EWC tournaments are directly discoverable.
-- [ ] Shared match/tournament anatomy is not duplicated across large files.
-- [ ] The UI uses installed shadcn primitives and semantic tokens.
-- [ ] EN/AR, RTL, keyboard, reduced-motion, and mobile checks pass.
-- [ ] All repository gates pass.
+- [x] The page has a clear live-to-upcoming-to-results hierarchy.
+- [x] Search and every filter have names and selected-state semantics.
+- [x] Filter counts consistently mean tournaments.
+- [x] Filter state is shareable and back/forward safe.
+- [x] Finished EWC tournaments are directly discoverable.
+- [x] Shared match/tournament anatomy is not duplicated across large files.
+- [x] The UI uses installed shadcn primitives and semantic tokens.
+- [x] EN/AR, RTL, keyboard, reduced-motion, and mobile checks pass.
+- [x] All repository gates pass.
 
 ## STOP conditions
 

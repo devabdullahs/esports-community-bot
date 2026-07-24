@@ -19,6 +19,7 @@ import { normalizeTeamName as _normalizeTeamName } from "@bot/lib/render.js";
 import {
   getTournamentById as _getById,
   listActiveTournaments as _listActive,
+  listArchivedTournamentFacets as _listArchivedFacets,
   listArchivedTournaments as _listArchived,
   resolveCanonicalTournamentId as _resolveCanonicalTournamentId,
 } from "@bot/db/tournaments.js";
@@ -97,6 +98,26 @@ export type TournamentSummary = {
   /** Standings-format events (battle royale, TFT groups) have rows here instead of matches. */
   hasStandings: boolean;
   featuredMatch: MatchRow | null;
+};
+
+export type ArchivedTournamentFacet = {
+  id: number;
+  name: string | null;
+  game: string | null;
+  source: string;
+  url: string | null;
+  ewc: boolean;
+  archived_at: number | null;
+  last_match_at: number | null;
+  matchCounts: MatchCounts;
+};
+
+export type ArchivedTournamentFilters = {
+  ewcOnly?: boolean;
+  game?: string;
+  source?: string;
+  query?: string;
+  status?: "all" | "live" | "upcoming" | "results";
 };
 
 export type MatchStream = { platform: string; url: string };
@@ -196,8 +217,18 @@ export type TournamentMatchOptions = {
 const listActive = _listActive as (guildId?: string) => Promise<TournamentRow[]>;
 const listArchived = _listArchived as (
   guildId: string,
-  opts?: { limit?: number; offset?: number },
+  opts?: { limit?: number; offset?: number } & ArchivedTournamentFilters,
 ) => Promise<TournamentRow[]>;
+type ArchivedFacetRow = TournamentRow & {
+  running_count: number | string;
+  scheduled_count: number | string;
+  finished_count: number | string;
+  postponed_count: number | string;
+  cancelled_count: number | string;
+};
+const listArchivedFacets = _listArchivedFacets as (
+  guildId: string,
+) => Promise<ArchivedFacetRow[]>;
 const getById = _getById as (id: number) => Promise<TournamentRow | undefined>;
 const dedupeMatches = _dedupeMatches as <T extends MatchRow>(rows: T[]) => T[];
 
@@ -434,21 +465,54 @@ export async function listArchivedTournamentSummaries({
   limit = 25,
   offset = 0,
   ewcOnly = false,
+  game = "",
+  source = "",
+  query = "",
+  status = "all",
 }: {
   limit?: number;
   offset?: number;
-  ewcOnly?: boolean;
-} = {}): Promise<TournamentSummary[]> {
+} & ArchivedTournamentFilters = {}): Promise<TournamentSummary[]> {
   const guildId = await resolveDefaultGuildId();
   if (!guildId) return [];
-  const rows = await listArchived(guildId, { limit, offset });
+  const rows = await listArchived(guildId, {
+    limit,
+    offset,
+    ewcOnly,
+    game,
+    source,
+    query,
+    status,
+  });
   const [withStandings, healthRows] = await Promise.all([
     standingsTournamentIds(),
     listTournamentSyncHealth(rows.map((t) => t.id)),
   ]);
   const healthByTournamentId = new Map(healthRows.map((row) => [row.tournament_id, row]));
-  const summaries = await Promise.all(rows.map((t) => tournamentSummary(t, withStandings, healthByTournamentId)));
-  return ewcOnly ? summaries.filter((t) => t.ewc) : summaries;
+  return Promise.all(rows.map((t) => tournamentSummary(t, withStandings, healthByTournamentId)));
+}
+
+export async function listArchivedTournamentFacets(): Promise<ArchivedTournamentFacet[]> {
+  const guildId = await resolveDefaultGuildId();
+  if (!guildId) return [];
+  const rows = await listArchivedFacets(guildId);
+  return rows.map((row) => ({
+    id: Number(row.id),
+    name: row.name ?? null,
+    game: row.game ?? null,
+    source: String(row.source),
+    url: row.url ?? null,
+    ewc: isEwcTournamentReference(row),
+    archived_at: row.archived_at == null ? null : Number(row.archived_at),
+    last_match_at: row.last_match_at == null ? null : Number(row.last_match_at),
+    matchCounts: {
+      running: Number(row.running_count || 0),
+      scheduled: Number(row.scheduled_count || 0),
+      finished: Number(row.finished_count || 0),
+      postponed: Number(row.postponed_count || 0),
+      cancelled: Number(row.cancelled_count || 0),
+    },
+  }));
 }
 
 /**
