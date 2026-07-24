@@ -188,8 +188,15 @@ export async function runEwcPredictionAdminOperation({ guildId, season, operatio
     const schedule = await deps.fetchSchedule(Number(season));
     const weeks = deps.generateWeeks(schedule?.events || [], input);
     if (!weeks.length) throw new Error(`No dated EWC events were found for ${season}.`);
+    const reconciliation = {
+      newWeeks: 0,
+      unchanged: 0,
+      rekeyed: 0,
+      added: 0,
+      removedUnreferenced: 0,
+    };
     for (const week of weeks) {
-      await deps.upsertWeek({
+      const saved = await deps.upsertWeek({
         guildId,
         season,
         weekKey: week.weekKey,
@@ -202,8 +209,22 @@ export async function runEwcPredictionAdminOperation({ guildId, season, operatio
         games: week.events,
         createdBy: actorId,
       });
+      reconciliation.newWeeks += Number(saved?.reconciliation?.newWeek || 0);
+      reconciliation.unchanged += Number(saved?.reconciliation?.unchanged || 0);
+      reconciliation.rekeyed += Number(saved?.reconciliation?.rekeyed || 0);
+      reconciliation.added += Number(saved?.reconciliation?.added || 0);
+      reconciliation.removedUnreferenced += Number(saved?.reconciliation?.removedUnreferenced || 0);
     }
-    return { weeks: weeks.length, events: schedule.events.length, message: `Generated ${weeks.length} EWC ${season} weekly prediction round(s).` };
+    return {
+      weeks: weeks.length,
+      events: schedule.events.length,
+      reconciliation,
+      message:
+        `Generated ${weeks.length} EWC ${season} weekly prediction round(s): ` +
+        `${reconciliation.newWeeks} new, ${reconciliation.unchanged} unchanged, ` +
+        `${reconciliation.rekeyed} rekeyed, ${reconciliation.added} event(s) added, ` +
+        `${reconciliation.removedUnreferenced} unreferenced event(s) removed.`,
+    };
   }
   if (operation === 'snapshot_week') {
     const round = await deps.getWeek(guildId, season, input.weekKey);

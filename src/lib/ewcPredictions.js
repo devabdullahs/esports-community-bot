@@ -1,3 +1,5 @@
+import { createHash } from 'node:crypto';
+
 import { normalizeTeamName } from './render.js';
 
 const RIYADH_UTC_OFFSET = '+03:00';
@@ -595,13 +597,182 @@ function matchingOfficialEwc2026EventDates(event) {
   return EWC_2026_OFFICIAL_EVENT_DATES.filter((rule) => rule.test.test(hay));
 }
 
-function slugifyGameKey(value) {
+function slugifyGameKey(value, maxLength = 48) {
   return String(value || 'event')
     .toLowerCase()
     .replace(/&/g, 'and')
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-+|-+$/g, '')
-    .slice(0, 48) || 'event';
+    .slice(0, maxLength) || 'event';
+}
+
+function normalizeEventIdentityText(value) {
+  return String(value || '')
+    .normalize('NFKC')
+    .trim()
+    .toLowerCase()
+    .replace(/[_\s]+/g, ' ')
+    .replace(/\s+/g, ' ');
+}
+
+function normalizedLiquipediaPath(value) {
+  const raw = String(value || '').trim();
+  if (!raw) return null;
+  try {
+    const url = new URL(raw, 'https://liquipedia.net');
+    if (url.hostname && url.hostname !== 'liquipedia.net' && !url.hostname.endsWith('.liquipedia.net')) return null;
+    let pathname;
+    try {
+      pathname = decodeURIComponent(url.pathname);
+    } catch {
+      pathname = url.pathname;
+    }
+    pathname = pathname
+      .normalize('NFKC')
+      .replace(/\/+/g, '/')
+      .replace(/\/$/, '')
+      .toLowerCase();
+    return pathname && pathname !== '/' ? pathname : null;
+  } catch {
+    return null;
+  }
+}
+
+export function canonicalEwcEventIdentity(event) {
+  const path = normalizedLiquipediaPath(event?.eventUrl);
+  if (path) return `liquipedia:${path}`;
+
+  const gameWiki = normalizeEventIdentityText(event?.gameWiki);
+  const title = normalizeEventIdentityText(event?.event);
+  const game = normalizeEventIdentityText(event?.game);
+  if (!gameWiki && !title && !game) {
+    throw new Error('EWC prediction event is missing the fields required for a stable identity.');
+  }
+  return `fallback:${gameWiki}|${title}|${game}`;
+}
+
+function persistedEwcEventIdentity(event) {
+  const persisted = String(event?.eventIdentity || '').normalize('NFKC').trim().toLowerCase();
+  return persisted || canonicalEwcEventIdentity(event);
+}
+
+export function stableEwcGameKey(event) {
+  const identity = canonicalEwcEventIdentity(event);
+  const readable = slugifyGameKey(event?.game || event?.event || event?.gameWiki, 21);
+  const hash = createHash('sha256').update(identity).digest('hex').slice(0, 10);
+  return `${readable}-${hash}`;
+}
+
+function indexGamesByIdentity(games, side) {
+  const identities = new Map();
+  const keys = new Map();
+  const invalid = [];
+  for (const [index, game] of (games || []).entries()) {
+    if (!game || typeof game !== 'object' || Array.isArray(game)) {
+      invalid.push({ side, index, reason: 'not-an-object' });
+      continue;
+    }
+    const key = String(game.key || '').trim();
+    if (!key) {
+      invalid.push({ side, index, reason: 'missing-key' });
+      continue;
+    }
+    let identity;
+    try {
+      identity = persistedEwcEventIdentity(game);
+    } catch (error) {
+      invalid.push({ side, index, key, reason: error.message });
+      continue;
+    }
+    if (!identities.has(identity)) identities.set(identity, []);
+    identities.get(identity).push({ game, index, key, identity });
+    if (!keys.has(key)) keys.set(key, []);
+    keys.get(key).push({ game, index, key, identity });
+  }
+  return { identities, keys, invalid };
+}
+
+export function reconcileEwcPredictionGames(storedGames, regeneratedGames, { referencedKeys = [] } = {}) {
+  if (!Array.isArray(storedGames) || !Array.isArray(regeneratedGames)) {
+    throw new Error('Stored and regenerated EWC prediction games must be arrays.');
+  }
+
+  const stored = indexGamesByIdentity(storedGames, 'stored');
+  const regenerated = indexGamesByIdentity(regeneratedGames, 'regenerated');
+  const references = new Set((referencedKeys || []).map((key) => String(key || '').trim()).filter(Boolean));
+  const ambiguous = [...stored.invalid, ...regenerated.invalid];
+
+  for (const [key, rows] of stored.keys) {
+    if (rows.length > 1) ambiguous.push({ side: 'stored', key, reason: 'duplicate-key' });
+  }
+  for (const [key, rows] of regenerated.keys) {
+    if (rows.length > 1) ambiguous.push({ side: 'regenerated', key, reason: 'duplicate-key' });
+  }
+  for (const [identity, rows] of stored.identities) {
+    if (rows.length > 1) ambiguous.push({ side: 'stored', identity, reason: 'duplicate-identity' });
+  }
+  for (const [identity, rows] of regenerated.identities) {
+    if (rows.length > 1) ambiguous.push({ side: 'regenerated', identity, reason: 'duplicate-identity' });
+  }
+
+  const mapping = {};
+  const unchanged = [];
+  const rekeyed = [];
+  const removedReferenced = [];
+  const removedUnreferenced = [];
+  const added = [];
+
+  for (const [identity, storedRows] of stored.identities) {
+    if (storedRows.length !== 1) continue;
+    const storedRow = storedRows[0];
+    const regeneratedRows = regenerated.identities.get(identity) || [];
+    if (regeneratedRows.length === 1) {
+      const regeneratedRow = regeneratedRows[0];
+      mapping[storedRow.key] = regeneratedRow.key;
+      const entry = { identity, oldKey: storedRow.key, newKey: regeneratedRow.key };
+      if (storedRow.key === regeneratedRow.key) unchanged.push(entry);
+      else rekeyed.push(entry);
+      continue;
+    }
+    const removed = { identity, oldKey: storedRow.key };
+    if (references.has(storedRow.key)) removedReferenced.push(removed);
+    else removedUnreferenced.push(removed);
+  }
+
+  for (const [identity, regeneratedRows] of regenerated.identities) {
+    if (regeneratedRows.length !== 1) continue;
+    if (!stored.identities.has(identity)) {
+      added.push({ identity, newKey: regeneratedRows[0].key });
+    }
+  }
+
+  const unknownReferences = [...references]
+    .filter((key) => !stored.keys.has(key))
+    .sort()
+    .map((key) => ({ key }));
+
+  return {
+    ok: ambiguous.length === 0 && removedReferenced.length === 0 && unknownReferences.length === 0,
+    mapping,
+    unchanged,
+    rekeyed,
+    added,
+    removedReferenced,
+    removedUnreferenced,
+    ambiguous,
+    unknownReferences,
+  };
+}
+
+function assertUniqueGeneratedEventIdentities(events) {
+  const seen = new Map();
+  for (const [index, event] of events.entries()) {
+    const identity = canonicalEwcEventIdentity(event);
+    if (seen.has(identity)) {
+      throw new Error(`Duplicate EWC prediction event identity at schedule rows ${seen.get(identity) + 1} and ${index + 1}: ${identity}`);
+    }
+    seen.set(identity, index);
+  }
 }
 
 function officialWeekWindows2026() {
@@ -623,10 +794,11 @@ function weekForEventEnd(event, windows) {
   return windows.find((week) => event.endAt >= week.startAt && event.endAt <= week.endAt) || null;
 }
 
-function compactEvent(event, index, lockBeforeHours) {
-  const keyBase = slugifyGameKey(event.game || event.event || event.gameWiki || `event-${index + 1}`);
+function compactEvent(event, lockBeforeHours) {
+  const eventIdentity = canonicalEwcEventIdentity(event);
   return {
-    key: `${keyBase}-${index + 1}`,
+    key: stableEwcGameKey(event),
+    eventIdentity,
     game: event.game,
     gameWiki: event.gameWiki || null,
     event: event.event,
@@ -757,16 +929,17 @@ export function generateEwcWeekWindows(events, { openBeforeHours = 48, lockBefor
   const normalizedEvents = (events || []).map(applyOfficialEwc2026EventDates);
   const dated = normalizedEvents.filter((event) => event.startAt && event.endAt).sort((a, b) => a.startAt - b.startAt);
   if (!dated.length) return [];
+  assertUniqueGeneratedEventIdentities(dated);
 
   lockBeforeHours = Math.max(0, Number(lockBeforeHours) || 0);
   const year = new Date(dated[0].startAt * 1000).toLocaleString('en-GB', { timeZone: EWC_SCHEDULE_TIME_ZONE, year: 'numeric' });
   if (year === '2026') {
     const windows = officialWeekWindows2026();
     const byWeek = windows.map((week) => ({ ...week, events: [] }));
-    dated.forEach((event, eventIndex) => {
+    dated.forEach((event) => {
       const week = weekForEventEnd(event, byWeek);
       if (!week) return;
-      week.events.push(compactEvent(event, eventIndex, lockBeforeHours));
+      week.events.push(compactEvent(event, lockBeforeHours));
     });
     return byWeek
       .filter((week) => week.events.length)
@@ -799,7 +972,7 @@ export function generateEwcWeekWindows(events, { openBeforeHours = 48, lockBefor
     const end = start + weekSeconds - 1;
     const weekEvents = dated
       .filter((event) => event.startAt <= end && event.endAt >= start)
-      .map((event, eventIndex) => compactEvent(event, eventIndex, lockBeforeHours));
+      .map((event) => compactEvent(event, lockBeforeHours));
     if (weekEvents.length) {
       weeks.push({
         weekKey: `week-${index}`,

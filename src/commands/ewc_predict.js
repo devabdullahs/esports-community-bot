@@ -236,12 +236,17 @@ function formatPicks(picks) {
   return picks.map((pick, index) => `**${index + 1}.** ${pick}`).join('\n');
 }
 
-function weeklyGameId(seasonYear, weekKey, gameKey, page, ownerId) {
-  return `ewc_predict:wg:${seasonYear}:${weekKey}:${gameKey}:${page}:${ownerId}`;
+function boundedCustomId(value) {
+  if (value.length > 100) throw new Error('Discord component custom ID exceeds 100 characters.');
+  return value;
 }
 
-function weeklyPickModalId(seasonYear, weekKey, gameKey, page, ownerId) {
-  return `ewc_predict:wpm:${seasonYear}:${weekKey}:${gameKey}:${page}:${ownerId}`;
+export function weeklyGameId(seasonYear, weekKey, gameKey, page, ownerId) {
+  return boundedCustomId(`ewc_predict:wg:${seasonYear}:${weekKey}:${gameKey}:${page}:${ownerId}`);
+}
+
+export function weeklyPickModalId(seasonYear, weekKey, gameKey, page, ownerId) {
+  return boundedCustomId(`ewc_predict:wpm:${seasonYear}:${weekKey}:${gameKey}:${page}:${ownerId}`);
 }
 
 function weeklyPageId(seasonYear, weekKey, page, ownerId) {

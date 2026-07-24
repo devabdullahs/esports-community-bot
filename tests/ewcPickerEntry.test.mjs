@@ -12,7 +12,14 @@ process.env.DISCORD_CLIENT_ID = 'test-client-id';
 
 const { closeDb } = await import('../src/db/index.js');
 const { upsertEwcWeek, setEwcWeekStatus, upsertEwcSeason } = await import('../src/db/ewcPredictions.js');
-const { currentOpenWeek, handleComponent, seasonSlotState, weeklyPickPayload } = await import('../src/commands/ewc_predict.js');
+const {
+  currentOpenWeek,
+  handleComponent,
+  seasonSlotState,
+  weeklyGameId,
+  weeklyPickModalId,
+  weeklyPickPayload,
+} = await import('../src/commands/ewc_predict.js');
 const { anyRoundOpen } = await import('../src/jobs/ewcPredictions.js');
 
 test.after(() => {
@@ -177,4 +184,13 @@ test('seasonSlotState enforces top-down (no skipping ahead)', () => {
   // Empty → only rank 0 is settable.
   assert.equal(seasonSlotState([], 0), 'next');
   assert.equal(seasonSlotState([], 1), 'locked');
+});
+
+test('maximum stable game keys keep weekly Discord component IDs within 100 characters', () => {
+  const key = 'a'.repeat(32);
+  const ownerId = '9'.repeat(19);
+  const gameId = weeklyGameId('2026', 'week-7', key, 99, ownerId);
+  const modalId = weeklyPickModalId('2026', 'week-7', key, 99, ownerId);
+  assert.ok(gameId.length <= 100);
+  assert.ok(modalId.length <= 100);
 });
