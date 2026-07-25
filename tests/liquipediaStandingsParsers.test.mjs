@@ -615,6 +615,45 @@ test('fighter prize pool is the final standings, not the earlier qualifier field
   ]);
 });
 
+test('prize-pool finals are preserved ahead of preliminary group tables', () => {
+  const $ = cheerio.load(`
+    <div class="group-table">
+      <div class="group-table-title">Group A</div>
+      <div class="group-table-result-row">
+        <div class="group-table-rank">1</div>
+        <div class="group-table-entry" aria-label="Group Leader"><span>Group Leader</span></div>
+        <div class="group-table-match-score">2-0</div>
+        <div class="group-table-game-score">4-1</div>
+      </div>
+    </div>
+    <h2>Prize Pool</h2>
+    <table class="table2__table prizepooltable">
+      <tr><th>Place</th><th>Participant</th><th>$ USD</th><th>Club Points</th></tr>
+      <tr>
+        <td class="prizepooltable-place">1</td>
+        <td class="prizepooltable-col-team"><span class="block-team"><span class="name">Team Vision</span></span></td>
+        <td>$500,000</td><td>1,000</td>
+      </tr>
+      <tr>
+        <td class="prizepooltable-place">2</td>
+        <td class="prizepooltable-col-team"><span class="block-team"><span class="name">Aurora Gaming</span></span></td>
+        <td>$250,000</td><td>750</td>
+      </tr>
+    </table>`);
+
+  assert.deepEqual(
+    parseEventStandings($).map((section) => ({
+      title: section.title,
+      teams: section.entries.map((entry) => entry.team),
+    })),
+    [
+      { title: 'Final standings', teams: ['Team Vision', 'Aurora Gaming'] },
+      { title: 'Group A', teams: ['Group Leader'] },
+    ],
+  );
+  assert.equal(hasStandingsRows($), true);
+});
+
 test('an all-TBD table (unseeded event) yields no section', () => {
   // PUBG / PUBG Mobile / early Apex events list every slot as TBD until their
   // qualifiers finish — storing that would be a page of "1. TBD, 2. TBD, ...".

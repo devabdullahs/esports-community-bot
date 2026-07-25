@@ -135,6 +135,32 @@ test('persists lifecycle transitions atomically and rejects stale evidence', asy
   assert.equal(stale.status, 'cancelled');
   assert.equal(stale.winner_side, null);
   assert.equal(stale.result_reason, 'cancelled');
+
+  await upsertMatch({
+    tournament_id: tournamentId,
+    source: 'liquipedia',
+    external_id: 'match:corrected-final',
+    team_a: 'Team Vision',
+    team_b: 'Aurora Gaming',
+    status: 'finished',
+    score_a: 2,
+    score_b: 0,
+    scheduled_at: rescheduledStart,
+  });
+  const corrected = await upsertMatch({
+    tournament_id: tournamentId,
+    source: 'liquipedia',
+    external_id: 'match:corrected-final',
+    team_a: 'Team Vision',
+    team_b: 'Aurora Gaming',
+    status: 'finished',
+    score_a: 3,
+    score_b: 0,
+    scheduled_at: rescheduledStart,
+  });
+  assert.equal(corrected.score_a, 3, 'a corrected authoritative final replaces the stale score');
+  assert.equal(corrected.score_b, 0);
+  assert.equal(corrected.winner_side, 'team1');
 });
 
 test('toMatchRow preserves a trusted scoreless winner', () => {

@@ -32,7 +32,7 @@ export function finalTournamentStandingSection(rows: readonly TournamentStanding
     .map((section, index) => ({ section, index, priority: finalSectionPriority(section) }))
     .filter(({ priority }) => priority > 0)
     .sort((a, b) => b.priority - a.priority || b.index - a.index)[0];
-  return semantic?.section ?? sections.at(-1) ?? null;
+  return semantic?.section ?? null;
 }
 
 export function ewcPlacementPointsForRank(rank: number): number {

@@ -14,11 +14,11 @@ describe("completed EWC tournament standings", () => {
     expect(finalTournamentStandingSection(rows)).toBe("Finals: Grand Final");
   });
 
-  test("falls back to the last standings field when no final label exists", () => {
+  test("does not promote a preliminary field when no final section exists", () => {
     expect(finalTournamentStandingSection([
-      { section: "Round 1", rank: 1 },
-      { section: "Round 2", rank: 1 },
-    ])).toBe("Round 2");
+      { section: "Group Stage: Group A", rank: 1 },
+      { section: "Group Stage: Group B", rank: 1 },
+    ])).toBeNull();
   });
 
   test("maps official EWC placement points through eighth place", () => {
