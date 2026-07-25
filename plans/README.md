@@ -227,7 +227,7 @@ untouched.
 | 107  | Add private prediction mini-leagues | P1 | L | - | DONE |
 | 108  | Add predictor achievements and streak badges | P2 | M | - | DONE |
 | 109  | Add match discussion threads | P2 | M-L | - | DONE |
-| 110  | Add PWA install support and an offline shell | P2 | M | 104 optional | TODO |
+| 110  | Add PWA install support and an offline shell | P2 | M | 104 optional | DONE |
 | 111  | Add team and player comparison pages | P2 | M-L | - | DONE |
 | 112  | Add Club Championship standings history charts | P2 | M | 080 | DONE |
 | 113  | Add downloadable web share cards | P2 | M | - | DONE |

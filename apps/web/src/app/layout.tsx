@@ -4,6 +4,7 @@ import { AnalyticsTracker } from "@/components/analytics/analytics-tracker";
 import { GoogleAnalyticsConsentBanner } from "@/components/analytics/google-analytics-consent";
 import { DeploymentUpdateAlert } from "@/components/deployment-update-alert";
 import { Providers } from "@/components/providers";
+import { ServiceWorkerRegistration } from "@/components/pwa/service-worker-registration";
 import { RouteFreshnessGuard } from "@/components/route-freshness-guard";
 import { SiteFooter } from "@/components/site-footer";
 import { SiteHeader } from "@/components/site-header";
@@ -28,6 +29,10 @@ export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
   viewportFit: "cover",
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#f8fafc" },
+    { media: "(prefers-color-scheme: dark)", color: "#0b0e14" },
+  ],
 };
 
 export async function generateMetadata(): Promise<Metadata> {
@@ -38,6 +43,7 @@ export async function generateMetadata(): Promise<Metadata> {
   return {
     metadataBase: new URL(absoluteUrl()),
     applicationName: name,
+    manifest: "/manifest.webmanifest",
     title: {
       default: name,
       template: `%s | ${name}`,
@@ -165,6 +171,7 @@ export default async function RootLayout({
               </Suspense>
             ) : null}
             <DeploymentUpdateAlert initialVersion={deploymentVersion} locale={locale} />
+            <ServiceWorkerRegistration />
           </Providers>
         </div>
       </body>
