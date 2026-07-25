@@ -13,7 +13,15 @@ import {
   XIcon,
   type LucideIcon,
 } from "lucide-react";
-import { useMemo, useTransition } from "react";
+import {
+  memo,
+  useDeferredValue,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useTransition,
+} from "react";
 import {
   CompetitionStatusBadge,
   FixtureRow,
@@ -120,6 +128,7 @@ export function TournamentDirectory({
       }),
     [gameOptions, searchParams, sourceOptions],
   );
+  const [immediateQuery, setImmediateQuery] = useState(filters.query);
   const stats = useMemo(() => tournamentDirectoryStats(universe), [universe]);
   const counts = useMemo(
     () => tournamentDirectoryFilterCounts(universe, filters),
@@ -129,10 +138,25 @@ export function TournamentDirectory({
     () => serverFiltered ? tournaments : filterTournamentDirectory(tournaments, filters),
     [filters, serverFiltered, tournaments],
   );
-  const live = filtered.filter((tournament) => tournamentPrimaryStatus(tournament) === "live");
-  const directory = filtered.filter((tournament) => tournamentPrimaryStatus(tournament) !== "live");
-  const hasFilters =
+  const [live, directory] = useMemo(() => {
+    const liveItems: TournamentDirectoryItem[] = [];
+    const directoryItems: TournamentDirectoryItem[] = [];
+    for (const tournament of filtered) {
+      if (tournamentPrimaryStatus(tournament) === "live") {
+        liveItems.push(tournament);
+      } else {
+        directoryItems.push(tournament);
+      }
+    }
+    return [liveItems, directoryItems];
+  }, [filtered]);
+  const appliedHasFilters =
     filters.query !== "" ||
+    filters.status !== "all" ||
+    filters.game !== "all" ||
+    filters.source !== "all";
+  const immediateHasFilters =
+    immediateQuery !== "" ||
     filters.status !== "all" ||
     filters.game !== "all" ||
     filters.source !== "all";
@@ -150,6 +174,7 @@ export function TournamentDirectory({
   }
 
   function clearFilters() {
+    setImmediateQuery("");
     navigate({ query: "", status: "all", game: "all", source: "all" });
   }
 
@@ -183,11 +208,7 @@ export function TournamentDirectory({
             </h2>
             <Badge variant="secondary">{formatNumber(live.length, locale)}</Badge>
           </div>
-          <div className="grid gap-3 lg:grid-cols-2">
-            {live.map((tournament) => (
-              <TournamentPanel key={tournament.id} locale={locale} tournament={tournament} live />
-            ))}
-          </div>
+          <TournamentGrid locale={locale} tournaments={live} live />
         </section>
       ) : null}
 
@@ -204,29 +225,30 @@ export function TournamentDirectory({
         showing={filtered.length}
         total={resultTotal ?? universe.length}
         pending={isPending}
-        hasFilters={Boolean(hasFilters)}
+        hasFilters={immediateHasFilters}
+        onImmediateQueryChange={setImmediateQuery}
         onNavigate={navigate}
         onClear={clearFilters}
       />
 
       {directory.length ? (
-        <section aria-label={archived ? text.archiveTitle : text.trackedTournaments} className="grid gap-3 lg:grid-cols-2">
-          {directory.map((tournament) => (
-            <TournamentPanel key={tournament.id} locale={locale} tournament={tournament} />
-          ))}
-        </section>
+        <TournamentGrid
+          locale={locale}
+          tournaments={directory}
+          ariaLabel={archived ? text.archiveTitle : text.trackedTournaments}
+        />
       ) : live.length ? null : (
         <Empty className="min-h-56 border">
           <EmptyHeader>
             <EmptyMedia variant="icon">
               <SearchIcon />
             </EmptyMedia>
-            <EmptyTitle>{hasFilters ? text.noFiltered : archived ? text.archiveEmpty : text.empty}</EmptyTitle>
+            <EmptyTitle>{appliedHasFilters ? text.noFiltered : archived ? text.archiveEmpty : text.empty}</EmptyTitle>
             <EmptyDescription>
-              {hasFilters ? text.searchPlaceholder : text.description}
+              {appliedHasFilters ? text.searchPlaceholder : text.description}
             </EmptyDescription>
           </EmptyHeader>
-          {hasFilters ? (
+          {appliedHasFilters ? (
             <EmptyContent>
               <Button variant="outline" size="sm" onClick={clearFilters}>
                 <XIcon data-icon="inline-start" />
@@ -306,6 +328,7 @@ function TournamentFilters({
   total,
   pending,
   hasFilters,
+  onImmediateQueryChange,
   onNavigate,
   onClear,
 }: {
@@ -322,6 +345,7 @@ function TournamentFilters({
   total: number;
   pending: boolean;
   hasFilters: boolean;
+  onImmediateQueryChange: (query: string) => void;
   onNavigate: (
     patch: Partial<NormalizedTournamentDirectoryFilters>,
     behavior?: "push" | "replace",
@@ -342,23 +366,12 @@ function TournamentFilters({
       </div>
 
       <div className="grid gap-3 xl:grid-cols-[minmax(16rem,1fr)_auto_auto]">
-        <div className="min-w-0">
-          <Label htmlFor="tournament-search" className="sr-only">
-            {text.searchPlaceholder}
-          </Label>
-          <InputGroup className="h-9">
-            <InputGroupAddon>
-              <SearchIcon />
-            </InputGroupAddon>
-            <InputGroupInput
-              id="tournament-search"
-              value={filters.query}
-              onChange={(event) => onNavigate({ query: event.target.value }, "replace")}
-              placeholder={text.searchPlaceholder}
-              maxLength={120}
-            />
-          </InputGroup>
-        </div>
+        <TournamentSearchField
+          value={filters.query}
+          placeholder={text.searchPlaceholder}
+          onImmediateQueryChange={onImmediateQueryChange}
+          onNavigate={onNavigate}
+        />
 
         <div>
           <Label id="tournament-game-filter-label" className="sr-only">
@@ -448,7 +461,104 @@ function TournamentFilters({
   );
 }
 
-function TournamentPanel({
+function TournamentSearchField({
+  value,
+  placeholder,
+  onImmediateQueryChange,
+  onNavigate,
+}: {
+  value: string;
+  placeholder: string;
+  onImmediateQueryChange: (query: string) => void;
+  onNavigate: (
+    patch: Partial<NormalizedTournamentDirectoryFilters>,
+    behavior?: "push" | "replace",
+  ) => void;
+}) {
+  const [query, setQuery] = useState(value);
+  const deferredQuery = useDeferredValue(query);
+  const locallyEdited = useRef(false);
+  const requestedQuery = useRef(value);
+
+  useEffect(() => {
+    if (value === requestedQuery.current && query === value) {
+      locallyEdited.current = false;
+      return;
+    }
+    if (!locallyEdited.current && value !== requestedQuery.current) {
+      requestedQuery.current = value;
+      setQuery(value);
+      onImmediateQueryChange(value);
+    }
+  }, [onImmediateQueryChange, query, value]);
+
+  useEffect(() => {
+    if (
+      !locallyEdited.current ||
+      deferredQuery === value ||
+      requestedQuery.current === deferredQuery
+    ) {
+      return;
+    }
+    requestedQuery.current = deferredQuery;
+    onNavigate({ query: deferredQuery }, "replace");
+  }, [deferredQuery, onNavigate, value]);
+
+  return (
+    <div className="min-w-0">
+      <Label htmlFor="tournament-search" className="sr-only">
+        {placeholder}
+      </Label>
+      <InputGroup className="h-9">
+        <InputGroupAddon>
+          <SearchIcon />
+        </InputGroupAddon>
+        <InputGroupInput
+          id="tournament-search"
+          value={query}
+          onChange={(event) => {
+            locallyEdited.current = true;
+            const nextQuery = event.target.value;
+            setQuery(nextQuery);
+            onImmediateQueryChange(nextQuery);
+          }}
+          placeholder={placeholder}
+          maxLength={120}
+        />
+      </InputGroup>
+    </div>
+  );
+}
+
+const TournamentGrid = memo(function TournamentGrid({
+  locale,
+  tournaments,
+  live = false,
+  ariaLabel,
+}: {
+  locale: Locale;
+  tournaments: TournamentDirectoryItem[];
+  live?: boolean;
+  ariaLabel?: string;
+}) {
+  const panels = tournaments.map((tournament) => (
+    <TournamentPanel
+      key={tournament.id}
+      locale={locale}
+      tournament={tournament}
+      live={live}
+    />
+  ));
+  return ariaLabel ? (
+    <section aria-label={ariaLabel} className="grid gap-3 lg:grid-cols-2">
+      {panels}
+    </section>
+  ) : (
+    <div className="grid gap-3 lg:grid-cols-2">{panels}</div>
+  );
+});
+
+const TournamentPanel = memo(function TournamentPanel({
   locale,
   tournament,
   live = false,
@@ -505,7 +615,7 @@ function TournamentPanel({
       </div>
     </article>
   );
-}
+});
 
 function Metric({ label, value, locale }: { label: string; value: number; locale: Locale }) {
   return (
