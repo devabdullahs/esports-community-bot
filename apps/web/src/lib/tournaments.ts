@@ -532,7 +532,13 @@ export async function getTournamentMatches(
   if (!guildId) return null;
   const canonicalId = await _resolveCanonicalTournamentId(id);
   const tournament = await getById(canonicalId);
-  if (!tournament || tournament.guild_id !== guildId || tournament.active !== 1) return null;
+  if (
+    !tournament
+    || tournament.guild_id !== guildId
+    || (tournament.active !== 1 && tournament.archived_at == null)
+  ) {
+    return null;
+  }
 
   const rows = await dedupedTournamentMatches(tournament);
   const [resolveProfile, rawStandings, health] = await Promise.all([

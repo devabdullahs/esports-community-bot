@@ -25,7 +25,7 @@ test.after(() => {
   rmSync(dir, { recursive: true, force: true });
 });
 
-test('finished stale tournaments are archived without deleting or deactivating them', async () => {
+test('finished stale tournaments are archived, deactivated, and preserved for history', async () => {
   const guildId = 'guild-archive';
   const old = Math.floor(Date.now() / 1000) - 5 * 24 * 3600;
   const tournament = await addTournament({
@@ -54,10 +54,13 @@ test('finished stale tournaments are archived without deleting or deactivating t
 
   const archivedAt = Math.floor(Date.now() / 1000);
   const result = await archiveTournament(tournament.id, guildId, archivedAt);
-  assert.equal(result.changes, 1);
+  assert.equal(result.id, tournament.id);
+  assert.equal(result.active, 0);
+  assert.equal(result.archived_at, archivedAt);
+  assert.equal(result.lifecycle_generation, tournament.lifecycle_generation + 1);
 
   const stored = await getTournamentById(tournament.id);
-  assert.equal(stored.active, 1);
+  assert.equal(stored.active, 0);
   assert.equal(stored.archived_at, archivedAt);
 
   const active = await listActiveTournaments(guildId);
