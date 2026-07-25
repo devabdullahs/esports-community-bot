@@ -111,4 +111,35 @@ describe("projectTournamentBracket", () => {
       ]),
     ).toBeNull();
   });
+
+  test("returns null for battle-royale lobby games even when their names contain Grand Final", () => {
+    expect(
+      projectTournamentBracket([
+        match({
+          id: 10,
+          name: "Grand Final - Game 10",
+          team_a: "Grand Final - Game 10",
+          team_b: "Lobby",
+          status: "finished",
+          scheduled_at: 100,
+        }),
+        match({
+          id: 11,
+          name: "Grand Final - Game 11",
+          team_a: "Grand Final - Game 11",
+          team_b: "Lobby",
+          status: "finished",
+          scheduled_at: 200,
+        }),
+        match({
+          id: 12,
+          name: "Grand Final - Game 12",
+          team_a: "Grand Final - Game 12",
+          team_b: "Lobby",
+          status: "scheduled",
+          scheduled_at: 300,
+        }),
+      ]),
+    ).toBeNull();
+  });
 });

@@ -22,7 +22,7 @@ export { isStandingsGame } from '../lib/tournamentStandingsSupport.js';
 export async function runStandingsSync({ liquipedia = defaultLiquipedia } = {}) {
   if (running) return { skipped: 'already-running' };
   running = true;
-  const summary = { tournaments: 0, rows: 0, empty: 0, failed: 0 };
+  const summary = { tournaments: 0, rows: 0, details: 0, empty: 0, failed: 0 };
   try {
     const tournaments = (await listActiveTournaments()).filter(
       (t) => t.source === 'liquipedia' && isStandingsGame(t.game),
@@ -33,6 +33,7 @@ export async function runStandingsSync({ liquipedia = defaultLiquipedia } = {}) 
           liquipediaService: liquipedia,
         });
         summary.tournaments += 1;
+        summary.details += result.detailsCount || 0;
         if (!result.count) {
           summary.empty += 1;
           continue;
@@ -47,7 +48,7 @@ export async function runStandingsSync({ liquipedia = defaultLiquipedia } = {}) 
     }
     if (summary.tournaments) {
       logger.info(
-        `[standings] refreshed ${summary.rows} row(s) across ${summary.tournaments} event(s) (${summary.empty} empty, ${summary.failed} failed).`,
+        `[standings] refreshed ${summary.rows} row(s) and ${summary.details} game detail snapshot(s) across ${summary.tournaments} event(s) (${summary.empty} empty, ${summary.failed} failed).`,
       );
     }
     return summary;
@@ -73,7 +74,7 @@ export async function refreshLiveBattleRoyaleStandings({ liquipedia = defaultLiq
       isStandingsGame(tournament.game) &&
       runningTournamentIds.has(tournament.id),
   );
-  const summary = { tournaments: 0, rows: 0, failed: 0 };
+  const summary = { tournaments: 0, rows: 0, details: 0, failed: 0 };
   for (const tournament of tournaments) {
     try {
       const result = await syncTournamentStandings(tournament.id, tournament.guild_id, {
@@ -81,13 +82,16 @@ export async function refreshLiveBattleRoyaleStandings({ liquipedia = defaultLiq
       });
       summary.tournaments += 1;
       summary.rows += result.count;
+      summary.details += result.detailsCount || 0;
     } catch (error) {
       summary.failed += 1;
       logger.warn(`[standings] live boot refresh ${tournament.external_id}: ${error.message}`);
     }
   }
   if (summary.tournaments) {
-    logger.info(`[standings] live boot refresh stored ${summary.rows} row(s) across ${summary.tournaments} event(s).`);
+    logger.info(
+      `[standings] live boot refresh stored ${summary.rows} row(s) and ${summary.details} game detail snapshot(s) across ${summary.tournaments} event(s).`,
+    );
   }
   return summary;
 }

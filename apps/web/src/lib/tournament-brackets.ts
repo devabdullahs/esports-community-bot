@@ -176,6 +176,10 @@ function sourceRound(match: BracketMatchInput): string | null {
   return bracketRoundFromStoredMatch(match);
 }
 
+function isLobbySchedule(match: BracketMatchInput): boolean {
+  return cleanLabel(match.team_b)?.toLocaleLowerCase() === "lobby";
+}
+
 function resultWinner(match: BracketMatchInput): BracketWinner {
   return matchWinner(match);
 }
@@ -227,6 +231,8 @@ export function projectTournamentBracket(matches: readonly BracketMatchInput[]):
   const groups = new Map<string, { descriptor: RoundDescriptor; matches: BracketMatchInput[] }>();
 
   for (const match of matches) {
+    // Battle-royale games are timed lobby stages, not elimination pairings.
+    if (isLobbySchedule(match)) continue;
     const descriptor = descriptorForLabel(sourceRound(match));
     if (!descriptor) continue;
     const group = groups.get(descriptor.key);

@@ -13,6 +13,7 @@ process.env.DISCORD_CLIENT_ID = 'test-client-id';
 const { closeDb } = await import('../src/db/index.js');
 const { addTournament, archiveTournament } = await import('../src/db/tournaments.js');
 const { upsertMatch } = await import('../src/db/matches.js');
+const { getMatchDetails } = await import('../src/db/matchDetails.js');
 const { listStandingsForTournament, replaceTournamentStandings } = await import('../src/db/tournamentStandings.js');
 const { isStandingsGame, refreshLiveBattleRoyaleStandings, runStandingsSync } = await import('../src/jobs/standingsSync.js');
 
@@ -71,6 +72,48 @@ test('sync fetches ONLY standings-format events and stores rows', async () => {
   assert.equal(rows[0].points, '87');
   assert.equal(rows[0].section, 'Group Stage');
   assert.equal(await (async () => (await listStandingsForTournament(valEvent.id)).length)(), 0);
+});
+
+test('standings refresh backfills exact battle-royale match detail snapshots', async () => {
+  const externalId = 'pubg:br-schedule:esports_world_cup/2026:grand-final:grand-final-game-11';
+  const storedMatch = await upsertMatch({
+    tournament_id: pubgEvent.id,
+    source: 'liquipedia',
+    external_id: externalId,
+    team_a: 'Grand Final - Game 11',
+    team_b: 'Lobby',
+    scheduled_at: 1784996400,
+    status: 'finished',
+  });
+  const payload = {
+    version: 1,
+    kind: 'battle-royale',
+    patch: null,
+    casters: [],
+    gameNumber: 11,
+    entries: [
+      { rank: 1, team: 'Team Alpha', logo: null, placement: 1, kills: 5, points: 15 },
+      { rank: 2, team: 'Team Bravo', logo: null, placement: 2, kills: 2, points: 8 },
+    ],
+  };
+
+  const summary = await runStandingsSync({
+    liquipedia: {
+      fetchEventStandings: async () => ({
+        hadRows: true,
+        sections: [{ title: 'Grand Final', entries: [{ rank: 1, team: 'Team Alpha', points: '38' }] }],
+        detailMatches: [{
+          source: 'liquipedia',
+          externalId,
+          detailsSourcePage: 'pubg/Esports_World_Cup/2026',
+          details: payload,
+        }],
+      }),
+    },
+  });
+
+  assert.equal(summary.details, 1);
+  assert.deepEqual((await getMatchDetails(storedMatch.id)).payload, payload);
 });
 
 test('refresh replaces wholesale (no stale rows)', async () => {
