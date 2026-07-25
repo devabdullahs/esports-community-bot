@@ -178,4 +178,3 @@ Run the full command table and inspect scope.
 Add a review rule: any new body-consuming route must use a bounded helper. A
 reverse-proxy cap remains useful defense in depth but is not a substitute for
 this application invariant.
-
