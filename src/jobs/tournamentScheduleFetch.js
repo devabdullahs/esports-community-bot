@@ -27,14 +27,24 @@ async function recordFailure(tournament, error, clock) {
 
 // Shared by the morning sweep and live poller. It owns only caller-level
 // coalescing and durable health; each service keeps its own provider queue/rate policy.
-export async function fetchTournamentSchedule(service, tournament, { clock = nowSec } = {}) {
+export async function fetchTournamentSchedule(
+  service,
+  tournament,
+  {
+    clock = nowSec,
+    beforeDispatch = null,
+    admissionKey = null,
+  } = {},
+) {
   const key = tournamentKey(tournament);
   if (inFlightScheduleFetches.has(key)) return inFlightScheduleFetches.get(key);
 
   const promise = (async () => {
     let matches;
     try {
-      matches = await service.fetchSchedule(tournament);
+      const providerOptions = { beforeDispatch, admissionKey };
+      const dispatch = () => service.fetchSchedule(tournament, providerOptions);
+      matches = await (beforeDispatch ? beforeDispatch(dispatch) : dispatch());
       if (!Array.isArray(matches)) {
         throw new TypeError('Invalid non-array schedule response.');
       }

@@ -7,6 +7,7 @@ import { startClubChampionship } from '../jobs/clubChampionship.js';
 import { startCsRankings } from '../jobs/csRankings.js';
 import { startEwcPredictions } from '../jobs/ewcPredictions.js';
 import { startEwcPredictionOperations } from '../jobs/ewcPredictionOperations.js';
+import { startTournamentOperations } from '../jobs/tournamentOperations.js';
 import { startNewsAnnouncer } from '../jobs/newsAnnouncer.js';
 import { startMediaAnnouncer } from '../jobs/mediaAnnouncer.js';
 import { startStreamStatusJob } from '../jobs/streamStatus.js';
@@ -61,6 +62,7 @@ export async function execute(client) {
   startCsRankings(client); // Counter-Strike Valve rankings refresh loop
   startEwcPredictions(client); // EWC prediction snapshots/scoring automation
   startEwcPredictionOperations(client); // durable dashboard-requested prediction operations
+  startTournamentOperations(client); // durable tournament lifecycle/sync operations
   startNewsAnnouncer(client); // Auto-post published news to Discord (per-game / default channel)
   startMediaAnnouncer(client); // Auto-announce opted-in media channels to their Discord channel
   startStreamStatusJob(client); // Poll Twitch/Kick/YouTube live status + go-live announcements

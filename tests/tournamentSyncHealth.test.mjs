@@ -87,7 +87,9 @@ test('adds the sync-health schema to a pre-plan database without losing tourname
   await recordTournamentSyncSuccess({ tournamentId: 1, source: 'liquipedia', itemCount: 2, at: 100 });
   assert.deepEqual(await getTournamentSyncHealth(1), {
     tournament_id: 1,
+    data_kind: 'schedule',
     source: 'liquipedia',
+    supported: 1,
     last_attempt_at: 100,
     last_success_at: 100,
     last_failure_at: null,

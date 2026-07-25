@@ -80,8 +80,8 @@ function childStagePages($, game, page) {
   return out;
 }
 
-async function loadTournamentPage(game, page) {
-  const data = await parsePage(game, page);
+async function loadTournamentPage(game, page, parseOptions = {}) {
+  const data = await parsePage(game, page, parseOptions);
   const html = data?.parse?.text?.['*'];
   if (!html) return null;
   return {
@@ -102,24 +102,24 @@ function prefixSections(sections, prefix) {
 // Tournament title resolver
 // ---------------------------------------------------------------------------
 
-export async function resolveTournamentTitle(tournament) {
+export async function resolveTournamentTitle(tournament, parseOptions = {}) {
   const [game, ...rest] = tournament.external_id.split('/');
   const page = rest.join('/');
   if (!page) return null;
 
-  const data = await parsePage(game, page);
+  const data = await parsePage(game, page, parseOptions);
   const title = cleanDisplayTitle(data?.parse?.displaytitle) || cleanDisplayTitle(data?.parse?.title);
   return title && !title.includes('/') ? title : formatLiquipediaPageTitle(page);
 }
 
-export async function resolveTournamentEwc(tournament) {
+export async function resolveTournamentEwc(tournament, parseOptions = {}) {
   // Preserve explicit flags and verified aliases even if an upstream page is
   // temporarily incomplete. The daily sync must never downgrade known EWC events.
   if (isEwcTournamentReference(tournament)) return true;
   const [game, ...rest] = tournament.external_id.split('/');
   const page = rest.join('/');
   if (!game || !page) return false;
-  const loaded = await loadTournamentPage(game, page);
+  const loaded = await loadTournamentPage(game, page, parseOptions);
   return loaded ? parseTournamentEwcAffiliation(loaded.$) : false;
 }
 
@@ -152,7 +152,15 @@ export async function fetchMatchDetails(game, matchPage, { teamA, teamB, maxAgeM
 // Matches for a tracked tournament, parsed from its OWN page's bracket/matchlist
 // (external_id = "<game>/<Page_Path>"). Stable + authoritative: upcoming, live, and finished
 // (with final scores + winners), so results are correct and corrections propagate.
-export async function fetchSchedule(tournament, { lpdbService = lpdb, loadPage = loadTournamentPage } = {}) {
+export async function fetchSchedule(
+  tournament,
+  {
+    lpdbService = lpdb,
+    loadPage = loadTournamentPage,
+    beforeDispatch = null,
+    admissionKey = null,
+  } = {},
+) {
   const [game, ...rest] = tournament.external_id.split('/');
   const page = rest.join('/');
   if (!page) return [];
@@ -161,7 +169,8 @@ export async function fetchSchedule(tournament, { lpdbService = lpdb, loadPage =
   // amplify into an immediate second request to Liquipedia's MediaWiki API.
   if (lpdbService.isEnabled()) {
     try {
-      const viaApi = await lpdbService.fetchSchedule(tournament);
+      const dispatch = () => lpdbService.fetchSchedule(tournament);
+      const viaApi = await (beforeDispatch ? beforeDispatch(dispatch) : dispatch());
       if (viaApi.length) return viaApi;
       logger.debug('[lpdb] no matches; using HTML parse');
     } catch (e) {
@@ -173,7 +182,8 @@ export async function fetchSchedule(tournament, { lpdbService = lpdb, loadPage =
     }
   }
 
-  const loaded = await loadPage(game, page);
+  const parseOptions = { beforeDispatch, admissionKey };
+  const loaded = await loadPage(game, page, parseOptions);
   if (!loaded) return [];
   const { $ } = loaded;
 
@@ -260,7 +270,7 @@ export async function fetchSchedule(tournament, { lpdbService = lpdb, loadPage =
   const pages = [{ page, $, stageTitle: '' }];
 
   for (const child of childStagePages($, game, page)) {
-    const childLoaded = await loadPage(game, child);
+    const childLoaded = await loadPage(game, child, parseOptions);
     if (!childLoaded) continue;
     pages.push({ page: child, $: childLoaded.$, stageTitle: titleFromPageSegment(child) });
   }
@@ -500,18 +510,26 @@ export async function fetchValveRegionalStandings(region = 'global') {
 // yielded any parseable standings row, so an empty `sections` from an all-TBD
 // event (hadRows true) can be told apart from a page whose standings we couldn't
 // parse at all (hadRows false — no standings, a partial page, or a DOM change).
-export async function fetchEventStandings(tournament) {
+export async function fetchEventStandings(
+  tournament,
+  {
+    loadPage = loadTournamentPage,
+    beforeDispatch = null,
+    admissionKey = null,
+  } = {},
+) {
   const [game, ...rest] = tournament.external_id.split('/');
   const page = rest.join('/');
   if (!game || !page) return { sections: [], hadRows: false };
-  const loaded = await loadTournamentPage(game, page);
+  const parseOptions = { beforeDispatch, admissionKey };
+  const loaded = await loadPage(game, page, parseOptions);
   if (!loaded) return { sections: [], hadRows: false };
 
   const sections = parseEventStandings(loaded.$);
   let hadRows = hasStandingsRows(loaded.$);
 
   for (const child of childStagePages(loaded.$, game, page)) {
-    const childLoaded = await loadTournamentPage(game, child);
+    const childLoaded = await loadPage(game, child, parseOptions);
     if (!childLoaded) continue;
     const prefix = titleFromPageSegment(child);
     sections.push(...prefixSections(parseEventStandings(childLoaded.$), prefix));

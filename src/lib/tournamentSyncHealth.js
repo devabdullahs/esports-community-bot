@@ -1,5 +1,14 @@
 export const TOURNAMENT_SYNC_SOURCES = ['liquipedia', 'startgg', 'pandascore'];
-export const TOURNAMENT_SYNC_FAILURE_CATEGORIES = ['rate_limit', 'auth', 'timeout', 'network', 'parse', 'unknown'];
+export const TOURNAMENT_SYNC_FAILURE_CATEGORIES = [
+  'rate_limit',
+  'auth',
+  'timeout',
+  'network',
+  'parse',
+  'empty',
+  'stale_generation',
+  'unknown',
+];
 
 const SOURCE_SET = new Set(TOURNAMENT_SYNC_SOURCES);
 const FAILURE_CATEGORY_SET = new Set(TOURNAMENT_SYNC_FAILURE_CATEGORIES);
@@ -39,6 +48,8 @@ export function categorizeTournamentSyncError(error) {
   if (/timeout|timed out|etimedout|abort/.test(text)) return 'timeout';
   if (/econn|enotfound|eai_again|network|socket|connect|dns/.test(text)) return 'network';
   if (/parse|invalid (?:schedule|json|response)|non-array schedule/.test(text)) return 'parse';
+  if (/no trusted rows|empty standings/.test(text)) return 'empty';
+  if (/stale lifecycle generation/.test(text)) return 'stale_generation';
   return 'unknown';
 }
 

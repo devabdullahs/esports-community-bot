@@ -4,9 +4,10 @@ function nowText() {
   return new Date().toISOString().slice(0, 19).replace('T', ' ');
 }
 
-export async function upsertMatchDetails({ matchId, sourcePage, game, payload }) {
+export async function upsertMatchDetails({ matchId, sourcePage, game, payload }, { client = null } = {}) {
   const now = nowText();
-  return run(
+  const execute = client?.run?.bind(client) || run;
+  return execute(
     `INSERT INTO match_details (match_id, source_page, game, payload_json, fetched_at, updated_at)
      VALUES ($1, $2, $3, $4, $5, $5)
      ON CONFLICT (match_id) DO UPDATE SET

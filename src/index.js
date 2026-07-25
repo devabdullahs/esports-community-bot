@@ -10,6 +10,7 @@ import { stopClubChampionship } from './jobs/clubChampionship.js';
 import { stopCsRankings } from './jobs/csRankings.js';
 import { stopEwcPredictions } from './jobs/ewcPredictions.js';
 import { stopEwcPredictionOperations } from './jobs/ewcPredictionOperations.js';
+import { stopTournamentOperations } from './jobs/tournamentOperations.js';
 import { stopNewsAnnouncer } from './jobs/newsAnnouncer.js';
 import { stopMediaAnnouncer } from './jobs/mediaAnnouncer.js';
 import { stopStreamStatusJob } from './jobs/streamStatus.js';
@@ -85,6 +86,7 @@ async function shutdown(signal) {
   stopCsRankings();
   stopEwcPredictions();
   stopEwcPredictionOperations();
+  stopTournamentOperations();
   stopNewsAnnouncer();
   stopMediaAnnouncer();
   stopStreamStatusJob();

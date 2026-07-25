@@ -6,9 +6,9 @@ function nowText() {
 
 // Replace a tournament's standings atomically. Sections arrive in page order;
 // the section index keeps that order stable for display.
-export async function replaceTournamentStandings(tournamentId, sections) {
+export async function replaceTournamentStandings(tournamentId, sections, { client = null } = {}) {
   const now = nowText();
-  return transaction(async (tx) => {
+  const replace = async (tx) => {
     await tx.run('DELETE FROM tournament_standings WHERE tournament_id = $1', [tournamentId]);
     let inserted = 0;
     let sectionOrder = 0;
@@ -39,7 +39,8 @@ export async function replaceTournamentStandings(tournamentId, sections) {
       }
     }
     return inserted;
-  });
+  };
+  return client ? replace(client) : transaction(replace);
 }
 
 export async function listStandingsForTournament(tournamentId) {

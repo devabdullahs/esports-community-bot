@@ -15,6 +15,10 @@ db.exec(`
     ewc          INTEGER NOT NULL DEFAULT 0,
     active       INTEGER NOT NULL DEFAULT 1,
     archived_at  INTEGER,
+    lifecycle_generation INTEGER NOT NULL DEFAULT 0,
+    display_name_override TEXT,
+    game_override TEXT,
+    ewc_override INTEGER CHECK (ewc_override IN (0, 1)),
     created_at   TEXT    NOT NULL DEFAULT (datetime('now')),
     UNIQUE (source, external_id, guild_id)
   );
@@ -425,6 +429,10 @@ ensureColumns('players', [
 ensureColumns('tournaments', [
   ['archived_at', 'INTEGER'],
   ['ewc', 'INTEGER NOT NULL DEFAULT 0'],
+  ['lifecycle_generation', 'INTEGER NOT NULL DEFAULT 0'],
+  ['display_name_override', 'TEXT'],
+  ['game_override', 'TEXT'],
+  ['ewc_override', 'INTEGER'],
 ]);
 
 // Durable schedule-sync outcomes. This stores only coarse operational categories
@@ -445,6 +453,60 @@ db.exec(`
     ON tournament_sync_health(source);
   CREATE INDEX IF NOT EXISTS idx_tournament_sync_health_last_success
     ON tournament_sync_health(last_success_at DESC);
+`);
+
+// Schedule and standings refresh independently. Keep the legacy schedule table
+// for backwards-compatible public projections while new operational surfaces
+// read this per-kind model.
+db.exec(`
+  CREATE TABLE IF NOT EXISTS tournament_data_health (
+    tournament_id          INTEGER NOT NULL REFERENCES tournaments(id) ON DELETE CASCADE,
+    data_kind              TEXT NOT NULL CHECK (data_kind IN ('schedule','standings')),
+    source                 TEXT NOT NULL CHECK (source IN ('liquipedia','startgg','pandascore')),
+    supported              INTEGER NOT NULL DEFAULT 1 CHECK (supported IN (0, 1)),
+    last_attempt_at        INTEGER,
+    last_success_at        INTEGER,
+    last_failure_at        INTEGER,
+    last_failure_category  TEXT CHECK (last_failure_category IN ('rate_limit','auth','timeout','network','parse','empty','stale_generation','unknown')),
+    consecutive_failures   INTEGER NOT NULL DEFAULT 0,
+    last_item_count        INTEGER,
+    updated_at             INTEGER NOT NULL,
+    PRIMARY KEY (tournament_id, data_kind)
+  );
+  CREATE INDEX IF NOT EXISTS idx_tournament_data_health_state
+    ON tournament_data_health(data_kind, last_success_at DESC);
+
+  CREATE TABLE IF NOT EXISTS tournament_operations (
+    id                   TEXT PRIMARY KEY,
+    guild_id             TEXT NOT NULL,
+    tournament_id        INTEGER REFERENCES tournaments(id) ON DELETE CASCADE,
+    operation            TEXT NOT NULL CHECK (operation IN (
+                           'validate_and_activate','sync_schedule','sync_standings',
+                           'archive','deactivate','reactivate'
+                         )),
+    source               TEXT CHECK (source IN ('liquipedia','startgg','pandascore')),
+    source_id            TEXT,
+    game                 TEXT,
+    status               TEXT NOT NULL DEFAULT 'queued'
+                           CHECK (status IN ('queued','running','succeeded','failed')),
+    idempotency_key      TEXT NOT NULL UNIQUE,
+    requested_actor_id   TEXT,
+    requested_actor_name TEXT,
+    requested_actor_type TEXT NOT NULL CHECK (requested_actor_type IN ('discord_admin','web_admin','system')),
+    requested_at         TEXT NOT NULL,
+    lease_token          TEXT,
+    lease_expires_at     INTEGER,
+    attempts             INTEGER NOT NULL DEFAULT 0 CHECK (attempts >= 0 AND attempts <= 20),
+    started_at           TEXT,
+    completed_at         TEXT,
+    result_code          TEXT,
+    failure_code         TEXT,
+    result_tournament_id INTEGER REFERENCES tournaments(id) ON DELETE SET NULL
+  );
+  CREATE INDEX IF NOT EXISTS idx_tournament_operations_claim
+    ON tournament_operations(status, lease_expires_at, requested_at);
+  CREATE INDEX IF NOT EXISTS idx_tournament_operations_target
+    ON tournament_operations(tournament_id, requested_at DESC);
 `);
 
 // Migration: pandascore_id used to be NOT NULL; Liquipedia-only entities (games

@@ -291,6 +291,37 @@ test('client cache hits and duplicate requests make zero extra admissions or HTT
   assert.equal(searchHarness.calls.length, 1);
 });
 
+test('parse beforeDispatch runs after queue pacing and can cancel without an HTTP call', async () => {
+  const firstGate = deferred();
+  const harness = createClientHarness({
+    get: async (_url, _request, count) =>
+      count === 1 ? firstGate.promise : { data: { parse: { text: 'must not run' } } },
+  });
+  const first = harness.client.parsePage('dota2', 'Queue_Blocker');
+  await flush();
+  assert.equal(harness.calls.length, 1);
+
+  let admissionChecks = 0;
+  const cancelled = harness.client.parsePage('dota2', 'Cancelled', {
+    admissionKey: 'tournament:7:3',
+    beforeDispatch() {
+      admissionChecks++;
+      const error = new Error('stale generation');
+      error.reasonCode = 'stale_generation';
+      throw error;
+    },
+  });
+  await flush();
+  assert.equal(admissionChecks, 0);
+  assert.equal(harness.calls.length, 1);
+
+  firstGate.resolve({ data: { parse: { text: 'ok' } } });
+  await first;
+  await assert.rejects(cancelled, (error) => error.reasonCode === 'stale_generation');
+  assert.equal(admissionChecks, 1);
+  assert.equal(harness.calls.length, 1);
+});
+
 test('client marks 403, 429, and 503 responses as a shared persistent backoff', async () => {
   for (const status of [403, 429, 503]) {
     const harness = createClientHarness({

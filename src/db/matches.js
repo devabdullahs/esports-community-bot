@@ -14,7 +14,7 @@ function nowText() {
 const STARTGG_PREVIEW_MATCH_SQL = "(source = 'startgg' AND external_id LIKE 'sgg:preview_%')";
 const STARTGG_PREVIEW_MATCH_SQL_M = "(m.source = 'startgg' AND m.external_id LIKE 'sgg:preview_%')";
 
-export async function upsertMatch(row) {
+export async function upsertMatch(row, { client = null } = {}) {
   const merged = {
     name: null,
     team_a: 'TBD',
@@ -31,7 +31,7 @@ export async function upsertMatch(row) {
     ...row,
   };
   const now = nowText();
-  return transaction(async (tx) => {
+  const persist = async (tx) => {
     const existing = await tx.get(
       'SELECT * FROM matches WHERE source = $1 AND external_id = $2',
       [merged.source, merged.external_id],
@@ -114,7 +114,8 @@ export async function upsertMatch(row) {
       );
     }
     return persisted;
-  });
+  };
+  return client ? persist(client) : transaction(persist);
 }
 
 // Map a parser result (camelCase) into a DB row (snake_case).
@@ -560,8 +561,13 @@ export async function deleteResolvedLiveAliasMatches() {
   return ids.length;
 }
 
-export async function deleteTournamentPlaceholderMatches(tournamentId, currentExternalIds = null) {
-  const rows = await all(
+export async function deleteTournamentPlaceholderMatches(
+  tournamentId,
+  currentExternalIds = null,
+  { client = null } = {},
+) {
+  const reader = client || { all };
+  const rows = await reader.all(
     'SELECT id, external_id, team_a, team_b, scheduled_at FROM matches WHERE tournament_id = $1',
     [tournamentId],
   );
@@ -597,9 +603,11 @@ export async function deleteTournamentPlaceholderMatches(tournamentId, currentEx
     })
     .map((row) => row.id);
   if (!ids.length) return 0;
-  await transaction(async (tx) => {
+  const remove = async (tx) => {
     for (const id of ids) await tx.run('DELETE FROM matches WHERE id = $1', [id]);
-  });
+  };
+  if (client) await remove(client);
+  else await transaction(remove);
   return ids.length;
 }
 
@@ -615,10 +623,15 @@ export async function deleteTournamentPlaceholderMatches(tournamentId, currentEx
 // time, which clears stale redirect aliases like PTime -> PlayTime without
 // deleting a later same-day rematch. Current stable rows with live scores count
 // too, so old alias rows do not survive until the match fully finishes.
-export async function deleteTournamentDuplicateMatches(tournamentId, currentExternalIds) {
+export async function deleteTournamentDuplicateMatches(
+  tournamentId,
+  currentExternalIds,
+  { client = null } = {},
+) {
   if (!currentExternalIds || !currentExternalIds.length) return 0;
   const current = new Set(currentExternalIds);
-  const rows = await all(
+  const reader = client || { all };
+  const rows = await reader.all(
     'SELECT id, external_id, team_a, team_b, score_a, score_b, status, scheduled_at FROM matches WHERE tournament_id = $1',
     [tournamentId],
   );
@@ -661,9 +674,11 @@ export async function deleteTournamentDuplicateMatches(tournamentId, currentExte
     if (Number(r.scheduled_at) <= Number(candidates[0].scheduled_at)) ids.add(r.id);
   }
   if (!ids.size) return 0;
-  await transaction(async (tx) => {
+  const remove = async (tx) => {
     for (const id of ids) await tx.run('DELETE FROM matches WHERE id = $1', [id]);
-  });
+  };
+  if (client) await remove(client);
+  else await transaction(remove);
   return ids.size;
 }
 
