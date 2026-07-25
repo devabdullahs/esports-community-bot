@@ -18,6 +18,7 @@ import {
   toMatchRow,
   upsertMatch,
 } from '../db/matches.js';
+import { upsertMatchDetails } from '../db/matchDetails.js';
 import { replaceTournamentStandings } from '../db/tournamentStandings.js';
 import {
   markTournamentDataKindUnsupported,
@@ -94,7 +95,19 @@ async function persistScheduleAtGeneration(tournament, generation, fetchedMatche
   const persisted = await withActiveTournamentGeneration(tournament.id, generation, async (tx) => {
     const rows = [];
     for (const parsed of matches) {
-      rows.push(await upsertMatch(toMatchRow(parsed, tournament.id), { client: tx }));
+      const row = await upsertMatch(toMatchRow(parsed, tournament.id), { client: tx });
+      rows.push(row);
+      if (parsed.details) {
+        await upsertMatchDetails(
+          {
+            matchId: row.id,
+            sourcePage: parsed.detailsSourcePage || parsed.externalId,
+            game: tournament.game,
+            payload: parsed.details,
+          },
+          { client: tx },
+        );
+      }
     }
     const currentIds = matches.map((match) => match.externalId);
     await deleteTournamentPlaceholderMatches(tournament.id, currentIds, { client: tx });

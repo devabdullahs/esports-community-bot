@@ -287,8 +287,19 @@ export async function fetchSchedule(
 
     // Swiss group standings grids (RLCS etc.) — matches are encoded in the round cells.
     for (const m of parseSwissMatches($page, game)) {
-      if (seenIds.has(m.externalId) || pairIndex.has(pairOf(m))) continue;
+      if (seenIds.has(m.externalId)) continue;
       seenIds.add(m.externalId);
+      const candidates = pairIndex.get(pairOf(m)) || [];
+      if (candidates.length === 1) {
+        const kept = candidates[0];
+        if (matchResultRank(m) > matchResultRank(kept)) {
+          kept.status = m.status;
+          kept.scoreA = m.scoreA;
+          kept.scoreB = m.scoreB;
+          kept.winner = m.winner;
+        }
+        continue;
+      }
       addToPairIndex(m);
       out.push(m);
     }

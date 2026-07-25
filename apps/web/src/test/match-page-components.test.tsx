@@ -1,9 +1,17 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, test } from "vitest";
-import { DotaGames, MatchDetailTabs } from "@/components/matches/match-detail-tabs";
+import {
+  BattleRoyaleResults,
+  DotaGames,
+  MatchDetailTabs,
+} from "@/components/matches/match-detail-tabs";
 import { MatchHeader } from "@/components/matches/match-header";
 import { copy } from "@/lib/i18n";
-import type { DotaDetails, MatchPageModel } from "@/lib/match-details";
+import type {
+  BattleRoyaleDetails,
+  DotaDetails,
+  MatchPageModel,
+} from "@/lib/match-details";
 
 function matchModel(overrides: Partial<MatchPageModel> = {}): MatchPageModel {
   return {
@@ -103,5 +111,43 @@ describe("match destination components", () => {
     expect(detailsHtml).toContain('data-slot="accordion-trigger"');
     expect(detailsHtml).toContain('role="region"');
     expect(detailsHtml).toContain('tabindex="0"');
+  });
+
+  test("renders localized PUBG per-game points with shadcn table and avatars", () => {
+    const details: BattleRoyaleDetails = {
+      kind: "battle-royale",
+      patch: null,
+      casters: [],
+      gameNumber: 11,
+      entries: [
+        {
+          rank: 1,
+          team: "Twisted Minds",
+          logo: "https://liquipedia.net/commons/images/team.png",
+          placement: 1,
+          kills: 8,
+          points: 18,
+        },
+        {
+          rank: 2,
+          team: "Team Falcons",
+          logo: null,
+          placement: 2,
+          kills: 5,
+          points: 11,
+        },
+      ],
+    };
+    const html = renderToStaticMarkup(
+      <BattleRoyaleResults details={details} text={copy.ar.tournaments} />,
+    );
+
+    expect(html).toContain("Twisted Minds");
+    expect(html).toContain("Team Falcons");
+    expect(html).toContain(">18<");
+    expect(html).toContain("\u0627\u0644\u0646\u0642\u0627\u0637");
+    expect(html).toContain("\u0627\u0644\u0625\u0642\u0635\u0627\u0621\u0627\u062a");
+    expect(html).toContain('data-slot="table"');
+    expect(html).toContain('data-slot="avatar"');
   });
 });

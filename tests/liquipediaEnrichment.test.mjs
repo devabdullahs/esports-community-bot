@@ -72,7 +72,12 @@ function mockLiquipedia({
         name: page.replace(/_/g, ' '),
         image: `https://liquipedia.net/img/${page}.jpg`,
         facts: { nationality: 'France' },
-        normalized: { nationality: 'France', role: null, romanizedName: 'Evan Rogez' },
+        normalized: {
+          nationality: 'France',
+          role: null,
+          romanizedName: 'Evan Rogez',
+          team: 'Player Club',
+        },
         raw: '<div class="fo-nttax-infobox">…</div>',
       };
     },
@@ -190,6 +195,7 @@ test('individual FC competitors are backfilled and enriched as players, never te
   assert.ok(aboMakkah, 'FC participant has a player profile');
   assert.match(aboMakkah.liquipedia_url, /easportsfc\/AboMakkah/);
   assert.ok(aboMakkah.liquipedia_parsed_at);
+  assert.equal(aboMakkah.current_team_name, 'Player Club');
   assert.ok(parseCalls.some((call) => call.kind === 'player' && call.page === 'AboMakkah'));
 
   const teams = await listTeams({ game: 'easportsfc', limit: 50 });
