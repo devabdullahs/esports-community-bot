@@ -193,11 +193,10 @@ export async function fetchSchedule(
   const pairIndex = new Map(); // pairKey -> kept authoritative matches
   const pairOf = (m) => [normalizeTeamName(m.teamA), normalizeTeamName(m.teamB)].sort().join('|');
   const teamKeysOf = (m) => [normalizeTeamName(m.teamA), normalizeTeamName(m.teamB)].filter(Boolean);
-  // A page can render the SAME match twice - once in a bracket widget and once in
-  // a match-list widget. Only collapse cross-widget twins that share the exact
-  // start timestamp; same-pair rematches later that day, or untimed rows where the
-  // match identity is ambiguous, must keep their separate structural ids.
-  const authByKey = new Map(); // `${pair}|${scheduledAt}` -> [{ match, widget }]
+  // An overview and its child-stage page can render the SAME match under different
+  // structural ids. Collapse only copies with the exact pair + start timestamp;
+  // later same-day rematches and ambiguous untimed rows stay separate.
+  const authByKey = new Map(); // `${pair}|${scheduledAt}` -> kept match
   const timestampOf = (m) => (m.scheduledAt == null ? null : Number(m.scheduledAt) || null);
   const dayOf = (m) => (m.scheduledAt ? Math.floor(m.scheduledAt / 86400) : 'x');
   const authKeyOf = (m) => {
@@ -233,28 +232,42 @@ export async function fetchSchedule(
     }
     return matches.length === 1 ? matches[0] : null;
   };
-  const addAuthoritative = ($page, el, parser, structuralScope, widget) => {
+  const mergeAuthoritativeCopy = (kept, incoming) => {
+    const sameOrientation =
+      normalizeTeamName(kept.teamA) === normalizeTeamName(incoming.teamA);
+    const incomingScoreA = sameOrientation ? incoming.scoreA : incoming.scoreB;
+    const incomingScoreB = sameOrientation ? incoming.scoreB : incoming.scoreA;
+    const incomingLogoA = sameOrientation ? incoming.logoA : incoming.logoB;
+    const incomingLogoB = sameOrientation ? incoming.logoB : incoming.logoA;
+    const incomingRank = matchResultRank(incoming);
+    const keptRank = matchResultRank(kept);
+
+    // Child-stage pages are loaded after the overview and can contain a corrected
+    // final score with the same lifecycle rank (for example 3-0 replacing 2-0).
+    if (incomingRank >= keptRank) {
+      kept.status = incoming.status;
+      if (incomingScoreA != null && incomingScoreB != null) {
+        kept.scoreA = incomingScoreA;
+        kept.scoreB = incomingScoreB;
+      }
+      if (incoming.winner) kept.winner = incoming.winner;
+    }
+    if (!kept.logoA && incomingLogoA) kept.logoA = incomingLogoA;
+    if (!kept.logoB && incomingLogoB) kept.logoB = incomingLogoB;
+    if (!kept.bestOf && incoming.bestOf) kept.bestOf = incoming.bestOf;
+    if (!kept.stream && incoming.stream) kept.stream = incoming.stream;
+  };
+  const addAuthoritative = ($page, el, parser, structuralScope) => {
     const m = parser($page, el, game, structuralScope || page);
     if (!m || seenIds.has(m.externalId)) return;
     const key = authKeyOf(m);
-    const kept = key ? (authByKey.get(key) || []).find((entry) => entry.widget !== widget)?.match : null;
+    const kept = key ? authByKey.get(key) : null;
     if (kept) {
-      // Same match from the sibling widget: fold in a richer result, drop the dup.
-      if (matchResultRank(m) > matchResultRank(kept)) {
-        kept.status = m.status;
-        kept.scoreA = m.scoreA;
-        kept.scoreB = m.scoreB;
-        kept.winner = m.winner;
-      }
-      if (!kept.scheduledAt && m.scheduledAt) kept.scheduledAt = m.scheduledAt;
+      mergeAuthoritativeCopy(kept, m);
       return;
     }
     seenIds.add(m.externalId);
-    if (key) {
-      const matches = authByKey.get(key);
-      if (matches) matches.push({ match: m, widget });
-      else authByKey.set(key, [{ match: m, widget }]);
-    }
+    if (key) authByKey.set(key, m);
     addToPairIndex(m);
     out.push(m);
   };
@@ -279,10 +292,10 @@ export async function fetchSchedule(
     // Brackets AND match lists (group / Swiss / weekly schedules) = authoritative:
     // stable set, with winners + final scores.
     $page('.brkts-match').each((i, el) =>
-      addAuthoritative($page, el, parseBracketMatch, `${pagePath}:bracket:${i}`, 'bracket'),
+      addAuthoritative($page, el, parseBracketMatch, `${pagePath}:bracket:${i}`),
     );
     $page('.brkts-matchlist-match').each((i, el) =>
-      addAuthoritative($page, el, parseMatchlistMatch, `${pagePath}:matchlist:${i}`, 'matchlist'),
+      addAuthoritative($page, el, parseMatchlistMatch, `${pagePath}:matchlist:${i}`),
     );
 
     // Swiss group standings grids (RLCS etc.) — matches are encoded in the round cells.

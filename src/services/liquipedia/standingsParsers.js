@@ -652,9 +652,14 @@ export function parseEventStandings($) {
       ? participantGroups
       : battleRoyale;
   const structured = [...battleRoyaleSections, ...parseGroupTableStandings($)];
-  if (structured.length) return structured;
-  const participants = parseParticipantTables($);
   const final = parsePrizePoolFinalStandings($);
+  if (structured.length) {
+    const alreadyHasFinal = structured.some(({ title }) =>
+      /\b(?:grand final|final standings|overall standings)\b/i.test(cleanText(title)),
+    );
+    return final && !alreadyHasFinal ? [final, ...structured] : structured;
+  }
+  const participants = parseParticipantTables($);
   return final ? [final, ...participants] : participants;
 }
 
@@ -706,6 +711,7 @@ export function hasStandingsRows($) {
       return undefined;
     });
   if (found) return true;
+  if (parsePrizePoolFinalStandings($)?.entries.length) return true;
   $('table.wikitable').each((_, table) => {
     const rows = $(table).find('tr').toArray();
     if (rows.length < 2) return;

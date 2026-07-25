@@ -937,6 +937,104 @@ test('fetchSchedule: merges a unique untimed Swiss result into its timed FC matc
   assert.equal(matches[0].winner, 'Samugamer 07');
 });
 
+test('fetchSchedule: collapses overview and child-stage bracket copies and keeps the corrected final', async () => {
+  const scheduledAt = 1_784_990_700;
+  const overview = load(`
+    <a href="/tft/Esports_World_Cup/2026/Playoffs">Playoffs</a>
+    <div class="brkts-match">
+      <div class="brkts-opponent-entry" aria-label="Team Vision">
+        <span class="brkts-opponent-win"></span>
+        <div class="brkts-opponent-score-inner">2</div>
+      </div>
+      <div class="brkts-opponent-entry" aria-label="Aurora Gaming (Serbia)">
+        <div class="brkts-opponent-score-inner">0</div>
+      </div>
+      <span data-timestamp="${scheduledAt}"></span>
+      <div class="brkts-popup">(Bo5)</div>
+    </div>
+  `);
+  const playoffs = load(`
+    <div class="brkts-match">
+      <div class="brkts-opponent-entry" aria-label="Aurora Gaming (Serbia)">
+        <div class="brkts-opponent-score-inner">0</div>
+      </div>
+      <div class="brkts-opponent-entry" aria-label="Team Vision">
+        <span class="brkts-opponent-win"></span>
+        <div class="brkts-opponent-score-inner">3</div>
+      </div>
+      <span data-timestamp="${scheduledAt}"></span>
+      <div class="brkts-popup">(Bo5)</div>
+    </div>
+  `);
+
+  const matches = await fetchSchedule(
+    {
+      source: 'liquipedia',
+      external_id: 'tft/Esports_World_Cup/2026',
+    },
+    {
+      lpdbService: {
+        isEnabled: () => false,
+        fetchSchedule: async () => [],
+      },
+      loadPage: async (_game, page) => ({
+        $: page.endsWith('/Playoffs') ? playoffs : overview,
+      }),
+    },
+  );
+
+  assert.equal(matches.length, 1);
+  assert.equal(matches[0].teamA, 'Team Vision');
+  assert.equal(matches[0].teamB, 'Aurora Gaming (Serbia)');
+  assert.equal(matches[0].scoreA, 3);
+  assert.equal(matches[0].scoreB, 0);
+  assert.equal(matches[0].winner, 'Team Vision');
+});
+
+test('fetchSchedule: preserves exact same-pair rematches at different timestamps', async () => {
+  const firstAt = 1_784_990_700;
+  const rematchAt = firstAt + 3_600;
+  const $ = load(`
+    <div class="brkts-match">
+      <div class="brkts-opponent-entry" aria-label="Team Vision">
+        <span class="brkts-opponent-win"></span>
+        <div class="brkts-opponent-score-inner">2</div>
+      </div>
+      <div class="brkts-opponent-entry" aria-label="Aurora Gaming">
+        <div class="brkts-opponent-score-inner">0</div>
+      </div>
+      <span data-timestamp="${firstAt}"></span>
+    </div>
+    <div class="brkts-match">
+      <div class="brkts-opponent-entry" aria-label="Team Vision">
+        <div class="brkts-opponent-score-inner">0</div>
+      </div>
+      <div class="brkts-opponent-entry" aria-label="Aurora Gaming">
+        <span class="brkts-opponent-win"></span>
+        <div class="brkts-opponent-score-inner">2</div>
+      </div>
+      <span data-timestamp="${rematchAt}"></span>
+    </div>
+  `);
+
+  const matches = await fetchSchedule(
+    {
+      source: 'liquipedia',
+      external_id: 'tft/Esports_World_Cup/2026',
+    },
+    {
+      lpdbService: {
+        isEnabled: () => false,
+        fetchSchedule: async () => [],
+      },
+      loadPage: async () => ({ $ }),
+    },
+  );
+
+  assert.equal(matches.length, 2);
+  assert.deepEqual(matches.map((match) => match.scheduledAt), [firstAt, rematchAt]);
+});
+
 // ---------------------------------------------------------------------------
 // parseBracketMatch
 // ---------------------------------------------------------------------------
