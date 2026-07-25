@@ -7,6 +7,7 @@
 
 ## Status
 
+- **State**: DONE
 - **Priority**: P2
 - **Effort**: M
 - **Risk**: MED
@@ -76,10 +77,10 @@ not block content.
 
 ## Done criteria
 
-- [ ] Manifest validates and icons load.
-- [ ] Offline fallback works for public navigations.
-- [ ] Admin/auth/API routes are not cached.
-- [ ] Verification commands pass.
+- [x] Manifest validates and icons load.
+- [x] Offline fallback works for public navigations.
+- [x] Admin/auth/API routes are not cached.
+- [x] Verification commands pass.
 
 ## STOP conditions
 

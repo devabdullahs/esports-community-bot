@@ -70,7 +70,8 @@ function finalizePublicResponse(request: NextRequest, response: NextResponse) {
 }
 
 function shouldPersistLocale(request: NextRequest) {
-  return !isPublicHtmlCacheCandidate(request);
+  return request.headers.get("sec-fetch-dest") === "document" ||
+    request.headers.get("sec-fetch-mode") === "navigate";
 }
 
 export function proxy(request: NextRequest) {
@@ -119,6 +120,12 @@ export function proxy(request: NextRequest) {
 
   const url = request.nextUrl.clone();
   url.pathname = stripLocalePrefix(url.pathname);
+
+  // API namespaces are never locale-routed. Do not redirect `/ar/api/...`
+  // into `/api/...`; leave the prefixed path untouched so it remains a 404.
+  if (url.pathname === "/api" || url.pathname.startsWith("/api/")) {
+    return NextResponse.next();
+  }
 
   if (!isLocaleRoutedPath(url.pathname)) {
     const response = NextResponse.redirect(url);

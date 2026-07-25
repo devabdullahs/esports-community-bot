@@ -2,7 +2,11 @@ import "server-only";
 
 import { get } from "@bot/db/client.js";
 import { getMatchDetails } from "@bot/db/matchDetails.js";
+import { isEwcTournamentReference } from "@bot/lib/ewcTournament.js";
 import { resolveDefaultGuildId } from "@/lib/guild";
+import { liveCoStreamsByMatch, type MatchCoStream } from "@/lib/match-co-streams";
+import type { MatchStatus, ResultReason, WinnerSide } from "@/lib/match-lifecycle";
+import { safeUrlOrUndefined } from "@/lib/safe-url";
 
 type Side = "a" | "b";
 type SidePlayers<T> = { a: T[]; b: T[] };
@@ -81,7 +85,9 @@ export type MatchPageModel = {
   id: number;
   source: string;
   externalId: string;
-  status: "running" | "scheduled" | "finished";
+  status: MatchStatus;
+  winnerSide: WinnerSide;
+  resultReason: ResultReason;
   teamA: string | null;
   teamB: string | null;
   logoA: string | null;
@@ -90,7 +96,14 @@ export type MatchPageModel = {
   scoreB: number | null;
   scheduledAt: number | null;
   stream: { platform: string | null; url: string | null };
-  tournament: { id: number; name: string | null; game: string | null };
+  coStreams: MatchCoStream[];
+  tournament: {
+    id: number;
+    name: string | null;
+    game: string | null;
+    source: string;
+    url: string | null;
+  };
   details: MatchDetailsViewModel | null;
 };
 
@@ -257,11 +270,17 @@ type MatchDbRow = {
   logo_b: string | null;
   score_a: number | null;
   score_b: number | null;
+  winner_side: WinnerSide;
+  result_reason: ResultReason;
   scheduled_at: number | null;
   stream_platform: string | null;
   stream_url: string | null;
   tournament_id: number;
   tournament_name: string | null;
+  tournament_source: string;
+  tournament_url: string | null;
+  tournament_external_id: string;
+  tournament_ewc: number | null;
   game: string | null;
 };
 
@@ -270,8 +289,11 @@ export async function getMatchPageModel(matchId: number): Promise<MatchPageModel
   if (!guildId) return null;
   const match = (await get(
     `SELECT m.id, m.source, m.external_id, m.status, m.team_a, m.team_b, m.logo_a, m.logo_b,
-            m.score_a, m.score_b, m.scheduled_at, m.stream_platform, m.stream_url,
-            t.id AS tournament_id, t.name AS tournament_name, t.game
+            m.score_a, m.score_b, m.winner_side, m.result_reason,
+            m.scheduled_at, m.stream_platform, m.stream_url,
+            t.id AS tournament_id, t.name AS tournament_name, t.game,
+            t.source AS tournament_source, t.url AS tournament_url,
+            t.external_id AS tournament_external_id, t.ewc AS tournament_ewc
        FROM matches m
        JOIN tournaments t ON t.id = m.tournament_id
       WHERE m.id = $1
@@ -281,7 +303,31 @@ export async function getMatchPageModel(matchId: number): Promise<MatchPageModel
   )) as MatchDbRow | null;
   if (!match) return null;
 
-  const details = await getMatchDetails(matchId);
+  const coStreamsPromise = match.status === "running"
+    ? liveCoStreamsByMatch(
+      [{
+        id: match.id,
+        external_id: match.external_id,
+        team_a: match.team_a,
+        team_b: match.team_b,
+      }],
+      {
+        gameSlug: match.game,
+        includeEwc: isEwcTournamentReference({
+          name: match.tournament_name,
+          url: match.tournament_url,
+          external_id: match.tournament_external_id,
+          ewc: match.tournament_ewc,
+        }),
+      },
+    )
+    : Promise.resolve(new Map<number, MatchCoStream[]>());
+  const [details, coStreamsByMatch] = await Promise.all([
+    getMatchDetails(matchId),
+    coStreamsPromise,
+  ]);
+  const streamUrl = safeUrlOrUndefined(match.stream_url) ?? null;
+  const tournamentUrl = safeUrlOrUndefined(match.tournament_url) ?? null;
   return {
     id: match.id,
     source: match.source,
@@ -293,9 +339,21 @@ export async function getMatchPageModel(matchId: number): Promise<MatchPageModel
     logoB: match.logo_b,
     scoreA: match.score_a,
     scoreB: match.score_b,
+    winnerSide: match.winner_side,
+    resultReason: match.result_reason,
     scheduledAt: match.scheduled_at,
-    stream: { platform: match.stream_platform, url: match.stream_url },
-    tournament: { id: match.tournament_id, name: match.tournament_name, game: match.game },
+    stream: {
+      platform: streamUrl ? match.stream_platform : null,
+      url: streamUrl,
+    },
+    coStreams: coStreamsByMatch.get(match.id) ?? [],
+    tournament: {
+      id: match.tournament_id,
+      name: match.tournament_name,
+      game: match.game,
+      source: match.tournament_source,
+      url: tournamentUrl,
+    },
     details: toMatchDetailsViewModel(details?.payload),
   };
 }

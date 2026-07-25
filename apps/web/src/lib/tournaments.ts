@@ -19,11 +19,13 @@ import { normalizeTeamName as _normalizeTeamName } from "@bot/lib/render.js";
 import {
   getTournamentById as _getById,
   listActiveTournaments as _listActive,
+  listArchivedTournamentFacets as _listArchivedFacets,
   listArchivedTournaments as _listArchived,
   resolveCanonicalTournamentId as _resolveCanonicalTournamentId,
 } from "@bot/db/tournaments.js";
 import { unstable_cache } from "next/cache";
 import { resolveDefaultGuildId } from "@/lib/guild";
+import type { MatchStatus, ResultReason, WinnerSide } from "@/lib/match-lifecycle";
 import { liveCoStreamsByMatch, type MatchCoStream } from "@/lib/match-co-streams";
 import { ewcPlacementPointsForRank, finalTournamentStandingSection } from "@/lib/tournament-standings";
 import { bracketRoundFromStoredMatch } from "@/lib/tournament-brackets";
@@ -37,7 +39,7 @@ import { bracketRoundFromStoredMatch } from "@/lib/tournament-brackets";
 // write from the web process.
 // ---------------------------------------------------------------------------
 
-export type MatchStatus = "running" | "scheduled" | "finished";
+export type { MatchStatus } from "@/lib/match-lifecycle";
 
 export type TournamentRow = {
   id: number;
@@ -54,7 +56,13 @@ export type TournamentRow = {
   last_match_at?: number | null;
 };
 
-export type MatchCounts = { running: number; scheduled: number; finished: number };
+export type MatchCounts = {
+  running: number;
+  scheduled: number;
+  finished: number;
+  postponed: number;
+  cancelled: number;
+};
 
 export type PublicSyncHealth = {
   state: "fresh" | "delayed" | "unavailable" | "final";
@@ -92,6 +100,26 @@ export type TournamentSummary = {
   featuredMatch: MatchRow | null;
 };
 
+export type ArchivedTournamentFacet = {
+  id: number;
+  name: string | null;
+  game: string | null;
+  source: string;
+  url: string | null;
+  ewc: boolean;
+  archived_at: number | null;
+  last_match_at: number | null;
+  matchCounts: MatchCounts;
+};
+
+export type ArchivedTournamentFilters = {
+  ewcOnly?: boolean;
+  game?: string;
+  source?: string;
+  query?: string;
+  status?: "all" | "live" | "upcoming" | "results";
+};
+
 export type MatchStream = { platform: string; url: string };
 
 export function matchHasDetails(value: unknown): boolean {
@@ -117,6 +145,8 @@ export type MatchRow = {
   score_a: number | null;
   score_b: number | null;
   status: MatchStatus;
+  winner_side?: WinnerSide;
+  result_reason?: ResultReason;
   /** Public stage label derived from saved match data; never exposes provider IDs. */
   round?: string | null;
   scheduled_at: number | null;
@@ -159,25 +189,55 @@ export type TournamentMatches = {
     final_standings_section: string | null;
     syncHealth: PublicSyncHealth;
   };
-  matches: { running: MatchRow[]; scheduled: MatchRow[]; finished: MatchRow[] };
+  matches: {
+    running: MatchRow[];
+    scheduled: MatchRow[];
+    finished: MatchRow[];
+    postponed: MatchRow[];
+    cancelled: MatchRow[];
+  };
+  bracketMatches?: MatchRow[];
   standings: StandingRow[];
+  totals: MatchCounts & { all: number };
+  finishedPage: {
+    offset: number;
+    limit: number;
+    hasMore: boolean;
+  };
+  /** Compatibility alias for totals.all. */
   total: number;
+};
+
+export type TournamentMatchOptions = {
+  limit?: number;
+  offset?: number;
+  includeBracket?: boolean;
 };
 
 const listActive = _listActive as (guildId?: string) => Promise<TournamentRow[]>;
 const listArchived = _listArchived as (
   guildId: string,
-  opts?: { limit?: number; offset?: number },
+  opts?: { limit?: number; offset?: number } & ArchivedTournamentFilters,
 ) => Promise<TournamentRow[]>;
+type ArchivedFacetRow = TournamentRow & {
+  running_count: number | string;
+  scheduled_count: number | string;
+  finished_count: number | string;
+  postponed_count: number | string;
+  cancelled_count: number | string;
+};
+const listArchivedFacets = _listArchivedFacets as (
+  guildId: string,
+) => Promise<ArchivedFacetRow[]>;
 const getById = _getById as (id: number) => Promise<TournamentRow | undefined>;
 const dedupeMatches = _dedupeMatches as <T extends MatchRow>(rows: T[]) => T[];
 
 function zeroCounts(): MatchCounts {
-  return { running: 0, scheduled: 0, finished: 0 };
+  return { running: 0, scheduled: 0, finished: 0, postponed: 0, cancelled: 0 };
 }
 
 const MATCH_COLUMNS =
-  "id, external_id, name, team_a, team_b, logo_a, logo_b, score_a, score_b, status, scheduled_at, stream_platform, stream_url, updated_at";
+  "id, external_id, name, team_a, team_b, logo_a, logo_b, score_a, score_b, status, winner_side, result_reason, scheduled_at, stream_platform, stream_url, updated_at";
 
 // The official per-match stream is the Liquipedia Special:Stream link, which
 // resolves to the real channel (the path segment is Liquipedia's key, not the
@@ -204,7 +264,13 @@ const MATCHES_SQL = `SELECT ${MATCH_COLUMNS},
    FROM matches
    WHERE tournament_id = $1
      AND NOT (source = 'startgg' AND external_id LIKE 'sgg:preview_%')
-   ORDER BY CASE status WHEN 'running' THEN 0 WHEN 'scheduled' THEN 1 ELSE 2 END,
+   ORDER BY CASE status
+              WHEN 'running' THEN 0
+              WHEN 'scheduled' THEN 1
+              WHEN 'postponed' THEN 2
+              WHEN 'finished' THEN 3
+              ELSE 4
+            END,
             CASE WHEN status = 'finished' THEN scheduled_at END DESC,
             scheduled_at ASC`;
 
@@ -219,6 +285,8 @@ function publicMatch(row: MatchRow): MatchRow {
     score_a: row.score_a,
     score_b: row.score_b,
     status: row.status,
+    winner_side: row.winner_side ?? null,
+    result_reason: row.result_reason ?? "unknown",
     round: bracketRoundFromStoredMatch(row),
     scheduled_at: row.scheduled_at,
     updated_at: row.updated_at,
@@ -330,9 +398,7 @@ async function dedupedTournamentMatches(tournament: TournamentRow): Promise<Matc
 function countsFromRows(rows: MatchRow[]): MatchCounts {
   const counts = zeroCounts();
   for (const row of rows) {
-    if (row.status === "running" || row.status === "scheduled" || row.status === "finished") {
-      counts[row.status] += 1;
-    }
+    counts[row.status] += 1;
   }
   return counts;
 }
@@ -341,7 +407,9 @@ function featuredMatchFromRows(rows: MatchRow[]): MatchRow | null {
   return (
     rows.find((row) => row.status === "running") ??
     rows.find((row) => row.status === "scheduled") ??
+    rows.find((row) => row.status === "postponed") ??
     rows.find((row) => row.status === "finished") ??
+    rows.find((row) => row.status === "cancelled") ??
     null
   );
 }
@@ -397,21 +465,54 @@ export async function listArchivedTournamentSummaries({
   limit = 25,
   offset = 0,
   ewcOnly = false,
+  game = "",
+  source = "",
+  query = "",
+  status = "all",
 }: {
   limit?: number;
   offset?: number;
-  ewcOnly?: boolean;
-} = {}): Promise<TournamentSummary[]> {
+} & ArchivedTournamentFilters = {}): Promise<TournamentSummary[]> {
   const guildId = await resolveDefaultGuildId();
   if (!guildId) return [];
-  const rows = await listArchived(guildId, { limit, offset });
+  const rows = await listArchived(guildId, {
+    limit,
+    offset,
+    ewcOnly,
+    game,
+    source,
+    query,
+    status,
+  });
   const [withStandings, healthRows] = await Promise.all([
     standingsTournamentIds(),
     listTournamentSyncHealth(rows.map((t) => t.id)),
   ]);
   const healthByTournamentId = new Map(healthRows.map((row) => [row.tournament_id, row]));
-  const summaries = await Promise.all(rows.map((t) => tournamentSummary(t, withStandings, healthByTournamentId)));
-  return ewcOnly ? summaries.filter((t) => t.ewc) : summaries;
+  return Promise.all(rows.map((t) => tournamentSummary(t, withStandings, healthByTournamentId)));
+}
+
+export async function listArchivedTournamentFacets(): Promise<ArchivedTournamentFacet[]> {
+  const guildId = await resolveDefaultGuildId();
+  if (!guildId) return [];
+  const rows = await listArchivedFacets(guildId);
+  return rows.map((row) => ({
+    id: Number(row.id),
+    name: row.name ?? null,
+    game: row.game ?? null,
+    source: String(row.source),
+    url: row.url ?? null,
+    ewc: isEwcTournamentReference(row),
+    archived_at: row.archived_at == null ? null : Number(row.archived_at),
+    last_match_at: row.last_match_at == null ? null : Number(row.last_match_at),
+    matchCounts: {
+      running: Number(row.running_count || 0),
+      scheduled: Number(row.scheduled_count || 0),
+      finished: Number(row.finished_count || 0),
+      postponed: Number(row.postponed_count || 0),
+      cancelled: Number(row.cancelled_count || 0),
+    },
+  }));
 }
 
 /**
@@ -421,13 +522,23 @@ export async function listArchivedTournamentSummaries({
  */
 export async function getTournamentMatches(
   id: number,
-  { limit = 50, offset = 0 }: { limit?: number; offset?: number } = {},
+  options: TournamentMatchOptions = {},
 ): Promise<TournamentMatches | null> {
+  const requestedLimit = Number.isFinite(options.limit) ? Math.trunc(options.limit as number) : 50;
+  const requestedOffset = Number.isFinite(options.offset) ? Math.trunc(options.offset as number) : 0;
+  const limit = Math.min(200, Math.max(1, requestedLimit));
+  const offset = Math.min(100_000, Math.max(0, requestedOffset));
   const guildId = await resolveDefaultGuildId();
   if (!guildId) return null;
   const canonicalId = await _resolveCanonicalTournamentId(id);
   const tournament = await getById(canonicalId);
-  if (!tournament || tournament.guild_id !== guildId || tournament.active !== 1) return null;
+  if (
+    !tournament
+    || tournament.guild_id !== guildId
+    || (tournament.active !== 1 && tournament.archived_at == null)
+  ) {
+    return null;
+  }
 
   const rows = await dedupedTournamentMatches(tournament);
   const [resolveProfile, rawStandings, health] = await Promise.all([
@@ -459,14 +570,31 @@ export async function getTournamentMatches(
   const finishedAll = rows
     .filter((m) => m.status === "finished")
     .map((m) => withProfileReferences(publicMatch(m), resolveProfile));
+  const postponed = rows
+    .filter((m) => m.status === "postponed")
+    .map((m) => withProfileReferences(publicMatch(m), resolveProfile));
+  const cancelled = rows
+    .filter((m) => m.status === "cancelled")
+    .map((m) => withProfileReferences(publicMatch(m), resolveProfile));
   const finished = finishedAll.slice(offset, offset + limit);
   const ewc = isEwcTournamentReference(tournament);
   const standingsHaveResults = rawStandings.some(
     (row) => /[1-9]/.test(String(row.points ?? "")) || /[1-9]/.test(String(row.extra ?? "")),
   );
   const completed = tournament.archived_at != null || (
-    running.length === 0 && scheduled.length === 0 && (finishedAll.length > 0 || standingsHaveResults)
+    running.length === 0
+    && scheduled.length === 0
+    && postponed.length === 0
+    && (finishedAll.length > 0 || standingsHaveResults)
   );
+  const totals = {
+    running: running.length,
+    scheduled: scheduled.length,
+    finished: finishedAll.length,
+    postponed: postponed.length,
+    cancelled: cancelled.length,
+    all: running.length + scheduled.length + finishedAll.length + postponed.length + cancelled.length,
+  };
   const finalStandingsSection = ewc && completed ? finalTournamentStandingSection(rawStandings) : null;
   if (finalStandingsSection) {
     standings = standings.map((row) => ({
@@ -487,9 +615,18 @@ export async function getTournamentMatches(
       final_standings_section: finalStandingsSection,
       syncHealth: syncHealthForTournament(tournament, health, rawRunning.length > 0),
     },
-    matches: { running, scheduled, finished },
+    matches: { running, scheduled, finished, postponed, cancelled },
+    ...(options.includeBracket
+      ? { bracketMatches: [...running, ...scheduled, ...postponed, ...finishedAll, ...cancelled] }
+      : {}),
     standings,
-    total: running.length + scheduled.length + finishedAll.length,
+    totals,
+    finishedPage: {
+      offset,
+      limit,
+      hasMore: offset + finished.length < finishedAll.length,
+    },
+    total: totals.all,
   };
 }
 
@@ -506,7 +643,7 @@ export const listTournamentSummariesCached = unstable_cache(
 );
 
 export const getTournamentMatchesCached = unstable_cache(
-  async (id: number, opts?: { limit?: number; offset?: number }) => getTournamentMatches(id, opts),
+  async (id: number, opts?: TournamentMatchOptions) => getTournamentMatches(id, opts),
   ["tournament-matches"],
   { tags: ["cms-tournaments"], revalidate: 60 },
 );

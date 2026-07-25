@@ -5,9 +5,11 @@ import { recordAdminAudit } from "@/lib/audit";
 import { sameOriginOr403 } from "@/lib/community";
 import { createPartnerCampaign, getPartner, listPartnerCampaigns } from "@/lib/partners";
 import { validatePartnerCampaignInput } from "@/lib/partner-validation";
+import { readBoundedJson, requestBodyErrorResponse } from "@/lib/request-body";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+const PARTNER_CAMPAIGN_BODY_MAX_BYTES = 64 * 1024;
 
 export async function GET() {
   const access = await getAdminAccess();
@@ -23,7 +25,9 @@ export async function POST(request: Request) {
   if (!access.session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   if (!isSuper(access)) return NextResponse.json({ error: "Super admin only" }, { status: 403 });
 
-  const body = await request.json().catch(() => ({}));
+  const parsed = await readBoundedJson<unknown>(request, PARTNER_CAMPAIGN_BODY_MAX_BYTES);
+  if (!parsed.ok) return requestBodyErrorResponse(parsed.reason);
+  const body = parsed.value;
   const validated = validatePartnerCampaignInput(body);
   if (!validated.ok) return NextResponse.json({ error: validated.error }, { status: 400 });
   if (!(await getPartner(validated.value.partnerId))) {

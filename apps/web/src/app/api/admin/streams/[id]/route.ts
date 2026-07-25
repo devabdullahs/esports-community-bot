@@ -4,9 +4,11 @@ import { recordAdminAudit } from "@/lib/audit";
 import { sameOriginOr403 } from "@/lib/community";
 import { deleteStreamChannel, updateStreamChannel, type UpdateStreamChannelInput } from "@/lib/stream-channels";
 import { normalizeCreatorKey } from "@/lib/stream-normalize";
+import { readBoundedJson, requestBodyErrorResponse } from "@/lib/request-body";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+const STREAM_CHANNEL_BODY_MAX_BYTES = 64 * 1024;
 
 function parseId(raw: string): number | null {
   const id = Number(raw);
@@ -25,7 +27,9 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
   const id = parseId(rawId);
   if (id === null) return NextResponse.json({ error: "Invalid id" }, { status: 400 });
 
-  const body = (await request.json().catch(() => ({}))) as Record<string, unknown>;
+  const parsed = await readBoundedJson<Record<string, unknown>>(request, STREAM_CHANNEL_BODY_MAX_BYTES);
+  if (!parsed.ok) return requestBodyErrorResponse(parsed.reason);
+  const body = parsed.value;
   const patch: UpdateStreamChannelInput = {};
   if (typeof body.label === "string") patch.label = body.label.trim().slice(0, 120);
   if (typeof body.language === "string") patch.language = body.language.trim().toLowerCase().slice(0, 8);

@@ -281,6 +281,19 @@ function displayNameFromHead(head) {
   return tournamentName;
 }
 
+export function normalizeStartggState(state) {
+  switch (Number(state)) {
+    case 1:
+      return 'scheduled';
+    case 2:
+      return 'running';
+    case 3:
+      return 'finished';
+    default:
+      return null;
+  }
+}
+
 // Normalize a start.gg set into the bot's standard match shape.
 export function normalizeSet(s) {
   if (isPreviewSetId(s?.id)) return null;
@@ -294,10 +307,8 @@ export function normalizeSet(s) {
   };
   const idA = s1?.entrant?.id;
   const idB = s2?.entrant?.id;
-  // winnerId is set once the set completes; state 2 means it's actively being played.
-  let status = 'scheduled';
-  if (s.winnerId) status = 'finished';
-  else if (s.state === 2) status = 'running';
+  // State is authoritative even when a completed set has no winner, such as a draw.
+  const status = normalizeStartggState(s.state);
   return {
     source: 'startgg',
     externalId: `sgg:${s.id}`,

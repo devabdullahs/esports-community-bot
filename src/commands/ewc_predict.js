@@ -46,6 +46,7 @@ import { tryAcquireRenderSlot } from '../lib/renderGate.js';
 import { logger } from '../lib/logger.js';
 import { projectSeasonScoreBreakdown, projectWeeklyScoreBreakdown } from '../lib/ewcPredictionBreakdown.js';
 import { seasonPicksVisible, weeklyPickVisible } from '../lib/ewcPredictionVisibility.js';
+import { syncDashboardProfile } from '../services/dashboardInternalClient.js';
 import QRCode from 'qrcode';
 
 const DEFAULT_SEASON = '2026';
@@ -142,7 +143,7 @@ builder = builder
       .setName('sync')
       .setDescription('Re-sync your EWC Discord profile showcase.'),
   )
-  .addSubcommand((s) => s.setName('unlink').setDescription('Remove your EWC Discord profile showcase link.'))
+  .addSubcommand((s) => s.setName('unlink').setDescription('Open the dashboard control for removing your profile showcase.'))
   .setContexts(InteractionContextType.Guild);
 
 export const data = builder;
@@ -161,28 +162,11 @@ function dashboardProfileUrl(interaction, seasonYear) {
   return `${base}/me?${params.toString()}`;
 }
 
-async function dashboardInternalRequest(path, body) {
-  if (!config.dashboard.internalUrl || !config.dashboard.internalSecret) {
-    throw new Error('Dashboard internal sync is not configured.');
-  }
-  const response = await fetch(`${config.dashboard.internalUrl.replace(/\/$/, '')}${path}`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'x-ewc-internal-secret': config.dashboard.internalSecret,
-    },
-    body: JSON.stringify(body),
-  });
-  const data = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(data.error || `Dashboard request failed (${response.status})`);
-  return data;
-}
-
 export async function refreshLinkedProfileAfterFirstWeeklyPick({ firstPick, discordUserId, guildId, season }) {
   if (!firstPick) return;
   try {
     if (!(await getEwcProfileLinkByDiscordUser(discordUserId))) return;
-    await dashboardInternalRequest('/api/internal/ewc-profile/sync', {
+    await syncDashboardProfile({
       discordUserId,
       guildId,
       season,
@@ -1196,11 +1180,11 @@ export async function execute(interaction) {
             '**العربية**\n' +
               '**ما هو العرض؟** عرض EWC الخاص بك هو ترتيبك ونقاطك وانتصاراتك الأسبوعية معروضة على ملفك في ديسكورد كرتبة مرتبطة، فيراها الجميع دون فتح اللوحة.\n\n' +
               '**كيف تربطه؟** استخدم `/ewc_predict link`، ثم اضغط **Open my dashboard** وسجّل الدخول بنفس حساب ديسكورد. يتم الربط تلقائيًا — لا حاجة لإعداد إضافي.\n\n' +
-              '**التحديث والإزالة:** اضغط زر **التحديث** في اللوحة (أو استخدم `/ewc_predict sync`) لتحديث الإحصاءات المعروضة، واستخدم `/ewc_predict unlink` لإزالة الربط في أي وقت.\n\n' +
+              '**التحديث والإزالة:** اضغط زر **التحديث** في اللوحة (أو استخدم `/ewc_predict sync`) لتحديث الإحصاءات المعروضة. يفتح `/ewc_predict unlink` زر الإزالة الآمن في لوحة التحكم.\n\n' +
               '**English**\n' +
               '**What it is:** Your EWC showcase is your EWC rank, points and weekly wins displayed on your Discord profile as a linked role, so everyone sees them without opening the dashboard.\n\n' +
               '**How to link:** Run `/ewc_predict link`, then tap **Open my dashboard** and sign in with the same Discord account. It links automatically — no extra setup.\n\n' +
-              '**Update & remove:** Tap **Refresh** on the dashboard (or use `/ewc_predict sync`) to update the stats shown, and use `/ewc_predict unlink` to remove the link anytime.',
+              '**Update & remove:** Tap **Refresh** on the dashboard (or use `/ewc_predict sync`) to update the stats shown. `/ewc_predict unlink` opens the secure unlink control in your dashboard.',
           ),
       ],
     });
@@ -1269,21 +1253,36 @@ export async function execute(interaction) {
 
   if (sub === 'sync') {
     await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-    await dashboardInternalRequest('/api/internal/ewc-profile/sync', {
+    const result = await syncDashboardProfile({
       discordUserId: interaction.user.id,
       guildId: interaction.guildId,
       season: seasonYear,
     });
+    if (!result) throw new Error('Dashboard profile sync is not configured.');
     await interaction.editReply('Your Discord profile showcase has been synced.');
     return;
   }
 
   if (sub === 'unlink') {
-    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-    await dashboardInternalRequest('/api/internal/ewc-profile/unlink', {
-      discordUserId: interaction.user.id,
+    const profileUrl = dashboardProfileUrl(interaction, seasonYear);
+    if (!profileUrl) {
+      await interaction.reply({
+        content: 'The dashboard URL is not configured. Please contact an administrator.',
+        flags: MessageFlags.Ephemeral,
+      });
+      return;
+    }
+    const row = new ActionRowBuilder().addComponents(
+      new ButtonBuilder()
+        .setLabel('Open unlink control')
+        .setStyle(ButtonStyle.Link)
+        .setURL(profileUrl),
+    );
+    await interaction.reply({
+      content: 'For your protection, unlinking is completed from your signed-in dashboard profile.',
+      components: [row],
+      flags: MessageFlags.Ephemeral,
     });
-    await interaction.editReply('Your EWC profile showcase link has been removed.');
     return;
   }
 }

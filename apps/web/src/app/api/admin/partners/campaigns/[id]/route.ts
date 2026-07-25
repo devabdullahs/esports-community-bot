@@ -5,9 +5,11 @@ import { recordAdminAudit } from "@/lib/audit";
 import { sameOriginOr403 } from "@/lib/community";
 import { deletePartnerCampaign, getPartner, getPartnerCampaign, updatePartnerCampaign } from "@/lib/partners";
 import { validatePartnerCampaignInput } from "@/lib/partner-validation";
+import { readBoundedJson, requestBodyErrorResponse } from "@/lib/request-body";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+const PARTNER_CAMPAIGN_BODY_MAX_BYTES = 64 * 1024;
 
 function parseId(raw: string): number | null {
   const id = Number(raw);
@@ -26,7 +28,9 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
   if (!id) return NextResponse.json({ error: "Invalid id" }, { status: 400 });
   if (!(await getPartnerCampaign(id))) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
-  const body = await request.json().catch(() => ({}));
+  const parsed = await readBoundedJson<unknown>(request, PARTNER_CAMPAIGN_BODY_MAX_BYTES);
+  if (!parsed.ok) return requestBodyErrorResponse(parsed.reason);
+  const body = parsed.value;
   const validated = validatePartnerCampaignInput(body);
   if (!validated.ok) return NextResponse.json({ error: validated.error }, { status: 400 });
   if (!(await getPartner(validated.value.partnerId))) {

@@ -4,9 +4,11 @@ import { recordAdminAudit } from "@/lib/audit";
 import { sameOriginOr403 } from "@/lib/community";
 import { getPartnerInquiry, updatePartnerInquiryStatus } from "@/lib/partners";
 import { PARTNER_INQUIRY_STATUSES, type PartnerInquiryStatus } from "@/lib/partner-validation";
+import { readBoundedJson, requestBodyErrorResponse } from "@/lib/request-body";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+const PARTNER_INQUIRY_STATUS_BODY_MAX_BYTES = 8 * 1024;
 
 function parseId(raw: string): number | null {
   const id = Number(raw);
@@ -26,7 +28,12 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
   if (!id) return NextResponse.json({ error: "Invalid id" }, { status: 400 });
   if (!(await getPartnerInquiry(id))) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
-  const body = (await request.json().catch(() => ({}))) as Record<string, unknown>;
+  const parsed = await readBoundedJson<Record<string, unknown>>(
+    request,
+    PARTNER_INQUIRY_STATUS_BODY_MAX_BYTES,
+  );
+  if (!parsed.ok) return requestBodyErrorResponse(parsed.reason);
+  const body = parsed.value;
   const status = typeof body.status === "string" ? body.status : "";
   if (!(PARTNER_INQUIRY_STATUSES as readonly string[]).includes(status)) {
     return NextResponse.json({ error: "Invalid status" }, { status: 400 });

@@ -28,8 +28,13 @@ export function dashboardPublicUrl() {
   ).replace(/\/$/, "");
 }
 
-export function internalSecret() {
-  return process.env.EWC_DASHBOARD_INTERNAL_SECRET || "";
+export type InternalCapability = "profile-sync" | "news-revalidate";
+
+export function internalCapabilitySecret(capability: InternalCapability) {
+  if (capability === "profile-sync") {
+    return process.env.EWC_DASHBOARD_INTERNAL_PROFILE_SYNC_SECRET || "";
+  }
+  return process.env.EWC_DASHBOARD_INTERNAL_NEWS_REVALIDATE_SECRET || "";
 }
 
 export function trustedOrigins() {

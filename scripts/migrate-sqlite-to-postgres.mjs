@@ -73,10 +73,14 @@ const appTables = [
   'user_match_reminders',
   'user_notification_prefs',
   'user_notifications',
+  'user_push_subscriptions',
+  'user_push_deliveries',
   'web_analytics_events',
   'web_product_events',
   'tournament_standings',
   'tournament_sync_health',
+  'tournament_data_health',
+  'tournament_operations',
 ];
 
 const authTables = ['user', 'session', 'account', 'verification'];

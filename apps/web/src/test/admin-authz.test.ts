@@ -625,6 +625,26 @@ describe("news/upload authorization", () => {
   });
 });
 
+describe("news editor request-body admission", () => {
+  test("rejects an oversized authenticated editor payload", async () => {
+    mockAccess.mockResolvedValue(superAdmin());
+    const request = new Request("http://localhost/api/admin/news", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Content-Length": String(513 * 1024),
+        Origin: "http://localhost",
+        Host: "localhost",
+      },
+      body: "{}",
+    });
+
+    const response = await newsPOST(request);
+
+    expect(response.status).toBe(413);
+  });
+});
+
 // ---------------------------------------------------------------------------
 // Suite 10: news author eligibility on write (031) — submitted authors must be
 // eligible for the target game; the stored name comes from the roster, not the

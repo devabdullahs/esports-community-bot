@@ -8,16 +8,20 @@ import {
   toMatchRow,
   getMatch,
   getActiveMatches,
-  markFinishedByExternalId,
   deleteResolvedLiveAliasMatches,
   deleteTournamentPlaceholderMatches,
   deleteTournamentDuplicateMatches,
   reconcileUntimedTournamentMatches,
 } from '../db/matches.js';
 import { getMatchDetailsFetchedAt, upsertMatchDetails } from '../db/matchDetails.js';
-import { getTournamentById } from '../db/tournaments.js';
+import {
+  getTournamentById,
+  isTournamentGenerationActive,
+  withActiveTournamentGeneration,
+} from '../db/tournaments.js';
 import { replaceTournamentStandings } from '../db/tournamentStandings.js';
 import { fetchTournamentSchedule } from './tournamentScheduleFetch.js';
+import { tournamentProviderAdmissionOptions } from '../services/tournamentProviderAdmission.js';
 
 // Targeted backoff polling: a match is polled (every livePollIntervalMs) only while it is
 // actually running, and polling stops the moment it finishes / leaves the ticker. Matches
@@ -40,7 +44,7 @@ const ARM_LOOKAHEAD_SECONDS = Math.max(
   Number(process.env.POLL_ARM_LOOKAHEAD_SECONDS || DEFAULT_ARM_LOOKAHEAD_SECONDS),
 );
 
-const watchers = new Map(); // external_id -> { armTimer?, pollTimer? }
+const watchers = new Map(); // external_id -> { tournamentId, generation, armTimer?, pollTimer? }
 const detailRefreshes = new Map(); // match.id -> { promise, finalRequested }
 const MATCH_DETAIL_GAMES = new Set(['valorant', 'dota2']);
 
@@ -63,10 +67,14 @@ export async function persistFetchedStandings(matches, tournamentId, { replace =
 // The refresh handler ignores the type; the notifier keys on 'started'/'finished'.
 // A row first seen already running still counts as started (mid-match discovery),
 // but a first-seen finished row does not (bulk schedule import, not an event).
-function transitionType(before, row) {
+export function transitionType(before, row) {
   if (row.status === 'running' && (!before || before.status !== 'running')) return 'started';
   if (before && before.status !== 'finished' && row.status === 'finished') return 'finished';
   return 'update';
+}
+
+export function shouldWatchMatch(match) {
+  return match?.status === 'scheduled' || match?.status === 'running';
 }
 
 export function isPlaceholderTeam(value) {
@@ -118,9 +126,16 @@ export function stopAll() {
   for (const id of [...watchers.keys()]) clearWatcher(id);
 }
 
+export function stopTournament(tournamentId) {
+  const target = Number(tournamentId);
+  for (const [externalId, watcher] of watchers) {
+    if (Number(watcher.tournamentId) === target) clearWatcher(externalId);
+  }
+}
+
 // Schedule polling for a match: immediately if it has started, else at its start time.
 export function armMatch(match, tournament, { initialPollDelayMs = 0 } = {}) {
-  if (match.status === 'finished') return false;
+  if (!shouldWatchMatch(match)) return false;
   if (watchers.has(match.external_id)) return false; // already armed or polling
   if (isNonPollableMatch(match)) return false;
   if (isPlaceholderTeam(match.team_a) || isPlaceholderTeam(match.team_b)) return false;
@@ -139,7 +154,10 @@ export function armMatch(match, tournament, { initialPollDelayMs = 0 } = {}) {
     logger.debug(`[poll] not arming ${match.external_id}; start is beyond Node's timer limit`);
     return false;
   }
-  const w = {};
+  const w = {
+    tournamentId: Number(match.tournament_id ?? tournament.id),
+    generation: Number(tournament.lifecycle_generation ?? 0),
+  };
   w.armTimer = setTimeout(() => startPolling(match, tournament), delaySec * 1000);
   watchers.set(match.external_id, w);
   logger.info(`[poll] armed ${match.external_id} — starts in ${Math.round(delaySec / 60)}m`);
@@ -147,7 +165,10 @@ export function armMatch(match, tournament, { initialPollDelayMs = 0 } = {}) {
 }
 
 function startPolling(match, tournament, { initialPollDelayMs = 0 } = {}) {
-  const w = watchers.get(match.external_id) || {};
+  const w = watchers.get(match.external_id) || {
+    tournamentId: Number(match.tournament_id ?? tournament.id),
+    generation: Number(tournament.lifecycle_generation ?? 0),
+  };
   if (w.pollTimer || w.firstPollTimer) return;
   logger.info(`[poll] start ${match.external_id} (${match.team_a} vs ${match.team_b})`);
   const tick = () =>
@@ -182,7 +203,7 @@ function fetchedMoreThanSecondsAgo(fetchedAt, seconds) {
   return !Number.isFinite(timestamp) || Date.now() - timestamp > seconds * 1000;
 }
 
-async function refreshMatchDetails(match, tournament, { force = false } = {}) {
+async function refreshMatchDetails(match, tournament, generation, { force = false } = {}) {
   if (
     !config.liquipedia.matchDetailsEnabled ||
     match.source !== 'liquipedia' ||
@@ -200,15 +221,23 @@ async function refreshMatchDetails(match, tournament, { force = false } = {}) {
     maxAgeMs: force ? 0 : 300_000,
   });
   if (!payload) return;
-  await upsertMatchDetails({
-    matchId: match.id,
-    sourcePage: match.external_id,
-    game: tournament.game,
-    payload,
-  });
+  const persisted = await withActiveTournamentGeneration(match.tournament_id, generation, (tx) =>
+    upsertMatchDetails(
+      {
+        matchId: match.id,
+        sourcePage: match.external_id,
+        game: tournament.game,
+        payload,
+      },
+      { client: tx },
+    ),
+  );
+  if (!persisted.applied) {
+    logger.debug(`[poll] discarded stale match details for ${match.external_id}`);
+  }
 }
 
-function queueMatchDetailsRefresh(match, tournament) {
+function queueMatchDetailsRefresh(match, tournament, generation) {
   const current = detailRefreshes.get(match.id);
   if (current) {
     if (match.status === 'finished') current.finalRequested = true;
@@ -216,44 +245,95 @@ function queueMatchDetailsRefresh(match, tournament) {
   }
   const state = { finalRequested: false };
   const force = match.status === 'finished';
-  const promise = refreshMatchDetails(match, tournament, { force })
+  const promise = refreshMatchDetails(match, tournament, generation, { force })
     .catch((error) => logger.warn(`[poll] match details ${match.external_id}: ${error.message}`))
     .finally(() => {
       detailRefreshes.delete(match.id);
-      if (state.finalRequested) queueMatchDetailsRefresh({ ...match, status: 'finished' }, tournament);
+      if (state.finalRequested) {
+        queueMatchDetailsRefresh({ ...match, status: 'finished' }, tournament, generation);
+      }
     });
   state.promise = promise;
   detailRefreshes.set(match.id, state);
 }
 
+async function persistPollSnapshot(match, generation, all) {
+  return withActiveTournamentGeneration(match.tournament_id, generation, async (tx) => {
+    const changes = [];
+    const standings = all?.standings;
+    if (standings && (standings.sections?.length || standings.hadRows)) {
+      await replaceTournamentStandings(match.tournament_id, standings.sections || [], { client: tx });
+    }
+    for (const fresh of all) {
+      const before = await tx.get(
+        'SELECT * FROM matches WHERE source = $1 AND external_id = $2',
+        [fresh.source, fresh.externalId],
+      );
+      const row = await upsertMatch(toMatchRow(fresh, match.tournament_id), { client: tx });
+      changes.push({ before, row, fresh });
+    }
+    return changes;
+  });
+}
+
 async function pollOnce(match, tournament) {
+  const watcher = watchers.get(match.external_id);
+  const generation = Number(watcher?.generation ?? tournament.lifecycle_generation ?? 0);
+  if (!(await isTournamentGenerationActive(match.tournament_id, generation))) {
+    clearWatcher(match.external_id);
+    return;
+  }
   const service = services[match.source];
   if (!service?.fetchSchedule) {
     clearWatcher(match.external_id);
     return;
   }
 
-  const fetched = await fetchTournamentSchedule(service, tournament);
+  const fetched = await fetchTournamentSchedule(
+    service,
+    tournament,
+    tournamentProviderAdmissionOptions(match.tournament_id, generation),
+  );
+  if (!(await isTournamentGenerationActive(match.tournament_id, generation))) {
+    clearWatcher(match.external_id);
+    return;
+  }
   const all = await reconcileUntimedTournamentMatches(match.tournament_id, fetched);
   const currentIds = all.map((m) => m.externalId);
-  await persistFetchedStandings(all, match.tournament_id);
+  const snapshot = await persistPollSnapshot(match, generation, all);
+  if (!snapshot.applied) {
+    clearWatcher(match.external_id);
+    return;
+  }
 
   // Refresh EVERY match in this tournament so live scores, final results, winners, and any
   // later corrections all propagate — not just the one match this watcher is tied to.
   let polled = null;
-  for (const fresh of all) {
-    const before = await getMatch(fresh.source, fresh.externalId);
-    const row = await upsertMatch(toMatchRow(fresh, match.tournament_id));
+  for (const { before, row, fresh } of snapshot.value) {
     const changed =
       !before ||
       before.score_a !== row.score_a ||
       before.score_b !== row.score_b ||
       before.status !== row.status ||
+      before.winner_side !== row.winner_side ||
+      before.result_reason !== row.result_reason ||
       before.logo_a !== row.logo_a ||
       before.logo_b !== row.logo_b;
-    if (changed) onUpdate(transitionType(before, row), row);
-    if (!watchers.has(row.external_id) && row.status !== 'finished') armMatch(row, tournament);
+    if (changed && (await isTournamentGenerationActive(match.tournament_id, generation))) {
+      onUpdate(transitionType(before, row), row);
+    }
+    if (
+      !watchers.has(row.external_id) &&
+      shouldWatchMatch(row) &&
+      (await isTournamentGenerationActive(match.tournament_id, generation))
+    ) {
+      armMatch(row, { ...tournament, lifecycle_generation: generation });
+    }
     if (fresh.externalId === match.external_id) polled = row;
+  }
+  if (!(await isTournamentGenerationActive(match.tournament_id, generation))) {
+    clearWatcher(match.external_id);
+    return;
   }
   const deleted = await deleteTournamentPlaceholderMatches(match.tournament_id, currentIds);
   if (deleted) logger.info(`[poll] removed ${deleted} stale placeholder match(es) for tournament ${match.tournament_id}`);
@@ -275,14 +355,33 @@ async function pollOnce(match, tournament) {
       return null;
     });
     if (fresh) {
-      const before = await getMatch(fresh.source, fresh.externalId);
-      const row = await upsertMatch(toMatchRow(fresh, match.tournament_id));
+      const persisted = await withActiveTournamentGeneration(
+        match.tournament_id,
+        generation,
+        async (tx) => {
+          const before = await tx.get(
+            'SELECT * FROM matches WHERE source = $1 AND external_id = $2',
+            [fresh.source, fresh.externalId],
+          );
+          const row = await upsertMatch(toMatchRow(fresh, match.tournament_id), { client: tx });
+          return { before, row };
+        },
+      );
+      if (!persisted.applied) {
+        clearWatcher(match.external_id);
+        return;
+      }
+      const { before, row } = persisted.value;
       const changed =
         !before ||
         before.score_a !== row.score_a ||
         before.score_b !== row.score_b ||
-        before.status !== row.status;
-      if (changed) onUpdate(transitionType(before, row), row);
+        before.status !== row.status ||
+        before.winner_side !== row.winner_side ||
+        before.result_reason !== row.result_reason;
+      if (changed && (await isTournamentGenerationActive(match.tournament_id, generation))) {
+        onUpdate(transitionType(before, row), row);
+      }
       polled = row;
     }
   }
@@ -290,23 +389,53 @@ async function pollOnce(match, tournament) {
   if (polled) {
     // Detail work is detached from the score poll. Its fetcher still uses the
     // shared Liquipedia queue, but a slow or failed detail page never blocks scores.
-    queueMatchDetailsRefresh(polled, tournament);
+    queueMatchDetailsRefresh(polled, tournament, generation);
     // Stop watching only on a genuine finish (the bracket marks a winner) — never on a mere
     // disappearance from the page, which previously caused false/early "finished" results.
-    if (polled.status === 'finished') {
+    if (!shouldWatchMatch(polled)) {
       clearWatcher(match.external_id);
-      logger.info(`[poll] stop ${match.external_id} (finished ${polled.score_a}-${polled.score_b})`);
+      const detail =
+        polled.status === 'finished'
+          ? ` ${polled.score_a ?? '?'}-${polled.score_b ?? '?'}`
+          : '';
+      logger.info(`[poll] stop ${match.external_id} (${polled.status}${detail})`);
     }
   } else if (shouldRetireAbsentMatch(match, tournament)) {
     // Safety net: gone from the page and long overdue. Mark it finished (no score) so it
     // leaves the live match-card board instead of staying stuck 'running' forever, then
     // refresh so the card is dropped and the upcoming-matches card takes its place.
-    await markFinishedByExternalId(match.source, match.external_id);
+    const retired = await withActiveTournamentGeneration(
+      match.tournament_id,
+      generation,
+      (tx) =>
+        tx.run(
+          `UPDATE matches
+              SET status = 'finished',
+                  winner_side = CASE
+                    WHEN score_a IS NOT NULL AND score_b IS NOT NULL AND score_a > score_b THEN 'team1'
+                    WHEN score_a IS NOT NULL AND score_b IS NOT NULL AND score_b > score_a THEN 'team2'
+                    ELSE winner_side
+                  END,
+                  result_reason = CASE
+                    WHEN score_a IS NOT NULL AND score_b IS NOT NULL AND score_a <> score_b THEN 'normal'
+                    ELSE result_reason
+                  END,
+                  updated_at = $1
+            WHERE source = $2 AND external_id = $3 AND status NOT IN ('finished','cancelled')`,
+          [new Date().toISOString().slice(0, 19).replace('T', ' '), match.source, match.external_id],
+        ),
+    );
+    if (!retired.applied) {
+      clearWatcher(match.external_id);
+      return;
+    }
     clearWatcher(match.external_id);
     // Deliberately 'update', not 'finished': this is a synthetic timeout-finish with
     // no real result. Emitting 'finished' would DM followers a scoreless "result" AND
     // burn the dedupe key so the genuine result could never notify.
-    onUpdate('update', { ...match, status: 'finished' });
+    if (await isTournamentGenerationActive(match.tournament_id, generation)) {
+      onUpdate('update', { ...match, status: 'finished' });
+    }
     logger.info(`[poll] stop ${match.external_id} (gone, max runtime — marked finished)`);
   }
 }

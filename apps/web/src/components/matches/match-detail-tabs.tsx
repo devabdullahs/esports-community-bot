@@ -1,6 +1,12 @@
 "use client";
 
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion";
 import { DotaPlayerTable, ValorantPlayerTable } from "@/components/matches/player-table";
 import type { DotaDetails, DotaTeamStats, MatchDetailsViewModel, ValorantDetails } from "@/lib/match-details";
 import { copy, type Locale } from "@/lib/i18n";
@@ -23,6 +29,12 @@ type MatchDetailsCopy = {
   matchDetailsShowLess: string;
   matchDetailsDuration: string;
   matchDetailsGame: (number: number) => string;
+  matchDetailsSections: string;
+  matchDetailsMap: (number: number) => string;
+  matchDetailsGold: string;
+  matchDetailsTowers: string;
+  matchDetailsBarracks: string;
+  matchDetailsRoshans: string;
 };
 
 function score(value: number | null) {
@@ -143,33 +155,48 @@ function DotaOverview({ details, teamA, teamB, text }: { details: DotaDetails; t
   );
 }
 
-function DotaTeamStats({ stats }: { stats: DotaTeamStats }) {
+function DotaTeamStats({ stats, text }: { stats: DotaTeamStats; text: MatchDetailsCopy }) {
   const kda = [stats.kills, stats.deaths, stats.assists].every((value) => value != null)
     ? `${stats.kills}/${stats.deaths}/${stats.assists}`
     : "-";
   return (
     <dl className="grid grid-cols-2 gap-x-3 gap-y-1 text-sm" dir="ltr">
       <dt className="text-muted-foreground">KDA</dt><dd className="text-end tabular-nums">{kda}</dd>
-      <dt className="text-muted-foreground">Gold</dt><dd className="text-end tabular-nums">{stats.gold ?? "-"}</dd>
-      <dt className="text-muted-foreground">Towers</dt><dd className="text-end tabular-nums">{stats.towers ?? "-"}</dd>
-      <dt className="text-muted-foreground">Barracks</dt><dd className="text-end tabular-nums">{stats.barracks ?? "-"}</dd>
-      <dt className="text-muted-foreground">Roshans</dt><dd className="text-end tabular-nums">{stats.roshans ?? "-"}</dd>
+      <dt className="text-muted-foreground">{text.matchDetailsGold}</dt><dd className="text-end tabular-nums">{stats.gold ?? "-"}</dd>
+      <dt className="text-muted-foreground">{text.matchDetailsTowers}</dt><dd className="text-end tabular-nums">{stats.towers ?? "-"}</dd>
+      <dt className="text-muted-foreground">{text.matchDetailsBarracks}</dt><dd className="text-end tabular-nums">{stats.barracks ?? "-"}</dd>
+      <dt className="text-muted-foreground">{text.matchDetailsRoshans}</dt><dd className="text-end tabular-nums">{stats.roshans ?? "-"}</dd>
     </dl>
   );
 }
 
-function ValorantMaps({ details, teamA, teamB, locale }: { details: ValorantDetails; teamA: string; teamB: string; locale: Locale }) {
+function ValorantMaps({
+  details,
+  teamA,
+  teamB,
+  locale,
+  text,
+}: {
+  details: ValorantDetails;
+  teamA: string;
+  teamB: string;
+  locale: Locale;
+  text: MatchDetailsCopy;
+}) {
   return (
-    <div className="flex flex-col gap-3">
+    <Accordion
+      defaultValue={details.maps.length ? ["map-0"] : []}
+      className="overflow-hidden rounded-xl border"
+    >
       {details.maps.map((map, index) => (
-        <details key={`${map.name}-${index}`} className="rounded-xl border p-4" open={index === 0}>
-          <summary className="cursor-pointer list-none font-semibold">
-            <div className="flex items-center justify-between gap-3" dir="ltr">
-              <span>{map.name ?? `Map ${index + 1}`}</span>
+        <AccordionItem key={`${map.name}-${index}`} value={`map-${index}`}>
+          <AccordionTrigger className="px-4 hover:no-underline">
+            <div className="flex min-w-0 flex-1 items-center justify-between gap-3 pe-2" dir="ltr">
+              <span className="truncate">{map.name ?? text.matchDetailsMap(index + 1)}</span>
               <span className="tabular-nums text-muted-foreground">{map.duration ?? "-"}</span>
             </div>
-          </summary>
-          <div className="mt-4 flex flex-col gap-5">
+          </AccordionTrigger>
+          <AccordionContent className="flex flex-col gap-5 px-4 pb-4">
             <ScoreStrip teamA={teamA} teamB={teamB} scoreA={map.scoreA} scoreB={map.scoreB} winner={map.winner} />
             {(["a", "b"] as const).map((team) => (
               <section key={team} className="flex flex-col gap-2">
@@ -177,27 +204,30 @@ function ValorantMaps({ details, teamA, teamB, locale }: { details: ValorantDeta
                 <ValorantPlayerTable players={map.players[team]} locale={locale} />
               </section>
             ))}
-          </div>
-        </details>
+          </AccordionContent>
+        </AccordionItem>
       ))}
-    </div>
+    </Accordion>
   );
 }
 
-function DotaGames({ details, teamA, teamB, locale, text }: { details: DotaDetails; teamA: string; teamB: string; locale: Locale; text: MatchDetailsCopy }) {
+export function DotaGames({ details, teamA, teamB, locale, text }: { details: DotaDetails; teamA: string; teamB: string; locale: Locale; text: MatchDetailsCopy }) {
   return (
-    <div className="flex flex-col gap-3">
+    <Accordion
+      defaultValue={details.games.length ? ["game-0"] : []}
+      className="overflow-hidden rounded-xl border"
+    >
       {details.games.map((game, index) => (
-        <details key={game.number ?? index} className="rounded-xl border p-4" open={index === 0}>
-          <summary className="cursor-pointer list-none font-semibold">
-            <div className="flex items-center justify-between gap-3">
+        <AccordionItem key={game.number ?? index} value={`game-${index}`}>
+          <AccordionTrigger className="px-4 hover:no-underline">
+            <div className="flex min-w-0 flex-1 items-center justify-between gap-3 pe-2">
               <span>{text.matchDetailsGame(game.number ?? index + 1)}</span>
               <span className="tabular-nums text-muted-foreground" dir="ltr">
                 {text.matchDetailsDuration}: {game.duration ?? "-"}
               </span>
             </div>
-          </summary>
-          <div className="mt-4 flex flex-col gap-5">
+          </AccordionTrigger>
+          <AccordionContent className="flex flex-col gap-5 px-4 pb-4">
             <ScoreStrip
               teamA={teamA}
               teamB={teamB}
@@ -211,7 +241,7 @@ function DotaGames({ details, teamA, teamB, locale, text }: { details: DotaDetai
                 {(["a", "b"] as const).map((team) => (
                   <div key={team} className="flex flex-col gap-2 rounded-lg bg-muted/50 p-3">
                     <span className="font-medium" dir="ltr">{team === "a" ? teamA : teamB} · {game.sides[team] ?? "-"}</span>
-                    <DotaTeamStats stats={game.teamStats[team]} />
+                    <DotaTeamStats stats={game.teamStats[team]} text={text} />
                   </div>
                 ))}
               </div>
@@ -222,10 +252,10 @@ function DotaGames({ details, teamA, teamB, locale, text }: { details: DotaDetai
                 <DotaPlayerTable players={game.players[team]} locale={locale} />
               </section>
             ))}
-          </div>
-        </details>
+          </AccordionContent>
+        </AccordionItem>
       ))}
-    </div>
+    </Accordion>
   );
 }
 
@@ -244,7 +274,7 @@ export function MatchDetailTabs({
   const text = copy[locale].tournaments;
   return (
     <Tabs defaultValue="overview" className="gap-5">
-      <TabsList variant="line" aria-label="Match details sections">
+      <TabsList variant="line" aria-label={text.matchDetailsSections}>
         <TabsTrigger value="overview">{text.matchDetailsOverview}</TabsTrigger>
         <TabsTrigger value="detail">{isValorant ? text.matchDetailsMaps : text.matchDetailsGames}</TabsTrigger>
       </TabsList>
@@ -257,7 +287,7 @@ export function MatchDetailTabs({
       </TabsContent>
       <TabsContent value="detail">
         {isValorant ? (
-          <ValorantMaps details={details} teamA={teamA} teamB={teamB} locale={locale} />
+          <ValorantMaps details={details} teamA={teamA} teamB={teamB} locale={locale} text={text} />
         ) : (
           <DotaGames details={details} teamA={teamA} teamB={teamB} locale={locale} text={text} />
         )}

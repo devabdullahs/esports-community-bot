@@ -8,14 +8,23 @@
 // decodes + parses the bounded buffer. Content-Length is used purely as an
 // early-rejection optimization — it is never the enforcement point.
 
-export type BoundedJsonResult =
-  | { ok: true; value: unknown }
-  | { ok: false; reason: "too_large" | "invalid" };
+export type RequestBodyFailureReason = "too_large" | "invalid";
 
-export async function readBoundedJson(
+type BoundedResult<T> =
+  | { ok: true; value: T }
+  | { ok: false; reason: RequestBodyFailureReason };
+
+export type BoundedJsonResult<T = unknown> = BoundedResult<T>;
+export type BoundedFormDataResult = BoundedResult<FormData>;
+
+async function readBoundedBytes(
   request: Request,
   maxBytes: number,
-): Promise<BoundedJsonResult> {
+): Promise<BoundedResult<Uint8Array>> {
+  if (!Number.isSafeInteger(maxBytes) || maxBytes < 0) {
+    return { ok: false, reason: "invalid" };
+  }
+
   const declared = Number(request.headers.get("content-length"));
   if (Number.isFinite(declared) && declared > maxBytes) {
     return { ok: false, reason: "too_large" };
@@ -51,10 +60,50 @@ export async function readBoundedJson(
     buffer.set(chunk, offset);
     offset += chunk.byteLength;
   }
+  return { ok: true, value: buffer };
+}
+
+export async function readBoundedJson<T = unknown>(
+  request: Request,
+  maxBytes: number,
+): Promise<BoundedJsonResult<T>> {
+  const result = await readBoundedBytes(request, maxBytes);
+  if (!result.ok) return result;
+  try {
+    const text = new TextDecoder("utf-8", { fatal: false }).decode(result.value);
+    return { ok: true, value: JSON.parse(text) as T };
+  } catch {
+    return { ok: false, reason: "invalid" };
+  }
+}
+
+export function requestBodyErrorResponse(reason: RequestBodyFailureReason): Response {
+  const tooLarge = reason === "too_large";
+  return Response.json(
+    { error: tooLarge ? "Request body is too large." : "Invalid request body." },
+    { status: tooLarge ? 413 : 400 },
+  );
+}
+
+export async function readBoundedFormData(
+  request: Request,
+  maxBytes: number,
+): Promise<BoundedFormDataResult> {
+  const result = await readBoundedBytes(request, maxBytes);
+  if (!result.ok) return result;
+
+  const contentType = request.headers.get("content-type");
+  if (!contentType) return { ok: false, reason: "invalid" };
 
   try {
-    const text = new TextDecoder("utf-8", { fatal: false }).decode(buffer);
-    return { ok: true, value: JSON.parse(text) };
+    const body = new Uint8Array(result.value.byteLength);
+    body.set(result.value);
+    const bounded = new Request(request.url, {
+      method: "POST",
+      headers: { "Content-Type": contentType },
+      body: body.buffer,
+    });
+    return { ok: true, value: await bounded.formData() };
   } catch {
     return { ok: false, reason: "invalid" };
   }

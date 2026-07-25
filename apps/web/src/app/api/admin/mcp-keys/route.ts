@@ -8,9 +8,11 @@ import { MCP_NO_SCOPE_SENTINEL } from "@/lib/mcp-auth";
 import { ADMIN_SELECTABLE_MCP_TOOL_NAMES } from "@/lib/mcp-tool-manifest";
 import { createMcpKey, listMcpKeys, toMcpKeyDto, type McpKey } from "@/lib/mcp-keys";
 import { rateLimitOr429 } from "@/lib/rate-limit";
+import { readBoundedJson, requestBodyErrorResponse } from "@/lib/request-body";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+const MCP_KEY_BODY_MAX_BYTES = 64 * 1024;
 
 function sanitizeList(input: unknown, valid: readonly string[]) {
   if (!Array.isArray(input)) return [];
@@ -75,7 +77,9 @@ export async function POST(request: Request) {
   if (!access.session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   if (!access.allowed) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
-  const body = await request.json().catch(() => ({}));
+  const parsed = await readBoundedJson<Record<string, unknown>>(request, MCP_KEY_BODY_MAX_BYTES);
+  if (!parsed.ok) return requestBodyErrorResponse(parsed.reason);
+  const body = parsed.value;
   const ownerDiscordId = access.discordUserId;
   if (!ownerDiscordId) {
     return NextResponse.json({ error: "Signed-in admin is missing a Discord ID" }, { status: 400 });

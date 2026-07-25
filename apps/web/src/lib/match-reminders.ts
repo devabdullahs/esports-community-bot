@@ -8,7 +8,10 @@ import {
 } from "@bot/db/userMatchReminders.js";
 import { getViewerDiscordId } from "@/lib/follows";
 
-export type MatchReminderTarget = { id: number; status: "running" | "scheduled" | "finished" };
+export type MatchReminderTarget = {
+  id: number;
+  status: "running" | "scheduled" | "finished" | "postponed" | "cancelled";
+};
 export type MatchReminderRow = {
   discord_user_id: string;
   match_id: number;

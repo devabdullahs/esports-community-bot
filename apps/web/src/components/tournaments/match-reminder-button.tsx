@@ -31,12 +31,14 @@ export function MatchReminderButton({
   initialReminded,
   locale,
   callbackPath,
+  showLabel = false,
 }: {
   matchId: number;
   signedIn: boolean;
   initialReminded: boolean;
   locale: Locale;
   callbackPath: string;
+  showLabel?: boolean;
 }) {
   const text = copy[locale].tournaments;
   const [reminded, setReminded] = useState(initialReminded);
@@ -53,13 +55,14 @@ export function MatchReminderButton({
             <Button
               render={<Link href={`${localizedPath("/login", locale)}?${loginParams.toString()}`} />}
               nativeButton={false}
-              variant="ghost"
-              size="icon-sm"
+              variant={showLabel ? "outline" : "ghost"}
+              size={showLabel ? "sm" : "icon-sm"}
               aria-label={text.signInToSetReminder}
             />
           }
         >
           <BellIcon aria-hidden="true" />
+          {showLabel ? <span>{text.remindMe}</span> : null}
         </TooltipTrigger>
         <TooltipContent dir={locale === "ar" ? "rtl" : "ltr"}>{text.signInToSetReminder}</TooltipContent>
       </Tooltip>
@@ -93,8 +96,8 @@ export function MatchReminderButton({
           render={
             <Button
               type="button"
-              variant={reminded ? "default" : "ghost"}
-              size="icon-sm"
+              variant={reminded ? "default" : showLabel ? "outline" : "ghost"}
+              size={showLabel ? "sm" : "icon-sm"}
               disabled={busy}
               aria-label={label}
               aria-pressed={reminded}
@@ -104,6 +107,7 @@ export function MatchReminderButton({
           }
         >
           {busy ? <Loader2Icon className="animate-spin" aria-hidden="true" /> : reminded ? <BellRingIcon aria-hidden="true" /> : <BellIcon aria-hidden="true" />}
+          {showLabel ? <span>{label}</span> : null}
         </TooltipTrigger>
         <TooltipContent dir={locale === "ar" ? "rtl" : "ltr"}>{label}</TooltipContent>
       </Tooltip>

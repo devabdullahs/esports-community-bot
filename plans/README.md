@@ -93,7 +93,7 @@ or optimize for guild counts.
 | 068  | Keep MCP key verifier hashes server-private | P1 | S | - | DONE |
 | 069  | Derive MCP permissions, UI, tests, and docs from one tool manifest | P1 | M | 068 | DONE |
 | 070  | Apply canonical news validation to MCP-created drafts | P1 | S | - | DONE |
-| 071  | Make admin MCP news search honor locale and combined owner filters | P2 | M | - | TODO |
+| 071  | Make admin MCP news search honor locale and combined owner filters | P2 | M | - | DONE |
 | 072  | Make MCP writes atomic, audited, and idempotent | P1 | L | 070 | DONE |
 | 073  | Let admin MCP clients discover usable scopes and resource IDs | P2 | M | 069 | DONE |
 | 074  | Confirm client-side admin navigation when a news draft is dirty | P1 | M | - | DONE |
@@ -111,7 +111,7 @@ or optimize for guild counts.
 | 086  | Make prediction ranks tie-aware on every surface | P2 | M | - | DONE (this commit) |
 | 087  | Add explainable prediction score breakdowns | P2 | M | 082 | DONE (this commit) |
 | 088  | Add secure website prediction submission | P2 | L | 082, 083, 084 | DONE (this commit) |
-| 089  | Localize the complete Discord prediction experience | P2 | M | 084, 085, 087 | TODO — STOP: installed discord.js application-command locale enum lacks Arabic |
+| 089  | Localize the complete Discord prediction experience | P2 | M | 084, 085, 087 | STOPPED — Discord has no Arabic application-command locale |
 | 090  | Add a secure admin prediction operations center | P3 | L | 082, 084 | DONE (`69d9eb2`) |
 | 091  | Add opt-in public predictor identities | P3 | M | 086 | DONE (`97f91c7`) |
 | 092  | Add Liquipedia match details pages | P2 | L | - | DONE (PR #207) |
@@ -221,13 +221,13 @@ untouched.
 | 101  | Redesign the login page as a first-class public-site surface | P1 | M | - | DONE - merged in PR #254 (`b272848`); deployed successfully to CranL and production-smoked in EN/AR. |
 | 102  | Add a live match center | P1 | M-L | 094 recommended | DONE |
 | 103  | Add a personal match calendar with iCal export | P1 | M | 097 recommended | DONE |
-| 104  | Add opt-in web push notifications | P1 | L | 099 | TODO |
+| 104  | Add opt-in web push notifications | P1 | L | 099 | DONE |
 | 105  | Show community pick distribution after lock | P1 | M | - | DONE |
 | 106  | Add interactive playoff bracket views | P1 | L | 102 optional | DONE |
 | 107  | Add private prediction mini-leagues | P1 | L | - | DONE |
 | 108  | Add predictor achievements and streak badges | P2 | M | - | DONE |
 | 109  | Add match discussion threads | P2 | M-L | - | DONE |
-| 110  | Add PWA install support and an offline shell | P2 | M | 104 optional | TODO |
+| 110  | Add PWA install support and an offline shell | P2 | M | 104 optional | DONE |
 | 111  | Add team and player comparison pages | P2 | M-L | - | DONE |
 | 112  | Add Club Championship standings history charts | P2 | M | 080 | DONE |
 | 113  | Add downloadable web share cards | P2 | M | - | DONE |
@@ -243,7 +243,7 @@ untouched.
 | 123  | Add keyword auto-flagging and bulk moderation | P2 | M-L | - | DONE |
 | 124  | Add a cross-post composer for site, Discord, and social drafts | P2 | L | 120 recommended | DONE |
 | 125  | Exercise PostgreSQL behavior in CI | P1 | M | - | DONE |
-| 126  | Bound every web mutation request before parsing | P1 | L | - | TODO |
+| 126  | Bound every web mutation request before parsing | P1 | L | - | DONE |
 | 127  | Preserve CMS content when games or media channels are deleted | P1 | M | - | DONE |
 | 128  | Compute and reconcile official EWC boundaries in Riyadh | P1 | M | - | DONE |
 | 129  | Serialize prediction submissions with round transitions and scoring | P1 | M | 125 | DONE (branch `codex/129-prediction-round-locks`, SQLite/PostgreSQL lock-race coverage) |
@@ -254,6 +254,15 @@ untouched.
 | 134  | Make SQLite-to-PostgreSQL imports fail closed on skipped data | P1 | M | 125, 133 | DONE — exact mappings, empty-target preflight, conflict rollback, and pre-commit count/constraint/identity validation |
 | 135  | Route Liquipedia MediaWiki requests through one scheduler | P1 | M | - | DONE |
 | 136  | Serialize, persist, and paginate LPDB schedule requests | P1 | M | - | DONE |
+| 137  | Close the bot-to-web capability boundary | P1 | M | 126 | DONE |
+| 138  | Test path agreement and shield the application origin | P1 | M | 137 recommended | BLOCKED (local/CI corpus and tunnel-safe config complete; deployment owner must provide CranL ingress evidence or an explicitly authorized origin URL) |
+| 139  | Make API authorization coverage complete and object-aware | P1 | L | 137 | DONE |
+| 140  | Make tournament history complete and trustworthy | P1 | M | - | DONE |
+| 141  | Recompose tournaments as a competition board | P2 | L | 140 recommended | DONE |
+| 142  | Preserve the complete match lifecycle and outcome | P1 | L | 125 recommended | DONE - canonical states/outcomes, dual-schema parity, safe reconciliation, and unified public/notification behavior |
+| 143  | Make every match a first-class destination | P1 | M-L | 142 recommended; 141 optional | DONE |
+| 144  | Serialize and audit tournament lifecycle operations | P1 | L | 142; 125 recommended; coordinate 135/136 | DONE |
+| 145  | Build the tournament operations center | P1 | L | 126, 139, 144 | DONE |
 Status values: TODO | IN PROGRESS | DONE | BLOCKED (reason) | REJECTED (rationale) | SUPERSEDED.
 
 ## Deep reliability audit - first planning batch (2026-07-23 @ `0718e2d`)

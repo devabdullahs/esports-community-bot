@@ -11,10 +11,12 @@ import {
 } from "@/lib/admins";
 import { listGames } from "@/lib/games";
 import { listMediaChannels } from "@/lib/media";
+import { readBoundedJson, requestBodyErrorResponse } from "@/lib/request-body";
 import { isSnowflake } from "@/lib/validate";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+const ADMIN_SCOPE_BODY_MAX_BYTES = 64 * 1024;
 
 function sanitizeScopes(input: unknown, valid: string[]): string[] {
   if (!Array.isArray(input)) return [];
@@ -37,7 +39,9 @@ export async function POST(request: Request) {
   if (!access.session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   if (!isSuper(access)) return NextResponse.json({ error: "Super admin only" }, { status: 403 });
 
-  const body = await request.json().catch(() => ({}));
+  const parsed = await readBoundedJson<Record<string, unknown>>(request, ADMIN_SCOPE_BODY_MAX_BYTES);
+  if (!parsed.ok) return requestBodyErrorResponse(parsed.reason);
+  const body = parsed.value;
   const discordId = typeof body.discordId === "string" ? body.discordId.trim() : "";
   if (!isSnowflake(discordId)) {
     return NextResponse.json({ error: "Discord ID must be a 17-20 digit snowflake" }, { status: 400 });

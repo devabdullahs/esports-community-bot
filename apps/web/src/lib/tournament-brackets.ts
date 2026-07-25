@@ -1,4 +1,11 @@
-export type BracketMatchStatus = "running" | "scheduled" | "finished";
+import {
+  matchWinner,
+  type MatchStatus,
+  type ResultReason,
+  type WinnerSide,
+} from "@/lib/match-lifecycle";
+
+export type BracketMatchStatus = MatchStatus;
 export type BracketWinner = "a" | "b" | "draw" | null;
 
 export type BracketMatchInput = {
@@ -19,6 +26,8 @@ export type BracketMatchInput = {
   score_a: number | null;
   score_b: number | null;
   status: BracketMatchStatus;
+  winner_side?: WinnerSide;
+  result_reason?: ResultReason;
   scheduled_at: number | null;
   has_details?: boolean;
 };
@@ -168,10 +177,7 @@ function sourceRound(match: BracketMatchInput): string | null {
 }
 
 function resultWinner(match: BracketMatchInput): BracketWinner {
-  if (match.status !== "finished" || match.score_a == null || match.score_b == null) return null;
-  if (match.score_a > match.score_b) return "a";
-  if (match.score_b > match.score_a) return "b";
-  return "draw";
+  return matchWinner(match);
 }
 
 function publicBracketMatch(match: BracketMatchInput): BracketRound["matches"][number] {
@@ -188,6 +194,8 @@ function publicBracketMatch(match: BracketMatchInput): BracketRound["matches"][n
     score_a: match.score_a,
     score_b: match.score_b,
     status: match.status,
+    winner_side: match.winner_side ?? null,
+    result_reason: match.result_reason ?? "unknown",
     scheduled_at: match.scheduled_at,
     has_details: match.has_details,
     winner: resultWinner(match),

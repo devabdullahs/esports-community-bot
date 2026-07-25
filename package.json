@@ -23,11 +23,13 @@
     "web:e2e": "node scripts/run-web-e2e.mjs",
     "web:e2e:install": "npm --workspace @esports-community-bot/web exec -- playwright install --with-deps chromium",
     "web:smoke:local": "node scripts/run-web-e2e.mjs --smoke",
+    "security:boundary": "node scripts/security/probe-boundaries.mjs",
     "web:auth:migrate": "npm --workspace @esports-community-bot/web run auth:migrate",
     "seed:dev": "node scripts/seed-dev.mjs",
     "db:pg:schema": "node scripts/run-postgres-migrations.mjs",
     "db:pg:schema:generate": "node scripts/build-postgres-schema.mjs",
     "db:pg:schema:check": "node scripts/build-postgres-schema.mjs --check",
+    "db:reconcile-match-lifecycle": "node scripts/reconcile-match-lifecycle.mjs",
     "db:sqlite-to-pg:preflight": "node scripts/migrate-sqlite-to-postgres.mjs --preflight-target",
     "db:sqlite-to-pg": "node scripts/migrate-sqlite-to-postgres.mjs"
   },
@@ -47,6 +49,7 @@
     "node-cron": "^4.2.1",
     "pg": "^8.21.0",
     "qrcode": "^1.5.4",
+    "web-push": "^3.6.7",
     "zod": "^4.4.3"
   },
   "devDependencies": {

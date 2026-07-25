@@ -206,8 +206,9 @@ supports it.
 | `BETTER_AUTH_SECRET` | Better Auth signing/encryption secret |
 | `BETTER_AUTH_URL` | Public auth base URL |
 | `EWC_DASHBOARD_PUBLIC_URL` | Public dashboard URL |
-| `EWC_DASHBOARD_INTERNAL_URL` | Bot-to-web internal URL |
-| `EWC_DASHBOARD_INTERNAL_SECRET` | Shared secret for internal sync routes |
+| `EWC_DASHBOARD_INTERNAL_URL` | Bot-to-web loopback URL with an explicit port |
+| `EWC_DASHBOARD_INTERNAL_PROFILE_SYNC_SECRET` | 32+ byte secret for profile sync only |
+| `EWC_DASHBOARD_INTERNAL_NEWS_REVALIDATE_SECRET` | 32+ byte secret for news-cache revalidation only |
 | `EWC_DASHBOARD_SUPER_ADMIN_DISCORD_IDS` | Comma-separated Discord IDs with full dashboard access |
 | `LIQUIPEDIA_USER_AGENT` | Required descriptive User-Agent with contact info |
 | `LIQUIPEDIA_PARSE_MIN_GAP_MS` | Minimum gap between parse requests |

@@ -59,7 +59,10 @@ export async function TournamentsView({
         locale={locale}
         heading={heading}
         tournaments={directoryItems}
-        archiveHref={ewcOnly ? null : localizedPath("/tournaments/archive", locale)}
+        archiveHref={localizedPath(
+          ewcOnly ? "/tournaments/archive?ewc=1" : "/tournaments/archive",
+          locale,
+        )}
       />
 
       <LiquipediaAttribution locale={locale} />

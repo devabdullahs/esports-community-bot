@@ -18,6 +18,7 @@ import {
   PenLineIcon,
   RadioIcon,
   ShieldIcon,
+  TrophyIcon,
   Tv2Icon,
   UsersIcon,
   type LucideIcon,
@@ -64,6 +65,7 @@ const NAV_ICONS: Record<AdminNavIcon, LucideIcon> = {
   activity: ActivityIcon,
   image: ImageIcon,
   calendar: CalendarDaysIcon,
+  trophy: TrophyIcon,
 };
 
 export function AdminDashboardShell({

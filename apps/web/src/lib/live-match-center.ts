@@ -3,12 +3,12 @@ import "server-only";
 import { unstable_cache } from "next/cache";
 import {
   getTournamentMatchesCached,
-  matchHasDetails,
   listTournamentSummariesCached,
   type MatchStream,
   type TournamentMatches,
 } from "@/lib/tournaments";
 import type { MatchCoStream } from "@/lib/match-co-streams";
+import type { MatchStatus, ResultReason, WinnerSide } from "@/lib/match-lifecycle";
 
 export const LIVE_UPCOMING_LIMIT = 25;
 export const LIVE_RECENT_FINISHED_LIMIT = 5;
@@ -26,9 +26,11 @@ export type LiveMatchCenterItem = {
   logoB: string | null;
   scoreA: number | null;
   scoreB: number | null;
-  status: "running" | "scheduled" | "finished";
+  status: MatchStatus;
+  winnerSide: WinnerSide;
+  resultReason: ResultReason;
   scheduledAt: number | null;
-  detailsHref: string | null;
+  matchHref: string;
   stream: MatchStream | null;
   coStreams: MatchCoStream[];
 };
@@ -69,8 +71,10 @@ function toPublicMatch(
     scoreA: match.score_a,
     scoreB: match.score_b,
     status: match.status,
+    winnerSide: match.winner_side ?? null,
+    resultReason: match.result_reason ?? "unknown",
     scheduledAt: match.scheduled_at,
-    detailsHref: matchHasDetails(match.has_details) ? `/matches/${match.id}` : null,
+    matchHref: `/matches/${match.id}`,
     stream: match.stream ?? null,
     coStreams: (match.coStreams ?? []).map(({ platform, handle, label, url }) => ({
       platform,

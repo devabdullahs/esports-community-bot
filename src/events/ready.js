@@ -7,12 +7,14 @@ import { startClubChampionship } from '../jobs/clubChampionship.js';
 import { startCsRankings } from '../jobs/csRankings.js';
 import { startEwcPredictions } from '../jobs/ewcPredictions.js';
 import { startEwcPredictionOperations } from '../jobs/ewcPredictionOperations.js';
+import { startTournamentOperations } from '../jobs/tournamentOperations.js';
 import { startNewsAnnouncer } from '../jobs/newsAnnouncer.js';
 import { startMediaAnnouncer } from '../jobs/mediaAnnouncer.js';
 import { startStreamStatusJob } from '../jobs/streamStatus.js';
 import { startPandaScoreProfileCache } from '../jobs/pandascoreProfiles.js';
 import { startLogoWarmup } from '../jobs/logoWarmup.js';
 import { notifyMatchEvent, startNotifier } from '../jobs/notifier.js';
+import { startPushNotifier } from '../jobs/pushNotifier.js';
 import { startLiquipediaEnrichment } from '../jobs/liquipediaEnrichment.js';
 import { refreshLiveBattleRoyaleStandings, startStandingsSync } from '../jobs/standingsSync.js';
 import { primeEwcClubCache } from '../lib/ewcClubCache.js';
@@ -61,12 +63,14 @@ export async function execute(client) {
   startCsRankings(client); // Counter-Strike Valve rankings refresh loop
   startEwcPredictions(client); // EWC prediction snapshots/scoring automation
   startEwcPredictionOperations(client); // durable dashboard-requested prediction operations
+  startTournamentOperations(client); // durable tournament lifecycle/sync operations
   startNewsAnnouncer(client); // Auto-post published news to Discord (per-game / default channel)
   startMediaAnnouncer(client); // Auto-announce opted-in media channels to their Discord channel
   startStreamStatusJob(client); // Poll Twitch/Kick/YouTube live status + go-live announcements
   startPandaScoreProfileCache(); // Quiet-hours team/player profile cache.
   startLogoWarmup(); // Pre-download tracked-match crests so the web logo proxy can serve them.
   startNotifier(client); // Deliver follower notifications (site inbox rows -> Discord DMs).
+  startPushNotifier(); // Deliver opted-in browser notifications from the same durable inbox rows.
   startLiquipediaEnrichment(); // Quiet-hours team/player enrichment from Liquipedia.
   startStandingsSync(); // BR/TFT event standings tracking (no matches to poll).
   primeEwcClubCache(); // Warm autocomplete after user-facing Liquipedia boards get first queue slots.

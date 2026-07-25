@@ -1,7 +1,10 @@
 import { describe, expect, test } from "vitest";
 import {
   filterTournamentDirectory,
+  parseTournamentDirectoryFilters,
+  serializeTournamentDirectoryFilters,
   sourceLabel,
+  tournamentDirectoryFilterCounts,
   tournamentDirectoryStats,
   tournamentPrimaryStatus,
   type TournamentDirectoryItem,
@@ -172,5 +175,111 @@ describe("tournament directory model", () => {
     ]);
 
     expect(stats).toEqual({ tournaments: 3, games: 2, live: 1, upcoming: 1, results: 1 });
+  });
+
+  test("assigns mixed-history tournaments to one primary state", () => {
+    const mixed = tournament({
+      id: 7,
+      name: "Live finals",
+      matchCounts: { running: 1, scheduled: 2, finished: 14 },
+    });
+
+    expect(tournamentPrimaryStatus(mixed)).toBe("live");
+    expect(filterTournamentDirectory([mixed], { status: "live" })).toHaveLength(1);
+    expect(filterTournamentDirectory([mixed], { status: "upcoming" })).toHaveLength(0);
+    expect(filterTournamentDirectory([mixed], { status: "results" })).toHaveLength(0);
+  });
+
+  test("round-trips shareable filters and rejects invalid values", () => {
+    const filters = parseTournamentDirectoryFilters(
+      new URLSearchParams("q=world+cup&status=results&game=fighters&source=startgg&ewc=1"),
+      { games: ["fighters"], sources: ["startgg"] },
+    );
+
+    expect(filters).toEqual({
+      query: "world cup",
+      status: "results",
+      game: "fighters",
+      source: "startgg",
+      ewc: true,
+    });
+    expect(serializeTournamentDirectoryFilters(filters).toString()).toBe(
+      "q=world+cup&status=results&game=fighters&source=startgg&ewc=1",
+    );
+    expect(
+      parseTournamentDirectoryFilters(
+        new URLSearchParams("status=broken&game=private&source=unknown"),
+        { games: ["fighters"], sources: ["startgg"] },
+      ),
+    ).toEqual({
+      query: "",
+      status: "all",
+      game: "all",
+      source: "all",
+      ewc: false,
+    });
+  });
+
+  test("computes every option count in tournament units after other filters", () => {
+    const events = [
+      tournament({
+        id: 1,
+        name: "Live Liquipedia",
+        matchCounts: { running: 1, scheduled: 0, finished: 5 },
+      }),
+      tournament({
+        id: 2,
+        name: "Upcoming start.gg",
+        game: "fighters",
+        gameTitle: "Fighter Games",
+        source: "startgg",
+        sourceLabel: "start.gg",
+        matchCounts: { running: 0, scheduled: 2, finished: 1 },
+      }),
+      tournament({
+        id: 3,
+        name: "Finished Liquipedia",
+        game: "fighters",
+        gameTitle: "Fighter Games",
+        matchCounts: { running: 0, scheduled: 0, finished: 8 },
+      }),
+    ];
+
+    const counts = tournamentDirectoryFilterCounts(events, {
+      status: "results",
+      game: "fighters",
+      source: "all",
+    });
+    expect(counts.statuses).toEqual({ all: 2, live: 0, upcoming: 1, results: 1 });
+    expect(counts.games).toEqual([{ value: "fighters", count: 1 }]);
+    expect(counts.sources).toEqual([{ value: "liquipedia", count: 1 }]);
+    expect(counts.allGames).toBe(1);
+    expect(counts.allSources).toBe(1);
+  });
+
+  test("keeps EWC archive scope when clearing incidental filters", () => {
+    const scoped = tournament({
+      id: 1,
+      name: "EWC finals",
+      ewc: true,
+      matchCounts: { running: 0, scheduled: 0, finished: 4 },
+    });
+    const other = tournament({
+      id: 2,
+      name: "Regional finals",
+      matchCounts: { running: 0, scheduled: 0, finished: 4 },
+    });
+    const params = serializeTournamentDirectoryFilters({
+      query: "",
+      status: "all",
+      game: "all",
+      source: "all",
+      ewc: true,
+    });
+
+    expect(params.toString()).toBe("ewc=1");
+    expect(filterTournamentDirectory([scoped, other], { ewc: true }).map((item) => item.id)).toEqual([
+      1,
+    ]);
   });
 });

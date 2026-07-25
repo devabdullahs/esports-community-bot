@@ -253,11 +253,7 @@ export async function setCommentStatus(id, status, { deletedBy = null } = {}) {
   return getComment(id);
 }
 
-// A moderator decision changes visibility, records the per-comment audit row,
-// and resolves the comment's open reports in one transaction. Bulk moderation
-// calls this once per id, so each valid decision is atomic while stale ids can
-// be reported without rolling back the rest of a batch.
-export async function applyCommentModerationDecision({
+async function applyModerationDecisionInTransaction(tx, {
   id,
   status,
   action,
@@ -265,45 +261,137 @@ export async function applyCommentModerationDecision({
   moderatorName = null,
   reason = null,
 }) {
-  return transaction(async (tx) => {
-    const now = nowText();
-    const sets = ['status = $1', 'updated_at = $2', 'auto_approve_at = NULL'];
-    const params = [status, now];
-    if (status === 'deleted') {
-      params.push(now);
-      sets.push(`deleted_at = $${params.length}`);
-      params.push(moderatorDiscordId);
-      sets.push(`deleted_by = $${params.length}`);
-    } else {
-      sets.push('deleted_at = NULL', 'deleted_by = NULL');
-    }
-    params.push(id);
-    // Deleted comments may only be restored. `restore` also remains valid for
-    // held/hidden comments, matching the existing moderation workflow.
-    const statusPredicate = action === 'restore' ? '1 = 1' : "status <> 'deleted'";
-    const updated = await tx.get(
-      `UPDATE post_comments
-       SET ${sets.join(', ')}
-       WHERE id = $${params.length} AND ${statusPredicate}
-       RETURNING *`,
-      params,
-    );
-    if (!updated) return null;
+  const now = nowText();
+  const sets = ['status = $1', 'updated_at = $2', 'auto_approve_at = NULL'];
+  const params = [status, now];
+  if (status === 'deleted') {
+    params.push(now);
+    sets.push(`deleted_at = $${params.length}`);
+    params.push(moderatorDiscordId);
+    sets.push(`deleted_by = $${params.length}`);
+  } else {
+    sets.push('deleted_at = NULL', 'deleted_by = NULL');
+  }
+  params.push(id);
+  // Deleted comments may only be restored. `restore` also remains valid for
+  // held/hidden comments, matching the existing moderation workflow.
+  const statusPredicate = action === 'restore' ? '1 = 1' : "status <> 'deleted'";
+  const updated = await tx.get(
+    `UPDATE post_comments
+     SET ${sets.join(', ')}
+     WHERE id = $${params.length} AND ${statusPredicate}
+     RETURNING *`,
+    params,
+  );
+  if (!updated) return null;
 
-    await tx.run(
-      `INSERT INTO comment_moderation_actions
-         (comment_id, moderator_discord_id, moderator_name, action, reason, created_at)
-       VALUES ($1, $2, $3, $4, $5, $6)`,
-      [id, moderatorDiscordId, moderatorName, action, reason, now],
-    );
-    await tx.run(
-      `UPDATE comment_reports
-       SET status = $1
-       WHERE comment_id = $2 AND status = 'open'`,
-      [action === 'restore' ? 'dismissed' : 'resolved', id],
-    );
-    return hydrate(updated);
-  });
+  await tx.run(
+    `INSERT INTO comment_moderation_actions
+       (comment_id, moderator_discord_id, moderator_name, action, reason, created_at)
+     VALUES ($1, $2, $3, $4, $5, $6)`,
+    [id, moderatorDiscordId, moderatorName, action, reason, now],
+  );
+  await tx.run(
+    `UPDATE comment_reports
+     SET status = $1
+     WHERE comment_id = $2 AND status = 'open'`,
+    [action === 'restore' ? 'dismissed' : 'resolved', id],
+  );
+  return hydrate(updated);
+}
+
+// A moderator decision changes visibility, records the per-comment audit row,
+// and resolves the comment's open reports in one transaction.
+export async function applyCommentModerationDecision(input) {
+  return transaction((tx) => applyModerationDecisionInTransaction(tx, input));
+}
+
+class CommentModerationBatchConflict extends Error {
+  constructor(failed) {
+    super('Comment moderation batch validation failed.');
+    this.failed = failed;
+  }
+}
+
+/**
+ * Validate and apply a whole moderation batch as one transaction.
+ *
+ * Validation happens before the first mutation. Conditional UPDATE guards are
+ * retained so a concurrent delete/status change also rolls the entire batch
+ * back instead of leaving a partial result.
+ */
+export async function applyCommentModerationBatch({
+  ids,
+  status,
+  action,
+  moderatorDiscordId,
+  moderatorName = null,
+  reason = null,
+}) {
+  const normalizedIds = ids.map(Number);
+  const duplicateIds = normalizedIds.filter((id, index) => normalizedIds.indexOf(id) !== index);
+  const invalidIds = normalizedIds.filter((id) => !Number.isSafeInteger(id) || id <= 0);
+  if (
+    normalizedIds.length === 0
+    || invalidIds.length > 0
+    || duplicateIds.length > 0
+  ) {
+    const failed = [
+      ...new Set(invalidIds),
+    ].map((id) => ({ id, error: 'invalid-id' }));
+    for (const id of new Set(duplicateIds)) {
+      if (!failed.some((entry) => Object.is(entry.id, id))) {
+        failed.push({ id, error: 'duplicate-id' });
+      }
+    }
+    return {
+      ok: false,
+      failed,
+    };
+  }
+
+  try {
+    const comments = await transaction(async (tx) => {
+      const placeholders = normalizedIds.map((_, index) => `$${index + 1}`).join(', ');
+      const rows = await tx.all(
+        `SELECT * FROM post_comments WHERE id IN (${placeholders})`,
+        normalizedIds,
+      );
+      const byId = new Map(rows.map((row) => [Number(row.id), row]));
+      const failed = [];
+      for (const id of normalizedIds) {
+        const row = byId.get(id);
+        if (!row) failed.push({ id, error: 'not-found' });
+        else if (action !== 'restore' && row.status === 'deleted') {
+          failed.push({ id, error: 'invalid-status' });
+        }
+      }
+      if (failed.length > 0) throw new CommentModerationBatchConflict(failed);
+
+      const updated = [];
+      for (const id of normalizedIds) {
+        const comment = await applyModerationDecisionInTransaction(tx, {
+          id,
+          status,
+          action,
+          moderatorDiscordId,
+          moderatorName,
+          reason,
+        });
+        if (!comment) {
+          throw new CommentModerationBatchConflict([{ id, error: 'invalid-status' }]);
+        }
+        updated.push(comment);
+      }
+      return updated;
+    });
+    return { ok: true, comments };
+  } catch (error) {
+    if (error instanceof CommentModerationBatchConflict) {
+      return { ok: false, failed: error.failed };
+    }
+    throw error;
+  }
 }
 
 // Atomically hold a still-visible comment for review (report auto-hide). The

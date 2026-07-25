@@ -4,9 +4,11 @@ import { getAdminAccess, isSuper } from "@/lib/admin";
 import { recordAdminAudit } from "@/lib/audit";
 import { sameOriginOr403 } from "@/lib/community";
 import { reorderMediaChannels } from "@/lib/media";
+import { readBoundedJson, requestBodyErrorResponse } from "@/lib/request-body";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+const MEDIA_REORDER_BODY_MAX_BYTES = 64 * 1024;
 
 export async function POST(request: Request) {
   const origin = sameOriginOr403(request);
@@ -16,7 +18,9 @@ export async function POST(request: Request) {
   if (!access.session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   if (!isSuper(access)) return NextResponse.json({ error: "Super admin only" }, { status: 403 });
 
-  const body = await request.json().catch(() => ({}));
+  const parsed = await readBoundedJson<Record<string, unknown>>(request, MEDIA_REORDER_BODY_MAX_BYTES);
+  if (!parsed.ok) return requestBodyErrorResponse(parsed.reason);
+  const body = parsed.value;
   if (
     !Array.isArray(body.slugs) ||
     body.slugs.length === 0 ||

@@ -7,12 +7,14 @@ import {
   markAllRead,
   markRead,
 } from "@/lib/follows";
+import { readBoundedJson, requestBodyErrorResponse } from "@/lib/request-body";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 const DEFAULT_PAGE_SIZE = 20;
 const MAX_PAGE_SIZE = 100;
+const NOTIFICATION_UPDATE_BODY_MAX_BYTES = 8 * 1024;
 
 function parsePageInteger(value: string | null, fallback: number, { min, max }: { min: number; max?: number }) {
   if (value === null) return fallback;
@@ -49,7 +51,12 @@ export async function PATCH(request: Request) {
   const discordUserId = await getViewerDiscordId();
   if (!discordUserId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const body = await request.json().catch(() => ({}));
+  const parsed = await readBoundedJson<{ all?: unknown; id?: unknown }>(
+    request,
+    NOTIFICATION_UPDATE_BODY_MAX_BYTES,
+  );
+  if (!parsed.ok) return requestBodyErrorResponse(parsed.reason);
+  const body = parsed.value;
   if (body.all === true) {
     const marked = await markAllRead(discordUserId);
     return NextResponse.json({ marked });

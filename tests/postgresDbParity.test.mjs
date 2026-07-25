@@ -97,6 +97,8 @@ test('PostgreSQL DB parity', { skip: postgresEnabled ? false : 'run through npm 
   const games = await import('../src/db/ewcGames.js');
   const media = await import('../src/db/ewcMediaChannels.js');
   const news = await import('../src/db/ewcNewsPosts.js');
+  const matches = await import('../src/db/matches.js');
+  const tournaments = await import('../src/db/tournaments.js');
 
   t.after(async () => {
     await db.closeDbClient();
@@ -158,6 +160,72 @@ test('PostgreSQL DB parity', { skip: postgresEnabled ? false : 'run through npm 
         )
       ).count,
       2,
+    );
+  });
+
+  await t.test('canonical match lifecycle round-trips on PostgreSQL', async () => {
+    const tournament = await tournaments.addTournament({
+      source: 'liquipedia',
+      external_id: 'postgres-ci/match-lifecycle',
+      game: 'valorant',
+      name: 'PostgreSQL lifecycle fixture',
+      guild_id: 'postgres-ci-guild',
+    });
+
+    const postponed = await matches.upsertMatch({
+      tournament_id: tournament.id,
+      source: 'liquipedia',
+      external_id: 'postgres-ci/postponed',
+      team_a: 'Alpha',
+      team_b: 'Bravo',
+      status: 'postponed',
+      scheduled_at: 1_800_000_000,
+    });
+    assert.equal(postponed.status, 'postponed');
+    assert.equal(postponed.winner_side, null);
+    assert.equal(postponed.result_reason, 'postponed');
+
+    const cancelled = await matches.upsertMatch({
+      tournament_id: tournament.id,
+      source: 'liquipedia',
+      external_id: 'postgres-ci/cancelled',
+      team_a: 'Charlie',
+      team_b: 'Delta',
+      status: 'cancelled',
+      scheduled_at: 1_800_000_100,
+    });
+    assert.equal(cancelled.status, 'cancelled');
+    assert.equal(cancelled.winner_side, null);
+    assert.equal(cancelled.result_reason, 'cancelled');
+
+    const walkover = await matches.upsertMatch({
+      tournament_id: tournament.id,
+      source: 'liquipedia',
+      external_id: 'postgres-ci/walkover',
+      team_a: 'Echo',
+      team_b: 'Foxtrot',
+      score_a: null,
+      score_b: null,
+      status: 'finished',
+      winner_side: 'team2',
+      result_reason: 'walkover',
+      scheduled_at: 1_800_000_200,
+    });
+    assert.equal(walkover.status, 'finished');
+    assert.equal(walkover.score_a, null);
+    assert.equal(walkover.score_b, null);
+    assert.equal(walkover.winner_side, 'team2');
+    assert.equal(walkover.result_reason, 'walkover');
+
+    await assert.rejects(
+      db.run(
+        `UPDATE matches
+            SET winner_side = 'team1',
+                result_reason = 'normal'
+          WHERE id = $1`,
+        [cancelled.id],
+      ),
+      /matches_lifecycle_outcome_check/,
     );
   });
 

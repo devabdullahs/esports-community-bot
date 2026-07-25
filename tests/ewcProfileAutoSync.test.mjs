@@ -9,8 +9,9 @@ process.env.DB_PATH = join(dir, 'bot.sqlite');
 process.env.LOG_LEVEL = 'error';
 process.env.DISCORD_TOKEN = 'test-token';
 process.env.DISCORD_CLIENT_ID = 'test-client-id';
-process.env.EWC_DASHBOARD_INTERNAL_URL = 'http://dashboard.internal';
-process.env.EWC_DASHBOARD_INTERNAL_SECRET = 'test-internal-secret';
+process.env.EWC_DASHBOARD_INTERNAL_URL = 'http://127.0.0.1:39001';
+process.env.EWC_DASHBOARD_INTERNAL_PROFILE_SYNC_SECRET = 'profile-sync-test-secret-that-is-long-enough';
+process.env.EWC_DASHBOARD_INTERNAL_NEWS_REVALIDATE_SECRET = 'news-revalidate-test-secret-that-is-long-enough';
 
 const { closeDb } = await import('../src/db/index.js');
 const { upsertEwcProfileLink } = await import('../src/db/ewcProfileLinks.js');
@@ -63,7 +64,10 @@ test('refreshes linked role metadata on startup and the first pick of a new week
   assert.equal(requests.length, 2);
 
   const request = requests[1];
-  assert.equal(request.url, 'http://dashboard.internal/api/internal/ewc-profile/sync');
-  assert.equal(request.options.headers['x-ewc-internal-secret'], 'test-internal-secret');
+  assert.equal(request.url, 'http://127.0.0.1:39001/api/internal/ewc-profile/sync');
+  assert.equal(
+    request.options.headers['x-ewc-internal-secret'],
+    'profile-sync-test-secret-that-is-long-enough',
+  );
   assert.deepEqual(JSON.parse(request.options.body), { discordUserId, guildId, season });
 });

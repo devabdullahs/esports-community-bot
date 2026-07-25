@@ -15,6 +15,10 @@ db.exec(`
     ewc          INTEGER NOT NULL DEFAULT 0,
     active       INTEGER NOT NULL DEFAULT 1,
     archived_at  INTEGER,
+    lifecycle_generation INTEGER NOT NULL DEFAULT 0,
+    display_name_override TEXT,
+    game_override TEXT,
+    ewc_override INTEGER CHECK (ewc_override IN (0, 1)),
     created_at   TEXT    NOT NULL DEFAULT (datetime('now')),
     UNIQUE (source, external_id, guild_id)
   );
@@ -29,15 +33,24 @@ db.exec(`
     team_b         TEXT,
     logo_a         TEXT,
     logo_b         TEXT,
-    score_a        INTEGER DEFAULT 0,
-    score_b        INTEGER DEFAULT 0,
+    score_a        INTEGER,
+    score_b        INTEGER,
     status         TEXT    NOT NULL DEFAULT 'scheduled'
-                     CHECK (status IN ('scheduled','running','finished')),
+                     CHECK (status IN ('scheduled','running','finished','postponed','cancelled')),
+    winner_side    TEXT CHECK (winner_side IN ('team1','team2','draw')),
+    result_reason  TEXT NOT NULL DEFAULT 'unknown'
+                     CHECK (result_reason IN ('normal','walkover','forfeit','cancelled','postponed','unknown')),
     scheduled_at   INTEGER,            -- unix seconds; feeds Discord <t:...> timestamps
     stream_platform TEXT,              -- official per-match broadcast stream (Liquipedia)
     stream_url      TEXT,              -- Liquipedia Special:Stream link (resolves the real channel)
     last_polled_at TEXT,
     updated_at     TEXT    NOT NULL DEFAULT (datetime('now')),
+    CHECK (
+      (status IN ('scheduled','running') AND winner_side IS NULL AND result_reason = 'unknown')
+      OR (status = 'postponed' AND winner_side IS NULL AND result_reason = 'postponed')
+      OR (status = 'cancelled' AND winner_side IS NULL AND result_reason = 'cancelled')
+      OR (status = 'finished' AND result_reason IN ('normal','walkover','forfeit','unknown'))
+    ),
     UNIQUE (source, external_id)
   );
 
@@ -171,6 +184,107 @@ function ensureColumns(table, defs) {
   }
 }
 
+// SQLite cannot alter the matches status CHECK in place. Keep the persisted
+// identity stable while upgrading old installations so dependent details,
+// reminders, and vote nominations continue to point at the same match ids.
+function migrateMatchLifecycleSchema() {
+  const table = db
+    .prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'matches'")
+    .get();
+  const columns = new Set(db.prepare('PRAGMA table_info(matches)').all().map((column) => column.name));
+  if (
+    table?.sql &&
+    /postponed/i.test(table.sql) &&
+    /cancelled/i.test(table.sql) &&
+    columns.has('winner_side') &&
+    columns.has('result_reason')
+  ) {
+    return;
+  }
+
+  const winnerExpression = columns.has('winner_side')
+    ? `CASE
+         WHEN winner_side IN ('team1','team2','draw') THEN winner_side
+         WHEN status = 'finished' AND score_a IS NOT NULL AND score_b IS NOT NULL AND score_a > score_b THEN 'team1'
+         WHEN status = 'finished' AND score_a IS NOT NULL AND score_b IS NOT NULL AND score_b > score_a THEN 'team2'
+         ELSE NULL
+       END`
+    : `CASE
+         WHEN status = 'finished' AND score_a IS NOT NULL AND score_b IS NOT NULL AND score_a > score_b THEN 'team1'
+         WHEN status = 'finished' AND score_a IS NOT NULL AND score_b IS NOT NULL AND score_b > score_a THEN 'team2'
+         ELSE NULL
+       END`;
+  const reasonExpression = columns.has('result_reason')
+    ? `CASE
+         WHEN status = 'finished' AND result_reason IN ('normal','walkover','forfeit','unknown')
+           THEN result_reason
+         WHEN status = 'finished' AND score_a IS NOT NULL AND score_b IS NOT NULL AND score_a <> score_b
+           THEN 'normal'
+         ELSE 'unknown'
+       END`
+    : `CASE
+         WHEN status = 'finished' AND score_a IS NOT NULL AND score_b IS NOT NULL AND score_a <> score_b
+           THEN 'normal'
+         ELSE 'unknown'
+       END`;
+
+  db.pragma('foreign_keys = OFF');
+  try {
+    db.exec('BEGIN');
+    db.exec(`
+      CREATE TABLE matches_lifecycle (
+        id              INTEGER PRIMARY KEY AUTOINCREMENT,
+        tournament_id   INTEGER NOT NULL REFERENCES tournaments(id) ON DELETE CASCADE,
+        source          TEXT NOT NULL,
+        external_id     TEXT NOT NULL,
+        name            TEXT,
+        team_a          TEXT,
+        team_b          TEXT,
+        logo_a          TEXT,
+        logo_b          TEXT,
+        score_a         INTEGER,
+        score_b         INTEGER,
+        status          TEXT NOT NULL DEFAULT 'scheduled'
+                          CHECK (status IN ('scheduled','running','finished','postponed','cancelled')),
+        winner_side     TEXT CHECK (winner_side IN ('team1','team2','draw')),
+        result_reason   TEXT NOT NULL DEFAULT 'unknown'
+                          CHECK (result_reason IN ('normal','walkover','forfeit','cancelled','postponed','unknown')),
+        scheduled_at    INTEGER,
+        stream_platform TEXT,
+        stream_url      TEXT,
+        last_polled_at  TEXT,
+        updated_at      TEXT NOT NULL DEFAULT (datetime('now')),
+        CHECK (
+          (status IN ('scheduled','running') AND winner_side IS NULL AND result_reason = 'unknown')
+          OR (status = 'postponed' AND winner_side IS NULL AND result_reason = 'postponed')
+          OR (status = 'cancelled' AND winner_side IS NULL AND result_reason = 'cancelled')
+          OR (status = 'finished' AND result_reason IN ('normal','walkover','forfeit','unknown'))
+        ),
+        UNIQUE (source, external_id)
+      );
+      INSERT INTO matches_lifecycle
+        (id, tournament_id, source, external_id, name, team_a, team_b, logo_a, logo_b,
+         score_a, score_b, status, winner_side, result_reason, scheduled_at,
+         stream_platform, stream_url, last_polled_at, updated_at)
+      SELECT id, tournament_id, source, external_id, name, team_a, team_b, logo_a, logo_b,
+             score_a, score_b, status, ${winnerExpression}, ${reasonExpression}, scheduled_at,
+             stream_platform, stream_url, last_polled_at, updated_at
+        FROM matches;
+      DROP TABLE matches;
+      ALTER TABLE matches_lifecycle RENAME TO matches;
+      CREATE INDEX idx_matches_status ON matches(status);
+      CREATE INDEX idx_matches_tournament ON matches(tournament_id);
+    `);
+    db.exec('COMMIT');
+    logger.info('[db] expanded the canonical match lifecycle schema');
+  } catch (error) {
+    db.exec('ROLLBACK');
+    throw error;
+  } finally {
+    db.pragma('foreign_keys = ON');
+  }
+}
+
 // SQLite cannot alter a CHECK constraint in place. The temporary table is
 // copied before the old parent is dropped, so child foreign-key definitions
 // continue to refer to ewc_news_posts after the replacement is renamed.
@@ -267,6 +381,7 @@ ensureColumns('matches', [
   ['stream_platform', 'TEXT'],
   ['stream_url', 'TEXT'],
 ]);
+migrateMatchLifecycleSchema();
 
 ensureColumns('teams', [
   ['game', 'TEXT'],
@@ -314,6 +429,10 @@ ensureColumns('players', [
 ensureColumns('tournaments', [
   ['archived_at', 'INTEGER'],
   ['ewc', 'INTEGER NOT NULL DEFAULT 0'],
+  ['lifecycle_generation', 'INTEGER NOT NULL DEFAULT 0'],
+  ['display_name_override', 'TEXT'],
+  ['game_override', 'TEXT'],
+  ['ewc_override', 'INTEGER'],
 ]);
 
 // Durable schedule-sync outcomes. This stores only coarse operational categories
@@ -334,6 +453,60 @@ db.exec(`
     ON tournament_sync_health(source);
   CREATE INDEX IF NOT EXISTS idx_tournament_sync_health_last_success
     ON tournament_sync_health(last_success_at DESC);
+`);
+
+// Schedule and standings refresh independently. Keep the legacy schedule table
+// for backwards-compatible public projections while new operational surfaces
+// read this per-kind model.
+db.exec(`
+  CREATE TABLE IF NOT EXISTS tournament_data_health (
+    tournament_id          INTEGER NOT NULL REFERENCES tournaments(id) ON DELETE CASCADE,
+    data_kind              TEXT NOT NULL CHECK (data_kind IN ('schedule','standings')),
+    source                 TEXT NOT NULL CHECK (source IN ('liquipedia','startgg','pandascore')),
+    supported              INTEGER NOT NULL DEFAULT 1 CHECK (supported IN (0, 1)),
+    last_attempt_at        INTEGER,
+    last_success_at        INTEGER,
+    last_failure_at        INTEGER,
+    last_failure_category  TEXT CHECK (last_failure_category IN ('rate_limit','auth','timeout','network','parse','empty','stale_generation','unknown')),
+    consecutive_failures   INTEGER NOT NULL DEFAULT 0,
+    last_item_count        INTEGER,
+    updated_at             INTEGER NOT NULL,
+    PRIMARY KEY (tournament_id, data_kind)
+  );
+  CREATE INDEX IF NOT EXISTS idx_tournament_data_health_state
+    ON tournament_data_health(data_kind, last_success_at DESC);
+
+  CREATE TABLE IF NOT EXISTS tournament_operations (
+    id                   TEXT PRIMARY KEY,
+    guild_id             TEXT NOT NULL,
+    tournament_id        INTEGER REFERENCES tournaments(id) ON DELETE CASCADE,
+    operation            TEXT NOT NULL CHECK (operation IN (
+                           'validate_and_activate','sync_schedule','sync_standings',
+                           'archive','deactivate','reactivate'
+                         )),
+    source               TEXT CHECK (source IN ('liquipedia','startgg','pandascore')),
+    source_id            TEXT,
+    game                 TEXT,
+    status               TEXT NOT NULL DEFAULT 'queued'
+                           CHECK (status IN ('queued','running','succeeded','failed')),
+    idempotency_key      TEXT NOT NULL UNIQUE,
+    requested_actor_id   TEXT,
+    requested_actor_name TEXT,
+    requested_actor_type TEXT NOT NULL CHECK (requested_actor_type IN ('discord_admin','web_admin','system')),
+    requested_at         TEXT NOT NULL,
+    lease_token          TEXT,
+    lease_expires_at     INTEGER,
+    attempts             INTEGER NOT NULL DEFAULT 0 CHECK (attempts >= 0 AND attempts <= 20),
+    started_at           TEXT,
+    completed_at         TEXT,
+    result_code          TEXT,
+    failure_code         TEXT,
+    result_tournament_id INTEGER REFERENCES tournaments(id) ON DELETE SET NULL
+  );
+  CREATE INDEX IF NOT EXISTS idx_tournament_operations_claim
+    ON tournament_operations(status, lease_expires_at, requested_at);
+  CREATE INDEX IF NOT EXISTS idx_tournament_operations_target
+    ON tournament_operations(tournament_id, requested_at DESC);
 `);
 
 // Migration: pandascore_id used to be NOT NULL; Liquipedia-only entities (games
@@ -1266,6 +1439,36 @@ db.exec(`
   );
   CREATE INDEX IF NOT EXISTS idx_user_notifications_user ON user_notifications(discord_user_id, created_at DESC);
   CREATE INDEX IF NOT EXISTS idx_user_notifications_dm   ON user_notifications(dm_status);
+
+  CREATE TABLE IF NOT EXISTS user_push_subscriptions (
+    id              TEXT PRIMARY KEY,
+    discord_user_id TEXT NOT NULL,
+    endpoint        TEXT NOT NULL UNIQUE,
+    p256dh          TEXT NOT NULL,
+    auth            TEXT NOT NULL,
+    created_at      TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at      TEXT NOT NULL DEFAULT (datetime('now')),
+    last_failure_at TEXT,
+    failure_count   INTEGER NOT NULL DEFAULT 0,
+    revoked_at      TEXT
+  );
+  CREATE INDEX IF NOT EXISTS idx_user_push_subscriptions_user
+    ON user_push_subscriptions(discord_user_id, revoked_at);
+
+  CREATE TABLE IF NOT EXISTS user_push_deliveries (
+    notification_id INTEGER NOT NULL REFERENCES user_notifications(id) ON DELETE CASCADE,
+    subscription_id TEXT NOT NULL REFERENCES user_push_subscriptions(id) ON DELETE CASCADE,
+    status          TEXT NOT NULL DEFAULT 'pending'
+      CHECK (status IN ('pending','sent','skipped','failed')),
+    not_before      INTEGER NOT NULL DEFAULT 0,
+    attempts        INTEGER NOT NULL DEFAULT 0,
+    delivered_at   TEXT,
+    last_failure_at TEXT,
+    last_failure_code TEXT,
+    PRIMARY KEY (notification_id, subscription_id)
+  );
+  CREATE INDEX IF NOT EXISTS idx_user_push_deliveries_due
+    ON user_push_deliveries(status, not_before, notification_id);
 
   CREATE TABLE IF NOT EXISTS web_analytics_events (
     id               INTEGER PRIMARY KEY AUTOINCREMENT,

@@ -83,14 +83,27 @@ export function createLiquipediaClient({
   }
 
   // Fetch parsed HTML via MediaWiki with persistent pacing, cache, and backoff.
-  async function parsePage(game, page, { maxAgeMs = cacheTtlMs } = {}) {
+  async function parsePage(
+    game,
+    page,
+    {
+      maxAgeMs = cacheTtlMs,
+      beforeDispatch = null,
+      admissionKey = null,
+    } = {},
+  ) {
     loadSchedulerRateState();
     const parsedMaxAge = Number(maxAgeMs);
     const cacheMaxAgeMs = Number.isFinite(parsedMaxAge) ? Math.max(0, parsedMaxAge) : cacheTtlMs;
     const key = `${game}/${page}`;
+    const scopedInFlightKey = beforeDispatch
+      ? admissionKey
+        ? `${key}\u0000${String(admissionKey)}`
+        : null
+      : key;
     const hit = cache.get(key);
     if (hit && now() - hit.at < cacheMaxAgeMs) return hit.data;
-    if (inFlight.has(key)) return inFlight.get(key);
+    if (scopedInFlightKey && inFlight.has(scopedInFlightKey)) return inFlight.get(scopedInFlightKey);
 
     if (now() < schedulerRateState.blockedUntil) {
       if (hit) return hit.data;
@@ -101,15 +114,17 @@ export function createLiquipediaClient({
       const afterWait = cache.get(key);
       if (afterWait && now() - afterWait.at < cacheMaxAgeMs) return afterWait.data;
 
-      const { data } = await http.get(apiUrlForGame(game), {
-        params: { action: 'parse', page, prop: 'text|displaytitle', format: 'json', redirects: true },
-      });
+      const dispatch = () =>
+        http.get(apiUrlForGame(game), {
+          params: { action: 'parse', page, prop: 'text|displaytitle', format: 'json', redirects: true },
+        });
+      const { data } = await (beforeDispatch ? beforeDispatch(dispatch) : dispatch());
       if (data.error) throw new Error(`Liquipedia: ${data.error.info}`);
       cache.set(key, { at: now(), data });
       return data;
     });
 
-    inFlight.set(key, promise);
+    if (scopedInFlightKey) inFlight.set(scopedInFlightKey, promise);
     try {
       return await promise;
     } catch (err) {
@@ -117,7 +132,7 @@ export function createLiquipediaClient({
       if (hit) return hit.data; // prefer stale data over nothing
       throw err;
     } finally {
-      inFlight.delete(key);
+      if (scopedInFlightKey) inFlight.delete(scopedInFlightKey);
     }
   }
 

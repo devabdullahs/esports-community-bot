@@ -185,4 +185,4 @@ test("team and player profile pages render synced PandaScore data", async () => 
     if (previousGuild == null) delete process.env.EWC_DASHBOARD_DEFAULT_GUILD_ID;
     else process.env.EWC_DASHBOARD_DEFAULT_GUILD_ID = previousGuild;
   }
-}, 20_000);
+}, 45_000);

@@ -78,12 +78,14 @@ describe("match reminder API", () => {
     expect(upsertMatchReminder).not.toHaveBeenCalled();
   });
 
-  test("rejects missing and finished matches", async () => {
+  test("rejects missing and non-scheduled matches", async () => {
     vi.mocked(getMatchReminderTarget).mockResolvedValueOnce(null);
     expect((await POST(request("POST", { matchId: 44 }))).status).toBe(404);
 
-    vi.mocked(getMatchReminderTarget).mockResolvedValueOnce({ id: 44, status: "finished" });
-    expect((await POST(request("POST", { matchId: 44 }))).status).toBe(409);
+    for (const status of ["running", "postponed", "cancelled", "finished"] as const) {
+      vi.mocked(getMatchReminderTarget).mockResolvedValueOnce({ id: 44, status });
+      expect((await POST(request("POST", { matchId: 44 }))).status).toBe(409);
+    }
     expect(upsertMatchReminder).not.toHaveBeenCalled();
   });
 

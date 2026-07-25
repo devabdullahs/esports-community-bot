@@ -1176,3 +1176,132 @@ CREATE INDEX IF NOT EXISTS idx_tournament_sync_health_source
 CREATE INDEX IF NOT EXISTS idx_tournament_sync_health_last_success
   ON tournament_sync_health(last_success_at DESC);
 -- END MIGRATION 0001-baseline.sql
+
+-- BEGIN MIGRATION 0002-match-lifecycle.sql
+ALTER TABLE matches
+  DROP CONSTRAINT IF EXISTS matches_status_check;
+
+ALTER TABLE matches
+  ADD COLUMN IF NOT EXISTS winner_side TEXT,
+  ADD COLUMN IF NOT EXISTS result_reason TEXT NOT NULL DEFAULT 'unknown';
+
+ALTER TABLE matches
+  ALTER COLUMN score_a DROP DEFAULT,
+  ALTER COLUMN score_b DROP DEFAULT;
+
+UPDATE matches
+   SET winner_side = CASE
+         WHEN score_a IS NOT NULL AND score_b IS NOT NULL AND score_a > score_b THEN 'team1'
+         WHEN score_a IS NOT NULL AND score_b IS NOT NULL AND score_b > score_a THEN 'team2'
+         ELSE NULL
+       END,
+       result_reason = CASE
+         WHEN score_a IS NOT NULL AND score_b IS NOT NULL AND score_a <> score_b THEN 'normal'
+         ELSE 'unknown'
+       END
+ WHERE status = 'finished'
+   AND winner_side IS NULL;
+
+ALTER TABLE matches
+  ADD CONSTRAINT matches_status_check
+    CHECK (status IN ('scheduled','running','finished','postponed','cancelled')),
+  ADD CONSTRAINT matches_winner_side_check
+    CHECK (winner_side IS NULL OR winner_side IN ('team1','team2','draw')),
+  ADD CONSTRAINT matches_result_reason_check
+    CHECK (result_reason IN ('normal','walkover','forfeit','cancelled','postponed','unknown')),
+  ADD CONSTRAINT matches_lifecycle_outcome_check
+    CHECK (
+      (status IN ('scheduled','running') AND winner_side IS NULL AND result_reason = 'unknown')
+      OR (status = 'postponed' AND winner_side IS NULL AND result_reason = 'postponed')
+      OR (status = 'cancelled' AND winner_side IS NULL AND result_reason = 'cancelled')
+      OR (status = 'finished' AND result_reason IN ('normal','walkover','forfeit','unknown'))
+    );
+-- END MIGRATION 0002-match-lifecycle.sql
+
+-- BEGIN MIGRATION 0003-tournament-operations.sql
+ALTER TABLE tournaments ADD COLUMN IF NOT EXISTS lifecycle_generation BIGINT NOT NULL DEFAULT 0;
+ALTER TABLE tournaments ADD COLUMN IF NOT EXISTS display_name_override TEXT;
+ALTER TABLE tournaments ADD COLUMN IF NOT EXISTS game_override TEXT;
+ALTER TABLE tournaments ADD COLUMN IF NOT EXISTS ewc_override INTEGER CHECK (ewc_override IN (0, 1));
+
+CREATE TABLE IF NOT EXISTS tournament_data_health (
+  tournament_id          BIGINT NOT NULL REFERENCES tournaments(id) ON DELETE CASCADE,
+  data_kind              TEXT NOT NULL CHECK (data_kind IN ('schedule','standings')),
+  source                 TEXT NOT NULL CHECK (source IN ('liquipedia','startgg','pandascore')),
+  supported              INTEGER NOT NULL DEFAULT 1 CHECK (supported IN (0, 1)),
+  last_attempt_at        BIGINT,
+  last_success_at        BIGINT,
+  last_failure_at        BIGINT,
+  last_failure_category  TEXT CHECK (last_failure_category IN ('rate_limit','auth','timeout','network','parse','empty','stale_generation','unknown')),
+  consecutive_failures   INTEGER NOT NULL DEFAULT 0,
+  last_item_count        INTEGER,
+  updated_at             BIGINT NOT NULL,
+  PRIMARY KEY (tournament_id, data_kind)
+);
+CREATE INDEX IF NOT EXISTS idx_tournament_data_health_state
+  ON tournament_data_health(data_kind, last_success_at DESC);
+
+CREATE TABLE IF NOT EXISTS tournament_operations (
+  id                   TEXT PRIMARY KEY,
+  guild_id             TEXT NOT NULL,
+  tournament_id        BIGINT REFERENCES tournaments(id) ON DELETE CASCADE,
+  operation            TEXT NOT NULL CHECK (operation IN (
+                         'validate_and_activate','sync_schedule','sync_standings',
+                         'archive','deactivate','reactivate'
+                       )),
+  source               TEXT CHECK (source IN ('liquipedia','startgg','pandascore')),
+  source_id            TEXT,
+  game                 TEXT,
+  status               TEXT NOT NULL DEFAULT 'queued'
+                         CHECK (status IN ('queued','running','succeeded','failed')),
+  idempotency_key      TEXT NOT NULL UNIQUE,
+  requested_actor_id   TEXT,
+  requested_actor_name TEXT,
+  requested_actor_type TEXT NOT NULL CHECK (requested_actor_type IN ('discord_admin','web_admin','system')),
+  requested_at         TEXT NOT NULL,
+  lease_token          TEXT,
+  lease_expires_at     BIGINT,
+  attempts             INTEGER NOT NULL DEFAULT 0 CHECK (attempts >= 0 AND attempts <= 20),
+  started_at           TEXT,
+  completed_at         TEXT,
+  result_code          TEXT,
+  failure_code         TEXT,
+  result_tournament_id BIGINT REFERENCES tournaments(id) ON DELETE SET NULL
+);
+CREATE INDEX IF NOT EXISTS idx_tournament_operations_claim
+  ON tournament_operations(status, lease_expires_at, requested_at);
+CREATE INDEX IF NOT EXISTS idx_tournament_operations_target
+  ON tournament_operations(tournament_id, requested_at DESC);
+-- END MIGRATION 0003-tournament-operations.sql
+
+-- BEGIN MIGRATION 0004-web-push.sql
+CREATE TABLE IF NOT EXISTS user_push_subscriptions (
+  id              TEXT PRIMARY KEY,
+  discord_user_id TEXT NOT NULL,
+  endpoint        TEXT NOT NULL UNIQUE,
+  p256dh          TEXT NOT NULL,
+  auth            TEXT NOT NULL,
+  created_at      TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at      TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  last_failure_at TEXT,
+  failure_count   INTEGER NOT NULL DEFAULT 0,
+  revoked_at      TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_user_push_subscriptions_user
+  ON user_push_subscriptions(discord_user_id, revoked_at);
+
+CREATE TABLE IF NOT EXISTS user_push_deliveries (
+  notification_id BIGINT NOT NULL REFERENCES user_notifications(id) ON DELETE CASCADE,
+  subscription_id TEXT NOT NULL REFERENCES user_push_subscriptions(id) ON DELETE CASCADE,
+  status          TEXT NOT NULL DEFAULT 'pending'
+    CHECK (status IN ('pending','sent','skipped','failed')),
+  not_before      BIGINT NOT NULL DEFAULT 0,
+  attempts        INTEGER NOT NULL DEFAULT 0,
+  delivered_at   TEXT,
+  last_failure_at TEXT,
+  last_failure_code TEXT,
+  PRIMARY KEY (notification_id, subscription_id)
+);
+CREATE INDEX IF NOT EXISTS idx_user_push_deliveries_due
+  ON user_push_deliveries(status, not_before, notification_id);
+-- END MIGRATION 0004-web-push.sql

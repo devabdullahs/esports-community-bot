@@ -19,7 +19,8 @@ export type AdminNavIcon =
   | "clipboard"
   | "activity"
   | "image"
-  | "calendar";
+  | "calendar"
+  | "trophy";
 
 export type AdminNavItem = {
   href: string;
@@ -91,6 +92,11 @@ export function adminNavSections(
   if (isSuper) {
     systemItems.unshift(
       { href: "/admin/analytics", label: t.links.analyticsTitle, icon: "chart" },
+      {
+        href: "/admin/tournaments",
+        label: locale === "ar" ? "عمليات البطولات" : "Tournament operations",
+        icon: "trophy",
+      },
       { href: "/admin/predictions", label: locale === "ar" ? "عمليات التوقعات" : "Prediction operations", icon: "clipboard" },
       { href: "/admin/users", label: t.links.usersTitle, icon: "users" },
       { href: "/admin/partners", label: t.links.partnersTitle, icon: "handshake" },

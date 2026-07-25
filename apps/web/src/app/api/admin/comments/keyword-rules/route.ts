@@ -8,9 +8,11 @@ import { recordAdminAudit } from "@/lib/audit";
 import { validateCommentKeywordRule } from "@/lib/comment-validation";
 import { sameOriginOr403 } from "@/lib/community";
 import { rateLimitOr429 } from "@/lib/rate-limit";
+import { readBoundedJson, requestBodyErrorResponse } from "@/lib/request-body";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+const KEYWORD_RULE_BODY_MAX_BYTES = 8 * 1024;
 
 type KeywordRule = {
   id: number;
@@ -77,7 +79,9 @@ export async function POST(request: Request) {
   const limited = await rateLimitOr429({ key: `comment:keyword-rule:${guard.access.discordUserId}`, limit: 30, windowSec: 600 });
   if (limited) return limited;
 
-  const body = await request.json().catch(() => null);
+  const parsed = await readBoundedJson<unknown>(request, KEYWORD_RULE_BODY_MAX_BYTES);
+  if (!parsed.ok) return requestBodyErrorResponse(parsed.reason);
+  const body = parsed.value;
   const validated = validateCommentKeywordRule(body, { requirePhrase: true });
   if (!validated.ok || !validated.value.action) {
     return NextResponse.json({ error: validated.ok ? "Keyword action is required." : validated.error }, { status: 400 });

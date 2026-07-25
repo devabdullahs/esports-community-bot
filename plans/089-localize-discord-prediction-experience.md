@@ -1,5 +1,12 @@
 # Plan 089: Localize the complete Discord prediction experience
 
+> **State: STOPPED** - Discord's application-command locale enum does not
+> include Arabic, so the invoking interaction cannot select the required
+> Arabic command metadata or private UI locale. The installed `discord.js`
+> runtime was checked directly on 2026-07-25. Keep the existing bilingual
+> guide/share surfaces; resume this plan only if Discord adds an Arabic locale
+> or the product adopts an explicit per-user language preference.
+>
 > **Executor instructions**: Centralize copy instead of sprinkling locale
 > conditionals through the command. Do not translate canonical team, player,
 > game, or tournament names. Preserve custom IDs and state semantics.

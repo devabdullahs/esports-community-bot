@@ -61,8 +61,11 @@ export async function POST(request: Request) {
   }
   const match = await getMatchReminderTarget(matchId);
   if (!match) return NextResponse.json({ error: "Match not found." }, { status: 404, headers: privateHeaders });
-  if (match.status === "finished") {
-    return NextResponse.json({ error: "Finished matches cannot be reminded." }, { status: 409, headers: privateHeaders });
+  if (match.status !== "scheduled") {
+    return NextResponse.json(
+      { error: "Only scheduled matches can receive new reminders." },
+      { status: 409, headers: privateHeaders },
+    );
   }
 
   const reminder = await upsertMatchReminder({ discordUserId: admitted.member.discordUserId, matchId });

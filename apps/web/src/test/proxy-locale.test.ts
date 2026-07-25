@@ -10,6 +10,7 @@ function request(
     routeLocale?: "ar" | "en";
     accept?: string;
     method?: string;
+    navigation?: boolean;
     rsc?: boolean;
     prefetch?: boolean;
   } = {},
@@ -18,6 +19,10 @@ function request(
   if (options.cookie) headers.set("cookie", `ewc_locale=${options.cookie}`);
   if (options.routeLocale) headers.set(LOCALE_ROUTE_HEADER, options.routeLocale);
   if (options.accept) headers.set("accept", options.accept);
+  if (options.navigation) {
+    headers.set("sec-fetch-dest", "document");
+    headers.set("sec-fetch-mode", "navigate");
+  }
   if (options.rsc) headers.set("rsc", "1");
   if (options.prefetch) headers.set("next-router-prefetch", "1");
   return new NextRequest(`https://esportscommunity.net${pathname}`, {
@@ -32,7 +37,7 @@ function forwardedLocale(response: Response) {
 
 describe("path-authoritative locale proxy", () => {
   test("an unprefixed public path is English even with an old Arabic cookie", () => {
-    const response = proxy(request("/games", { cookie: "ar" }));
+    const response = proxy(request("/games", { cookie: "ar", navigation: true }));
 
     expect(response.headers.get("x-middleware-next")).toBe("1");
     expect(forwardedLocale(response)).toBe("en");
@@ -40,7 +45,7 @@ describe("path-authoritative locale proxy", () => {
   });
 
   test("Arabic private paths keep a visible /ar prefix", () => {
-    const response = proxy(request("/admin/mcp", { cookie: "ar" }));
+    const response = proxy(request("/admin/mcp", { cookie: "ar", navigation: true }));
 
     expect(response.status).toBe(307);
     expect(response.headers.get("location")).toBe(
@@ -50,7 +55,7 @@ describe("path-authoritative locale proxy", () => {
   });
 
   test("an Arabic-prefixed private path rewrites internally without dropping /ar", () => {
-    const response = proxy(request("/ar/admin/mcp"));
+    const response = proxy(request("/ar/admin/mcp", { navigation: true }));
 
     expect(response.headers.get("x-middleware-rewrite")).toBe(
       "https://esportscommunity.net/admin/mcp",
@@ -60,7 +65,10 @@ describe("path-authoritative locale proxy", () => {
   });
 
   test("English private paths remain unprefixed", () => {
-    const response = proxy(request("/me?tab=notifications", { cookie: "en" }));
+    const response = proxy(request("/me?tab=notifications", {
+      cookie: "en",
+      navigation: true,
+    }));
 
     expect(response.headers.get("x-middleware-next")).toBe("1");
     expect(forwardedLocale(response)).toBe("en");
@@ -71,6 +79,19 @@ describe("path-authoritative locale proxy", () => {
     const response = proxy(request("/api/me/follows", { cookie: "ar" }));
 
     expect(response.headers.get("x-middleware-next")).toBe("1");
+    expect(forwardedLocale(response)).toBeNull();
+    expect(response.cookies.get("ewc_locale")).toBeUndefined();
+  });
+
+  test("an Arabic-prefixed API path is not redirected into the API namespace", () => {
+    const response = proxy(request("/ar/api/internal/ewc-profile/sync", {
+      accept: "application/json",
+      method: "POST",
+    }));
+
+    expect(response.headers.get("x-middleware-next")).toBe("1");
+    expect(response.headers.get("location")).toBeNull();
+    expect(response.headers.get("x-middleware-rewrite")).toBeNull();
     expect(forwardedLocale(response)).toBeNull();
     expect(response.cookies.get("ewc_locale")).toBeUndefined();
   });
@@ -87,11 +108,25 @@ describe("path-authoritative locale proxy", () => {
   });
 
   test("any cookie suppresses public HTML caching and remains locale-correct", () => {
-    const response = proxy(request("/games", { accept: "text/html", cookie: "ar" }));
+    const response = proxy(request("/games", {
+      accept: "text/html",
+      cookie: "ar",
+      navigation: true,
+    }));
 
     expect(forwardedLocale(response)).toBe("en");
     expect(response.cookies.get("ewc_locale")?.value).toBe("en");
     expect(response.headers.get("cloudflare-cdn-cache-control")).toBeNull();
+  });
+
+  test("background locale fetches cannot overwrite the user's language cookie", () => {
+    const response = proxy(request("/ar/offline", {
+      accept: "text/html",
+      cookie: "en",
+    }));
+
+    expect(forwardedLocale(response)).toBe("ar");
+    expect(response.cookies.get("ewc_locale")).toBeUndefined();
   });
 
   test("a client-spoofed locale header cannot poison the English cache key", () => {

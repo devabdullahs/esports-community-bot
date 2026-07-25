@@ -1,6 +1,10 @@
 import { all, get, run, transaction } from './client.js';
 import { normalizeTeamName } from '../lib/render.js';
 import { normalizeGameSlug } from '../lib/games.js';
+import {
+  mergeMatchLifecycle,
+  normalizeMatchLifecycle,
+} from '../lib/matchLifecycle.js';
 import { EWC_TOURNAMENT_SQL } from './tournamentStandings.js';
 
 function nowText() {
@@ -10,7 +14,7 @@ function nowText() {
 const STARTGG_PREVIEW_MATCH_SQL = "(source = 'startgg' AND external_id LIKE 'sgg:preview_%')";
 const STARTGG_PREVIEW_MATCH_SQL_M = "(m.source = 'startgg' AND m.external_id LIKE 'sgg:preview_%')";
 
-export async function upsertMatch(row) {
+export async function upsertMatch(row, { client = null } = {}) {
   const merged = {
     name: null,
     team_a: 'TBD',
@@ -22,52 +26,101 @@ export async function upsertMatch(row) {
     scheduled_at: null,
     stream_platform: null,
     stream_url: null,
+    winner_side: null,
+    result_reason: 'unknown',
     ...row,
   };
   const now = nowText();
-  return get(
-    `INSERT INTO matches
-       (tournament_id, source, external_id, name, team_a, team_b, logo_a, logo_b, score_a, score_b, status, scheduled_at, stream_platform, stream_url, last_polled_at, updated_at)
-     VALUES
-       ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $15)
-     ON CONFLICT (source, external_id) DO UPDATE SET
-       tournament_id = excluded.tournament_id,
-       name          = excluded.name,
-       team_a        = excluded.team_a,
-       team_b        = excluded.team_b,
-       logo_a        = COALESCE(excluded.logo_a, matches.logo_a),
-       logo_b        = COALESCE(excluded.logo_b, matches.logo_b),
-       score_a       = excluded.score_a,
-       score_b       = excluded.score_b,
-       status        = excluded.status,
-       scheduled_at  = excluded.scheduled_at,
-       stream_platform = excluded.stream_platform,
-       stream_url      = excluded.stream_url,
-       last_polled_at = $15,
-       updated_at    = $15
-     RETURNING *`,
-    [
-      merged.tournament_id,
-      merged.source,
-      merged.external_id,
-      merged.name,
-      merged.team_a,
-      merged.team_b,
-      merged.logo_a,
-      merged.logo_b,
-      merged.score_a,
-      merged.score_b,
-      merged.status,
-      merged.scheduled_at,
-      merged.stream_platform,
-      merged.stream_url,
-      now,
-    ],
-  );
+  const persist = async (tx) => {
+    const existing = await tx.get(
+      'SELECT * FROM matches WHERE source = $1 AND external_id = $2',
+      [merged.source, merged.external_id],
+    );
+    const normalizedLifecycle = normalizeMatchLifecycle(merged);
+    const lifecycle = existing
+      ? mergeMatchLifecycle(existing, merged)
+      : {
+          ...normalizedLifecycle,
+          status: normalizedLifecycle.status || 'scheduled',
+          status_accepted: true,
+        };
+    const accepted = !existing || lifecycle.status_accepted;
+    const scoreA = existing && !accepted
+      ? existing.score_a
+      : merged.score_a ?? existing?.score_a ?? null;
+    const scoreB = existing && !accepted
+      ? existing.score_b
+      : merged.score_b ?? existing?.score_b ?? null;
+    const scheduledAt = existing && !accepted
+      ? existing.scheduled_at
+      : merged.scheduled_at ?? existing?.scheduled_at ?? null;
+    const streamPlatform = existing && !accepted
+      ? existing.stream_platform
+      : merged.stream_platform;
+    const streamUrl = existing && !accepted ? existing.stream_url : merged.stream_url;
+
+    const persisted = await tx.get(
+      `INSERT INTO matches
+         (tournament_id, source, external_id, name, team_a, team_b, logo_a, logo_b,
+          score_a, score_b, status, winner_side, result_reason, scheduled_at,
+          stream_platform, stream_url, last_polled_at, updated_at)
+       VALUES
+         ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $17)
+       ON CONFLICT (source, external_id) DO UPDATE SET
+         tournament_id = excluded.tournament_id,
+         name          = excluded.name,
+         team_a        = excluded.team_a,
+         team_b        = excluded.team_b,
+         logo_a        = COALESCE(excluded.logo_a, matches.logo_a),
+         logo_b        = COALESCE(excluded.logo_b, matches.logo_b),
+         score_a       = excluded.score_a,
+         score_b       = excluded.score_b,
+         status        = excluded.status,
+         winner_side   = excluded.winner_side,
+         result_reason = excluded.result_reason,
+         scheduled_at  = excluded.scheduled_at,
+         stream_platform = excluded.stream_platform,
+         stream_url      = excluded.stream_url,
+         last_polled_at = $17,
+         updated_at    = $17
+       RETURNING *`,
+      [
+        merged.tournament_id,
+        merged.source,
+        merged.external_id,
+        merged.name,
+        merged.team_a,
+        merged.team_b,
+        merged.logo_a,
+        merged.logo_b,
+        scoreA,
+        scoreB,
+        lifecycle.status,
+        lifecycle.winner_side,
+        lifecycle.result_reason,
+        scheduledAt,
+        streamPlatform,
+        streamUrl,
+        now,
+      ],
+    );
+
+    if (existing?.status !== 'cancelled' && persisted.status === 'cancelled') {
+      await tx.run(
+        `UPDATE user_match_reminders
+            SET canceled_at = $1
+          WHERE match_id = $2 AND canceled_at IS NULL`,
+        [now, persisted.id],
+      );
+    }
+    return persisted;
+  };
+  return client ? persist(client) : transaction(persist);
 }
 
 // Map a parser result (camelCase) into a DB row (snake_case).
 export function toMatchRow(parsed, tournamentId) {
+  const lifecycle = normalizeMatchLifecycle(parsed);
   return {
     tournament_id: tournamentId,
     source: parsed.source,
@@ -79,7 +132,9 @@ export function toMatchRow(parsed, tournamentId) {
     logo_b: parsed.logoB ?? null,
     score_a: parsed.scoreA ?? null,
     score_b: parsed.scoreB ?? null,
-    status: parsed.status,
+    status: lifecycle.status,
+    winner_side: lifecycle.winner_side,
+    result_reason: lifecycle.result_reason,
     scheduled_at: parsed.scheduledAt ?? null,
     stream_platform: parsed.stream?.platform ?? null,
     stream_url: parsed.stream?.url ?? null,
@@ -177,8 +232,19 @@ function tournamentSpecificity(m) {
 
 function matchRank(m) {
   const hasScore = m.score_a != null && m.score_b != null;
+  const hasWinner = m.winner_side != null;
   const status =
-    m.status === 'finished' && hasScore ? 300 : m.status === 'running' ? 200 : m.status === 'finished' ? 150 : 0;
+    m.status === 'finished' && (hasScore || hasWinner)
+      ? 300
+      : m.status === 'running'
+        ? 200
+        : m.status === 'finished'
+          ? 150
+          : m.status === 'cancelled'
+            ? 125
+            : m.status === 'postponed'
+              ? 100
+              : 0;
   const stableMatchId = /^Match:/i.test(m.external_id || '') ? 40 : 0;
   const structural = /:(?:matchlist|bracket):/i.test(m.external_id || '') ? 10 : 0;
   const liveWidgetFallback = /^[^:]+:\d+:/i.test(m.external_id || '') ? -10 : 0;
@@ -258,7 +324,7 @@ export function dedupeMatches(rows) {
 }
 
 // All matches for a guild's active tournaments, with the tournament's game/name attached.
-// Ordered: live first, then upcoming by start time, then finished.
+// Ordered: live first, then upcoming/postponed, then terminal outcomes.
 export async function getMatchesForGuild(guildId) {
   const rows = await all(
     `SELECT m.*, t.game AS game, t.name AS tournament_name,
@@ -268,14 +334,20 @@ export async function getMatchesForGuild(guildId) {
      WHERE t.guild_id = $1 AND t.active = 1
        AND t.archived_at IS NULL
        AND NOT ${STARTGG_PREVIEW_MATCH_SQL_M}
-     ORDER BY CASE m.status WHEN 'running' THEN 0 WHEN 'scheduled' THEN 1 ELSE 2 END,
+     ORDER BY CASE m.status
+                WHEN 'running' THEN 0
+                WHEN 'scheduled' THEN 1
+                WHEN 'postponed' THEN 2
+                WHEN 'finished' THEN 3
+                ELSE 4
+              END,
               m.scheduled_at ASC`,
     [guildId],
   );
   return dedupeMatches(rows);
 }
 
-// Matches that still need watching: pending or running, and not absurdly old.
+// Matches that still need watching: pending, running, or awaiting a reschedule.
 export async function getActiveMatches() {
   const cutoff = Math.floor(Date.now() / 1000) - 43200;
   return all(
@@ -284,8 +356,12 @@ export async function getActiveMatches() {
      JOIN tournaments t ON t.id = m.tournament_id
      WHERE t.active = 1
        AND t.archived_at IS NULL
-       AND m.status IN ('scheduled','running')
-       AND (m.scheduled_at IS NULL OR m.scheduled_at > $1)
+       AND m.status IN ('scheduled','running','postponed')
+       AND (
+         m.status = 'postponed'
+         OR m.scheduled_at IS NULL
+         OR m.scheduled_at > $1
+       )
        AND NOT ${STARTGG_PREVIEW_MATCH_SQL_M}`,
     [cutoff],
   );
@@ -335,15 +411,41 @@ export async function listTrackedMatchLogos() {
 }
 
 export async function markFinished(id) {
-  return run(`UPDATE matches SET status='finished', updated_at=$1 WHERE id = $2`, [nowText(), id]);
+  return run(
+    `UPDATE matches
+        SET status = 'finished',
+            winner_side = CASE
+              WHEN score_a IS NOT NULL AND score_b IS NOT NULL AND score_a > score_b THEN 'team1'
+              WHEN score_a IS NOT NULL AND score_b IS NOT NULL AND score_b > score_a THEN 'team2'
+              ELSE winner_side
+            END,
+            result_reason = CASE
+              WHEN score_a IS NOT NULL AND score_b IS NOT NULL AND score_a <> score_b THEN 'normal'
+              ELSE result_reason
+            END,
+            updated_at = $1
+      WHERE id = $2 AND status NOT IN ('finished','cancelled')`,
+    [nowText(), id],
+  );
 }
 
 export async function markFinishedByExternalId(source, externalId) {
-  return run(`UPDATE matches SET status='finished', updated_at=$1 WHERE source = $2 AND external_id = $3`, [
-    nowText(),
-    source,
-    externalId,
-  ]);
+  return run(
+    `UPDATE matches
+        SET status = 'finished',
+            winner_side = CASE
+              WHEN score_a IS NOT NULL AND score_b IS NOT NULL AND score_a > score_b THEN 'team1'
+              WHEN score_a IS NOT NULL AND score_b IS NOT NULL AND score_b > score_a THEN 'team2'
+              ELSE winner_side
+            END,
+            result_reason = CASE
+              WHEN score_a IS NOT NULL AND score_b IS NOT NULL AND score_a <> score_b THEN 'normal'
+              ELSE result_reason
+            END,
+            updated_at = $1
+      WHERE source = $2 AND external_id = $3 AND status NOT IN ('finished','cancelled')`,
+    [nowText(), source, externalId],
+  );
 }
 
 // If a source leaves an already-started match without a posted result, it can stay
@@ -352,7 +454,18 @@ export async function markFinishedByExternalId(source, externalId) {
 export async function markStaleActiveFinished(staleSeconds) {
   const cutoff = Math.floor(Date.now() / 1000) - staleSeconds;
   const result = await run(
-    `UPDATE matches SET status='finished', updated_at=$1
+    `UPDATE matches
+        SET status = 'finished',
+            winner_side = CASE
+              WHEN score_a IS NOT NULL AND score_b IS NOT NULL AND score_a > score_b THEN 'team1'
+              WHEN score_a IS NOT NULL AND score_b IS NOT NULL AND score_b > score_a THEN 'team2'
+              ELSE NULL
+            END,
+            result_reason = CASE
+              WHEN score_a IS NOT NULL AND score_b IS NOT NULL AND score_a <> score_b THEN 'normal'
+              ELSE 'unknown'
+            END,
+            updated_at = $1
      WHERE status IN ('scheduled','running') AND scheduled_at IS NOT NULL AND scheduled_at < $2`,
     [nowText(), cutoff],
   );
@@ -448,8 +561,13 @@ export async function deleteResolvedLiveAliasMatches() {
   return ids.length;
 }
 
-export async function deleteTournamentPlaceholderMatches(tournamentId, currentExternalIds = null) {
-  const rows = await all(
+export async function deleteTournamentPlaceholderMatches(
+  tournamentId,
+  currentExternalIds = null,
+  { client = null } = {},
+) {
+  const reader = client || { all };
+  const rows = await reader.all(
     'SELECT id, external_id, team_a, team_b, scheduled_at FROM matches WHERE tournament_id = $1',
     [tournamentId],
   );
@@ -485,9 +603,11 @@ export async function deleteTournamentPlaceholderMatches(tournamentId, currentEx
     })
     .map((row) => row.id);
   if (!ids.length) return 0;
-  await transaction(async (tx) => {
+  const remove = async (tx) => {
     for (const id of ids) await tx.run('DELETE FROM matches WHERE id = $1', [id]);
-  });
+  };
+  if (client) await remove(client);
+  else await transaction(remove);
   return ids.length;
 }
 
@@ -503,10 +623,15 @@ export async function deleteTournamentPlaceholderMatches(tournamentId, currentEx
 // time, which clears stale redirect aliases like PTime -> PlayTime without
 // deleting a later same-day rematch. Current stable rows with live scores count
 // too, so old alias rows do not survive until the match fully finishes.
-export async function deleteTournamentDuplicateMatches(tournamentId, currentExternalIds) {
+export async function deleteTournamentDuplicateMatches(
+  tournamentId,
+  currentExternalIds,
+  { client = null } = {},
+) {
   if (!currentExternalIds || !currentExternalIds.length) return 0;
   const current = new Set(currentExternalIds);
-  const rows = await all(
+  const reader = client || { all };
+  const rows = await reader.all(
     'SELECT id, external_id, team_a, team_b, score_a, score_b, status, scheduled_at FROM matches WHERE tournament_id = $1',
     [tournamentId],
   );
@@ -549,9 +674,11 @@ export async function deleteTournamentDuplicateMatches(tournamentId, currentExte
     if (Number(r.scheduled_at) <= Number(candidates[0].scheduled_at)) ids.add(r.id);
   }
   if (!ids.size) return 0;
-  await transaction(async (tx) => {
+  const remove = async (tx) => {
     for (const id of ids) await tx.run('DELETE FROM matches WHERE id = $1', [id]);
-  });
+  };
+  if (client) await remove(client);
+  else await transaction(remove);
   return ids.size;
 }
 

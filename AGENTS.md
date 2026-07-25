@@ -11,6 +11,15 @@ add multi-tenant complexity.
 - Web lint:  `npm --workspace @esports-community-bot/web run lint`
 - Web tests: `npm --workspace @esports-community-bot/web run test` (vitest)
 - Web build: `npm run web:build`
+- API authorization inventory: every new or changed
+  `apps/web/src/app/api/**/route.ts` HTTP method must be declared in
+  `apps/web/src/test/api-authorization-policy.ts`, with its negative
+  authentication fixture and any applicable owner/scope object fixture added
+  in the same change.
+- Boundary gate: after the web build, run `npm run security:boundary`.
+  Update its explicit, non-destructive path fingerprints whenever Next, proxy
+  rewrites, API discovery, or internal routes change; never loosen the gate to
+  accept several route classes for one request target.
 - CI runs lint, tests, and build for the web workspace.
 - Sample data: `DB_PATH="<disposable-path>" npm run seed:dev` seeds a local
   dashboard DB for visual preview (games, news, prediction leaderboard, dev user).

@@ -7,6 +7,7 @@ import {
   editComment as _edit,
   setCommentStatus as _setStatus,
   applyCommentModerationDecision as _applyModerationDecision,
+  applyCommentModerationBatch as _applyModerationBatch,
   autoApproveDueComments as _autoApprove,
   listCommentsForModeration as _listMod,
   countCommentsByStatus as _counts,
@@ -480,6 +481,37 @@ export async function moderateComment(
   const status = ACTION_TO_STATUS[action];
   return applyModerationDecision({
     id,
+    status,
+    action,
+    moderatorDiscordId: moderator.discordUserId,
+    moderatorName: moderator.displayName,
+    reason: reason ?? null,
+  });
+}
+
+export async function moderateCommentsAtomically(
+  ids: number[],
+  action: keyof typeof ACTION_TO_STATUS,
+  moderator: { discordUserId: string; displayName: string | null },
+  reason?: string | null,
+): Promise<
+  | { ok: true; comments: CommentRecord[] }
+  | { ok: false; failed: Array<{ id: number; error: string }> }
+> {
+  const status = ACTION_TO_STATUS[action];
+  const applyModerationBatch = _applyModerationBatch as unknown as (input: {
+    ids: number[];
+    status: CommentStatus;
+    action: keyof typeof ACTION_TO_STATUS;
+    moderatorDiscordId: string;
+    moderatorName: string | null;
+    reason: string | null;
+  }) => Promise<
+    | { ok: true; comments: CommentRecord[] }
+    | { ok: false; failed: Array<{ id: number; error: string }> }
+  >;
+  return applyModerationBatch({
+    ids,
     status,
     action,
     moderatorDiscordId: moderator.discordUserId,

@@ -143,8 +143,13 @@ export const config = {
   },
   dashboard: {
     publicUrl: get('EWC_DASHBOARD_PUBLIC_URL'),
-    internalUrl: get('EWC_DASHBOARD_INTERNAL_URL'),
-    internalSecret: get('EWC_DASHBOARD_INTERNAL_SECRET'),
+  },
+  webPush: {
+    enabled: get('WEB_PUSH_ENABLED', 'false') === 'true',
+    publicKey: get('WEB_PUSH_VAPID_PUBLIC_KEY'),
+    privateKey: get('WEB_PUSH_VAPID_PRIVATE_KEY'),
+    subject: get('WEB_PUSH_VAPID_SUBJECT'),
+    sweepSeconds: Math.max(15, Number(get('WEB_PUSH_SWEEP_SECONDS', 60)) || 60),
   },
   db: {
     path: get('DB_PATH', 'data/bot.sqlite'),

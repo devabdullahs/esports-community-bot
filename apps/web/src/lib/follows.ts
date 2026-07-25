@@ -21,6 +21,12 @@ import {
   listPersonalizedMatchesForUser as _listPersonalizedMatches,
   listUpcomingFollowedMatchesForUser as _listUpcomingFollowedMatches,
 } from "@bot/db/userFollows.js";
+import {
+  listPushSubscriptionsForUser as _listPushSubscriptionsForUser,
+  revokePushSubscriptionEndpointForUser as _revokePushSubscriptionEndpointForUser,
+  revokePushSubscriptionForUser as _revokePushSubscriptionForUser,
+  upsertPushSubscription as _upsertPushSubscription,
+} from "@bot/db/userPushSubscriptions.js";
 import { getDiscordAccountForAuthUser } from "@/lib/auth-database";
 import { getOptionalSession } from "@/lib/session";
 
@@ -90,6 +96,12 @@ export type CalendarMatchRow = {
   scheduledAt: number;
 };
 
+export type PushSubscriptionRow = {
+  id: string;
+  created_at: string;
+  updated_at: string;
+};
+
 const upsertFollow = _upsertFollow as unknown as (input: {
   discordUserId: string;
   entityType: FollowEntityType;
@@ -151,6 +163,23 @@ const upsertPrefs = _upsertPrefs as unknown as (
     digestMinute?: number;
   },
 ) => Promise<NotificationPrefs>;
+const listPushSubscriptionsForUser = _listPushSubscriptionsForUser as unknown as (
+  discordUserId: string,
+) => Promise<PushSubscriptionRow[]>;
+const upsertPushSubscription = _upsertPushSubscription as unknown as (input: {
+  discordUserId: string;
+  endpoint: string;
+  p256dh: string;
+  auth: string;
+}) => Promise<PushSubscriptionRow>;
+const revokePushSubscriptionForUser = _revokePushSubscriptionForUser as unknown as (input: {
+  discordUserId: string;
+  subscriptionId: string;
+}) => Promise<number>;
+const revokePushSubscriptionEndpointForUser = _revokePushSubscriptionEndpointForUser as unknown as (input: {
+  discordUserId: string;
+  endpoint: string;
+}) => Promise<number>;
 
 export {
   deleteFollow,
@@ -168,6 +197,10 @@ export {
   markAllRead,
   getPrefs,
   upsertPrefs,
+  listPushSubscriptionsForUser,
+  upsertPushSubscription,
+  revokePushSubscriptionForUser,
+  revokePushSubscriptionEndpointForUser,
 };
 
 /** The signed-in viewer's Discord id, or null when logged out / not Discord-linked. */

@@ -17,6 +17,9 @@ type MatchDetailsCopy = {
   matchDetailsPlayerPerformance: string;
   matchDetailsShowMore: (count: number) => string;
   matchDetailsShowLess: string;
+  matchDetailsPlayer: string;
+  matchDetailsAgent: string;
+  matchDetailsHero: string;
 };
 
 function PlayerTableFooter({
@@ -52,12 +55,17 @@ export function ValorantPlayerTable({
   const shown = expanded ? players.length : Math.min(players.length, 3);
   return (
     <div className="min-w-0" dir="ltr">
-      <div className="overflow-x-auto">
+      <div
+        className="overflow-x-auto"
+        role="region"
+        aria-label={text.matchDetailsPlayerPerformance}
+        tabIndex={0}
+      >
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Player</TableHead>
-              <TableHead>Agent</TableHead>
+              <TableHead>{text.matchDetailsPlayer}</TableHead>
+              <TableHead>{text.matchDetailsAgent}</TableHead>
               <TableHead className="text-end">ACS</TableHead>
               <TableHead className="text-end">KDA</TableHead>
               <TableHead className="text-end">KAST</TableHead>
@@ -105,12 +113,17 @@ export function DotaPlayerTable({
   const shown = expanded ? players.length : Math.min(players.length, 3);
   return (
     <div className="min-w-0" dir="ltr">
-      <div className="overflow-x-auto">
+      <div
+        className="overflow-x-auto"
+        role="region"
+        aria-label={text.matchDetailsPlayerPerformance}
+        tabIndex={0}
+      >
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Player</TableHead>
-              <TableHead>Hero</TableHead>
+              <TableHead>{text.matchDetailsPlayer}</TableHead>
+              <TableHead>{text.matchDetailsHero}</TableHead>
               <TableHead className="text-end">KDA</TableHead>
               <TableHead className="text-end">DMG</TableHead>
               <TableHead className="text-end">LH/DN</TableHead>

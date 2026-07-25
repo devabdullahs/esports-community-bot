@@ -109,7 +109,7 @@ const CONTENT = {
         heading: "8. Discord Profile Showcase (Role Connection)",
         body: [
           "If you use /ewc_predict link or the dashboard's Sync profile button, your prediction summary is pushed to Discord's Application Role Connection API. This allows your Discord profile to display your EWC prediction rank and points.",
-          "This is a user-initiated action. You can remove the showcase at any time by using the Unlink button on your /me profile page or by running /ewc_predict unlink in Discord.",
+          "This is a user-initiated action. You can remove the showcase at any time with the Unlink button on your signed-in /me profile page. The /ewc_predict unlink command opens that authenticated control.",
         ],
       },
       {
@@ -231,7 +231,7 @@ const CONTENT = {
         heading: "٨. عرض ملف ديسكورد الشخصي (ربط الأدوار)",
         body: [
           "إن استخدمت /ewc_predict link أو زر \"مزامنة الملف\" في اللوحة، يُرسَل ملخص توقعاتك إلى واجهة Application Role Connection في ديسكورد. يتيح ذلك لملفك الشخصي على ديسكورد عرض رتبة ونقاط توقعات EWC.",
-          "هذا إجراء يبادر به المستخدم. يمكنك إزالة العرض في أي وقت عبر زر \"فصل الربط\" في صفحة ملفك /me أو بتشغيل /ewc_predict unlink في ديسكورد.",
+          "هذا إجراء يبادر به المستخدم. يمكنك إزالة العرض في أي وقت عبر زر \"فصل الربط\" في صفحة ملفك المسجل دخولها /me. يفتح أمر /ewc_predict unlink عنصر التحكم الآمن نفسه.",
         ],
       },
       {

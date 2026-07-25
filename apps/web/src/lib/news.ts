@@ -133,6 +133,7 @@ export function listAdminNewsPosts(filter?: {
   gameSlug?: string | null;
   mediaSlug?: string | null;
   status?: NewsStatus | null;
+  locale?: Locale | null;
 }): Promise<NewsPost[]> {
   return listAdmin(filter || {});
 }

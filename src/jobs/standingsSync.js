@@ -3,7 +3,8 @@ import { config } from '../config.js';
 import { logger } from '../lib/logger.js';
 import { listActiveTournaments } from '../db/tournaments.js';
 import { getActiveMatches } from '../db/matches.js';
-import { replaceTournamentStandings } from '../db/tournamentStandings.js';
+import { isStandingsGame } from '../lib/tournamentStandingsSupport.js';
+import { syncTournamentStandings } from '../services/tournamentOperations.js';
 import * as defaultLiquipedia from '../services/liquipedia.js';
 
 // Tournament tracking for standings-format games. Battle-royale events and TFT
@@ -12,25 +13,11 @@ import * as defaultLiquipedia from '../services/liquipedia.js';
 // land. Re-parse those pages on a gentle fixed cadence: one parse per tournament,
 // every few hours, through the same serialized Liquipedia queue as everything else.
 // 8 active events = ~4 minutes of queue time per sweep at the >=30s gap.
-const STANDINGS_GAMES = new Set([
-  'apexlegends',
-  'easportsfc',
-  'fighters',
-  'fortnite',
-  'freefire',
-  'pubg',
-  'pubgmobile',
-  'tft',
-  'warzone',
-]);
-
 let task = null;
 let bootTimer = null;
 let running = false;
 
-export function isStandingsGame(game) {
-  return STANDINGS_GAMES.has(String(game ?? '').trim().toLowerCase());
-}
+export { isStandingsGame } from '../lib/tournamentStandingsSupport.js';
 
 export async function runStandingsSync({ liquipedia = defaultLiquipedia } = {}) {
   if (running) return { skipped: 'already-running' };
@@ -42,21 +29,15 @@ export async function runStandingsSync({ liquipedia = defaultLiquipedia } = {}) 
     );
     for (const tournament of tournaments) {
       try {
-        const { sections, hadRows } = await liquipedia.fetchEventStandings(tournament);
+        const result = await syncTournamentStandings(tournament.id, tournament.guild_id, {
+          liquipediaService: liquipedia,
+        });
         summary.tournaments += 1;
-        if (!sections.length) {
+        if (!result.count) {
           summary.empty += 1;
-          // Clear stored rows ONLY when the page yielded parseable standings rows
-          // that were all-TBD (an unseeded event) — standings are re-derived each
-          // run, so that keeps the directory's hasStandings flag accurate. If we
-          // parsed NO rows (hadRows false), that could be a transient/partial page
-          // or a DOM change, so leave rows intact rather than risk wiping good
-          // data. A fetch FAILURE throws and is handled below, also leaving rows
-          // intact.
-          if (hadRows) await replaceTournamentStandings(tournament.id, []);
           continue;
         }
-        summary.rows += await replaceTournamentStandings(tournament.id, sections);
+        summary.rows += result.count;
       } catch (error) {
         summary.failed += 1;
         const message = `[standings] ${tournament.external_id}: ${error.message}`;
@@ -95,9 +76,11 @@ export async function refreshLiveBattleRoyaleStandings({ liquipedia = defaultLiq
   const summary = { tournaments: 0, rows: 0, failed: 0 };
   for (const tournament of tournaments) {
     try {
-      const { sections, hadRows } = await liquipedia.fetchEventStandings(tournament);
+      const result = await syncTournamentStandings(tournament.id, tournament.guild_id, {
+        liquipediaService: liquipedia,
+      });
       summary.tournaments += 1;
-      if (sections.length || hadRows) summary.rows += await replaceTournamentStandings(tournament.id, sections);
+      summary.rows += result.count;
     } catch (error) {
       summary.failed += 1;
       logger.warn(`[standings] live boot refresh ${tournament.external_id}: ${error.message}`);

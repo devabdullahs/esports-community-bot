@@ -2,7 +2,12 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { CircleHelpIcon, TriangleAlertIcon } from "lucide-react";
-import type { TournamentMatchesPayload } from "@/components/tournaments/tournament-match-list";
+import {
+  fetchTournamentMatchesPage,
+  shouldPollTournamentMatches,
+  tournamentMatchesQueryKey,
+  type TournamentMatchesPayload,
+} from "@/components/tournaments/tournament-match-list";
 import { LocalDateTime } from "@/components/local-date-time";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -32,14 +37,23 @@ export function TournamentSyncHealthStatus({
 }) {
   const text = copy[locale].tournaments;
   const query = useQuery<TournamentMatchesPayload>({
-    queryKey: ["tournament-matches", tournamentId],
-    queryFn: async () => {
-      const response = await fetch(`/api/tournaments/${tournamentId}/matches`);
-      if (!response.ok) throw new Error("Failed to load tournament health");
-      return response.json();
-    },
+    queryKey: tournamentMatchesQueryKey(tournamentId, initialData),
+    queryFn: () => fetchTournamentMatchesPage(tournamentId, initialData),
     initialData,
-    refetchInterval: REFETCH_INTERVAL_MS,
+    staleTime: 0,
+    refetchOnMount: false,
+    refetchInterval: (current) => {
+      const data = current.state.data as TournamentMatchesPayload | undefined;
+      return data && shouldPollTournamentMatches(data) ? REFETCH_INTERVAL_MS : false;
+    },
+    refetchOnReconnect: (current) => {
+      const data = current.state.data as TournamentMatchesPayload | undefined;
+      return data ? shouldPollTournamentMatches(data) : true;
+    },
+    refetchOnWindowFocus: (current) => {
+      const data = current.state.data as TournamentMatchesPayload | undefined;
+      return data ? shouldPollTournamentMatches(data) : true;
+    },
   });
   const health = (query.data ?? initialData).tournament.syncHealth;
   const timestamp = health.lastSuccessAt == null

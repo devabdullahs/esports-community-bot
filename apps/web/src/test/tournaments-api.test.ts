@@ -19,10 +19,19 @@ vi.mock("@/lib/request-locale", () => ({
   getRequestLocale: async () => "en",
 }));
 
+vi.mock("next/navigation", () => ({
+  usePathname: () => "/tournaments/archive",
+  useRouter: () => ({
+    push: vi.fn(),
+    replace: vi.fn(),
+  }),
+  useSearchParams: () => new URLSearchParams(),
+}));
+
 import { GET as listGET } from "@/app/api/tournaments/route";
 import { GET as matchesGET } from "@/app/api/tournaments/[id]/matches/route";
 import TournamentArchivePage from "@/app/tournaments/archive/page";
-import { listArchivedTournamentSummaries } from "@/lib/tournaments";
+import { getTournamentMatches, listArchivedTournamentSummaries } from "@/lib/tournaments";
 
 function matchesReq(query = ""): Request {
   return new Request(`http://localhost/api/tournaments/x/matches${query}`);
@@ -41,6 +50,8 @@ let legacyPlayInsTournamentId: number;
 let canonicalPlayInsTournamentId: number;
 let individualTournamentId: number;
 let individualPlayerId: number;
+const FINISHED_MATCH_COUNT = 85;
+const TOURNAMENT_MATCH_TOTAL = FINISHED_MATCH_COUNT + 5;
 
 async function seed(): Promise<void> {
   // Bootstrap the SQLite schema on the shared connection. The tournaments/matches
@@ -134,27 +145,33 @@ async function seed(): Promise<void> {
   });
 
   const base = { tournament_id: tournamentId, source: "liquipedia" };
-  // 1 running, 2 scheduled, 5 finished, plus one parser duplicate that should be hidden by public reads.
+  // 1 running, 2 scheduled, 1 postponed, 1 cancelled, 85 finished, plus one
+  // parser duplicate that public reads hide.
   await upsertMatch({ ...base, external_id: `Match:run-${tournamentId}`, team_a: "Falcons", team_b: "T1", score_a: 1, score_b: 0, status: "running", scheduled_at: 1_900_000_000 });
   await upsertMatch({ ...base, external_id: `Widget:run-dupe-${tournamentId}`, team_a: "T1", team_b: "Falcons", status: "scheduled", scheduled_at: 1_900_000_300 });
   await upsertMatch({ ...base, external_id: `Match:sch1-${tournamentId}`, team_a: "Vitality", team_b: "NAVI", status: "scheduled", scheduled_at: 1_900_100_000 });
   await upsertMatch({ ...base, external_id: `Match:sch2-${tournamentId}`, team_a: "G2", team_b: "FaZe", status: "scheduled", scheduled_at: 1_900_200_000 });
-  for (let i = 0; i < 5; i += 1) {
+  await upsertMatch({ ...base, external_id: `Match:postponed-${tournamentId}`, team_a: "Spirit", team_b: "Liquid", status: "postponed", scheduled_at: 1_900_300_000 });
+  await upsertMatch({ ...base, external_id: `Match:cancelled-${tournamentId}`, team_a: "Cloud9", team_b: "MOUZ", status: "cancelled", scheduled_at: 1_900_400_000 });
+  for (let i = 0; i < FINISHED_MATCH_COUNT; i += 1) {
+    const scorelessWalkover = i === FINISHED_MATCH_COUNT - 1;
     await upsertMatch({
       ...base,
       external_id: `Match:fin${i}-${tournamentId}`,
       team_a: `A${i}`,
       team_b: `B${i}`,
-      score_a: 2,
-      score_b: i % 2,
+      score_a: scorelessWalkover ? null : 2,
+      score_b: scorelessWalkover ? null : i % 2,
       status: "finished",
+      winner_side: scorelessWalkover ? "team2" : undefined,
+      result_reason: scorelessWalkover ? "walkover" : undefined,
       scheduled_at: 1_800_000_000 + i * 3600,
     });
   }
   await recordTournamentSyncSuccess({
     tournamentId,
     source: "liquipedia",
-    itemCount: 8,
+    itemCount: TOURNAMENT_MATCH_TOTAL,
     at: Math.floor(Date.now() / 1000),
   });
 
@@ -198,7 +215,13 @@ describe("GET /api/tournaments", () => {
     const t = body.tournaments.find((row: { id: number }) => row.id === tournamentId);
     expect(t).toBeTruthy();
     expect(t.game).toBe("cs2");
-    expect(t.matchCounts).toEqual({ running: 1, scheduled: 2, finished: 5 });
+    expect(t.matchCounts).toEqual({
+      running: 1,
+      scheduled: 2,
+      finished: FINISHED_MATCH_COUNT,
+      postponed: 1,
+      cancelled: 1,
+    });
   });
 
   test("excludes archived tournaments from the active tournament list", async () => {
@@ -260,7 +283,7 @@ describe("GET /api/tournaments/[id]/matches", () => {
     expect(match.team_a_profile_id).toBe(individualPlayerId);
   });
 
-  test("groups matches by status with the tournament header and total", async () => {
+  test("groups matches by status with explicit totals and first-page metadata", async () => {
     const res = await matchesGET(matchesReq(), ctx(String(tournamentId)));
     expect(res.status).toBe(200);
     const body = await res.json();
@@ -268,8 +291,36 @@ describe("GET /api/tournaments/[id]/matches", () => {
     expect(body.tournament.url).toContain("liquipedia.net");
     expect(body.matches.running).toHaveLength(1);
     expect(body.matches.scheduled).toHaveLength(2);
-    expect(body.matches.finished).toHaveLength(5);
-    expect(body.total).toBe(8);
+    expect(body.matches.finished).toHaveLength(50);
+    expect(body.matches.postponed).toHaveLength(1);
+    expect(body.matches.cancelled).toHaveLength(1);
+    expect(body.matches.postponed[0]).toMatchObject({
+      status: "postponed",
+      winner_side: null,
+      result_reason: "postponed",
+    });
+    expect(body.matches.cancelled[0]).toMatchObject({
+      status: "cancelled",
+      winner_side: null,
+      result_reason: "cancelled",
+    });
+    expect(body.matches.finished[0]).toMatchObject({
+      winner_side: "team2",
+      result_reason: "walkover",
+      score_a: null,
+      score_b: null,
+    });
+    expect(body.totals).toEqual({
+      running: 1,
+      scheduled: 2,
+      finished: FINISHED_MATCH_COUNT,
+      postponed: 1,
+      cancelled: 1,
+      all: TOURNAMENT_MATCH_TOTAL,
+    });
+    expect(body.finishedPage).toEqual({ offset: 0, limit: 50, hasMore: true });
+    expect(body.total).toBe(TOURNAMENT_MATCH_TOTAL);
+    expect(body.bracketMatches).toBeUndefined();
     expect(body.tournament.syncHealth).toEqual({
       state: "fresh",
       lastSuccessAt: expect.any(Number),
@@ -288,6 +339,17 @@ describe("GET /api/tournaments/[id]/matches", () => {
     expect(body.matches.running).toHaveLength(0);
     expect(body.matches.scheduled).toHaveLength(0);
     expect(body.matches.finished).toHaveLength(1);
+    expect(body.matches.postponed).toHaveLength(0);
+    expect(body.matches.cancelled).toHaveLength(0);
+    expect(body.totals).toEqual({
+      running: 0,
+      scheduled: 0,
+      finished: 1,
+      postponed: 0,
+      cancelled: 0,
+      all: 1,
+    });
+    expect(body.finishedPage).toEqual({ offset: 0, limit: 50, hasMore: false });
     expect(body.total).toBe(1);
   });
 
@@ -296,6 +358,8 @@ describe("GET /api/tournaments/[id]/matches", () => {
     expect(res.status).toBe(200);
     const body = await res.json();
     expect(body.matches.finished).toHaveLength(2);
+    expect(body.totals.finished).toBe(FINISHED_MATCH_COUNT);
+    expect(body.finishedPage).toEqual({ offset: 0, limit: 2, hasMore: true });
     // running/scheduled are always returned in full regardless of limit
     expect(body.matches.running).toHaveLength(1);
     expect(body.matches.scheduled).toHaveLength(2);
@@ -305,14 +369,61 @@ describe("GET /api/tournaments/[id]/matches", () => {
     const res = await matchesGET(matchesReq("?limit=99999"), ctx(String(tournamentId)));
     expect(res.status).toBe(200);
     const body = await res.json();
-    expect(body.matches.finished).toHaveLength(5);
+    expect(body.matches.finished).toHaveLength(FINISHED_MATCH_COUNT);
+    expect(body.finishedPage).toEqual({ offset: 0, limit: 200, hasMore: false });
   });
 
-  test("offset paginates the finished list", async () => {
-    const all = await (await matchesGET(matchesReq(), ctx(String(tournamentId)))).json();
-    const page2 = await (await matchesGET(matchesReq("?limit=2&offset=2"), ctx(String(tournamentId)))).json();
-    expect(page2.matches.finished).toHaveLength(2);
-    expect(page2.matches.finished[0].id).toBe(all.matches.finished[2].id);
+  test("paginates first, middle, final, and over-range finished-result pages", async () => {
+    const firstFifty = await (await matchesGET(matchesReq("?limit=50"), ctx(String(tournamentId)))).json();
+    const first = await (await matchesGET(matchesReq("?limit=25"), ctx(String(tournamentId)))).json();
+    const middle = await (await matchesGET(matchesReq("?limit=25&offset=25"), ctx(String(tournamentId)))).json();
+    const final = await (await matchesGET(matchesReq("?limit=25&offset=75"), ctx(String(tournamentId)))).json();
+    const overRange = await (await matchesGET(matchesReq("?limit=25&offset=100"), ctx(String(tournamentId)))).json();
+
+    expect(first.matches.finished).toHaveLength(25);
+    expect(first.finishedPage).toEqual({ offset: 0, limit: 25, hasMore: true });
+    expect(middle.matches.finished).toHaveLength(25);
+    expect(middle.finishedPage).toEqual({ offset: 25, limit: 25, hasMore: true });
+    expect(middle.matches.finished[0].id).toBe(firstFifty.matches.finished[25].id);
+    expect(final.matches.finished).toHaveLength(10);
+    expect(final.finishedPage).toEqual({ offset: 75, limit: 25, hasMore: false });
+    expect(overRange.matches.finished).toHaveLength(0);
+    expect(overRange.finishedPage).toEqual({ offset: 100, limit: 25, hasMore: false });
+    expect(overRange.totals.finished).toBe(FINISHED_MATCH_COUNT);
+  });
+
+  test("returns truthful metadata for an empty tournament page", async () => {
+    const res = await matchesGET(matchesReq("?limit=25&offset=25"), ctx(String(organizerTaggedTournamentId)));
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.matches).toEqual({
+      running: [],
+      scheduled: [],
+      finished: [],
+      postponed: [],
+      cancelled: [],
+    });
+    expect(body.totals).toEqual({
+      running: 0,
+      scheduled: 0,
+      finished: 0,
+      postponed: 0,
+      cancelled: 0,
+      all: 0,
+    });
+    expect(body.finishedPage).toEqual({ offset: 25, limit: 25, hasMore: false });
+    expect(body.total).toBe(0);
+  });
+
+  test("keeps complete bracket input while paging the visible result history", async () => {
+    const body = await getTournamentMatches(tournamentId, {
+      limit: 2,
+      offset: 2,
+      includeBracket: true,
+    });
+    expect(body?.matches.finished).toHaveLength(2);
+    expect(body?.bracketMatches).toHaveLength(TOURNAMENT_MATCH_TOTAL);
+    expect(body?.totals.all).toBe(TOURNAMENT_MATCH_TOTAL);
   });
 
   test("400 on a non-numeric id", async () => {
@@ -339,7 +450,13 @@ describe("tournaments archive", () => {
     expect(firstPage).toHaveLength(2);
     expect(firstPage[0].id).toBe(newestArchivedTournamentId);
     expect(firstPage[0].name).toBe("Archived Test 12");
-    expect(firstPage[0].matchCounts).toEqual({ running: 0, scheduled: 0, finished: 1 });
+    expect(firstPage[0].matchCounts).toEqual({
+      running: 0,
+      scheduled: 0,
+      finished: 1,
+      postponed: 0,
+      cancelled: 0,
+    });
 
     const secondPage = await listArchivedTournamentSummaries({ limit: 2, offset: 2 });
     expect(secondPage).toHaveLength(2);

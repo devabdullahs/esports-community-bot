@@ -85,11 +85,14 @@ Discord Developer Portal settings:
 The bot calls internal dashboard routes with:
 
 ```env
-EWC_DASHBOARD_INTERNAL_URL=
-EWC_DASHBOARD_INTERNAL_SECRET=
+EWC_DASHBOARD_INTERNAL_URL=http://127.0.0.1:3000
+EWC_DASHBOARD_INTERNAL_PROFILE_SYNC_SECRET=
+EWC_DASHBOARD_INTERNAL_NEWS_REVALIDATE_SECRET=
 ```
 
-Internal routes fail closed if the secret is missing or wrong.
+The internal client accepts only an explicit loopback URL and each 32+ byte
+secret authorizes one operation. Internal routes fail closed if their
+capability secret is missing, short, placeholder text, or wrong.
 
 ## Admin Access
 

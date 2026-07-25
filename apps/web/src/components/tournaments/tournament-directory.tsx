@@ -1,11 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import Image from "next/image";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
   ArrowRightIcon,
   CalendarDaysIcon,
-  ClockIcon,
   Gamepad2Icon,
   ListFilterIcon,
   RadioIcon,
@@ -14,693 +13,535 @@ import {
   XIcon,
   type LucideIcon,
 } from "lucide-react";
-import { useMemo, useState, type ReactNode } from "react";
-import { LocalDateTime } from "@/components/local-date-time";
+import { useMemo, useTransition } from "react";
+import {
+  CompetitionStatusBadge,
+  FixtureRow,
+  TournamentIdentity,
+} from "@/components/tournaments/competition-primitives";
+import {
+  GameIcon,
+  SourceIcon,
+  TournamentMark,
+} from "@/components/tournaments/competition-icons";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
+import {
+  Empty,
+  EmptyContent,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyMedia,
+  EmptyTitle,
+} from "@/components/ui/empty";
+import {
+  InputGroup,
+  InputGroupAddon,
+  InputGroupInput,
+} from "@/components/ui/input-group";
+import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { copy, formatNumber, localizedPath, type Locale } from "@/lib/i18n";
-import { logoProxyUrl } from "@/lib/logo-url";
-import { safeUrlOrUndefined } from "@/lib/safe-url";
 import {
   filterTournamentDirectory,
+  parseTournamentDirectoryFilters,
+  serializeTournamentDirectoryFilters,
+  tournamentDirectoryFilterCounts,
   tournamentDirectoryStats,
   tournamentPrimaryStatus,
+  type NormalizedTournamentDirectoryFilters,
   type TournamentDirectoryItem,
   type TournamentStatusFilter,
 } from "@/lib/tournament-directory";
 
-type FilterOption = { value: string; label: string; count: number };
+type FilterOption = { value: string; label: string };
+
+export { GameIcon, SourceIcon, TournamentMark };
 
 export function TournamentDirectory({
   locale,
   heading,
   tournaments,
   archiveHref = null,
+  archived = false,
+  filterUniverse,
+  serverFiltered = false,
+  resultTotal,
 }: {
   locale: Locale;
   heading: string;
   tournaments: TournamentDirectoryItem[];
   archiveHref?: string | null;
+  archived?: boolean;
+  filterUniverse?: TournamentDirectoryItem[];
+  serverFiltered?: boolean;
+  resultTotal?: number;
 }) {
   const text = copy[locale].tournaments;
-  const [query, setQuery] = useState("");
-  const [status, setStatus] = useState<TournamentStatusFilter>("all");
-  const [game, setGame] = useState("all");
-  const [source, setSource] = useState("all");
+  const pathname = usePathname();
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const [isPending, startTransition] = useTransition();
 
-  const stats = useMemo(() => tournamentDirectoryStats(tournaments), [tournaments]);
-  const gameOptions = useMemo<FilterOption[]>(() => {
-    const byGame = new Map<string, FilterOption>();
-    for (const tournament of tournaments) {
-      const value = tournament.game ?? "other";
-      const existing = byGame.get(value);
-      if (existing) {
-        existing.count += 1;
-      } else {
-        byGame.set(value, { value, label: tournament.gameTitle, count: 1 });
-      }
-    }
-    return [...byGame.values()].sort((a, b) => a.label.localeCompare(b.label));
-  }, [tournaments]);
-  const sourceOptions = useMemo<FilterOption[]>(() => {
-    const bySource = new Map<string, FilterOption>();
-    for (const tournament of tournaments) {
-      const existing = bySource.get(tournament.source);
-      if (existing) {
-        existing.count += 1;
-      } else {
-        bySource.set(tournament.source, {
+  const universe = filterUniverse ?? tournaments;
+  const gameOptions = useMemo<FilterOption[]>(
+    () =>
+      uniqueOptions(
+        universe.map((tournament) => ({
+          value: tournament.game ?? "other",
+          label: tournament.gameTitle,
+        })),
+      ),
+    [universe],
+  );
+  const sourceOptions = useMemo<FilterOption[]>(
+    () =>
+      uniqueOptions(
+        universe.map((tournament) => ({
           value: tournament.source,
           label: tournament.sourceLabel,
-          count: 1,
-        });
-      }
-    }
-    return [...bySource.values()].sort((a, b) => a.label.localeCompare(b.label));
-  }, [tournaments]);
-
-  const filtered = useMemo(
-    () => filterTournamentDirectory(tournaments, { query, status, game, source }),
-    [game, query, source, status, tournaments],
+        })),
+      ),
+    [universe],
   );
-  const hasFilters = query.trim() || status !== "all" || game !== "all" || source !== "all";
+  const filters = useMemo(
+    () =>
+      parseTournamentDirectoryFilters(searchParams, {
+        games: gameOptions.map((option) => option.value),
+        sources: sourceOptions.map((option) => option.value),
+      }),
+    [gameOptions, searchParams, sourceOptions],
+  );
+  const stats = useMemo(() => tournamentDirectoryStats(universe), [universe]);
+  const counts = useMemo(
+    () => tournamentDirectoryFilterCounts(universe, filters),
+    [filters, universe],
+  );
+  const filtered = useMemo(
+    () => serverFiltered ? tournaments : filterTournamentDirectory(tournaments, filters),
+    [filters, serverFiltered, tournaments],
+  );
+  const live = filtered.filter((tournament) => tournamentPrimaryStatus(tournament) === "live");
+  const directory = filtered.filter((tournament) => tournamentPrimaryStatus(tournament) !== "live");
+  const hasFilters =
+    filters.query !== "" ||
+    filters.status !== "all" ||
+    filters.game !== "all" ||
+    filters.source !== "all";
 
-  const statusOptions: Array<{ value: TournamentStatusFilter; label: string; count: number }> = [
-    { value: "all", label: text.allStatuses, count: tournaments.length },
-    { value: "live", label: text.live, count: stats.live },
-    { value: "upcoming", label: text.upcoming, count: stats.upcoming },
-    { value: "results", label: text.results, count: stats.results },
-  ];
-
-  function clearFilters() {
-    setQuery("");
-    setStatus("all");
-    setGame("all");
-    setSource("all");
+  function navigate(
+    patch: Partial<NormalizedTournamentDirectoryFilters>,
+    behavior: "push" | "replace" = "push",
+  ) {
+    const params = serializeTournamentDirectoryFilters(
+      { ...filters, ...patch },
+      new URLSearchParams(searchParams.toString()),
+    );
+    const href = params.size ? `${pathname}?${params}` : pathname;
+    startTransition(() => router[behavior](href, { scroll: false }));
   }
 
+  function clearFilters() {
+    navigate({ query: "", status: "all", game: "all", source: "all" });
+  }
+
+  const statusOptions: Array<{
+    value: TournamentStatusFilter;
+    label: string;
+    count: number;
+  }> = [
+    { value: "all", label: text.allStatuses, count: counts.statuses.all },
+    { value: "live", label: text.live, count: counts.statuses.live },
+    { value: "upcoming", label: text.upcoming, count: counts.statuses.upcoming },
+    { value: "results", label: text.results, count: counts.statuses.results },
+  ];
+
   return (
-    <div className="flex flex-col gap-8">
-      <section className="relative overflow-hidden rounded-2xl border bg-card/40 p-5 shadow-sm sm:p-6">
-        <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-primary/60 to-transparent" />
-        <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
-          <div className="flex max-w-3xl flex-col gap-3">
-            <Badge variant="outline" className="w-fit border-primary/35 bg-primary/10 text-primary">
-              <TrophyIcon data-icon="inline-start" />
-              {text.eyebrow}
-            </Badge>
-            <div className="flex flex-col gap-2">
-              <h1 className="text-3xl font-semibold leading-tight sm:text-4xl">{heading}</h1>
-              <p className="text-sm leading-6 text-muted-foreground sm:text-base">
-                {text.description}
-              </p>
-            </div>
-            {archiveHref ? (
-              <Link
-                href={archiveHref}
-                className="inline-flex w-fit items-center gap-1.5 text-sm font-medium text-primary underline-offset-4 hover:underline"
-              >
-                {text.archiveLink}
-                <ArrowRightIcon className="size-3.5 rtl:rotate-180" />
-              </Link>
-            ) : null}
+    <div className="flex flex-col gap-7">
+      <CompetitionMasthead
+        locale={locale}
+        heading={heading}
+        archiveHref={archiveHref}
+        archived={archived}
+        stats={stats}
+      />
+
+      {live.length ? (
+        <section aria-labelledby="live-competitions-title" className="flex flex-col gap-3">
+          <div className="flex items-center justify-between gap-3">
+            <h2 id="live-competitions-title" className="inline-flex items-center gap-2 text-lg font-semibold">
+              <RadioIcon className="size-4 text-primary" />
+              {text.liveNow}
+            </h2>
+            <Badge variant="secondary">{formatNumber(live.length, locale)}</Badge>
           </div>
-          <div className="grid w-full grid-cols-2 gap-2 sm:grid-cols-4 lg:w-[31rem]">
-            <StatPill icon={TrophyIcon} label={text.trackedTournaments} value={stats.tournaments} locale={locale} />
-            <StatPill icon={Gamepad2Icon} label={text.trackedGames} value={stats.games} locale={locale} />
-            <StatPill icon={RadioIcon} label={text.liveTournaments} value={stats.live} locale={locale} tone="live" />
-            <StatPill icon={CalendarDaysIcon} label={text.upcomingTournaments} value={stats.upcoming} locale={locale} />
+          <div className="grid gap-3 lg:grid-cols-2">
+            {live.map((tournament) => (
+              <TournamentPanel key={tournament.id} locale={locale} tournament={tournament} live />
+            ))}
           </div>
-        </div>
-      </section>
+        </section>
+      ) : null}
 
-      <section className="flex flex-col gap-4 rounded-2xl border bg-card/35 p-4">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="inline-flex items-center gap-2 text-sm font-medium">
-            <ListFilterIcon className="size-4 text-primary" />
-            {text.filters}
-          </div>
-          <div className="text-xs text-muted-foreground">
-            {text.showing} {formatNumber(filtered.length, locale)} /{" "}
-            {formatNumber(tournaments.length, locale)}
-          </div>
-        </div>
+      <TournamentFilters
+        locale={locale}
+        filters={filters}
+        gameOptions={gameOptions}
+        sourceOptions={sourceOptions}
+        statusOptions={statusOptions}
+        gameCounts={new Map(counts.games.map((option) => [option.value, option.count]))}
+        sourceCounts={new Map(counts.sources.map((option) => [option.value, option.count]))}
+        allGames={counts.allGames}
+        allSources={counts.allSources}
+        showing={filtered.length}
+        total={resultTotal ?? universe.length}
+        pending={isPending}
+        hasFilters={Boolean(hasFilters)}
+        onNavigate={navigate}
+        onClear={clearFilters}
+      />
 
-        <div className="relative">
-          <SearchIcon className="pointer-events-none absolute start-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-            placeholder={text.searchPlaceholder}
-            className="h-10 ps-8"
-          />
-        </div>
-
-        <FilterRow>
-          {statusOptions.map((option) => (
-            <FilterButton
-              key={option.value}
-              active={status === option.value}
-              label={option.label}
-              count={option.count}
-              locale={locale}
-              onClick={() => setStatus(option.value)}
-            />
-          ))}
-        </FilterRow>
-
-        <FilterRow>
-          <FilterButton
-            active={game === "all"}
-            label={text.allGames}
-            count={stats.games}
-            locale={locale}
-            onClick={() => setGame("all")}
-          />
-          {gameOptions.map((option) => (
-            <FilterButton
-              key={option.value}
-              active={game === option.value}
-              label={option.label}
-              count={option.count}
-              locale={locale}
-              onClick={() => setGame(option.value)}
-              icon={<GameIcon slug={option.value} />}
-            />
-          ))}
-        </FilterRow>
-
-        <FilterRow>
-          <FilterButton
-            active={source === "all"}
-            label={text.allSources}
-            count={sourceOptions.length}
-            locale={locale}
-            onClick={() => setSource("all")}
-          />
-          {sourceOptions.map((option) => (
-            <FilterButton
-              key={option.value}
-              active={source === option.value}
-              label={option.label}
-              count={option.count}
-              locale={locale}
-              onClick={() => setSource(option.value)}
-              icon={<SourceIcon source={option.value} />}
-            />
-          ))}
-          {hasFilters ? (
-            <Button variant="ghost" size="sm" onClick={clearFilters}>
-              <XIcon data-icon="inline-start" />
-              {text.clearFilters}
-            </Button>
-          ) : null}
-        </FilterRow>
-      </section>
-
-      {filtered.length ? (
-        <section className="grid gap-4 lg:grid-cols-2">
-          {filtered.map((tournament) => (
-            <TournamentCard key={tournament.id} locale={locale} tournament={tournament} />
+      {directory.length ? (
+        <section aria-label={archived ? text.archiveTitle : text.trackedTournaments} className="grid gap-3 lg:grid-cols-2">
+          {directory.map((tournament) => (
+            <TournamentPanel key={tournament.id} locale={locale} tournament={tournament} />
           ))}
         </section>
-      ) : (
-        <Card className="items-center justify-center py-14 text-center">
-          <CardContent className="flex flex-col items-center gap-3">
-            <div className="grid size-12 place-items-center rounded-xl border bg-muted/40 text-muted-foreground">
-              <SearchIcon className="size-5" />
-            </div>
-            <div className="text-base font-medium">{hasFilters ? text.noFiltered : text.empty}</div>
-            {hasFilters ? (
+      ) : live.length ? null : (
+        <Empty className="min-h-56 border">
+          <EmptyHeader>
+            <EmptyMedia variant="icon">
+              <SearchIcon />
+            </EmptyMedia>
+            <EmptyTitle>{hasFilters ? text.noFiltered : archived ? text.archiveEmpty : text.empty}</EmptyTitle>
+            <EmptyDescription>
+              {hasFilters ? text.searchPlaceholder : text.description}
+            </EmptyDescription>
+          </EmptyHeader>
+          {hasFilters ? (
+            <EmptyContent>
               <Button variant="outline" size="sm" onClick={clearFilters}>
+                <XIcon data-icon="inline-start" />
                 {text.clearFilters}
               </Button>
-            ) : null}
-          </CardContent>
-        </Card>
+            </EmptyContent>
+          ) : null}
+        </Empty>
       )}
     </div>
   );
 }
 
-function TournamentCard({
+function CompetitionMasthead({
+  locale,
+  heading,
+  archiveHref,
+  archived,
+  stats,
+}: {
+  locale: Locale;
+  heading: string;
+  archiveHref: string | null;
+  archived: boolean;
+  stats: ReturnType<typeof tournamentDirectoryStats>;
+}) {
+  const text = copy[locale].tournaments;
+  return (
+    <section className="border-b pb-6">
+      <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
+        <div className="flex max-w-3xl flex-col gap-3">
+          <Badge variant="outline" className="w-fit">
+            <TrophyIcon data-icon="inline-start" />
+            {archived ? text.archivedBadge : text.eyebrow}
+          </Badge>
+          <div className="flex flex-col gap-2">
+            <h1 className="text-3xl font-semibold leading-tight sm:text-4xl">{heading}</h1>
+            <p className="text-sm leading-6 text-muted-foreground sm:text-base">
+              {archived ? text.archiveDescription : text.description}
+            </p>
+          </div>
+          {archiveHref ? (
+            <Button
+              render={<Link href={archiveHref} />}
+              nativeButton={false}
+              variant="outline"
+              size="sm"
+              className="w-fit"
+            >
+              {archived ? text.activeLink : text.archiveLink}
+              <ArrowRightIcon data-icon="inline-end" className="rtl:rotate-180" />
+            </Button>
+          ) : null}
+        </div>
+        <div className="grid w-full grid-cols-2 gap-2 sm:grid-cols-4 lg:w-[31rem]">
+          <StatFact icon={TrophyIcon} label={text.trackedTournaments} value={stats.tournaments} locale={locale} />
+          <StatFact icon={Gamepad2Icon} label={text.trackedGames} value={stats.games} locale={locale} />
+          <StatFact icon={RadioIcon} label={text.liveTournaments} value={stats.live} locale={locale} />
+          <StatFact icon={CalendarDaysIcon} label={text.upcomingTournaments} value={stats.upcoming} locale={locale} />
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function TournamentFilters({
+  locale,
+  filters,
+  gameOptions,
+  sourceOptions,
+  statusOptions,
+  gameCounts,
+  sourceCounts,
+  allGames,
+  allSources,
+  showing,
+  total,
+  pending,
+  hasFilters,
+  onNavigate,
+  onClear,
+}: {
+  locale: Locale;
+  filters: NormalizedTournamentDirectoryFilters;
+  gameOptions: FilterOption[];
+  sourceOptions: FilterOption[];
+  statusOptions: Array<{ value: TournamentStatusFilter; label: string; count: number }>;
+  gameCounts: Map<string, number>;
+  sourceCounts: Map<string, number>;
+  allGames: number;
+  allSources: number;
+  showing: number;
+  total: number;
+  pending: boolean;
+  hasFilters: boolean;
+  onNavigate: (
+    patch: Partial<NormalizedTournamentDirectoryFilters>,
+    behavior?: "push" | "replace",
+  ) => void;
+  onClear: () => void;
+}) {
+  const text = copy[locale].tournaments;
+  return (
+    <section aria-labelledby="tournament-filters-title" className="flex flex-col gap-4 border-y py-4">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h2 id="tournament-filters-title" className="inline-flex items-center gap-2 text-sm font-medium">
+          <ListFilterIcon className="size-4 text-primary" />
+          {text.filters}
+        </h2>
+        <span className="text-xs text-muted-foreground" aria-live="polite">
+          {text.showing} {formatNumber(showing, locale)} / {formatNumber(total, locale)}
+        </span>
+      </div>
+
+      <div className="grid gap-3 xl:grid-cols-[minmax(16rem,1fr)_auto_auto]">
+        <div className="min-w-0">
+          <Label htmlFor="tournament-search" className="sr-only">
+            {text.searchPlaceholder}
+          </Label>
+          <InputGroup className="h-9">
+            <InputGroupAddon>
+              <SearchIcon />
+            </InputGroupAddon>
+            <InputGroupInput
+              id="tournament-search"
+              value={filters.query}
+              onChange={(event) => onNavigate({ query: event.target.value }, "replace")}
+              placeholder={text.searchPlaceholder}
+              maxLength={120}
+            />
+          </InputGroup>
+        </div>
+
+        <div>
+          <Label id="tournament-game-filter-label" className="sr-only">
+            {text.allGames}
+          </Label>
+          <Select value={filters.game} onValueChange={(value) => onNavigate({ game: value ?? "all" })}>
+            <SelectTrigger className="h-9 w-full xl:w-52" aria-labelledby="tournament-game-filter-label">
+              <SelectValue>
+                {(value) => {
+                  const option = gameOptions.find((item) => item.value === value);
+                  return value === "all" ? text.allGames : option?.label ?? text.allGames;
+                }}
+              </SelectValue>
+            </SelectTrigger>
+            <SelectContent alignItemWithTrigger={false}>
+              <SelectGroup>
+                <SelectItem value="all">
+                  {text.allGames} ({formatNumber(allGames, locale)})
+                </SelectItem>
+                {gameOptions.map((option) => (
+                  <SelectItem key={option.value} value={option.value}>
+                    <GameIcon slug={option.value} />
+                    {option.label} ({formatNumber(gameCounts.get(option.value) ?? 0, locale)})
+                  </SelectItem>
+                ))}
+              </SelectGroup>
+            </SelectContent>
+          </Select>
+        </div>
+
+        <div>
+          <Label id="tournament-source-filter-label" className="sr-only">
+            {text.allSources}
+          </Label>
+          <Select value={filters.source} onValueChange={(value) => onNavigate({ source: value ?? "all" })}>
+            <SelectTrigger className="h-9 w-full xl:w-48" aria-labelledby="tournament-source-filter-label">
+              <SelectValue>
+                {(value) => {
+                  const option = sourceOptions.find((item) => item.value === value);
+                  return value === "all" ? text.allSources : option?.label ?? text.allSources;
+                }}
+              </SelectValue>
+            </SelectTrigger>
+            <SelectContent alignItemWithTrigger={false}>
+              <SelectGroup>
+                <SelectItem value="all">
+                  {text.allSources} ({formatNumber(allSources, locale)})
+                </SelectItem>
+                {sourceOptions.map((option) => (
+                  <SelectItem key={option.value} value={option.value}>
+                    <SourceIcon source={option.value} />
+                    {option.label} ({formatNumber(sourceCounts.get(option.value) ?? 0, locale)})
+                  </SelectItem>
+                ))}
+              </SelectGroup>
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <ToggleGroup
+          value={[filters.status]}
+          onValueChange={(values) => values[0] && onNavigate({ status: values[0] as TournamentStatusFilter })}
+          variant="outline"
+          spacing={0}
+          aria-label={text.allStatuses}
+          className="max-w-full overflow-x-auto"
+        >
+          {statusOptions.map((option) => (
+            <ToggleGroupItem key={option.value} value={option.value} className="shrink-0 gap-1.5 px-2.5">
+              {option.label}
+              <span className="text-[0.68rem] tabular-nums text-muted-foreground">
+                {formatNumber(option.count, locale)}
+              </span>
+            </ToggleGroupItem>
+          ))}
+        </ToggleGroup>
+        {hasFilters ? (
+          <Button variant="ghost" size="sm" onClick={onClear} disabled={pending}>
+            <XIcon data-icon="inline-start" />
+            {text.clearFilters}
+          </Button>
+        ) : null}
+      </div>
+    </section>
+  );
+}
+
+function TournamentPanel({
   locale,
   tournament,
+  live = false,
 }: {
   locale: Locale;
   tournament: TournamentDirectoryItem;
+  live?: boolean;
 }) {
   const text = copy[locale].tournaments;
-  const primaryStatus = tournamentPrimaryStatus(tournament);
+  const status = tournamentPrimaryStatus(tournament);
   const match = tournament.featuredMatch;
-  const label =
-    primaryStatus === "live"
-      ? text.liveNow
-      : primaryStatus === "upcoming"
-        ? text.nextMatch
-        : primaryStatus === "results"
-          ? text.latestResult
-          : text.featuredMatch;
-
   return (
-    <Link
-      href={localizedPath(`/tournaments/${tournament.id}`, locale)}
-      className="group block rounded-2xl outline-none focus-visible:ring-2 focus-visible:ring-ring"
-    >
-      <Card
-        size="sm"
-        className="h-full border-border/70 bg-card/70 transition-colors group-hover:border-primary/40 group-hover:bg-card"
+    <article className="flex min-w-0 flex-col rounded-lg border bg-card">
+      <Link
+        href={localizedPath(`/tournaments/${tournament.id}`, locale)}
+        className="group flex items-start justify-between gap-3 p-4 outline-none focus-visible:ring-2 focus-visible:ring-ring"
       >
-        <CardHeader>
-          <div className="flex items-start justify-between gap-3">
-            <div className="flex min-w-0 items-start gap-3">
-              <TournamentMark slug={tournament.game ?? "other"} />
-              <div className="min-w-0">
-                <CardTitle className="line-clamp-2 text-base" dir="auto">
-                  {tournament.name || `#${formatNumber(tournament.id, locale)}`}
-                </CardTitle>
-                <div className="mt-1 flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
-                  <Badge variant="secondary" className="h-5 rounded-md">
-                    <GameIcon slug={tournament.game ?? "other"} />
-                    {tournament.gameTitle}
-                  </Badge>
-                  <Badge variant="outline" className="h-5 rounded-md text-muted-foreground">
-                    <SourceIcon source={tournament.source} />
-                    {tournament.sourceLabel}
-                  </Badge>
-                </div>
-              </div>
-            </div>
-            <ArrowCue />
-          </div>
-        </CardHeader>
-        <CardContent className="flex flex-1 flex-col gap-4">
-          <div className="grid grid-cols-3 gap-2">
-            <Metric label={text.live} value={tournament.matchCounts.running} locale={locale} live />
-            <Metric label={text.upcoming} value={tournament.matchCounts.scheduled} locale={locale} />
-            <Metric label={text.results} value={tournament.matchCounts.finished} locale={locale} />
-          </div>
-
-          {match ? (
-            <div className="rounded-xl border bg-muted/20 p-3">
-              <div className="mb-3 flex flex-wrap items-center justify-between gap-3 text-xs text-muted-foreground">
-                <span className="inline-flex items-center gap-1.5">
-                  {primaryStatus === "live" ? (
-                    <RadioIcon className="size-3.5 text-destructive" />
-                  ) : (
-                    <ClockIcon className="size-3.5 text-primary" />
-                  )}
-                  {label}
-                </span>
-                {match.scheduled_at ? (
-                  <LocalDateTime
-                    value={match.scheduled_at}
-                    locale={locale}
-                    fallback={text.timeTbd}
-                    className="tabular-nums"
-                  />
-                ) : null}
-              </div>
-              <div className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-3">
-                <TeamPreview name={match.team_a} logo={match.logo_a} />
-                <MatchCenter match={match} locale={locale} />
-                <TeamPreview name={match.team_b} logo={match.logo_b} align="end" />
-              </div>
-            </div>
-          ) : (
-            <div className="rounded-xl border border-dashed bg-muted/10 p-4 text-sm text-muted-foreground">
-              {text.noMatches}
-            </div>
-          )}
-        </CardContent>
-      </Card>
-    </Link>
+        <TournamentIdentity
+          name={tournament.name}
+          id={tournament.id}
+          game={tournament.game ?? "other"}
+          gameTitle={tournament.gameTitle}
+          source={tournament.source}
+          sourceLabel={tournament.sourceLabel}
+          locale={locale}
+        />
+        <div className="flex shrink-0 flex-col items-end gap-2">
+          <CompetitionStatusBadge status={status} locale={locale} />
+          <ArrowRightIcon className="size-4 text-muted-foreground transition-colors group-hover:text-primary rtl:rotate-180" />
+        </div>
+      </Link>
+      <div className="border-t px-4">
+        {match ? (
+          <FixtureRow
+            match={match}
+            locale={locale}
+            status={live ? "live" : undefined}
+            label={
+              status === "upcoming"
+                ? text.nextMatch
+                : status === "results"
+                  ? text.latestResult
+                  : text.featuredMatch
+            }
+          />
+        ) : (
+          <p className="py-4 text-sm text-muted-foreground">{text.noMatches}</p>
+        )}
+      </div>
+      <div className="grid grid-cols-3 border-t text-center text-xs text-muted-foreground">
+        <Metric label={text.live} value={tournament.matchCounts.running} locale={locale} />
+        <Metric label={text.upcoming} value={tournament.matchCounts.scheduled} locale={locale} />
+        <Metric label={text.results} value={tournament.matchCounts.finished} locale={locale} />
+      </div>
+    </article>
   );
 }
 
-function FilterRow({ children }: { children: ReactNode }) {
-  return <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1">{children}</div>;
-}
-
-function FilterButton({
-  active,
-  label,
-  count,
-  locale,
-  onClick,
-  icon,
-}: {
-  active: boolean;
-  label: string;
-  count: number;
-  locale: Locale;
-  onClick: () => void;
-  icon?: ReactNode;
-}) {
+function Metric({ label, value, locale }: { label: string; value: number; locale: Locale }) {
   return (
-    <Button
-      type="button"
-      variant={active ? "default" : "outline"}
-      size="sm"
-      className="shrink-0"
-      onClick={onClick}
-    >
-      {icon}
-      <span>{label}</span>
-      <span className="rounded-md bg-background/35 px-1.5 py-0.5 text-[0.7rem] tabular-nums">
-        {formatNumber(count, locale)}
-      </span>
-    </Button>
+    <div className="border-e px-2 py-2 last:border-e-0">
+      <span className="font-semibold tabular-nums text-foreground">{formatNumber(value, locale)}</span>
+      <span className="ms-1.5">{label}</span>
+    </div>
   );
 }
 
-function StatPill({
+function StatFact({
   icon: Icon,
   label,
   value,
   locale,
-  tone,
 }: {
   icon: LucideIcon;
   label: string;
   value: number;
   locale: Locale;
-  tone?: "live";
 }) {
   return (
-    <div className="rounded-xl border bg-background/40 p-3">
+    <div className="border-s-2 border-primary/45 px-3 py-1">
       <div className="flex items-center gap-2 text-xs text-muted-foreground">
-        <Icon className={tone === "live" ? "size-3.5 text-destructive" : "size-3.5 text-primary"} />
+        <Icon className="size-3.5 text-primary" />
         <span className="truncate">{label}</span>
       </div>
-      <div className="mt-2 text-2xl font-semibold tabular-nums">
-        {formatNumber(value, locale)}
-      </div>
+      <div className="mt-1 text-xl font-semibold tabular-nums">{formatNumber(value, locale)}</div>
     </div>
   );
 }
 
-function Metric({
-  label,
-  value,
-  locale,
-  live,
-}: {
-  label: string;
-  value: number;
-  locale: Locale;
-  live?: boolean;
-}) {
-  return (
-    <div className="rounded-lg bg-muted/35 px-2 py-2 text-center">
-      <div className={live && value > 0 ? "text-sm font-semibold text-destructive" : "text-sm font-semibold"}>
-        {formatNumber(value, locale)}
-      </div>
-      <div className="mt-0.5 truncate text-[0.68rem] text-muted-foreground">{label}</div>
-    </div>
-  );
-}
-
-function MatchCenter({
-  match,
-  locale,
-}: {
-  match: TournamentDirectoryItem["featuredMatch"];
-  locale: Locale;
-}) {
-  if (!match) return null;
-  if (match.score_a !== null && match.score_b !== null) {
-    return (
-      <span className="text-center text-sm font-semibold tabular-nums">
-        {formatNumber(match.score_a, locale)} - {formatNumber(match.score_b, locale)}
-      </span>
-    );
+function uniqueOptions(options: FilterOption[]): FilterOption[] {
+  const byValue = new Map<string, FilterOption>();
+  for (const option of options) {
+    if (!byValue.has(option.value)) byValue.set(option.value, option);
   }
-  return <span className="text-center text-xs font-medium text-muted-foreground">VS</span>;
-}
-
-function TeamPreview({
-  name,
-  logo,
-  align = "start",
-}: {
-  name: string | null;
-  logo: string | null;
-  align?: "start" | "end";
-}) {
-  const safeName = name || "TBD";
-  return (
-    <div
-      className={
-        align === "end"
-          ? "flex min-w-0 flex-row-reverse items-center gap-2 text-end"
-          : "flex min-w-0 items-center gap-2"
-      }
-    >
-      <TeamLogo name={safeName} logo={logo} />
-      <span className="min-w-0 truncate text-sm font-medium" dir="auto">
-        {safeName}
-      </span>
-    </div>
-  );
-}
-
-function TeamLogo({ name, logo }: { name: string; logo: string | null }) {
-  const [failed, setFailed] = useState(false);
-  const safe = safeUrlOrUndefined(logo);
-  // The logo proxy 404s for any crest the bot has not warmed into the shared
-  // cache yet; without an onError fallback that surfaces as a broken-image icon.
-  // Mirror the match-list Logo: validate the URL and degrade to clean initials.
-  if (!safe || failed) {
-    return (
-      <span className="grid size-8 shrink-0 place-items-center rounded-md bg-muted text-[0.65rem] font-semibold text-muted-foreground">
-        {initials(name)}
-      </span>
-    );
-  }
-  return (
-    // eslint-disable-next-line @next/next/no-img-element
-    <img
-      src={logoProxyUrl(safe)}
-      alt=""
-      loading="lazy"
-      onError={() => setFailed(true)}
-      className="size-8 shrink-0 rounded-md bg-background/70 object-contain p-1"
-    />
-  );
-}
-
-function initials(name: string): string {
-  return name
-    .split(/\s+/)
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((part) => part[0])
-    .join("")
-    .toUpperCase();
-}
-
-type GameIconSize = "inline" | "mark";
-
-const GAME_ICON_LABELS: Record<string, string> = {
-  ageofempires: "AoE",
-  apexlegends: "APEX",
-  brawlstars: "BS",
-  brawlhalla: "BH",
-  callofduty: "CoD",
-  callofdutyleague: "CDL",
-  chess: "CH",
-  clashofclans: "CoC",
-  clashroyale: "CR",
-  crossfire: "CF",
-  deadlock: "DL",
-  deltaforce: "DF",
-  easportsfc: "FC",
-  esports: "EWC",
-  esportsfc: "FC",
-  fighters: "FG",
-  freefire: "FF",
-  halo: "HALO",
-  hearthstone: "HS",
-  heroes: "HotS",
-  honorofkings: "HoK",
-  leagueoflegends: "LoL",
-  marvelrivals: "MR",
-  mobilelegends: "MLBB",
-  naraka: "NK",
-  osu: "OSU",
-  overwatch: "OW",
-  pubg: "PUBG",
-  pubgmobile: "PUBGM",
-  rainbowsix: "R6",
-  rocketleague: "RL",
-  simracing: "SIM",
-  smash: "SSB",
-  splatoon: "SPL",
-  starcraft2: "SC2",
-  stormgate: "SG",
-  teamfighttactics: "TFT",
-  teamfortress: "TF2",
-  thefinals: "FIN",
-  tft: "TFT",
-  trackmania: "TM",
-  valorant: "VCT",
-  warcraft: "WC",
-  warthunder: "WT",
-  warzone: "WZ",
-  wildrift: "WR",
-  worldoftanks: "WoT",
-};
-
-function normalizedGameSlug(slug: string): string {
-  const key = slug.trim().toLowerCase();
-  if (key === "cs2") return "counterstrike";
-  if (key === "fifa" || key === "ea-sports-fc" || key === "easportsfc") return "esportsfc";
-  if (key === "teamfighttactics") return "tft";
-  return key || "other";
-}
-
-const GAME_GLYPH_PATHS: Record<string, string> = {
-  ageofempires: "/game-glyphs/ageofempires.svg",
-  apexlegends: "/game-glyphs/apexlegends.png",
-  brawlstars: "/game-glyphs/brawlstars.svg",
-  brawlhalla: "/game-glyphs/brawlhalla.svg",
-  callofduty: "/game-glyphs/callofduty.png",
-  callofdutyleague: "/game-glyphs/callofdutyleague.png",
-  chess: "/game-glyphs/chess.svg",
-  clashofclans: "/game-glyphs/clashofclans.svg",
-  clashroyale: "/game-glyphs/clashroyale.svg",
-  counterstrike: "/game-glyphs/counterstrike.svg",
-  crossfire: "/game-glyphs/crossfire.svg",
-  deadlock: "/game-glyphs/deadlock.svg",
-  deltaforce: "/game-glyphs/deltaforce.svg",
-  dota2: "/game-glyphs/dota2.png",
-  easportsfc: "/game-glyphs/esportsfc.png",
-  esports: "/game-glyphs/esports.svg",
-  esportsfc: "/game-glyphs/esportsfc.png",
-  fifa: "/game-glyphs/esportsfc.png",
-  fighters: "/game-glyphs/fighters.png",
-  fortnite: "/game-glyphs/fortnite.png",
-  freefire: "/game-glyphs/freefire.png",
-  halo: "/game-glyphs/halo.svg",
-  hearthstone: "/game-glyphs/hearthstone.svg",
-  heroes: "/game-glyphs/heroes.svg",
-  honorofkings: "/game-glyphs/honorofkings.svg",
-  leagueoflegends: "/game-glyphs/leagueoflegends.png",
-  marvelrivals: "/game-glyphs/marvelrivals.svg",
-  mobilelegends: "/game-glyphs/mobilelegends.png",
-  naraka: "/game-glyphs/naraka.svg",
-  osu: "/game-glyphs/osu.svg",
-  overwatch: "/game-glyphs/overwatch.png",
-  pubg: "/game-glyphs/pubg.png",
-  pubgmobile: "/game-glyphs/pubgmobile.svg",
-  rainbowsix: "/game-glyphs/rainbowsix.png",
-  rocketleague: "/game-glyphs/rocketleague.svg",
-  simracing: "/game-glyphs/simracing.svg",
-  smash: "/game-glyphs/smash.svg",
-  splatoon: "/game-glyphs/splatoon.svg",
-  starcraft2: "/game-glyphs/starcraft2.svg",
-  stormgate: "/game-glyphs/stormgate.svg",
-  teamfighttactics: "/game-glyphs/tft.png",
-  teamfortress: "/game-glyphs/teamfortress.svg",
-  thefinals: "/game-glyphs/thefinals.svg",
-  tft: "/game-glyphs/tft.png",
-  trackmania: "/game-glyphs/trackmania.svg",
-  valorant: "/game-glyphs/valorant.png",
-  warcraft: "/game-glyphs/warcraft.svg",
-  warthunder: "/game-glyphs/warthunder.svg",
-  warzone: "/game-glyphs/warzone.png",
-  wildrift: "/game-glyphs/wildrift.svg",
-  worldoftanks: "/game-glyphs/worldoftanks.svg",
-};
-
-function gameGlyphPath(slug: string): string | null {
-  const normalized = normalizedGameSlug(slug);
-  return GAME_GLYPH_PATHS[normalized] ?? null;
-}
-
-const SOURCE_GLYPH_PATHS: Record<string, string> = {
-  liquipedia: "/source-glyphs/liquipedia.png",
-  pandascore: "/source-glyphs/pandascore.png",
-  startgg: "/source-glyphs/startgg.png",
-};
-
-function sourceGlyphPath(source: string): string | null {
-  return SOURCE_GLYPH_PATHS[source.toLowerCase()] ?? null;
-}
-
-function iconClass(size: GameIconSize): string {
-  return size === "mark" ? "size-7" : "size-4";
-}
-
-function fallbackIconLabel(slug: string): string {
-  const normalized = normalizedGameSlug(slug);
-  return GAME_ICON_LABELS[normalized] ?? normalized.slice(0, 3).toUpperCase();
-}
-
-export function GameIcon({ slug, size = "inline" }: { slug: string; size?: GameIconSize }) {
-  const normalized = normalizedGameSlug(slug);
-  const className = iconClass(size);
-  const glyph = gameGlyphPath(normalized);
-  if (glyph) {
-    const mask = `url("${glyph}") center / contain no-repeat`;
-    return (
-      <span
-        className={`${className} inline-block shrink-0 bg-current`}
-        style={{ WebkitMask: mask, mask }}
-        aria-hidden
-      />
-    );
-  }
-
-  return (
-    <span
-      className={
-        size === "mark"
-          ? "inline-grid min-w-8 place-items-center rounded-md border border-primary/25 bg-primary/10 px-1.5 py-1 text-[0.62rem] font-bold uppercase leading-none text-primary"
-          : "inline-grid min-w-5 place-items-center rounded bg-muted px-1 text-[0.5rem] font-bold uppercase leading-4 text-muted-foreground"
-      }
-      aria-hidden
-    >
-      {fallbackIconLabel(normalized)}
-    </span>
-  );
-}
-
-export function SourceIcon({ source }: { source: string }) {
-  const glyph = sourceGlyphPath(source);
-  if (glyph) {
-    return (
-      <span className="grid size-4 shrink-0 place-items-center overflow-hidden rounded bg-muted/70 p-0.5">
-        <Image src={glyph} alt="" width={14} height={14} className="size-full object-contain" />
-      </span>
-    );
-  }
-
-  return (
-    <span className="grid size-4 place-items-center rounded bg-muted text-[0.5rem] font-bold uppercase text-muted-foreground">
-      {source.slice(0, 1)}
-    </span>
-  );
-}
-
-export function TournamentMark({ slug }: { slug: string }) {
-  return (
-    <div className="relative grid size-12 shrink-0 place-items-center overflow-hidden rounded-xl border bg-background/70 text-primary">
-      <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_20%,hsl(var(--primary)/0.18),transparent_60%)]" />
-      <div className="relative z-10 grid size-full place-items-center">
-        <GameIcon slug={slug} size="mark" />
-      </div>
-    </div>
-  );
-}
-
-function ArrowCue() {
-  return (
-    <div className="grid size-8 shrink-0 place-items-center rounded-lg border bg-background/40 text-muted-foreground transition-colors group-hover:text-primary">
-      <ArrowRightIcon className="size-4 rtl:rotate-180" />
-    </div>
-  );
+  return [...byValue.values()].sort((a, b) => a.label.localeCompare(b.label));
 }

@@ -30,6 +30,7 @@ import {
   type NotificationPrefsPatch,
 } from "@/components/follows/notification-client";
 import { NotificationInbox } from "@/components/follows/notification-inbox";
+import { PushNotificationSettings } from "@/components/follows/push-notification-settings";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -286,6 +287,7 @@ export function FollowCenter({ locale, section = "all" }: { locale: Locale; sect
               <p className="text-xs text-muted-foreground">{text.nextDelivery}: {deliveryPreview}</p>
             </div>
           </>}
+          <PushNotificationSettings locale={locale} />
         </CardContent>
       </Card>}
     </section>

@@ -26,7 +26,11 @@ export async function GET(
 
   // Cached (60s revalidate); the match list polls every ~90s. unstable_cache keys
   // by (id, limit, offset), so paginated and per-tournament reads stay distinct.
-  const data = await getTournamentMatchesCached(tournamentId, { limit, offset });
+  const data = await getTournamentMatchesCached(tournamentId, {
+    limit,
+    offset,
+    includeBracket: false,
+  });
   if (!data) {
     return NextResponse.json({ error: "Tournament not found." }, { status: 404 });
   }
