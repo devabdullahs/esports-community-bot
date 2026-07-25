@@ -114,6 +114,7 @@ function testEnvironment(dbPath) {
     DB_PATH: dbPath,
     DISCORD_CLIENT_ID: "e2e-discord-client-id",
     DISCORD_CLIENT_SECRET: "e2e-discord-client-secret",
+    DISCORD_GUILD_ID: "1200000000000000001",
     EWC_DASHBOARD_DEV_AUTH_BYPASS: "true",
     EWC_DASHBOARD_DEV_AUTH_USER_ID: "dev-local-auth-user",
     EWC_DASHBOARD_INTERNAL_PROFILE_SYNC_SECRET: "e2e-only-profile-sync-secret-that-is-long-enough",

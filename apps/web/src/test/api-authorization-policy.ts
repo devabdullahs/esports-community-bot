@@ -293,6 +293,8 @@ const POLICY_ENTRIES: readonly AuthorizationPolicyEntry[] = [
     ["admin/streams/[id]", ["PATCH", "DELETE"]],
     ["admin/team", ["GET", "POST"]],
     ["admin/team/[discordId]", ["PATCH", "DELETE"]],
+    ["admin/tournaments/[id]/metadata", ["PATCH"]],
+    ["admin/tournaments/operations", ["POST"]],
     ["admin/users/[discordId]/block", ["POST", "DELETE"]],
   ], SUPER_ADMIN),
   ...entries([
@@ -316,6 +318,8 @@ const POLICY_ENTRIES: readonly AuthorizationPolicyEntry[] = [
     ["admin/streams/[id]", ["PATCH", "DELETE"]],
     ["admin/team", ["POST"]],
     ["admin/team/[discordId]", ["PATCH", "DELETE"]],
+    ["admin/tournaments/[id]/metadata", ["PATCH"]],
+    ["admin/tournaments/operations", ["POST"]],
     ["admin/users/[discordId]/block", ["POST", "DELETE"]],
   ], {
     ...SUPER_ADMIN,
