@@ -76,7 +76,7 @@ test("super admin stages, recovers, archives, and reactivates a tournament", asy
   expect(staged.tournamentId).not.toBeNull();
 
   await page.reload();
-  await page.getByPlaceholder("Search tournaments").fill(stagedName);
+  await page.getByTestId("tournament-registry-search").fill(stagedName);
   let row = tournamentRow(page, stagedName);
   await expect(row).toBeVisible();
   await expect(row.getByText("Succeeded", { exact: true })).toBeVisible();
@@ -92,7 +92,7 @@ test("super admin stages, recovers, archives, and reactivates a tournament", asy
   expect(standings.tournamentId).toBe(staged.tournamentId);
 
   await page.reload();
-  await page.getByPlaceholder("Search tournaments").fill(stagedName);
+  await page.getByTestId("tournament-registry-search").fill(stagedName);
   row = tournamentRow(page, stagedName);
   await openActions(row);
   await confirmLifecycle(page, "Archive");
@@ -100,7 +100,7 @@ test("super admin stages, recovers, archives, and reactivates a tournament", asy
   expect(archived.tournamentId).toBe(staged.tournamentId);
 
   await page.reload();
-  await page.getByPlaceholder("Search tournaments").fill(stagedName);
+  await page.getByTestId("tournament-registry-search").fill(stagedName);
   row = tournamentRow(page, stagedName);
   await expect(row.getByText("Archived", { exact: true })).toBeVisible();
   await openActions(row);
@@ -114,7 +114,7 @@ test("super admin stages, recovers, archives, and reactivates a tournament", asy
   expect(reactivated.tournamentId).toBe(staged.tournamentId);
 
   await page.reload();
-  await page.getByPlaceholder("Search tournaments").fill(stagedName);
+  await page.getByTestId("tournament-registry-search").fill(stagedName);
   row = tournamentRow(page, stagedName);
   await expect(row.getByText("Active", { exact: true })).toBeVisible();
   await expect(page.getByText("e2e_completed", { exact: true }).first()).toBeVisible();

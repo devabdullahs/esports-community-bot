@@ -70,7 +70,8 @@ function finalizePublicResponse(request: NextRequest, response: NextResponse) {
 }
 
 function shouldPersistLocale(request: NextRequest) {
-  return !isPublicHtmlCacheCandidate(request);
+  return request.headers.get("sec-fetch-dest") === "document" ||
+    request.headers.get("sec-fetch-mode") === "navigate";
 }
 
 export function proxy(request: NextRequest) {

@@ -533,6 +533,7 @@ export function TournamentOperationsCenter({
             <div className="relative">
               <SearchIcon className="pointer-events-none absolute start-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
               <Input
+                data-testid="tournament-registry-search"
                 value={query}
                 onChange={(event) => setQuery(event.target.value)}
                 placeholder={t.search}
