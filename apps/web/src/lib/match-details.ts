@@ -78,8 +78,23 @@ export type DotaDetails = DetailBase & {
   }[];
 };
 
+export type BattleRoyaleEntry = {
+  rank: number | null;
+  team: string;
+  logo: string | null;
+  placement: number | null;
+  kills: number | null;
+  points: number | null;
+};
+
+export type BattleRoyaleDetails = DetailBase & {
+  kind: "battle-royale";
+  gameNumber: number | null;
+  entries: BattleRoyaleEntry[];
+};
+
 export type DraftEntry = { hero: string | null; order: number | null };
-export type MatchDetailsViewModel = ValorantDetails | DotaDetails;
+export type MatchDetailsViewModel = ValorantDetails | DotaDetails | BattleRoyaleDetails;
 
 export type MatchPageModel = {
   id: number;
@@ -254,6 +269,24 @@ export function toMatchDetailsViewModel(payload: unknown): MatchDetailsViewModel
           players: sidePlayers(game.players, mapDotaPlayer),
         };
       }),
+    };
+  }
+
+  if (raw.kind === "battle-royale") {
+    const entries = valueByLabel(raw.entries, (entry) => ({
+      rank: number(entry.rank),
+      team: text(entry.team),
+      logo: safeUrlOrUndefined(text(entry.logo)) ?? null,
+      placement: number(entry.placement),
+      kills: number(entry.kills),
+      points: number(entry.points),
+    })).flatMap((entry) => (entry.team ? [{ ...entry, team: entry.team }] : []));
+    if (!entries.length) return null;
+    return {
+      ...base,
+      kind: "battle-royale",
+      gameNumber: number(raw.gameNumber),
+      entries,
     };
   }
   return null;

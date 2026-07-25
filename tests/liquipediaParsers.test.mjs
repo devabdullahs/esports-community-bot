@@ -31,6 +31,7 @@ const {
   parseMatchStream,
   matchResultRank,
   mergeLiveWidgetMatch,
+  fetchSchedule,
   parseTournamentEwcAffiliation,
   parseEwcEventResult,
   parseEwcEventPlacements,
@@ -874,6 +875,66 @@ test('parseMatchlistMatch: both TBD returns null', () => {
   const $ = load(html);
   const el = $('.brkts-matchlist-match')[0];
   assert.equal(parseMatchlistMatch($, el, 'valorant', 'EWC/2026'), null);
+});
+
+test('fetchSchedule: merges a unique untimed Swiss result into its timed FC match', async () => {
+  const scheduledAt = 1_784_822_400;
+  const $ = load(`
+    <div class="brkts-matchlist-match">
+      <div class="brkts-matchlist-opponent" aria-label="Samugamer 07">
+        <span class="name">Samugamer 07</span>
+      </div>
+      <div class="brkts-matchlist-score">
+        <span class="brkts-matchlist-cell-content"></span>
+        <span class="brkts-matchlist-cell-content"></span>
+      </div>
+      <div class="brkts-matchlist-opponent" aria-label="Adida">
+        <span class="name">Adida</span>
+      </div>
+      <span class="timer-object" data-timestamp="${scheduledAt}"></span>
+    </div>
+    <div class="swiss-table-body-row">
+      <div class="group-table-result-row">
+        <div class="group-table-entry" aria-label="Samugamer 07"></div>
+      </div>
+      <div class="swiss-table-match-row">
+        <div class="swiss-table-match" aria-label="Adida">
+          <span class="swiss-table-match-score">9:3</span>
+        </div>
+      </div>
+    </div>
+    <div class="swiss-table-body-row">
+      <div class="group-table-result-row">
+        <div class="group-table-entry" aria-label="Adida"></div>
+      </div>
+      <div class="swiss-table-match-row">
+        <div class="swiss-table-match" aria-label="Samugamer 07">
+          <span class="swiss-table-match-score">3:9</span>
+        </div>
+      </div>
+    </div>
+  `);
+
+  const matches = await fetchSchedule(
+    {
+      source: 'liquipedia',
+      external_id: 'easportsfc/FC_Pro_26/World_Championship',
+    },
+    {
+      lpdbService: {
+        isEnabled: () => false,
+        fetchSchedule: async () => [],
+      },
+      loadPage: async () => ({ $ }),
+    },
+  );
+
+  assert.equal(matches.length, 1);
+  assert.equal(matches[0].scheduledAt, scheduledAt);
+  assert.equal(matches[0].status, 'finished');
+  assert.equal(matches[0].scoreA, 9);
+  assert.equal(matches[0].scoreB, 3);
+  assert.equal(matches[0].winner, 'Samugamer 07');
 });
 
 // ---------------------------------------------------------------------------

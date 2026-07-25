@@ -7,9 +7,26 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from "@/components/ui/accordion";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Badge } from "@/components/ui/badge";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { DotaPlayerTable, ValorantPlayerTable } from "@/components/matches/player-table";
-import type { DotaDetails, DotaTeamStats, MatchDetailsViewModel, ValorantDetails } from "@/lib/match-details";
+import type {
+  BattleRoyaleDetails,
+  DotaDetails,
+  DotaTeamStats,
+  MatchDetailsViewModel,
+  ValorantDetails,
+} from "@/lib/match-details";
 import { copy, type Locale } from "@/lib/i18n";
+import { logoProxyUrl } from "@/lib/logo-url";
 import { cn } from "@/lib/utils";
 
 type Side = "a" | "b";
@@ -35,6 +52,12 @@ type MatchDetailsCopy = {
   matchDetailsTowers: string;
   matchDetailsBarracks: string;
   matchDetailsRoshans: string;
+  matchDetailsGameResults: string;
+  matchDetailsRank: string;
+  matchDetailsTeam: string;
+  matchDetailsPlacement: string;
+  matchDetailsKills: string;
+  matchDetailsPoints: string;
 };
 
 function score(value: number | null) {
@@ -80,6 +103,64 @@ function DetailsMetadata({ details, text }: { details: MatchDetailsViewModel; te
         </div>
       ) : null}
     </dl>
+  );
+}
+
+export function BattleRoyaleResults({
+  details,
+  text,
+}: {
+  details: BattleRoyaleDetails;
+  text: MatchDetailsCopy;
+}) {
+  return (
+    <div className="flex flex-col gap-4">
+      <DetailsMetadata details={details} text={text} />
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h2 className="text-lg font-semibold">{text.matchDetailsGameResults}</h2>
+        {details.gameNumber ? (
+          <Badge variant="secondary">{text.matchDetailsGame(details.gameNumber)}</Badge>
+        ) : null}
+      </div>
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead className="w-16 px-3 text-center">{text.matchDetailsRank}</TableHead>
+            <TableHead className="min-w-52 px-3 text-start">{text.matchDetailsTeam}</TableHead>
+            <TableHead className="px-3 text-center">{text.matchDetailsPlacement}</TableHead>
+            <TableHead className="px-3 text-center">{text.matchDetailsKills}</TableHead>
+            <TableHead className="px-3 text-center">{text.matchDetailsPoints}</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {details.entries.map((entry, index) => (
+            <TableRow key={`${entry.team}-${index}`}>
+              <TableCell className="px-3 text-center tabular-nums" dir="ltr">
+                {entry.rank ?? index + 1}
+              </TableCell>
+              <TableCell className="px-3">
+                <div className="flex min-w-48 items-center gap-3">
+                  <Avatar size="sm">
+                    {entry.logo ? <AvatarImage src={logoProxyUrl(entry.logo)} alt="" /> : null}
+                    <AvatarFallback>{entry.team.slice(0, 2).toUpperCase()}</AvatarFallback>
+                  </Avatar>
+                  <bdi className="font-medium">{entry.team}</bdi>
+                </div>
+              </TableCell>
+              <TableCell className="px-3 text-center tabular-nums" dir="ltr">
+                {entry.placement ?? "-"}
+              </TableCell>
+              <TableCell className="px-3 text-center tabular-nums" dir="ltr">
+                {entry.kills ?? "-"}
+              </TableCell>
+              <TableCell className="px-3 text-center font-semibold tabular-nums" dir="ltr">
+                {entry.points ?? "-"}
+              </TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+    </div>
   );
 }
 
@@ -270,8 +351,11 @@ export function MatchDetailTabs({
   teamB: string;
   locale: Locale;
 }) {
-  const isValorant = details.kind === "valorant";
   const text = copy[locale].tournaments;
+  if (details.kind === "battle-royale") {
+    return <BattleRoyaleResults details={details} text={text} />;
+  }
+  const isValorant = details.kind === "valorant";
   return (
     <Tabs defaultValue="overview" className="gap-5">
       <TabsList variant="line" aria-label={text.matchDetailsSections}>

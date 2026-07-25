@@ -50,6 +50,7 @@ import {
 import { withProfileReturn, type ProfileReturnContext } from "@/lib/profile-navigation";
 import { safeUrlOrUndefined } from "@/lib/safe-url";
 import { projectTournamentBracket } from "@/lib/tournament-brackets";
+import { cn } from "@/lib/utils";
 
 type TournamentCopy = (typeof copy)[Locale]["tournaments"];
 type PublicSyncHealth = {
@@ -332,11 +333,24 @@ function MatchTime({ value, locale, fallback }: { value: number | null; locale: 
   return <LocalDateTime value={new Date(value * 1000).toISOString()} locale={locale} />;
 }
 
-function MatchDetailsLink({ match, locale, text }: { match: MatchRow; locale: Locale; text: TournamentCopy }) {
+function MatchDetailsLink({
+  match,
+  locale,
+  text,
+  centered = false,
+}: {
+  match: MatchRow;
+  locale: Locale;
+  text: TournamentCopy;
+  centered?: boolean;
+}) {
   return (
     <Link
       href={localizedPath(`/matches/${match.id}`, locale)}
-      className="text-xs font-medium text-primary underline-offset-4 hover:underline"
+      className={cn(
+        "text-xs font-medium text-primary underline-offset-4 hover:underline",
+        centered && "flex w-full justify-center px-3 py-1.5 text-center",
+      )}
     >
       {text.matchDetails}
     </Link>
@@ -679,7 +693,7 @@ export function TournamentMatchList({
                     </div>
                   </CardContent>
                 )}
-                <MatchDetailsLink match={m} locale={locale} text={text} />
+                <MatchDetailsLink match={m} locale={locale} text={text} centered />
                 {m.stream ? (
                   <a
                     href={m.stream.url}

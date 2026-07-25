@@ -257,7 +257,7 @@ function queueMatchDetailsRefresh(match, tournament, generation) {
   detailRefreshes.set(match.id, state);
 }
 
-async function persistPollSnapshot(match, generation, all) {
+async function persistPollSnapshot(match, tournament, generation, all) {
   return withActiveTournamentGeneration(match.tournament_id, generation, async (tx) => {
     const changes = [];
     const standings = all?.standings;
@@ -270,6 +270,17 @@ async function persistPollSnapshot(match, generation, all) {
         [fresh.source, fresh.externalId],
       );
       const row = await upsertMatch(toMatchRow(fresh, match.tournament_id), { client: tx });
+      if (fresh.details) {
+        await upsertMatchDetails(
+          {
+            matchId: row.id,
+            sourcePage: fresh.detailsSourcePage || fresh.externalId,
+            game: tournament.game,
+            payload: fresh.details,
+          },
+          { client: tx },
+        );
+      }
       changes.push({ before, row, fresh });
     }
     return changes;
@@ -300,7 +311,7 @@ async function pollOnce(match, tournament) {
   }
   const all = await reconcileUntimedTournamentMatches(match.tournament_id, fetched);
   const currentIds = all.map((m) => m.externalId);
-  const snapshot = await persistPollSnapshot(match, generation, all);
+  const snapshot = await persistPollSnapshot(match, tournament, generation, all);
   if (!snapshot.applied) {
     clearWatcher(match.external_id);
     return;

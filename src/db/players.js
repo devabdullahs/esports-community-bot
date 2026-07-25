@@ -270,7 +270,17 @@ export async function rememberPlayerLiquipediaUrl(id, url) {
 // PandaScore sync keeps ownership of anything it already provides.
 export async function savePlayerLiquipedia(
   id,
-  { url = null, raw = null, facts = null, image = null, nationality = null, role = null, firstName = null, lastName = null },
+  {
+    url = null,
+    raw = null,
+    facts = null,
+    image = null,
+    nationality = null,
+    role = null,
+    firstName = null,
+    lastName = null,
+    currentTeamName = null,
+  },
 ) {
   const now = nowText();
   return get(
@@ -284,12 +294,14 @@ export async function savePlayerLiquipedia(
        role                 = COALESCE(role, $7),
        first_name           = COALESCE(first_name, $8),
        last_name            = COALESCE(last_name, $9),
+       current_team_name    = COALESCE(current_team_name, $10),
        updated_at           = $4
-     WHERE id = $10
+     WHERE id = $11
      RETURNING *`,
     [
       textOrNull(url), raw, facts ? JSON.stringify(facts) : null, now,
-      textOrNull(image), textOrNull(nationality), textOrNull(role), textOrNull(firstName), textOrNull(lastName), id,
+      textOrNull(image), textOrNull(nationality), textOrNull(role), textOrNull(firstName), textOrNull(lastName),
+      textOrNull(currentTeamName), id,
     ],
   );
 }

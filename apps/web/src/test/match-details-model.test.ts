@@ -67,6 +67,49 @@ describe("match details page model", () => {
     });
   });
 
+  test("maps battle-royale game results and rejects unsafe logos", () => {
+    const model = toMatchDetailsViewModel({
+      version: 1,
+      kind: "battle-royale",
+      patch: null,
+      casters: [],
+      gameNumber: 11,
+      entries: [
+        {
+          rank: 1,
+          team: "Twisted Minds",
+          logo: "https://liquipedia.net/commons/images/team.png",
+          placement: 1,
+          kills: 8,
+          points: 18,
+        },
+        {
+          rank: 2,
+          team: "Team Falcons",
+          logo: "javascript:alert(1)",
+          placement: 2,
+          kills: 5,
+          points: 11,
+        },
+        { rank: 3, team: " ", points: 0 },
+      ],
+    });
+
+    expect(model).toMatchObject({
+      kind: "battle-royale",
+      gameNumber: 11,
+      entries: [
+        { team: "Twisted Minds", logo: "https://liquipedia.net/commons/images/team.png", points: 18 },
+        { team: "Team Falcons", logo: null, points: 11 },
+      ],
+    });
+    expect(toMatchDetailsViewModel({
+      version: 1,
+      kind: "battle-royale",
+      entries: [],
+    })).toBeNull();
+  });
+
   test("rejects malformed or unsupported envelopes and maps database detail flags", () => {
     expect(toMatchDetailsViewModel(null)).toBeNull();
     expect(toMatchDetailsViewModel({ version: 2, kind: "valorant" })).toBeNull();

@@ -290,6 +290,95 @@ function battleRoyaleScheduleStatus($, item, scheduledAt) {
   return deriveStatus({ scheduledAt });
 }
 
+const PUBG_PLACEMENT_POINTS = new Map([
+  [1, 10],
+  [2, 6],
+  [3, 5],
+  [4, 4],
+  [5, 3],
+  [6, 2],
+  [7, 1],
+  [8, 1],
+]);
+
+function numericMetric($, cell, selector) {
+  const metric = $(cell).find(selector).first();
+  if (!metric.length) return null;
+  const raw = cleanText(metric.attr('data-sort-val')) || cleanText(metric.text());
+  if (!raw || /^(?:-|\u2013|\u2014)$/.test(raw)) return null;
+  const match = raw.replace(/,/g, '').match(/-?\d+(?:\.\d+)?/);
+  if (!match) return null;
+  const value = Number(match[0]);
+  return Number.isFinite(value) ? value : null;
+}
+
+function pubgPlacementPoints(placement) {
+  return PUBG_PLACEMENT_POINTS.get(placement) ?? 0;
+}
+
+function battleRoyaleGameEntries($, table, game, gameIndex) {
+  const entries = [];
+  $(table)
+    .find('.panel-table__row')
+    .not('.row--header')
+    .each((_, row) => {
+      const teamCell = $(row).find('.cell--team').first();
+      const team =
+        cleanText(teamCell.attr('data-sort-val')) ||
+        cleanText(teamCell.find('.block-team .name').first().text());
+      if (!isRealTeam(team)) return;
+
+      let gameCells = $(row).children('.cell--game').toArray();
+      if (!gameCells.length) {
+        gameCells = $(row)
+          .find('.cell--game')
+          .toArray()
+          .filter((cell) => !$(cell).parents('.cell--game').length);
+      }
+      const cell = gameCells[gameIndex];
+      if (!cell) return;
+
+      const placement = numericMetric($, cell, '.panel-table__cell__game-placement, [class*="game-placement"]');
+      const kills = numericMetric($, cell, '.panel-table__cell__game-kills, [class*="game-kills"]');
+      const explicitPoints = numericMetric($, cell, '.panel-table__cell__game-points, [class*="game-points"]');
+      if (placement == null && kills == null && explicitPoints == null) return;
+      const points =
+        explicitPoints ??
+        (game === 'pubg' && placement != null
+          ? pubgPlacementPoints(placement) + (kills ?? 0)
+          : null);
+      entries.push({
+        rank: null,
+        team,
+        logo: normalizeImageUrl(imageSrc(teamCell.find('img').first())),
+        placement,
+        kills,
+        points,
+      });
+    });
+
+  const unique = [];
+  const byTeam = new Map();
+  const weight = (entry) => [entry.points, entry.placement, entry.kills, entry.logo].filter((value) => value != null).length;
+  for (const entry of entries) {
+    const key = cleanText(entry.team).toLowerCase();
+    const index = byTeam.get(key);
+    if (index == null) {
+      byTeam.set(key, unique.length);
+      unique.push(entry);
+    } else if (weight(entry) > weight(unique[index])) {
+      unique[index] = entry;
+    }
+  }
+  unique.sort((a, b) =>
+    (b.points ?? Number.NEGATIVE_INFINITY) - (a.points ?? Number.NEGATIVE_INFINITY) ||
+    (a.placement ?? Number.POSITIVE_INFINITY) - (b.placement ?? Number.POSITIVE_INFINITY) ||
+    (b.kills ?? Number.NEGATIVE_INFINITY) - (a.kills ?? Number.NEGATIVE_INFINITY) ||
+    a.team.localeCompare(b.team),
+  );
+  return unique.map((entry, index) => ({ ...entry, rank: index + 1 }));
+}
+
 export function parseBattleRoyaleSchedules($, game, page, stageTitle = '') {
   const matches = [];
   $('.panel-table').each((_, table) => {
@@ -297,13 +386,15 @@ export function parseBattleRoyaleSchedules($, game, page, stageTitle = '') {
     if (!section && !stageTitle) return;
     const panel = $(table).closest('.panel-content');
     if (!panel.length) return;
-    panel.find('.panel-content__game-schedule__list-item').each((_, item) => {
+    panel.find('.panel-content__game-schedule__list-item').each((gameIndex, item) => {
       const label = cleanText($(item).find('.panel-content__game-schedule__title').first().text()).replace(/:$/, '');
       const scheduledAt = Number($(item).find('[data-timestamp]').first().attr('data-timestamp')) || null;
       if (!label || !scheduledAt) return;
       const parts = [stageTitle, section, label].filter(Boolean);
       const name = parts.join(' - ');
       const status = battleRoyaleScheduleStatus($, item, scheduledAt);
+      const entries = battleRoyaleGameEntries($, table, game, gameIndex);
+      const gameNumber = Number(label.match(/\bGame\s+(\d+)\b/i)?.[1] || 0) || gameIndex + 1;
       matches.push({
         source: 'liquipedia',
         externalId: scheduleExternalId(game, page, stageTitle || section, `${section}:${label}`),
@@ -317,6 +408,17 @@ export function parseBattleRoyaleSchedules($, game, page, stageTitle = '') {
         bestOf: null,
         scheduledAt,
         status,
+        details: entries.length
+          ? {
+              version: 1,
+              kind: 'battle-royale',
+              patch: null,
+              casters: [],
+              gameNumber,
+              entries,
+            }
+          : null,
+        detailsSourcePage: `${game}/${page}`,
       });
     });
   });
@@ -449,6 +551,15 @@ function scheduleStatusRank(status) {
   return 1;
 }
 
+function battleRoyaleDetailsWeight(details) {
+  if (details?.kind !== 'battle-royale' || !Array.isArray(details.entries)) return 0;
+  return details.entries.reduce(
+    (total, entry) =>
+      total + 1 + [entry?.points, entry?.placement, entry?.kills, entry?.logo].filter((value) => value != null).length,
+    0,
+  );
+}
+
 // Parent tournament pages and dedicated stage subpages can repeat the same BR
 // lobby schedule under different structural ids, and the child page can lag a
 // game number behind the overview. Collapse only exact stage+timestamp slots,
@@ -468,6 +579,10 @@ export function mergeBattleRoyaleSchedules(matches) {
     if (existing) {
       if (scheduleStatusRank(match.status) > scheduleStatusRank(existing.status)) {
         existing.status = match.status;
+      }
+      if (battleRoyaleDetailsWeight(match.details) > battleRoyaleDetailsWeight(existing.details)) {
+        existing.details = match.details;
+        existing.detailsSourcePage = match.detailsSourcePage;
       }
       continue;
     }
@@ -492,6 +607,9 @@ export function mergeBattleRoyaleSchedules(matches) {
       const name = `${title} - Game ${index + 1}`;
       match.name = name;
       match.teamA = name;
+      if (match.details?.kind === 'battle-royale') {
+        match.details.gameNumber = index + 1;
+      }
     });
   }
   return kept;

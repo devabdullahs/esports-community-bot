@@ -285,6 +285,84 @@ test('battle-royale schedule rows trust Liquipedia game state icons', () => {
   assert.deepEqual(matches.map((match) => match.status), ['finished', 'running', 'scheduled']);
 });
 
+test('PUBG battle-royale schedules attach points to the matching individual game', () => {
+  const $ = cheerio.load(`
+    <div class="tabs-dynamic">
+      <div class="navigation-tabs__list-item">Grand Final</div>
+      <div class="panel-content">
+        <div class="panel-content__game-schedule">
+          <div class="panel-content__game-schedule__list-item">
+            <span class="panel-content__game-schedule__title">Game 1</span>
+            <span class="icon--green"></span>
+            <span data-timestamp="1784986800"></span>
+          </div>
+          <div class="panel-content__game-schedule__list-item">
+            <span class="panel-content__game-schedule__title">Game 2</span>
+            <span data-timestamp="1784988600"></span>
+          </div>
+        </div>
+        <div class="panel-table">
+          <div class="panel-table__row row--header"></div>
+          <div class="panel-table__row">
+            <div class="cell--team" data-sort-val="Team Alpha"></div>
+            <div class="panel-table__cell cell--game">
+              <div class="panel-table__cell__game-placement" data-sort-val="1">1</div>
+              <div class="panel-table__cell__game-kills" data-sort-val="5">5</div>
+            </div>
+            <div class="panel-table__cell cell--game">
+              <div class="panel-table__cell__game-placement">-</div>
+              <div class="panel-table__cell__game-kills">-</div>
+            </div>
+          </div>
+          <div class="panel-table__row">
+            <div class="cell--team" data-sort-val="Team Bravo"></div>
+            <div class="panel-table__cell cell--game">
+              <div class="panel-table__cell__game-placement" data-sort-val="2">2</div>
+              <div class="panel-table__cell__game-kills" data-sort-val="2">2</div>
+            </div>
+            <div class="panel-table__cell cell--game"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  `);
+
+  const matches = parseBattleRoyaleSchedules(
+    $,
+    'pubg',
+    'Esports_World_Cup/2026',
+    'Grand Final',
+  );
+
+  assert.equal(matches.length, 2);
+  assert.deepEqual(matches[0].details, {
+    version: 1,
+    kind: 'battle-royale',
+    patch: null,
+    casters: [],
+    gameNumber: 1,
+    entries: [
+      {
+        rank: 1,
+        team: 'Team Alpha',
+        logo: null,
+        placement: 1,
+        kills: 5,
+        points: 15,
+      },
+      {
+        rank: 2,
+        team: 'Team Bravo',
+        logo: null,
+        placement: 2,
+        kills: 2,
+        points: 8,
+      },
+    ],
+  });
+  assert.equal(matches[1].details, null);
+});
+
 test('battle-royale standings collapse responsive row clones by team', () => {
   const $ = cheerio.load(`
     <div class="panel-table">
@@ -327,6 +405,45 @@ test('battle-royale schedules collapse parent/child stage twins and repair shift
   ]);
   assert.deepEqual(merged.map((match) => match.status), ['running', 'running', 'finished', 'scheduled']);
   assert.deepEqual(merged.map((match) => match.teamA), merged.map((match) => match.name));
+});
+
+test('battle-royale schedule merge keeps the richer duplicate game details', () => {
+  const base = {
+    source: 'liquipedia',
+    name: 'Grand Final - Game 1',
+    teamA: 'Grand Final - Game 1',
+    teamB: 'Lobby',
+    scheduledAt: 1000,
+    status: 'finished',
+  };
+  const details = {
+    version: 1,
+    kind: 'battle-royale',
+    patch: null,
+    casters: [],
+    gameNumber: 7,
+    entries: [{
+      rank: 1,
+      team: 'Team Alpha',
+      logo: null,
+      placement: 1,
+      kills: 5,
+      points: 15,
+    }],
+  };
+  const merged = mergeBattleRoyaleSchedules([
+    { ...base, externalId: 'overview', details: null },
+    {
+      ...base,
+      externalId: 'finals',
+      details,
+      detailsSourcePage: 'pubg/Esports_World_Cup/2026/Finals',
+    },
+  ]);
+
+  assert.equal(merged.length, 1);
+  assert.equal(merged[0].details, details);
+  assert.equal(merged[0].detailsSourcePage, 'pubg/Esports_World_Cup/2026/Finals');
 });
 
 test('battle-royale schedule merge keeps distinct simultaneous lobby sections', () => {

@@ -428,6 +428,7 @@ export async function runLiquipediaEnrichment({
             role: member.role || entity.normalized.role,
             firstName: nameParts.firstName,
             lastName: nameParts.lastName,
+            currentTeamName: entity.normalized.team,
           });
           summary.playersParsed += 1;
         }
