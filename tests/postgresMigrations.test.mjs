@@ -61,6 +61,10 @@ function runWithMigrations(migrationsDir) {
   return runPostgresMigrations({ ...postgresOptions(), migrationsDir });
 }
 
+function currentMigrationVersions() {
+  return listPostgresMigrations().map(({ version }) => version);
+}
+
 test('PostgreSQL migration snapshot is generated and excludes Better Auth tables', async () => {
   await buildPostgresSchema({ check: true });
   const baseline = await readFile('scripts/postgres/migrations/0001-baseline.sql', 'utf8');
@@ -141,8 +145,12 @@ test(
     }
 
     const result = await runPostgresMigrations(postgresOptions());
-    assert.deepEqual(result.applied, ['0001', '0002']);
-    assert.equal(Number((await queryOne('SELECT COUNT(*)::BIGINT AS count FROM app_schema_migrations')).count), 2);
+    const expectedVersions = currentMigrationVersions();
+    assert.deepEqual(result.applied, expectedVersions);
+    assert.equal(
+      Number((await queryOne('SELECT COUNT(*)::BIGINT AS count FROM app_schema_migrations')).count),
+      expectedVersions.length,
+    );
   },
 );
 
@@ -156,7 +164,7 @@ test(
     const second = await runPostgresMigrations(postgresOptions());
 
     assert.deepEqual(second.applied, []);
-    assert.deepEqual(second.alreadyApplied, ['0001', '0002']);
+    assert.deepEqual(second.alreadyApplied, currentMigrationVersions());
   },
 );
 
