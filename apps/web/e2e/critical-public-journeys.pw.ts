@@ -65,6 +65,23 @@ test("English home reaches the seeded tournament detail through the directory", 
   await expect(page.getByText("Displayed data may lag", { exact: false })).toBeVisible();
 });
 
+test("tournament directory search keeps typing responsive and restores cleared results", async ({ page }) => {
+  await page.goto("/tournaments");
+
+  const search = page.getByPlaceholder("Search tournaments, teams, or games");
+  await search.pressSequentially("Valorant");
+  await expect(search).toHaveValue("Valorant");
+  await expect(page).toHaveURL(/[?&]q=Valorant(?:&|$)/);
+  await expect(page.getByRole("link", { name: seededTournament }).first()).toBeVisible();
+
+  await search.fill("no-tournament-can-match-this-query");
+  await expect(page.getByText("No tournaments match these filters.", { exact: true })).toBeVisible();
+
+  await page.getByRole("button", { name: "Clear filters" }).last().click();
+  await expect(search).toHaveValue("");
+  await expect(page.getByRole("link", { name: seededTournament }).first()).toBeVisible();
+});
+
 test("tournament result history is complete, shareable, and retains data on refresh failure", async ({ page }, testInfo) => {
   await page.goto("/tournaments");
   const tournamentLink = page.getByRole("link", { name: seededTournament }).first();
