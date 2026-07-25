@@ -7,6 +7,7 @@
 
 ## Status
 
+- **State**: DONE
 - **Priority**: P1
 - **Effort**: L
 - **Risk**: HIGH
@@ -93,10 +94,10 @@ quiet-hours skip.
 
 ## Done criteria
 
-- [ ] Users can opt in and opt out.
-- [ ] Push sends only existing notification events.
-- [ ] Secrets are env-backed and absent from responses/logs.
-- [ ] All verification commands pass.
+- [x] Users can opt in and opt out.
+- [x] Push sends only existing notification events.
+- [x] Secrets are env-backed and absent from responses/logs.
+- [x] All verification commands pass.
 
 ## STOP conditions
 
@@ -108,3 +109,5 @@ quiet-hours skip.
 
 Monitor browser delivery failures after launch. Push can easily become noisy;
 review all copy and defaults with community moderators before enabling broadly.
+Keep `WEB_PUSH_ENABLED=false` until valid VAPID keys are configured and the
+subscribe/deliver/revoke flow has passed an HTTPS browser smoke test.

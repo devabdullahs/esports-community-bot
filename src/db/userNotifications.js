@@ -137,15 +137,30 @@ export async function enqueueNotifications({
     const schedule = normalizeNotificationSchedule(p);
     const deliveryMode = schedule.dmDeliveryMode;
     const notBefore = dmStatus === 'pending' ? dmNotBefore(nowSec, schedule) : 0;
-    const row = await get(
-      `INSERT INTO user_notifications (
-         discord_user_id, type, match_id, title, body, url, dedupe_key,
-         dm_status, dm_delivery_mode, dm_not_before
-       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-       ON CONFLICT (discord_user_id, dedupe_key) DO NOTHING
-       RETURNING id`,
-      [userId, type, matchId ?? null, title, body, url, dedupeKey, dmStatus, deliveryMode, notBefore],
-    );
+    const pushNotBefore = dmNotBefore(nowSec, { ...p, dm_delivery_mode: 'instant' });
+    const row = await transaction(async (tx) => {
+      const insertedRow = await tx.get(
+        `INSERT INTO user_notifications (
+           discord_user_id, type, match_id, title, body, url, dedupe_key,
+           dm_status, dm_delivery_mode, dm_not_before
+         ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+         ON CONFLICT (discord_user_id, dedupe_key) DO NOTHING
+         RETURNING id`,
+        [userId, type, matchId ?? null, title, body, url, dedupeKey, dmStatus, deliveryMode, notBefore],
+      );
+      if (!insertedRow) return null;
+      await tx.run(
+        `INSERT INTO user_push_deliveries (
+           notification_id, subscription_id, status, not_before
+         )
+         SELECT $1, id, 'pending', $2
+         FROM user_push_subscriptions
+         WHERE discord_user_id = $3 AND revoked_at IS NULL
+         ON CONFLICT (notification_id, subscription_id) DO NOTHING`,
+        [insertedRow.id, pushNotBefore, userId],
+      );
+      return insertedRow;
+    });
     if (row) inserted += 1;
   }
   return inserted;

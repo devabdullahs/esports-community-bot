@@ -17,6 +17,7 @@ import { stopStreamStatusJob } from './jobs/streamStatus.js';
 import { stopPandaScoreProfileCache } from './jobs/pandascoreProfiles.js';
 import { stopLogoWarmup } from './jobs/logoWarmup.js';
 import { stopNotifier } from './jobs/notifier.js';
+import { stopPushNotifier } from './jobs/pushNotifier.js';
 import { stopLiquipediaEnrichment } from './jobs/liquipediaEnrichment.js';
 import { stopStandingsSync } from './jobs/standingsSync.js';
 import { startWebAnalyticsRetention, stopWebAnalyticsRetention } from './jobs/webAnalyticsRetention.js';
@@ -93,6 +94,7 @@ async function shutdown(signal) {
   stopPandaScoreProfileCache();
   stopLogoWarmup();
   stopNotifier();
+  stopPushNotifier();
   stopLiquipediaEnrichment();
   stopStandingsSync();
   stopWebAnalyticsRetention();

@@ -196,6 +196,7 @@ const POLICY_ENTRIES: readonly AuthorizationPolicyEntry[] = [
     ["me/follows", ["GET", "POST", "DELETE", "PATCH"]],
     ["me/notification-prefs", ["GET", "PATCH"]],
     ["me/notifications", ["GET", "PATCH"]],
+    ["me/push-subscriptions", ["GET", "POST", "DELETE"]],
     ["me/share-card", ["GET"]],
   ], SESSION),
   ...entries([
@@ -205,6 +206,7 @@ const POLICY_ENTRIES: readonly AuthorizationPolicyEntry[] = [
     ["me/follows", ["POST", "DELETE", "PATCH"]],
     ["me/notification-prefs", ["PATCH"]],
     ["me/notifications", ["PATCH"]],
+    ["me/push-subscriptions", ["POST", "DELETE"]],
   ], {
     ...SESSION,
     csrf: true,

@@ -14,6 +14,7 @@ import { startStreamStatusJob } from '../jobs/streamStatus.js';
 import { startPandaScoreProfileCache } from '../jobs/pandascoreProfiles.js';
 import { startLogoWarmup } from '../jobs/logoWarmup.js';
 import { notifyMatchEvent, startNotifier } from '../jobs/notifier.js';
+import { startPushNotifier } from '../jobs/pushNotifier.js';
 import { startLiquipediaEnrichment } from '../jobs/liquipediaEnrichment.js';
 import { refreshLiveBattleRoyaleStandings, startStandingsSync } from '../jobs/standingsSync.js';
 import { primeEwcClubCache } from '../lib/ewcClubCache.js';
@@ -69,6 +70,7 @@ export async function execute(client) {
   startPandaScoreProfileCache(); // Quiet-hours team/player profile cache.
   startLogoWarmup(); // Pre-download tracked-match crests so the web logo proxy can serve them.
   startNotifier(client); // Deliver follower notifications (site inbox rows -> Discord DMs).
+  startPushNotifier(); // Deliver opted-in browser notifications from the same durable inbox rows.
   startLiquipediaEnrichment(); // Quiet-hours team/player enrichment from Liquipedia.
   startStandingsSync(); // BR/TFT event standings tracking (no matches to poll).
   primeEwcClubCache(); // Warm autocomplete after user-facing Liquipedia boards get first queue slots.

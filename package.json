@@ -49,6 +49,7 @@
     "node-cron": "^4.2.1",
     "pg": "^8.21.0",
     "qrcode": "^1.5.4",
+    "web-push": "^3.6.7",
     "zod": "^4.4.3"
   },
   "devDependencies": {

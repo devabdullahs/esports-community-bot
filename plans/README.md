@@ -221,7 +221,7 @@ untouched.
 | 101  | Redesign the login page as a first-class public-site surface | P1 | M | - | DONE - merged in PR #254 (`b272848`); deployed successfully to CranL and production-smoked in EN/AR. |
 | 102  | Add a live match center | P1 | M-L | 094 recommended | DONE |
 | 103  | Add a personal match calendar with iCal export | P1 | M | 097 recommended | DONE |
-| 104  | Add opt-in web push notifications | P1 | L | 099 | TODO |
+| 104  | Add opt-in web push notifications | P1 | L | 099 | DONE |
 | 105  | Show community pick distribution after lock | P1 | M | - | DONE |
 | 106  | Add interactive playoff bracket views | P1 | L | 102 optional | DONE |
 | 107  | Add private prediction mini-leagues | P1 | L | - | DONE |

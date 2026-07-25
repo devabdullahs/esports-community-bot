@@ -73,6 +73,8 @@ const appTables = [
   'user_match_reminders',
   'user_notification_prefs',
   'user_notifications',
+  'user_push_subscriptions',
+  'user_push_deliveries',
   'web_analytics_events',
   'web_product_events',
   'tournament_standings',
