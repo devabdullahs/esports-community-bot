@@ -204,7 +204,7 @@ export async function syncTournamentStandings(
   try {
     const providerOptions = tournamentProviderAdmissionOptions(tournament.id, generation);
     const dispatch = () => liquipediaService.fetchEventStandings(tournament, providerOptions);
-    const { sections, hadRows } = await providerOptions.beforeDispatch(dispatch);
+    const { sections, hadRows, detailMatches = [] } = await providerOptions.beforeDispatch(dispatch);
     if (!sections.length && !hadRows) {
       await recordTournamentSyncFailure({
         tournamentId,
@@ -214,17 +214,45 @@ export async function syncTournamentStandings(
       });
       return { code: 'standings_empty', tournamentId, count: 0, generation, empty: true };
     }
-    const persisted = await withActiveTournamentGeneration(tournamentId, generation, (tx) =>
-      replaceTournamentStandings(tournamentId, sections, { client: tx }),
-    );
+    const persisted = await withActiveTournamentGeneration(tournamentId, generation, async (tx) => {
+      const count = await replaceTournamentStandings(tournamentId, sections, { client: tx });
+      let detailsCount = 0;
+      for (const match of detailMatches) {
+        if (!match?.details || !match.externalId) continue;
+        const stored = await tx.get(
+          `SELECT id
+             FROM matches
+            WHERE tournament_id = $1 AND source = $2 AND external_id = $3`,
+          [tournamentId, match.source || tournament.source, match.externalId],
+        );
+        if (!stored) continue;
+        await upsertMatchDetails(
+          {
+            matchId: stored.id,
+            sourcePage: match.detailsSourcePage || match.externalId,
+            game: tournament.game,
+            payload: match.details,
+          },
+          { client: tx },
+        );
+        detailsCount += 1;
+      }
+      return { count, detailsCount };
+    });
     if (!persisted.applied) throw operationError('stale_generation', 'Tournament lifecycle changed before standings persistence.');
     await recordTournamentSyncSuccess({
       tournamentId,
       source: tournament.source,
-      itemCount: persisted.value,
+      itemCount: persisted.value.count,
       dataKind: 'standings',
     });
-    return { code: 'standings_synced', tournamentId, count: persisted.value, generation };
+    return {
+      code: 'standings_synced',
+      tournamentId,
+      count: persisted.value.count,
+      detailsCount: persisted.value.detailsCount,
+      generation,
+    };
   } catch (error) {
     await recordTournamentSyncFailure({
       tournamentId,

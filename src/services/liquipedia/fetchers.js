@@ -515,6 +515,15 @@ export async function fetchValveRegionalStandings(region = 'global') {
 // Event standings (battle-royale panel-tables + round-robin group tables)
 // ---------------------------------------------------------------------------
 
+const BATTLE_ROYALE_DETAIL_GAMES = new Set([
+  'apexlegends',
+  'fortnite',
+  'freefire',
+  'pubg',
+  'pubgmobile',
+  'warzone',
+]);
+
 // Standings sections for a tournament page. Used for formats that produce no
 // head-to-head matches (BR events, TFT groups). external_id = "game/Page/Path".
 // Returns { sections, hadRows }: hadRows tells the caller whether the page
@@ -537,6 +546,9 @@ export async function fetchEventStandings(
   if (!loaded) return { sections: [], hadRows: false };
 
   const sections = parseEventStandings(loaded.$);
+  const detailMatches = BATTLE_ROYALE_DETAIL_GAMES.has(game)
+    ? parseBattleRoyaleSchedules(loaded.$, game, page)
+    : [];
   let hadRows = hasStandingsRows(loaded.$);
 
   for (const child of childStagePages(loaded.$, game, page)) {
@@ -544,8 +556,15 @@ export async function fetchEventStandings(
     if (!childLoaded) continue;
     const prefix = titleFromPageSegment(child);
     sections.push(...prefixSections(parseEventStandings(childLoaded.$), prefix));
+    if (BATTLE_ROYALE_DETAIL_GAMES.has(game)) {
+      detailMatches.push(...parseBattleRoyaleSchedules(childLoaded.$, game, child, prefix));
+    }
     hadRows = hasStandingsRows(childLoaded.$) || hadRows;
   }
 
-  return { sections: mergeStandingsSectionAliases(sections), hadRows };
+  return {
+    sections: mergeStandingsSectionAliases(sections),
+    hadRows,
+    detailMatches: mergeBattleRoyaleSchedules(detailMatches).filter((match) => match.details),
+  };
 }
