@@ -93,6 +93,16 @@ function participantLogo($, entry) {
   return null;
 }
 
+function battleRoyaleTeamName($, teamCell) {
+  // Liquipedia can update the visible participant without refreshing the
+  // row's data-sort-val (for example after a late roster/org replacement).
+  // The visible label is what the standings page presents as authoritative.
+  return (
+    cleanText($(teamCell).find('.block-team .name').first().text()) ||
+    cleanText($(teamCell).attr('data-sort-val'))
+  );
+}
+
 function groupDrawHeaders($, row) {
   return $(row)
     .children('th,td')
@@ -192,9 +202,7 @@ export function parseBattleRoyaleStandings($) {
         const teamCell = $(row).find('.cell--team').first();
         const pointsCell = $(row).find('.cell--total-points').first();
         const extraCell = $(row).find('.cell--total-kills, .cell--kills').first();
-        const team =
-          cleanText(teamCell.attr('data-sort-val')) ||
-          cleanText(teamCell.find('.block-team .name').first().text());
+        const team = battleRoyaleTeamName($, teamCell);
         if (!team) return;
         const rank = Number.parseInt(rankCell.attr('data-sort-val') ?? '', 10);
         entries.push({
@@ -323,9 +331,7 @@ function battleRoyaleGameEntries($, table, game, gameIndex) {
     .not('.row--header')
     .each((_, row) => {
       const teamCell = $(row).find('.cell--team').first();
-      const team =
-        cleanText(teamCell.attr('data-sort-val')) ||
-        cleanText(teamCell.find('.block-team .name').first().text());
+      const team = battleRoyaleTeamName($, teamCell);
       if (!isRealTeam(team)) return;
 
       let gameCells = $(row).children('.cell--game').toArray();

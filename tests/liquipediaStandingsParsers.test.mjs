@@ -378,6 +378,35 @@ test('battle-royale standings collapse responsive row clones by team', () => {
   assert.deepEqual(sections[0].entries.map((entry) => [entry.team, entry.points]), [['Wolves Esports', '38']]);
 });
 
+test('battle-royale standings prefer the visible team when hidden sort metadata is stale', () => {
+  const $ = cheerio.load(`
+    <div class="panel-table">
+      <div class="panel-table__row">
+        <div class="cell--rank" data-sort-val="14"></div>
+        <div class="cell--team" data-sort-val="Anyone's Legend">
+          <div class="block-team"><span class="name">AG.AL</span></div>
+        </div>
+        <div class="cell--total-points" data-sort-val="71"></div>
+      </div>
+      <div class="panel-table__row">
+        <div class="cell--rank" data-sort-val="15"></div>
+        <div class="cell--team" data-sort-val="The Expendables">
+          <div class="block-team"><span class="name">GAM Esports</span></div>
+        </div>
+        <div class="cell--total-points" data-sort-val="70"></div>
+      </div>
+    </div>`);
+
+  const sections = parseBattleRoyaleStandings($);
+  assert.deepEqual(
+    sections[0].entries.map(({ rank, team, points }) => ({ rank, team, points })),
+    [
+      { rank: 14, team: 'AG.AL', points: '71' },
+      { rank: 15, team: 'GAM Esports', points: '70' },
+    ],
+  );
+});
+
 test('battle-royale schedules collapse parent/child stage twins and repair shifted game labels', () => {
   const schedule = (name, scheduledAt, status = 'scheduled', page = 'overview') => ({
     source: 'liquipedia',
