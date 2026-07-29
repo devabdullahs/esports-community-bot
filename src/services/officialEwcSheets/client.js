@@ -43,21 +43,60 @@ function quotedRange(title, rowCount, columnCount) {
   return `'${escaped}'!A1:${label}${rows}`;
 }
 
-async function readJson(response) {
-  if (!response.ok) {
-    const error = new Error(`Official tournament feed request failed (${response.status}).`);
-    error.status = response.status;
-    throw error;
-  }
-  const length = Number(response.headers.get('content-length'));
+function responseHeader(headers, name) {
+  if (!headers) return null;
+  if (typeof headers.get === 'function') return headers.get(name);
+  const entry = Object.entries(headers).find(
+    ([key]) => key.toLowerCase() === name.toLowerCase(),
+  );
+  return entry?.[1] ?? null;
+}
+
+function safeStatus(value) {
+  const status = Number(value);
+  return Number.isInteger(status) && status >= 100 && status <= 599 ? status : null;
+}
+
+function requestError(status = null) {
+  const error = new Error(
+    status
+      ? `Official tournament feed request failed (${status}).`
+      : 'Official tournament feed request failed.',
+  );
+  if (status) error.status = status;
+  return error;
+}
+
+function readJson(response) {
+  const status = safeStatus(response?.status);
+  if (!status || status < 200 || status >= 300) throw requestError(status);
+
+  const length = Number(responseHeader(response.headers, 'content-length'));
   if (Number.isFinite(length) && length > MAX_RESPONSE_BYTES) {
     throw new Error('Official tournament feed response exceeded the configured safety limit.');
   }
-  const text = await response.text();
-  if (Buffer.byteLength(text) > MAX_RESPONSE_BYTES) {
+
+  let text;
+  let data;
+  try {
+    if (typeof response.data === 'string') {
+      text = response.data;
+      data = JSON.parse(text);
+    } else if (response.data && typeof response.data === 'object') {
+      data = response.data;
+      text = JSON.stringify(data);
+    } else {
+      throw new TypeError('Unexpected response payload.');
+    }
+    if (typeof text !== 'string') throw new TypeError('Unexpected response payload.');
+  } catch {
+    throw new Error('Official tournament feed returned an invalid response.');
+  }
+
+  if (Buffer.byteLength(text, 'utf8') > MAX_RESPONSE_BYTES) {
     throw new Error('Official tournament feed response exceeded the configured safety limit.');
   }
-  return JSON.parse(text);
+  return data;
 }
 
 function authClient({ clientEmail, privateKey }) {
@@ -79,8 +118,8 @@ function resourceId(value, label) {
   return id;
 }
 
-export function createOfficialSheetsClient(credentials) {
-  const auth = authClient(credentials);
+export function createOfficialSheetsClient(credentials, options = {}) {
+  const auth = options.auth || authClient(credentials);
 
   async function fetchJson(url) {
     const controller = new AbortController();
@@ -92,6 +131,14 @@ export function createOfficialSheetsClient(credentials) {
           headers: { accept: 'application/json' },
         }),
       );
+    } catch (error) {
+      if (controller.signal.aborted) {
+        throw new Error('Official tournament feed request timed out.');
+      }
+      if (String(error?.message || '').startsWith('Official tournament feed ')) {
+        throw error;
+      }
+      throw requestError(safeStatus(error?.status ?? error?.response?.status));
     } finally {
       clearTimeout(timer);
     }

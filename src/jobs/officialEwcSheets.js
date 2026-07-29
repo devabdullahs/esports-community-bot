@@ -284,13 +284,13 @@ export async function refreshOfficialEwcSheets() {
             `[tournament-feed] refreshed ${result.game}: ${result.matches} matches, ${result.standings} standings rows`,
           );
         }
-      } catch (error) {
-        logger.warn(`[tournament-feed] workbook refresh failed: ${error.message}`);
+      } catch {
+        logger.warn('[tournament-feed] workbook refresh failed');
       }
     }
     if (changed) logger.info(`[tournament-feed] refresh completed for ${changed} tournament(s)`);
-  } catch (error) {
-    logger.warn(`[tournament-feed] refresh failed: ${error.message}`);
+  } catch {
+    logger.warn('[tournament-feed] refresh failed');
   } finally {
     running = false;
   }
