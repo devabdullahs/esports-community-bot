@@ -17,6 +17,7 @@ import { notifyMatchEvent, startNotifier } from '../jobs/notifier.js';
 import { startPushNotifier } from '../jobs/pushNotifier.js';
 import { startLiquipediaEnrichment } from '../jobs/liquipediaEnrichment.js';
 import { refreshLiveBattleRoyaleStandings, startStandingsSync } from '../jobs/standingsSync.js';
+import { startOfficialEwcSheets } from '../jobs/officialEwcSheets.js';
 import { primeEwcClubCache } from '../lib/ewcClubCache.js';
 
 // NOTE: in discord.js 14.26 this event's string is "clientReady" — always use the enum.
@@ -72,6 +73,7 @@ export async function execute(client) {
   startNotifier(client); // Deliver follower notifications (site inbox rows -> Discord DMs).
   startPushNotifier(); // Deliver opted-in browser notifications from the same durable inbox rows.
   startLiquipediaEnrichment(); // Quiet-hours team/player enrichment from Liquipedia.
+  startOfficialEwcSheets(); // Read-only authoritative tournament operations feed.
   startStandingsSync(); // BR/TFT event standings tracking (no matches to poll).
   primeEwcClubCache(); // Warm autocomplete after user-facing Liquipedia boards get first queue slots.
 }

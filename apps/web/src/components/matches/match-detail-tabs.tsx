@@ -22,7 +22,10 @@ import type {
   BattleRoyaleDetails,
   DotaDetails,
   DotaTeamStats,
+  IndividualDetails,
   MatchDetailsViewModel,
+  OfficialBattleRoyaleDetails,
+  TeamSeriesDetails,
   ValorantDetails,
 } from "@/lib/match-details";
 import { copy, type Locale } from "@/lib/i18n";
@@ -340,6 +343,113 @@ export function DotaGames({ details, teamA, teamB, locale, text }: { details: Do
   );
 }
 
+function IndividualResult({
+  details,
+  teamA,
+  teamB,
+}: {
+  details: IndividualDetails;
+  teamA: string;
+  teamB: string;
+}) {
+  return (
+    <section className="flex flex-col gap-4 rounded-xl border p-4">
+      {details.round ? <h2 className="text-lg font-semibold" dir="auto">{details.round}</h2> : null}
+      <ScoreStrip
+        teamA={teamA}
+        teamB={teamB}
+        scoreA={details.scoreA}
+        scoreB={details.scoreB}
+        winner={
+          details.scoreA != null && details.scoreB != null
+            ? details.scoreA > details.scoreB
+              ? "a"
+              : details.scoreB > details.scoreA
+                ? "b"
+                : null
+            : null
+        }
+      />
+      {details.penaltyA != null || details.penaltyB != null ? (
+        <p className="text-center text-sm text-muted-foreground" dir="ltr">
+          Penalties: {score(details.penaltyA)} - {score(details.penaltyB)}
+        </p>
+      ) : null}
+    </section>
+  );
+}
+
+function TeamSeries({
+  details,
+  teamA,
+  teamB,
+}: {
+  details: TeamSeriesDetails;
+  teamA: string;
+  teamB: string;
+}) {
+  return (
+    <div className="flex flex-col gap-3">
+      {details.maps.map((map, index) => (
+        <section key={`${map.name}-${map.round}-${index}`} className="flex flex-col gap-3 rounded-xl border p-4">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <h2 className="font-semibold" dir="auto">{map.name ?? `Map ${index + 1}`}</h2>
+            {map.round ? <span className="text-sm text-muted-foreground" dir="auto">{map.round}</span> : null}
+          </div>
+          <ScoreStrip
+            teamA={teamA}
+            teamB={teamB}
+            scoreA={map.scoreA}
+            scoreB={map.scoreB}
+            winner={
+              map.winner && map.winner.toLowerCase() === teamA.toLowerCase()
+                ? "a"
+                : map.winner && map.winner.toLowerCase() === teamB.toLowerCase()
+                  ? "b"
+                  : null
+            }
+          />
+        </section>
+      ))}
+    </div>
+  );
+}
+
+function BattleRoyaleGame({ details, locale }: { details: OfficialBattleRoyaleDetails; locale: Locale }) {
+  const labels = locale === "ar"
+    ? { rank: "المركز", team: "الفريق", placement: "التمركز", eliminations: "الإقصاءات", total: "المجموع" }
+    : { rank: "Rank", team: "Team", placement: "Placement", eliminations: "Eliminations", total: "Total" };
+  return (
+    <section className="overflow-hidden rounded-xl border">
+      {details.gameLabel ? <h2 className="border-b px-4 py-3 font-semibold" dir="auto">{details.gameLabel}</h2> : null}
+      <div className="overflow-x-auto">
+        <table className="w-full min-w-[38rem] text-sm">
+          <thead className="bg-muted/40 text-muted-foreground">
+            <tr>
+              <th className="px-4 py-3 text-start">{labels.rank}</th>
+              <th className="px-4 py-3 text-start">{labels.team}</th>
+              <th className="px-4 py-3 text-end">{labels.placement}</th>
+              <th className="px-4 py-3 text-end">{labels.eliminations}</th>
+              <th className="px-4 py-3 text-end">{labels.total}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {details.standings.map((entry, index) => (
+              <tr key={`${entry.rank}-${entry.team}-${index}`} className="border-t">
+                <td className="px-4 py-3 tabular-nums">{entry.rank ?? "-"}</td>
+                <td className="px-4 py-3 font-medium" dir="auto">{entry.team ?? "-"}</td>
+                <td className="px-4 py-3 text-end tabular-nums">{entry.placementPoints ?? "-"}</td>
+                <td className="px-4 py-3 text-end tabular-nums">{entry.eliminationPoints ?? "-"}</td>
+                <td className="px-4 py-3 text-end font-semibold tabular-nums">{entry.totalPoints ?? "-"}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  );
+}
+
 export function MatchDetailTabs({
   details,
   teamA,
@@ -352,6 +462,15 @@ export function MatchDetailTabs({
   locale: Locale;
 }) {
   const text = copy[locale].tournaments;
+  if (details.kind === "individual") {
+    return <IndividualResult details={details} teamA={teamA} teamB={teamB} />;
+  }
+  if (details.kind === "teamSeries") {
+    return <TeamSeries details={details} teamA={teamA} teamB={teamB} />;
+  }
+  if (details.kind === "battleRoyale") {
+    return <BattleRoyaleGame details={details} locale={locale} />;
+  }
   if (details.kind === "battle-royale") {
     return <BattleRoyaleResults details={details} text={text} />;
   }

@@ -10,6 +10,7 @@ import { GameIcon } from "@/components/tournaments/tournament-directory";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { OfficialTournamentAttribution } from "@/components/tournaments/official-tournament-attribution";
 import { copy, localizedPath, type Locale } from "@/lib/i18n";
 import type { LiveMatchCenter as LiveMatchCenterData, LiveMatchCenterItem } from "@/lib/live-match-center";
 import { matchOutcomeLabel, type MatchLifecycleView } from "@/lib/match-lifecycle";
@@ -262,6 +263,7 @@ export function LiveMatchCenter({ initialData, locale }: { initialData: LiveMatc
       </Tabs>
 
       <RecentFinished items={data.recentFinished} locale={locale} />
+      <OfficialTournamentAttribution value={data.attribution} />
     </main>
   );
 }

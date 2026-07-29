@@ -3,6 +3,7 @@ import "server-only";
 import { get } from "@bot/db/client.js";
 import { getMatchDetails } from "@bot/db/matchDetails.js";
 import { isEwcTournamentReference } from "@bot/lib/ewcTournament.js";
+import { getTournamentOverview } from "@bot/db/officialEwcSheets.js";
 import { resolveDefaultGuildId } from "@/lib/guild";
 import { liveCoStreamsByMatch, type MatchCoStream } from "@/lib/match-co-streams";
 import type { MatchStatus, ResultReason, WinnerSide } from "@/lib/match-lifecycle";
@@ -11,6 +12,7 @@ import { safeUrlOrUndefined } from "@/lib/safe-url";
 type Side = "a" | "b";
 type SidePlayers<T> = { a: T[]; b: T[] };
 type RawRecord = Record<string, unknown>;
+const OFFICIAL_ATTRIBUTION = "© Esports Foundation 2026. All rights reserved." as const;
 export type DotaTeamStats = {
   kills: number | null;
   deaths: number | null;
@@ -47,7 +49,12 @@ export type DotaPlayer = {
   gpm: number | null;
 };
 
-type DetailBase = { version: 1; patch: string | null; casters: string[] };
+type DetailBase = {
+  version: 1;
+  patch: string | null;
+  casters: string[];
+  attribution: string | null;
+};
 
 export type ValorantDetails = DetailBase & {
   kind: "valorant";
@@ -93,8 +100,46 @@ export type BattleRoyaleDetails = DetailBase & {
   entries: BattleRoyaleEntry[];
 };
 
+export type IndividualDetails = DetailBase & {
+  kind: "individual";
+  round: string | null;
+  scoreA: number | null;
+  scoreB: number | null;
+  penaltyA: number | null;
+  penaltyB: number | null;
+};
+
+export type TeamSeriesDetails = DetailBase & {
+  kind: "teamSeries";
+  maps: {
+    name: string | null;
+    round: string | null;
+    scoreA: number | null;
+    scoreB: number | null;
+    winner: string | null;
+  }[];
+};
+
+export type OfficialBattleRoyaleDetails = DetailBase & {
+  kind: "battleRoyale";
+  gameLabel: string | null;
+  standings: {
+    rank: number | null;
+    team: string | null;
+    placementPoints: number | null;
+    eliminationPoints: number | null;
+    totalPoints: number | null;
+  }[];
+};
+
 export type DraftEntry = { hero: string | null; order: number | null };
-export type MatchDetailsViewModel = ValorantDetails | DotaDetails | BattleRoyaleDetails;
+export type MatchDetailsViewModel =
+  | ValorantDetails
+  | DotaDetails
+  | BattleRoyaleDetails
+  | IndividualDetails
+  | TeamSeriesDetails
+  | OfficialBattleRoyaleDetails;
 
 export type MatchPageModel = {
   id: number;
@@ -120,6 +165,7 @@ export type MatchPageModel = {
     url: string | null;
   };
   details: MatchDetailsViewModel | null;
+  attribution: string | null;
 };
 
 function record(value: unknown): RawRecord | null {
@@ -215,6 +261,7 @@ function common(raw: RawRecord): DetailBase | null {
     version: 1,
     patch: text(raw.patch),
     casters: list(raw.casters).flatMap((caster) => (text(caster) ? [text(caster) as string] : [])),
+    attribution: raw.attribution === OFFICIAL_ATTRIBUTION ? OFFICIAL_ATTRIBUTION : null,
   };
 }
 
@@ -289,6 +336,47 @@ export function toMatchDetailsViewModel(payload: unknown): MatchDetailsViewModel
       entries,
     };
   }
+
+  if (raw.kind === "individual") {
+    return {
+      ...base,
+      kind: "individual",
+      round: text(raw.round),
+      scoreA: number(raw.scoreA),
+      scoreB: number(raw.scoreB),
+      penaltyA: number(raw.penaltyA),
+      penaltyB: number(raw.penaltyB),
+    };
+  }
+
+  if (raw.kind === "teamSeries") {
+    return {
+      ...base,
+      kind: "teamSeries",
+      maps: valueByLabel(raw.maps, (map) => ({
+        name: text(map.name),
+        round: text(map.round),
+        scoreA: number(map.scoreA),
+        scoreB: number(map.scoreB),
+        winner: text(map.winner),
+      })).slice(0, 30),
+    };
+  }
+
+  if (raw.kind === "battleRoyale") {
+    return {
+      ...base,
+      kind: "battleRoyale",
+      gameLabel: text(raw.gameLabel),
+      standings: valueByLabel(raw.standings, (entry) => ({
+        rank: number(entry.rank),
+        team: text(entry.team),
+        placementPoints: number(entry.placementPoints),
+        eliminationPoints: number(entry.eliminationPoints),
+        totalPoints: number(entry.totalPoints),
+      })).slice(0, 80),
+    };
+  }
   return null;
 }
 
@@ -355,12 +443,20 @@ export async function getMatchPageModel(matchId: number): Promise<MatchPageModel
       },
     )
     : Promise.resolve(new Map<number, MatchCoStream[]>());
-  const [details, coStreamsByMatch] = await Promise.all([
+  const [details, coStreamsByMatch, overview] = await Promise.all([
     getMatchDetails(matchId),
     coStreamsPromise,
+    getTournamentOverview(match.tournament_id),
   ]);
   const streamUrl = safeUrlOrUndefined(match.stream_url) ?? null;
   const tournamentUrl = safeUrlOrUndefined(match.tournament_url) ?? null;
+  const overviewAttribution =
+    overview?.payload &&
+    typeof overview.payload === "object" &&
+    !Array.isArray(overview.payload) &&
+    (overview.payload as Record<string, unknown>).attribution === OFFICIAL_ATTRIBUTION
+      ? OFFICIAL_ATTRIBUTION
+      : null;
   return {
     id: match.id,
     source: match.source,
@@ -388,5 +484,6 @@ export async function getMatchPageModel(matchId: number): Promise<MatchPageModel
       url: tournamentUrl,
     },
     details: toMatchDetailsViewModel(details?.payload),
+    attribution: overviewAttribution,
   };
 }

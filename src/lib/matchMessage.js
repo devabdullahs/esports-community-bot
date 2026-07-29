@@ -11,6 +11,7 @@ import { gameName, gameTag, matchTag, matchTagEwc, normalizeGameSlug } from './g
 import { isLobbyMatch, matchLabel, matchUrl, tournamentUrl } from './render.js';
 
 const LIQUIPEDIA_FOOTER = 'Data from Liquipedia — CC-BY-SA 3.0';
+const OFFICIAL_ATTRIBUTION = '© Esports Foundation 2026. All rights reserved.';
 const NEXT_UP_LOOKAHEAD_SECONDS = 3 * 60 * 60;
 const ALL_GAMES_LIVE_LIMIT = 12;
 const ALL_GAMES_UPCOMING_LIMIT = 12;
@@ -39,6 +40,10 @@ function nowSec() {
 
 function isLiquipediaMatch(m) {
   return m?.source === 'liquipedia' || m?.tournament_source === 'liquipedia';
+}
+
+function isOfficialAuthoritativeMatch(m) {
+  return Number(m?.official_authoritative) === 1;
 }
 
 function nextUpcomingSoon(matches, current) {
@@ -90,6 +95,7 @@ export function buildMatchEmbed(m, imageName, { nextMatch = null, showNextGameTa
   if (m.tournament_name) lines.push(`Tournament: **${m.tournament_name}**`);
   if (url) lines.push(`[Full match details](${url})`);
   if (nextMatch) lines.push(nextMatchEmbedLine(nextMatch, showNextGameTag));
+  if (isOfficialAuthoritativeMatch(m)) lines.push(`***${OFFICIAL_ATTRIBUTION}***`);
 
   const embed = new EmbedBuilder()
     .setColor(meta.color)

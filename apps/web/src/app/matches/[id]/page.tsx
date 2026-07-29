@@ -6,6 +6,7 @@ import { CommentsSection } from "@/components/comments/comments-section";
 import { MatchHeader } from "@/components/matches/match-header";
 import { MatchDetailTabs } from "@/components/matches/match-detail-tabs";
 import { LiquipediaAttribution } from "@/components/tournaments/liquipedia-attribution";
+import { OfficialTournamentAttribution } from "@/components/tournaments/official-tournament-attribution";
 import { Button } from "@/components/ui/button";
 import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "@/components/ui/empty";
 import { copy, localizedPath } from "@/lib/i18n";
@@ -148,6 +149,7 @@ export default async function MatchDetailPage({
 
       <CommentsSection target={{ type: "match", id: model.id }} locale={locale} />
 
+      <OfficialTournamentAttribution value={model.attribution ?? model.details?.attribution} />
       {model.tournament.source === "liquipedia" || model.source === "liquipedia" ? (
         <LiquipediaAttribution locale={locale} />
       ) : null}
