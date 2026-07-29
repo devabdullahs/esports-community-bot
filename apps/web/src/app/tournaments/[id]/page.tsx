@@ -11,6 +11,7 @@ import { LiquipediaAttribution } from "@/components/tournaments/liquipedia-attri
 import { PartnerPlacement } from "@/components/partners/partner-placement";
 import { TournamentMatchList } from "@/components/tournaments/tournament-match-list";
 import { TournamentSyncHealthStatus } from "@/components/tournaments/tournament-sync-health";
+import { OfficialTournamentAttribution } from "@/components/tournaments/official-tournament-attribution";
 import { copy, formatNumber, localizedPath } from "@/lib/i18n";
 import { getViewerFollowState } from "@/lib/follows";
 import { getViewerMatchReminderState } from "@/lib/match-reminders";
@@ -254,6 +255,51 @@ export default async function TournamentDetailPage({
         </div>
       </header>
 
+      {data.overview ? (
+        <section className="flex flex-col gap-4" aria-labelledby="tournament-overview-heading">
+          <h2 id="tournament-overview-heading" className="text-xl font-semibold">
+            {locale === "ar" ? "معلومات البطولة" : "Tournament information"}
+          </h2>
+          {data.overview.facts.length ? (
+            <dl className="grid gap-px overflow-hidden rounded-xl border bg-border sm:grid-cols-2">
+              {data.overview.facts.map((fact) => (
+                <div key={`${fact.label}-${fact.value}`} className="grid gap-1 bg-card p-4">
+                  <dt className="text-xs font-medium text-muted-foreground" dir="auto">{fact.label}</dt>
+                  <dd className="font-medium" dir="auto">{fact.value}</dd>
+                </div>
+              ))}
+            </dl>
+          ) : null}
+          {data.overview.sections.map((section) => (
+            <details key={section.title} className="overflow-hidden rounded-xl border">
+              <summary className="cursor-pointer px-4 py-3 font-semibold" dir="auto">
+                {section.title}
+              </summary>
+              <div className="overflow-x-auto border-t">
+                <table className="w-full min-w-[42rem] text-sm">
+                  <thead className="bg-muted/40">
+                    <tr>
+                      {section.columns.map((column) => (
+                        <th key={column} className="px-4 py-3 text-start" dir="auto">{column}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {section.entries.map((entry, index) => (
+                      <tr key={`${section.title}-${index}`} className="border-t">
+                        {section.columns.map((column) => (
+                          <td key={column} className="px-4 py-3" dir="auto">{entry[column] ?? "-"}</td>
+                        ))}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </details>
+          ))}
+        </section>
+      ) : null}
+
       <PartnerPlacement kind="tournament" target={`tournament:${tournament.id}`} locale={locale} />
 
       <TournamentMatchList
@@ -288,6 +334,7 @@ export default async function TournamentDetailPage({
         }}
       />
 
+      <OfficialTournamentAttribution value={data.overview?.attribution} />
       <LiquipediaAttribution locale={locale} />
     </main>
   );

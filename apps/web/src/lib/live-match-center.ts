@@ -12,6 +12,7 @@ import type { MatchStatus, ResultReason, WinnerSide } from "@/lib/match-lifecycl
 
 export const LIVE_UPCOMING_LIMIT = 25;
 export const LIVE_RECENT_FINISHED_LIMIT = 5;
+const OFFICIAL_ATTRIBUTION = "© Esports Foundation 2026. All rights reserved.";
 
 export type LiveMatchCenterItem = {
   id: number;
@@ -39,6 +40,7 @@ export type LiveMatchCenter = {
   running: LiveMatchCenterItem[];
   upcoming: LiveMatchCenterItem[];
   recentFinished: LiveMatchCenterItem[];
+  attribution: typeof OFFICIAL_ATTRIBUTION | null;
 };
 
 function timeForAscending(value: number | null): number {
@@ -93,9 +95,11 @@ export function buildLiveMatchCenter(rows: Array<TournamentMatches | null | unde
   const running: LiveMatchCenterItem[] = [];
   const upcoming: LiveMatchCenterItem[] = [];
   const recentFinished: LiveMatchCenterItem[] = [];
+  let attribution: typeof OFFICIAL_ATTRIBUTION | null = null;
 
   for (const row of rows) {
     if (!row) continue;
+    if (row.overview?.attribution === OFFICIAL_ATTRIBUTION) attribution = OFFICIAL_ATTRIBUTION;
     running.push(...row.matches.running.map((match) => toPublicMatch(row.tournament, match)));
     upcoming.push(...row.matches.scheduled.map((match) => toPublicMatch(row.tournament, match)));
     recentFinished.push(...row.matches.finished.map((match) => toPublicMatch(row.tournament, match)));
@@ -120,6 +124,7 @@ export function buildLiveMatchCenter(rows: Array<TournamentMatches | null | unde
     running,
     upcoming: upcoming.slice(0, LIVE_UPCOMING_LIMIT),
     recentFinished: recentFinished.slice(0, LIVE_RECENT_FINISHED_LIMIT),
+    attribution,
   };
 }
 

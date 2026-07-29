@@ -100,6 +100,20 @@ export const config = {
     timezone: get('STANDINGS_SYNC_TIMEZONE', 'Asia/Riyadh'),
     bootDelayMs: Math.max(0, Number(get('STANDINGS_SYNC_BOOT_DELAY_MS', 45000)) || 0),
   },
+  officialEwcSheets: {
+    // Private, read-only EWC operations feed. Disabled until a service account
+    // with Viewer access to the configured folder is supplied.
+    enabled: get('EWC_OFFICIAL_SHEETS_ENABLED', 'false') === 'true',
+    folderId: get('EWC_OFFICIAL_SHEETS_FOLDER_ID'),
+    clientEmail: get('EWC_OFFICIAL_SHEETS_CLIENT_EMAIL'),
+    privateKey: get('EWC_OFFICIAL_SHEETS_PRIVATE_KEY'),
+    pollMs: Math.max(30_000, Number(get('EWC_OFFICIAL_SHEETS_POLL_MS', 60_000)) || 60_000),
+    bootDelayMs: Math.max(0, Number(get('EWC_OFFICIAL_SHEETS_BOOT_DELAY_MS', 30_000)) || 0),
+    authorityTtlSeconds: Math.max(
+      120,
+      Number(get('EWC_OFFICIAL_SHEETS_AUTHORITY_TTL_SECONDS', 300)) || 300,
+    ),
+  },
   lpdb: {
     // LiquipediaDB API (optional). When LPDB_API_KEY is set it's preferred over HTML parsing.
     apiKey: get('LPDB_API_KEY'),

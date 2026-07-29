@@ -1,4 +1,5 @@
 import { all, transaction } from './client.js';
+import { contentHash } from './officialEwcSheets.js';
 
 function nowText() {
   return new Date().toISOString().slice(0, 19).replace('T', ' ');
@@ -6,9 +7,25 @@ function nowText() {
 
 // Replace a tournament's standings atomically. Sections arrive in page order;
 // the section index keeps that order stable for display.
-export async function replaceTournamentStandings(tournamentId, sections, { client = null } = {}) {
+export async function replaceTournamentStandings(
+  tournamentId,
+  sections,
+  {
+    client = null,
+    authoritative = false,
+    observedAt = Math.floor(Date.now() / 1000),
+    authorityTtlSeconds = 300,
+  } = {},
+) {
   const now = nowText();
   const replace = async (tx) => {
+    if (!authoritative) {
+      const authority = await tx.get(
+        'SELECT expires_at FROM official_standings_authority WHERE tournament_id = $1 AND expires_at > $2',
+        [tournamentId, observedAt],
+      );
+      if (authority) return 0;
+    }
     await tx.run('DELETE FROM tournament_standings WHERE tournament_id = $1', [tournamentId]);
     let inserted = 0;
     let sectionOrder = 0;
@@ -37,6 +54,18 @@ export async function replaceTournamentStandings(tournamentId, sections, { clien
         );
         inserted += 1;
       }
+    }
+    if (authoritative) {
+      await tx.run(
+        `INSERT INTO official_standings_authority
+           (tournament_id, observed_at, expires_at, content_hash)
+         VALUES ($1, $2, $3, $4)
+         ON CONFLICT (tournament_id) DO UPDATE SET
+           observed_at = excluded.observed_at,
+           expires_at = excluded.expires_at,
+           content_hash = excluded.content_hash`,
+        [tournamentId, observedAt, observedAt + authorityTtlSeconds, contentHash(sections || [])],
+      );
     }
     return inserted;
   };

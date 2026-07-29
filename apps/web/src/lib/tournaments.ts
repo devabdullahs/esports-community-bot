@@ -8,6 +8,7 @@ import {
   listStandingsCounts as _listStandingsCounts,
   listStandingsForTournament as _listStandingsForTournament,
 } from "@bot/db/tournamentStandings.js";
+import { getTournamentOverview as _getTournamentOverview } from "@bot/db/officialEwcSheets.js";
 import {
   getTournamentSyncHealth as _getTournamentSyncHealth,
   listTournamentSyncHealth as _listTournamentSyncHealth,
@@ -198,6 +199,7 @@ export type TournamentMatches = {
   };
   bracketMatches?: MatchRow[];
   standings: StandingRow[];
+  overview: TournamentOverview | null;
   totals: MatchCounts & { all: number };
   finishedPage: {
     offset: number;
@@ -212,6 +214,17 @@ export type TournamentMatchOptions = {
   limit?: number;
   offset?: number;
   includeBracket?: boolean;
+};
+
+export type TournamentOverview = {
+  facts: Array<{ label: string; value: string }>;
+  sections: Array<{
+    title: string;
+    columns: string[];
+    entries: Array<Record<string, string>>;
+  }>;
+  attribution: "© Esports Foundation 2026. All rights reserved.";
+  updatedAt: string | null;
 };
 
 const listActive = _listActive as (guildId?: string) => Promise<TournamentRow[]>;
@@ -308,6 +321,9 @@ const listStandingsCounts = _listStandingsCounts as () => Promise<
   Array<{ tournament_id: number; count: number }>
 >;
 const getTournamentSyncHealth = _getTournamentSyncHealth as (tournamentId: number) => Promise<SyncHealthRow | null>;
+const getTournamentOverview = _getTournamentOverview as (
+  tournamentId: number,
+) => Promise<{ payload?: unknown; updatedAt?: string | null } | null>;
 const listTournamentSyncHealth = _listTournamentSyncHealth as (tournamentIds: number[]) => Promise<SyncHealthRow[]>;
 const publicTournamentSyncHealth = _publicTournamentSyncHealth as (
   health: SyncHealthRow | null | undefined,
@@ -321,6 +337,78 @@ const publicTournamentSyncHealth = _publicTournamentSyncHealth as (
 const normalizeTeamName = _normalizeTeamName as (value: string | null | undefined) => string;
 const isIndividualCompetitorGame = _isIndividualCompetitorGame as (game: string | null | undefined) => boolean;
 const livePollIntervalMs = Number(process.env.LIVE_POLL_INTERVAL_MS || 300_000);
+const OFFICIAL_ATTRIBUTION = "© Esports Foundation 2026. All rights reserved." as const;
+
+function overviewRecord(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null;
+}
+
+function overviewText(value: unknown, max: number): string | null {
+  if (typeof value !== "string") return null;
+  const text = value.replace(/\s+/g, " ").trim();
+  if (!text || text.length > max || /https?:\/\/|docs\.google|drive\.google|spreadsheets\/d\//i.test(text)) {
+    return null;
+  }
+  return text;
+}
+
+function overviewLabelIsPublic(label: string): boolean {
+  return !/(?:^|\s)(?:url|link|sheet|workbook|drive|email|contact|id)(?:\s|$)/i.test(label);
+}
+
+export function publicTournamentOverview(
+  row: { payload?: unknown; updatedAt?: string | null } | null,
+): TournamentOverview | null {
+  const payload = overviewRecord(row?.payload);
+  if (!payload || payload.attribution !== OFFICIAL_ATTRIBUTION) return null;
+  const facts = (Array.isArray(payload.facts) ? payload.facts : [])
+    .flatMap((item) => {
+      const fact = overviewRecord(item);
+      const label = overviewText(fact?.label, 80);
+      const value = overviewText(fact?.value, 300);
+      return label && overviewLabelIsPublic(label) && value ? [{ label, value }] : [];
+    })
+    .slice(0, 40);
+  const sections = (Array.isArray(payload.sections) ? payload.sections : [])
+    .flatMap((item) => {
+      const section = overviewRecord(item);
+      const title = overviewText(section?.title, 80);
+      const rawColumns = Array.isArray(section?.columns) ? section.columns : [];
+      const columns = rawColumns
+        .flatMap((column) => {
+          const label = overviewText(column, 80);
+          return label && overviewLabelIsPublic(label)
+            ? [label]
+            : [];
+        })
+        .slice(0, 12);
+      if (!title || columns.length < 2) return [];
+      const entries = (Array.isArray(section?.entries) ? section.entries : [])
+        .flatMap((entry) => {
+          const raw = overviewRecord(entry);
+          if (!raw) return [];
+          const normalized = Object.fromEntries(
+            columns.flatMap((column) => {
+              const value = overviewText(raw[column], 300);
+              return value ? [[column, value]] : [];
+            }),
+          );
+          return Object.keys(normalized).length >= 2 ? [normalized] : [];
+        })
+        .slice(0, 120);
+      return entries.length ? [{ title, columns, entries }] : [];
+    })
+    .slice(0, 20);
+  if (!facts.length && !sections.length) return null;
+  return {
+    facts,
+    sections,
+    attribution: OFFICIAL_ATTRIBUTION,
+    updatedAt: typeof row?.updatedAt === "string" ? row.updatedAt : null,
+  };
+}
 
 function syncHealthForTournament(
   tournament: TournamentRow,
@@ -541,10 +629,11 @@ export async function getTournamentMatches(
   }
 
   const rows = await dedupedTournamentMatches(tournament);
-  const [resolveProfile, rawStandings, health] = await Promise.all([
+  const [resolveProfile, rawStandings, health, rawOverview] = await Promise.all([
     profileResolver(tournament.game),
     listStandingsForTournament(tournament.id),
     getTournamentSyncHealth(tournament.id),
+    getTournamentOverview(tournament.id),
   ]);
   let standings = rawStandings.map((row) => {
     const profile = resolveProfile(row.team);
@@ -620,6 +709,7 @@ export async function getTournamentMatches(
       ? { bracketMatches: [...running, ...scheduled, ...postponed, ...finishedAll, ...cancelled] }
       : {}),
     standings,
+    overview: publicTournamentOverview(rawOverview),
     totals,
     finishedPage: {
       offset,

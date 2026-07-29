@@ -6,6 +6,11 @@ import {
   normalizeMatchLifecycle,
 } from '../lib/matchLifecycle.js';
 import { EWC_TOURNAMENT_SQL } from './tournamentStandings.js';
+import {
+  contentHash,
+  getFreshMatchAuthority,
+  saveOfficialMatchAuthority,
+} from './officialEwcSheets.js';
 
 function nowText() {
   return new Date().toISOString().slice(0, 19).replace('T', ' ');
@@ -14,7 +19,28 @@ function nowText() {
 const STARTGG_PREVIEW_MATCH_SQL = "(source = 'startgg' AND external_id LIKE 'sgg:preview_%')";
 const STARTGG_PREVIEW_MATCH_SQL_M = "(m.source = 'startgg' AND m.external_id LIKE 'sgg:preview_%')";
 
-export async function upsertMatch(row, { client = null } = {}) {
+const OFFICIAL_MATCH_FIELDS = [
+  'name',
+  'team_a',
+  'team_b',
+  'score_a',
+  'score_b',
+  'status',
+  'scheduled_at',
+  'stream_platform',
+  'stream_url',
+];
+
+export async function upsertMatch(
+  row,
+  {
+    client = null,
+    authoritative = false,
+    authorityTtlSeconds = 300,
+    observedAt = Math.floor(Date.now() / 1000),
+    authorityFields = null,
+  } = {},
+) {
   const merged = {
     name: null,
     team_a: 'TBD',
@@ -36,6 +62,15 @@ export async function upsertMatch(row, { client = null } = {}) {
       'SELECT * FROM matches WHERE source = $1 AND external_id = $2',
       [merged.source, merged.external_id],
     );
+    if (existing && !authoritative) {
+      const protectedFields = await getFreshMatchAuthority(existing.id, {
+        client: tx,
+        now: observedAt,
+      });
+      for (const field of protectedFields || []) {
+        if (OFFICIAL_MATCH_FIELDS.includes(field)) merged[field] = existing[field];
+      }
+    }
     const normalizedLifecycle = normalizeMatchLifecycle(merged);
     const lifecycle = existing
       ? mergeMatchLifecycle(existing, merged)
@@ -113,6 +148,25 @@ export async function upsertMatch(row, { client = null } = {}) {
         [now, persisted.id],
       );
     }
+    if (authoritative) {
+      const fields = new Set(
+        (authorityFields || OFFICIAL_MATCH_FIELDS).filter(
+          (field) =>
+            OFFICIAL_MATCH_FIELDS.includes(field) &&
+            Object.prototype.hasOwnProperty.call(row, field) &&
+            row[field] !== null &&
+            row[field] !== undefined,
+        ),
+      );
+      await saveOfficialMatchAuthority(tx, {
+        matchId: persisted.id,
+        observedAt,
+        expiresAt: observedAt + authorityTtlSeconds,
+        hash: contentHash(Object.fromEntries([...fields].map((field) => [field, persisted[field]]))),
+        fields,
+      });
+    }
+
     return persisted;
   };
   return client ? persist(client) : transaction(persist);
@@ -143,6 +197,17 @@ export function toMatchRow(parsed, tournamentId) {
 
 export async function getMatch(source, externalId) {
   return get('SELECT * FROM matches WHERE source = $1 AND external_id = $2', [source, externalId]);
+}
+
+export async function listMatchesForTournament(tournamentId) {
+  return all(
+    `SELECT *
+       FROM matches
+      WHERE tournament_id = $1
+        AND NOT (source = 'startgg' AND external_id LIKE 'sgg:preview_%')
+      ORDER BY scheduled_at ASC, id ASC`,
+    [tournamentId],
+  );
 }
 
 // Current Liquipedia Swiss grids expose completed round scores but no timestamps.
@@ -328,7 +393,12 @@ export function dedupeMatches(rows) {
 export async function getMatchesForGuild(guildId) {
   const rows = await all(
     `SELECT m.*, t.game AS game, t.name AS tournament_name,
-            t.url AS tournament_url, t.external_id AS tournament_path, t.source AS tournament_source
+            t.url AS tournament_url, t.external_id AS tournament_path, t.source AS tournament_source,
+            CASE WHEN EXISTS (
+              SELECT 1
+                FROM official_match_authority oma
+               WHERE oma.match_id = m.id
+            ) THEN 1 ELSE 0 END AS official_authoritative
      FROM matches m
      JOIN tournaments t ON t.id = m.tournament_id
      WHERE t.guild_id = $1 AND t.active = 1
@@ -479,9 +549,16 @@ export async function markStaleActiveFinished(staleSeconds) {
 // SCORED row exists for the same normalized team pair in the same tournament, so a
 // genuinely-unresolved match (no scored twin) is always kept.
 export async function deleteResolvedDuplicateMatches() {
+  const now = Math.floor(Date.now() / 1000);
   const rows = await all(
-    `SELECT id, tournament_id, team_a, team_b, score_a, score_b
-     FROM matches WHERE status = 'finished'`,
+    `SELECT m.id, m.tournament_id, m.team_a, m.team_b, m.score_a, m.score_b,
+            CASE WHEN EXISTS (
+              SELECT 1 FROM official_match_authority oma
+               WHERE oma.match_id = m.id AND oma.expires_at > $1
+            ) THEN 1 ELSE 0 END AS official_fresh
+       FROM matches m
+      WHERE m.status = 'finished'`,
+    [now],
   );
   const pairKey = (r) =>
     `${r.tournament_id}|${[normalizeTeamName(r.team_a), normalizeTeamName(r.team_b)].sort().join('|')}`;
@@ -490,7 +567,12 @@ export async function deleteResolvedDuplicateMatches() {
     if (r.score_a != null && r.score_b != null) scoredPairs.add(pairKey(r));
   }
   const ids = rows
-    .filter((r) => (r.score_a == null || r.score_b == null) && scoredPairs.has(pairKey(r)))
+    .filter(
+      (r) =>
+        !r.official_fresh &&
+        (r.score_a == null || r.score_b == null) &&
+        scoredPairs.has(pairKey(r)),
+    )
     .map((r) => r.id);
   if (!ids.length) return 0;
   await transaction(async (tx) => {
@@ -504,15 +586,22 @@ export async function deleteResolvedDuplicateMatches() {
 // the same normalized pair/day, retire older timestamp-keyed alias rows immediately
 // so they do not stay live while waiting for the next Liquipedia fetch.
 export async function deleteResolvedLiveAliasMatches() {
+  const now = Math.floor(Date.now() / 1000);
   const rows = await all(
-    `SELECT id, tournament_id, source, external_id, team_a, team_b, score_a, score_b, status, scheduled_at
-     FROM matches
-     WHERE source = 'liquipedia'
-       AND scheduled_at IS NOT NULL
+    `SELECT m.id, m.tournament_id, m.source, m.external_id, m.team_a, m.team_b,
+            m.score_a, m.score_b, m.status, m.scheduled_at,
+            CASE WHEN EXISTS (
+              SELECT 1 FROM official_match_authority oma
+               WHERE oma.match_id = m.id AND oma.expires_at > $1
+            ) THEN 1 ELSE 0 END AS official_fresh
+       FROM matches m
+      WHERE m.source = 'liquipedia'
+       AND m.scheduled_at IS NOT NULL
        AND (
-         (status IN ('running','finished') AND score_a IS NOT NULL AND score_b IS NOT NULL)
-         OR status IN ('scheduled','running')
+         (m.status IN ('running','finished') AND m.score_a IS NOT NULL AND m.score_b IS NOT NULL)
+         OR m.status IN ('scheduled','running')
        )`,
+    [now],
   );
   const liveWidgetFallback = (r) => /^[^:]+:\d+:/i.test(String(r.external_id ?? ''));
   const normalizedDayKeyOf = (r) => {
@@ -547,7 +636,9 @@ export async function deleteResolvedLiveAliasMatches() {
 
   const ids = [];
   for (const r of rows) {
-    if (!liveWidgetFallback(r) || !['scheduled', 'running'].includes(r.status)) continue;
+    if (r.official_fresh || !liveWidgetFallback(r) || !['scheduled', 'running'].includes(r.status)) {
+      continue;
+    }
     const candidates = canonicalByDay.get(normalizedDayKeyOf(r)) || [];
     if (candidates.length !== 1) continue;
     const canonical = candidates[0];
@@ -567,12 +658,18 @@ export async function deleteTournamentPlaceholderMatches(
   { client = null } = {},
 ) {
   const reader = client || { all };
+  const now = Math.floor(Date.now() / 1000);
   const rows = await reader.all(
-    'SELECT id, external_id, team_a, team_b, scheduled_at FROM matches WHERE tournament_id = $1',
-    [tournamentId],
+    `SELECT m.id, m.external_id, m.team_a, m.team_b, m.scheduled_at,
+            CASE WHEN EXISTS (
+              SELECT 1 FROM official_match_authority oma
+               WHERE oma.match_id = m.id AND oma.expires_at > $2
+            ) THEN 1 ELSE 0 END AS official_fresh
+       FROM matches m
+      WHERE m.tournament_id = $1`,
+    [tournamentId, now],
   );
   const current = currentExternalIds ? new Set(currentExternalIds) : null;
-  const now = Math.floor(Date.now() / 1000);
   const staleAfterSeconds = 4 * 3600;
   const clean = (value) =>
     String(value ?? '')
@@ -586,6 +683,7 @@ export async function deleteTournamentPlaceholderMatches(
 
   const ids = rows
     .filter((row) => {
+      if (row.official_fresh) return false;
       if (/^sgg:preview_/i.test(String(row.external_id ?? ''))) {
         return current && !current.has(row.external_id);
       }
@@ -631,9 +729,17 @@ export async function deleteTournamentDuplicateMatches(
   if (!currentExternalIds || !currentExternalIds.length) return 0;
   const current = new Set(currentExternalIds);
   const reader = client || { all };
+  const now = Math.floor(Date.now() / 1000);
   const rows = await reader.all(
-    'SELECT id, external_id, team_a, team_b, score_a, score_b, status, scheduled_at FROM matches WHERE tournament_id = $1',
-    [tournamentId],
+    `SELECT m.id, m.external_id, m.team_a, m.team_b, m.score_a, m.score_b, m.status,
+            m.scheduled_at,
+            CASE WHEN EXISTS (
+              SELECT 1 FROM official_match_authority oma
+               WHERE oma.match_id = m.id AND oma.expires_at > $2
+            ) THEN 1 ELSE 0 END AS official_fresh
+       FROM matches m
+      WHERE m.tournament_id = $1`,
+    [tournamentId, now],
   );
   const liveWidgetFallback = (r) => /^[^:]+:\d+:/i.test(String(r.external_id ?? ''));
   const keyOf = (r) => {
@@ -653,7 +759,7 @@ export async function deleteTournamentDuplicateMatches(
       let g = groups.get(key);
       if (!g) groups.set(key, (g = { hasCurrent: false, staleIds: [] }));
       if (current.has(r.external_id)) g.hasCurrent = true;
-      else g.staleIds.push(r.id);
+      else if (!r.official_fresh) g.staleIds.push(r.id);
     }
 
     const dayKey = dayKeyOf(r);
@@ -668,7 +774,7 @@ export async function deleteTournamentDuplicateMatches(
   const ids = new Set();
   for (const g of groups.values()) if (g.hasCurrent) for (const id of g.staleIds) ids.add(id);
   for (const r of rows) {
-    if (current.has(r.external_id) || !liveWidgetFallback(r)) continue;
+    if (r.official_fresh || current.has(r.external_id) || !liveWidgetFallback(r)) continue;
     const candidates = currentScoredByDay.get(dayKeyOf(r)) || [];
     if (candidates.length !== 1) continue;
     if (Number(r.scheduled_at) <= Number(candidates[0].scheduled_at)) ids.add(r.id);

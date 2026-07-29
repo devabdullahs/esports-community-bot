@@ -119,4 +119,72 @@ describe("match details page model", () => {
     expect(matchHasDetails(0)).toBe(false);
     expect(matchHasDetails(undefined)).toBe(false);
   });
+
+  test("maps bounded official individual, team-series, and battle-royale payloads", () => {
+    const attribution = "© Esports Foundation 2026. All rights reserved.";
+    expect(toMatchDetailsViewModel({
+      version: 1,
+      kind: "individual",
+      attribution,
+      round: "Round 2",
+      scoreA: 5,
+      scoreB: 4,
+      penaltyA: null,
+      penaltyB: null,
+      privateWorkbookId: "must-not-project",
+    })).toEqual({
+      version: 1,
+      kind: "individual",
+      patch: null,
+      casters: [],
+      attribution,
+      round: "Round 2",
+      scoreA: 5,
+      scoreB: 4,
+      penaltyA: null,
+      penaltyB: null,
+    });
+
+    const maps = Array.from({ length: 40 }, (_, index) => ({
+      name: `Map ${index + 1}`,
+      scoreA: index,
+      scoreB: 0,
+    }));
+    const teamSeries = toMatchDetailsViewModel({
+      version: 1,
+      kind: "teamSeries",
+      attribution,
+      maps,
+    });
+    expect(teamSeries).toMatchObject({ kind: "teamSeries" });
+    expect(teamSeries?.kind === "teamSeries" ? teamSeries.maps : []).toHaveLength(30);
+
+    const standings = Array.from({ length: 100 }, (_, index) => ({
+      rank: index + 1,
+      team: `Team ${index + 1}`,
+      totalPoints: 100 - index,
+    }));
+    const battleRoyale = toMatchDetailsViewModel({
+      version: 1,
+      kind: "battleRoyale",
+      attribution,
+      gameLabel: "Game 1",
+      standings,
+    });
+    expect(battleRoyale).toMatchObject({ kind: "battleRoyale" });
+    expect(battleRoyale?.kind === "battleRoyale" ? battleRoyale.standings : []).toHaveLength(80);
+  });
+
+  test("accepts only the exact official attribution string", () => {
+    expect(toMatchDetailsViewModel({
+      version: 1,
+      kind: "individual",
+      attribution: "Private spreadsheet feed",
+    })?.attribution).toBeNull();
+    expect(toMatchDetailsViewModel({
+      version: 1,
+      kind: "individual",
+      attribution: "© Esports Foundation 2026. All rights reserved.",
+    })?.attribution).toBe("© Esports Foundation 2026. All rights reserved.");
+  });
 });

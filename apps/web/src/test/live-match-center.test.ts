@@ -41,6 +41,7 @@ function tournament(
   id: number,
   game: string | null,
   matches: Partial<TournamentMatches["matches"]> = {},
+  overview: TournamentMatches["overview"] = null,
 ): TournamentMatches {
   const running = matches.running ?? [];
   const scheduled = matches.scheduled ?? [];
@@ -59,6 +60,7 @@ function tournament(
     },
     matches: { running, scheduled, finished },
     standings: [],
+    overview,
     total: running.length + scheduled.length + finished.length,
   };
 }
@@ -110,6 +112,7 @@ describe("live match center projection", () => {
       running: [],
       upcoming: [],
       recentFinished: [],
+      attribution: null,
     });
   });
 
@@ -144,6 +147,20 @@ describe("live match center projection", () => {
     });
     expect(JSON.stringify(center)).not.toMatch(/external_id|stream_platform|stream_url|guild_id|updated_at/i);
   });
+
+  test("credits the official source when live data relies on an official tournament overview", () => {
+    const attribution = "© Esports Foundation 2026. All rights reserved.";
+    const center = buildLiveMatchCenter([
+      tournament(
+        8,
+        "valorant",
+        { running: [match({ id: 80, status: "running" })] },
+        { facts: [], sections: [], attribution, updatedAt: null },
+      ),
+    ]);
+
+    expect(center.attribution).toBe(attribution);
+  });
 });
 
 describe("GET /api/live", () => {
@@ -162,6 +179,7 @@ describe("GET /api/live", () => {
       running: [expect.objectContaining({ id: 50, matchHref: "/matches/50" })],
       upcoming: [],
       recentFinished: [],
+      attribution: null,
     });
     expect(JSON.stringify(body)).not.toMatch(/external_id|stream_platform|stream_url|guild_id|updated_at/i);
     expect(getTournamentMatchesCached).toHaveBeenCalledWith(5, { limit: LIVE_RECENT_FINISHED_LIMIT });

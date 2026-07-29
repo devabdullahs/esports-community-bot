@@ -6,7 +6,7 @@ process.env.DISCORD_TOKEN = 'test-token';
 process.env.DISCORD_CLIENT_ID = 'test-client-id';
 process.env.DB_PATH = ':memory:';
 
-const { selectAllGamesStatusMatches } = await import('../src/lib/matchMessage.js');
+const { buildMatchEmbed, selectAllGamesStatusMatches } = await import('../src/lib/matchMessage.js');
 
 const baseTime = 1_783_500_000;
 
@@ -68,4 +68,22 @@ test('all-games upcoming treats fighting-game player pairings as distinct rows',
     upcoming.map((m) => `${m.team_a} vs ${m.team_b}`),
     ['Mi2ha4 vs Senaru', 'MOUZ vs Team Nemesis', 'Gentle Mates vs NRG', 'H-DOPE vs Kindevu'],
   );
+});
+
+test('sheet-backed match embeds include the required official attribution', () => {
+  const embed = buildMatchEmbed(
+    matchRow({
+      status: 'finished',
+      score_a: 2,
+      score_b: 1,
+      official_authoritative: 1,
+    }),
+    'match.png',
+  );
+
+  assert.match(
+    embed.toJSON().description,
+    /\*\*\*© Esports Foundation 2026\. All rights reserved\.\*\*\*/,
+  );
+  assert.equal(embed.toJSON().footer?.text, 'Data from Liquipedia — CC-BY-SA 3.0');
 });
