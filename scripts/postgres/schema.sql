@@ -1158,46 +1158,6 @@ ALTER TABLE tournament_standings ADD COLUMN IF NOT EXISTS section_order INTEGER 
 CREATE INDEX IF NOT EXISTS idx_tournament_standings_tournament
   ON tournament_standings(tournament_id, section_order, rank);
 
--- Private-provider state contains opaque hashes/timestamps and normalized
--- public tournament data only. Upstream folder/workbook/sheet ids are not
--- persisted.
-CREATE TABLE IF NOT EXISTS official_feed_state (
-  workbook_key   TEXT PRIMARY KEY,
-  modified_token TEXT NOT NULL,
-  content_hash   TEXT NOT NULL,
-  updated_at     BIGINT NOT NULL
-);
-
-CREATE TABLE IF NOT EXISTS official_match_authority (
-  match_id      BIGINT PRIMARY KEY REFERENCES matches(id) ON DELETE CASCADE,
-  observed_at   BIGINT NOT NULL,
-  expires_at    BIGINT NOT NULL,
-  content_hash  TEXT NOT NULL,
-  fields_json   TEXT NOT NULL
-);
-CREATE INDEX IF NOT EXISTS idx_official_match_authority_expiry
-  ON official_match_authority(expires_at);
-
-CREATE TABLE IF NOT EXISTS official_standings_authority (
-  tournament_id BIGINT PRIMARY KEY REFERENCES tournaments(id) ON DELETE CASCADE,
-  observed_at   BIGINT NOT NULL,
-  expires_at    BIGINT NOT NULL,
-  content_hash  TEXT NOT NULL
-);
-
-CREATE TABLE IF NOT EXISTS tournament_overviews (
-  tournament_id BIGINT PRIMARY KEY REFERENCES tournaments(id) ON DELETE CASCADE,
-  payload_json  TEXT NOT NULL,
-  updated_at    TEXT NOT NULL
-);
-
-CREATE TABLE IF NOT EXISTS official_overview_authority (
-  tournament_id BIGINT PRIMARY KEY REFERENCES tournaments(id) ON DELETE CASCADE,
-  observed_at   BIGINT NOT NULL,
-  expires_at    BIGINT NOT NULL,
-  content_hash  TEXT NOT NULL
-);
-
 -- Durable, coarse schedule-sync health. Categories are deliberately closed:
 -- provider messages, URLs, tokens, and response data do not belong in this table.
 CREATE TABLE IF NOT EXISTS tournament_sync_health (
@@ -1345,3 +1305,45 @@ CREATE TABLE IF NOT EXISTS user_push_deliveries (
 CREATE INDEX IF NOT EXISTS idx_user_push_deliveries_due
   ON user_push_deliveries(status, not_before, notification_id);
 -- END MIGRATION 0004-web-push.sql
+
+-- BEGIN MIGRATION 0005-official-ewc-sheets.sql
+-- Private-provider state contains opaque hashes/timestamps and normalized
+-- public tournament data only. Upstream folder/workbook/sheet ids are not
+-- persisted.
+CREATE TABLE IF NOT EXISTS official_feed_state (
+  workbook_key   TEXT PRIMARY KEY,
+  modified_token TEXT NOT NULL,
+  content_hash   TEXT NOT NULL,
+  updated_at     BIGINT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS official_match_authority (
+  match_id      BIGINT PRIMARY KEY REFERENCES matches(id) ON DELETE CASCADE,
+  observed_at   BIGINT NOT NULL,
+  expires_at    BIGINT NOT NULL,
+  content_hash  TEXT NOT NULL,
+  fields_json   TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_official_match_authority_expiry
+  ON official_match_authority(expires_at);
+
+CREATE TABLE IF NOT EXISTS official_standings_authority (
+  tournament_id BIGINT PRIMARY KEY REFERENCES tournaments(id) ON DELETE CASCADE,
+  observed_at   BIGINT NOT NULL,
+  expires_at    BIGINT NOT NULL,
+  content_hash  TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS tournament_overviews (
+  tournament_id BIGINT PRIMARY KEY REFERENCES tournaments(id) ON DELETE CASCADE,
+  payload_json  TEXT NOT NULL,
+  updated_at    TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS official_overview_authority (
+  tournament_id BIGINT PRIMARY KEY REFERENCES tournaments(id) ON DELETE CASCADE,
+  observed_at   BIGINT NOT NULL,
+  expires_at    BIGINT NOT NULL,
+  content_hash  TEXT NOT NULL
+);
+-- END MIGRATION 0005-official-ewc-sheets.sql
