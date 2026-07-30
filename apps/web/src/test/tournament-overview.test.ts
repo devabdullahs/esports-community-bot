@@ -4,13 +4,18 @@ import { publicTournamentOverview } from "@/lib/tournaments";
 const attribution = "© Esports Foundation 2026. All rights reserved.";
 
 describe("public official tournament overview", () => {
-  test("projects bounded public facts and table values with the required attribution", () => {
+  test("projects only explicitly public aggregate facts from legacy stored payloads", () => {
     expect(publicTournamentOverview({
       updatedAt: "2026-07-29 12:00:00",
       payload: {
         attribution,
         facts: [
-          { label: "Organizer", value: "Esports Foundation" },
+          { label: "Tournament Format", value: "Double elimination" },
+          { label: "Total Number of Teams", value: "24" },
+          { label: "Players Arrival Date", value: "2026/07/20" },
+          { label: "Camera Setup", value: "Camera 4" },
+          { label: "Admin Notes", value: "Internal only" },
+          { label: "Player Name", value: "Private Person" },
           { label: "Official Link", value: "https://docs.google.com/private" },
         ],
         sections: [{
@@ -28,12 +33,11 @@ describe("public official tournament overview", () => {
     })).toEqual({
       attribution,
       updatedAt: "2026-07-29 12:00:00",
-      facts: [{ label: "Organizer", value: "Esports Foundation" }],
-      sections: [{
-        title: "Participants",
-        columns: ["Team", "Region"],
-        entries: [{ Team: "Team Falcons", Region: "Gulf" }],
-      }],
+      facts: [
+        { label: "Tournament Format", value: "Double elimination" },
+        { label: "Total Number of Teams", value: "24" },
+      ],
+      sections: [],
     });
   });
 
@@ -41,7 +45,7 @@ describe("public official tournament overview", () => {
     expect(publicTournamentOverview({
       payload: {
         attribution: "Official private spreadsheet",
-        facts: [{ label: "Organizer", value: "Esports Foundation" }],
+        facts: [{ label: "Tournament Format", value: "Double elimination" }],
       },
     })).toBeNull();
     expect(publicTournamentOverview({
