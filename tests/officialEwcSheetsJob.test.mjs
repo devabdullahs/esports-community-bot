@@ -43,6 +43,22 @@ test('tournament resolution succeeds only for one unambiguous active EWC event',
   assert.equal(resolveOfficialTournament([{ ...target, archived_at: 1 }], descriptor), null);
 });
 
+test('tournament resolution selects the Rocket League main event over its LCQ', () => {
+  const descriptor = { game: 'rocketleague', tournamentNeedle: 'featuring rocket league' };
+  const target = tournament({
+    id: 7,
+    game: 'rocketleague',
+    name: 'Esports World Cup 2026 featuring Rocket League',
+  });
+  const lcq = tournament({
+    id: 179,
+    game: 'rocketleague',
+    name: 'Rocket League Last Chance Qualifier at Esports World Cup 2026',
+  });
+
+  assert.equal(resolveOfficialTournament([target, lcq], descriptor)?.id, 7);
+});
+
 test('pair matching is order-independent and requires a unique timed candidate', () => {
   const scheduledAt = 1_785_000_000;
   const matches = [

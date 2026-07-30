@@ -29,6 +29,50 @@ test('workbook titles resolve only to supported public tournament identities', (
       tournamentNeedle: 'women',
     },
   );
+  assert.deepEqual(
+    workbookDescriptor('[PUBLIC] Call of Duty: Black Ops 7 (COD BO7) | Tournament Overview | Esports World Cup 2026'),
+    {
+      label: 'call of duty: black ops 7 (cod bo7)',
+      game: 'callofduty',
+    },
+  );
+  assert.deepEqual(
+    workbookDescriptor('[PUBLIC] Dota2 | Tournament Overview | Esports World Cup 2026'),
+    {
+      label: 'dota2',
+      game: 'dota2',
+    },
+  );
+  assert.deepEqual(
+    workbookDescriptor('[PUBLIC] Overwatch | Tournament Overview | Esports World Cup 2026'),
+    {
+      label: 'overwatch',
+      game: 'overwatch',
+    },
+  );
+  assert.deepEqual(
+    workbookDescriptor('[PUBLIC] Rainbow Six Siege | Tournament Overview | Esports World Cup 2026'),
+    {
+      label: 'rainbow six siege',
+      game: 'rainbowsix',
+    },
+  );
+  assert.deepEqual(
+    workbookDescriptor('[PUBLIC] Mobile Legends: Bang Bang Women (MLBBW / MWI) | Tournament Overview'),
+    {
+      label: 'mobile legends: bang bang women (mlbbw / mwi)',
+      game: 'mobilelegends',
+      tournamentNeedle: 'women',
+    },
+  );
+  assert.deepEqual(
+    workbookDescriptor('[PUBLIC] Rocket League | Tournament Overview | Esports World Cup 2026'),
+    {
+      label: 'rocket league',
+      game: 'rocketleague',
+      tournamentNeedle: 'featuring rocket league',
+    },
+  );
   assert.equal(workbookDescriptor('Internal credentials'), null);
 });
 
