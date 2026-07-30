@@ -5,7 +5,23 @@ const MAX_CELL_LENGTH = 500;
 const MAX_FACTS = 40;
 const MAX_SECTIONS = 30;
 const MAX_ENTRIES = 80;
-const MAX_OVERVIEW_ROWS = 120;
+
+const PUBLIC_OVERVIEW_FACT_KEYS = new Set([
+  'format',
+  'tournament format',
+  'prize pool',
+  'platform',
+  'game mode',
+  'mode',
+  'number of teams',
+  'total number of teams',
+  'number of players',
+  'total number of players',
+  'number of participants',
+  'total number of participants',
+  'number of matches',
+  'total number of matches',
+]);
 
 const WORKBOOK_GAME_ALIASES = new Map([
   ['apex', { game: 'apexlegends' }],
@@ -56,12 +72,6 @@ function publicOverviewText(value) {
   const result = text(value);
   if (!result || /https?:\/\/|docs\.google|drive\.google|spreadsheets\/d\//i.test(result)) return '';
   return result;
-}
-
-function sensitiveOverviewHeader(value) {
-  return /(?:^|\s)(?:url|link|sheet|workbook|drive|email|contact|id)(?:\s|$)/i.test(
-    normalizedHeader(value),
-  );
 }
 
 function normalizedHeader(value) {
@@ -327,14 +337,7 @@ export function parseTournamentOverview(rows) {
       const value = publicOverviewText(row[index + 1]);
       if (!label || !value || label === value || label.length > 80 || value.length > 300) continue;
       const key = normalizedHeader(label);
-      if (sensitiveOverviewHeader(label)) continue;
-      if (
-        !/(date|format|prize|platform|participant|team|player|venue|location|mode|stage|match|game|organizer|region)/.test(
-          key,
-        )
-      ) {
-        continue;
-      }
+      if (!PUBLIC_OVERVIEW_FACT_KEYS.has(key)) continue;
       const signature = `${key}\u0000${value.toLowerCase()}`;
       if (seen.has(signature)) continue;
       seen.add(signature);
@@ -345,39 +348,11 @@ export function parseTournamentOverview(rows) {
   return { facts };
 }
 
-function parseOverviewTable(rows, title) {
-  const firstNonEmpty = rows.findIndex((row) => (row || []).filter((cell) => text(cell)).length >= 2);
-  if (firstNonEmpty < 0) return null;
-  const header = (rows[firstNonEmpty] || []).map(publicOverviewText);
-  const meaningfulColumns = header
-    .map((label, index) => ({ label, index }))
-    .filter(({ label }) => label && label.length <= 80 && !sensitiveOverviewHeader(label))
-    .slice(0, 12);
-  if (meaningfulColumns.length < 2) return null;
-  const entries = [];
-  const seen = new Set();
-  for (const row of rows.slice(firstNonEmpty + 1, firstNonEmpty + 1 + MAX_OVERVIEW_ROWS)) {
-    const values = Object.fromEntries(
-      meaningfulColumns
-        .map(({ label, index }) => [label, publicOverviewText(row[index])])
-        .filter(([, value]) => value),
-    );
-    const signature = JSON.stringify(values).toLowerCase();
-    if (Object.keys(values).length < 2 || seen.has(signature)) continue;
-    seen.add(signature);
-    entries.push(values);
-  }
-  return entries.length ? { title, columns: meaningfulColumns.map(({ label }) => label), entries } : null;
-}
-
 export function parseTournamentEnrichment(tabs) {
-  const base = parseTournamentOverview(tabs['Tournament Information'] || []);
-  const sections = [
-    parseOverviewTable(tabs['Qualification Details'] || [], 'Qualification'),
-    parseOverviewTable(tabs['Participant Information'] || [], 'Participants'),
-    parseOverviewTable(tabs['Participant Rosters'] || [], 'Rosters'),
-  ].filter(Boolean);
-  return { ...base, sections };
+  return {
+    ...parseTournamentOverview(tabs['Tournament Information'] || []),
+    sections: [],
+  };
 }
 
 export function parseTeamMapDetails(rows) {

@@ -338,6 +338,22 @@ const normalizeTeamName = _normalizeTeamName as (value: string | null | undefine
 const isIndividualCompetitorGame = _isIndividualCompetitorGame as (game: string | null | undefined) => boolean;
 const livePollIntervalMs = Number(process.env.LIVE_POLL_INTERVAL_MS || 300_000);
 const OFFICIAL_ATTRIBUTION = "© Esports Foundation 2026. All rights reserved." as const;
+const PUBLIC_OVERVIEW_FACT_KEYS = new Set([
+  "format",
+  "tournament format",
+  "prize pool",
+  "platform",
+  "game mode",
+  "mode",
+  "number of teams",
+  "total number of teams",
+  "number of players",
+  "total number of players",
+  "number of participants",
+  "total number of participants",
+  "number of matches",
+  "total number of matches",
+]);
 
 function overviewRecord(value: unknown): Record<string, unknown> | null {
   return value && typeof value === "object" && !Array.isArray(value)
@@ -354,8 +370,8 @@ function overviewText(value: unknown, max: number): string | null {
   return text;
 }
 
-function overviewLabelIsPublic(label: string): boolean {
-  return !/(?:^|\s)(?:url|link|sheet|workbook|drive|email|contact|id)(?:\s|$)/i.test(label);
+function overviewFactKey(label: string): string {
+  return label.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
 }
 
 export function publicTournamentOverview(
@@ -368,43 +384,15 @@ export function publicTournamentOverview(
       const fact = overviewRecord(item);
       const label = overviewText(fact?.label, 80);
       const value = overviewText(fact?.value, 300);
-      return label && overviewLabelIsPublic(label) && value ? [{ label, value }] : [];
+      return label && PUBLIC_OVERVIEW_FACT_KEYS.has(overviewFactKey(label)) && value
+        ? [{ label, value }]
+        : [];
     })
-    .slice(0, 40);
-  const sections = (Array.isArray(payload.sections) ? payload.sections : [])
-    .flatMap((item) => {
-      const section = overviewRecord(item);
-      const title = overviewText(section?.title, 80);
-      const rawColumns = Array.isArray(section?.columns) ? section.columns : [];
-      const columns = rawColumns
-        .flatMap((column) => {
-          const label = overviewText(column, 80);
-          return label && overviewLabelIsPublic(label)
-            ? [label]
-            : [];
-        })
-        .slice(0, 12);
-      if (!title || columns.length < 2) return [];
-      const entries = (Array.isArray(section?.entries) ? section.entries : [])
-        .flatMap((entry) => {
-          const raw = overviewRecord(entry);
-          if (!raw) return [];
-          const normalized = Object.fromEntries(
-            columns.flatMap((column) => {
-              const value = overviewText(raw[column], 300);
-              return value ? [[column, value]] : [];
-            }),
-          );
-          return Object.keys(normalized).length >= 2 ? [normalized] : [];
-        })
-        .slice(0, 120);
-      return entries.length ? [{ title, columns, entries }] : [];
-    })
-    .slice(0, 20);
-  if (!facts.length && !sections.length) return null;
+    .slice(0, PUBLIC_OVERVIEW_FACT_KEYS.size);
+  if (!facts.length) return null;
   return {
     facts,
-    sections,
+    sections: [],
     attribution: OFFICIAL_ATTRIBUTION,
     updatedAt: typeof row?.updatedAt === "string" ? row.updatedAt : null,
   };

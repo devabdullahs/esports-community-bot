@@ -135,13 +135,22 @@ test('standings parser removes repeated team rows and repeated tables', () => {
   assert.deepEqual(parsed[0].entries.map((entry) => entry.team), ['Team Falcons', 'T1']);
 });
 
-test('tournament enrichment strips source URLs and sensitive columns before persistence', () => {
+test('tournament enrichment persists only explicitly public aggregate facts', () => {
   const parsed = parseTournamentEnrichment({
     'Tournament Information': [
-      ['Organizer', 'Esports Foundation'],
-      ['Venue', 'Riyadh'],
+      ['Tournament Format', 'Double elimination'],
+      ['Prize Pool', '$2,000,000'],
+      ['Total Number of Teams', '24'],
+      ['Players Arrival Date', '2026/07/20'],
+      ['Camera Setup', 'Camera 4'],
+      ['Admin Notes', 'Internal only'],
+      ['Player Name', 'Private Person'],
       ['Workbook ID', 'private-id'],
       ['Official Link', 'https://docs.google.com/spreadsheets/d/private'],
+    ],
+    'Qualification Details': [
+      ['Slot', 'Player Name', 'Arrival Date'],
+      ['1', 'Private Person', '2026/07/20'],
     ],
     'Participant Information': [
       ['Participant', 'Region', 'Contact Email', 'Sheet Link'],
@@ -151,18 +160,15 @@ test('tournament enrichment strips source URLs and sensitive columns before pers
   });
 
   assert.deepEqual(parsed.facts, [
-    { label: 'Organizer', value: 'Esports Foundation' },
-    { label: 'Venue', value: 'Riyadh' },
+    { label: 'Tournament Format', value: 'Double elimination' },
+    { label: 'Prize Pool', value: '$2,000,000' },
+    { label: 'Total Number of Teams', value: '24' },
   ]);
-  assert.deepEqual(parsed.sections, [{
-    title: 'Participants',
-    columns: ['Participant', 'Region'],
-    entries: [
-      { Participant: 'Team Falcons', Region: 'Gulf' },
-      { Participant: 'T1', Region: 'Asia-Pacific' },
-    ],
-  }]);
-  assert.doesNotMatch(JSON.stringify(parsed), /private|@example|google\.com/i);
+  assert.deepEqual(parsed.sections, []);
+  assert.doesNotMatch(
+    JSON.stringify(parsed),
+    /arrival|camera|admin|private person|participant|qualification|@example|google\.com/i,
+  );
 });
 
 test('battle royale parser keeps per-game placement, elimination, and total points', () => {
@@ -198,12 +204,12 @@ test('full workbook parser combines public schedule, standings, overview, and de
         [1, 'Alpha', 20],
         [2, 'Bravo', 16],
       ],
-      'Tournament Information': [['Organizer', 'Esports Foundation']],
+      'Tournament Information': [['Tournament Format', 'Battle royale']],
     },
   );
 
   assert.equal(parsed.descriptor.game, 'pubg');
   assert.equal(parsed.schedule.length, 1);
   assert.equal(parsed.standings.length, 1);
-  assert.deepEqual(parsed.overview.facts, [{ label: 'Organizer', value: 'Esports Foundation' }]);
+  assert.deepEqual(parsed.overview.facts, [{ label: 'Tournament Format', value: 'Battle royale' }]);
 });
