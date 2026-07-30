@@ -16,19 +16,23 @@ function clientWith(fetch) {
 }
 
 test('official sheets client reads Gaxios response data without using Fetch response methods', async () => {
-  const client = clientWith(async () => ({
-    status: 200,
-    headers: { 'content-length': '128' },
-    data: {
-      files: [
-        {
-          id: 'workbook_1234567890',
-          name: 'VALORANT - World Championship',
-          modifiedTime: '2026-07-30T12:00:00.000Z',
-        },
-      ],
-    },
-  }));
+  let requestedUrl = '';
+  const client = clientWith(async (url) => {
+    requestedUrl = url;
+    return {
+      status: 200,
+      headers: { 'content-length': '128' },
+      data: {
+        files: [
+          {
+            id: 'workbook_1234567890',
+            name: 'VALORANT - World Championship',
+            modifiedTime: '2026-07-30T12:00:00.000Z',
+          },
+        ],
+      },
+    };
+  });
 
   assert.deepEqual(await client.listWorkbooks(folderId), [
     {
@@ -37,6 +41,9 @@ test('official sheets client reads Gaxios response data without using Fetch resp
       modifiedTime: '2026-07-30T12:00:00.000Z',
     },
   ]);
+  const params = new URL(requestedUrl).searchParams;
+  assert.equal(params.get('includeItemsFromAllDrives'), 'true');
+  assert.equal(params.get('supportsAllDrives'), 'true');
 });
 
 test('official sheets client sanitizes provider failures before they reach callers', async () => {

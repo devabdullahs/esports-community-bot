@@ -26,6 +26,7 @@ const DETAIL_SOURCE = 'internal-normalized';
 
 let running = false;
 let client = null;
+let lastScanSummary = null;
 
 function normalized(value) {
   return String(value || '').trim().toLowerCase().replace(/[^a-z0-9]+/g, ' ');
@@ -275,9 +276,11 @@ export async function refreshOfficialEwcSheets() {
       listActiveTournaments(),
     ]);
     let changed = 0;
+    const reasons = new Map();
     for (const workbook of workbooks) {
       try {
         const result = await refreshWorkbook(workbook, tournaments, client);
+        reasons.set(result.reason || 'refreshed', (reasons.get(result.reason || 'refreshed') || 0) + 1);
         if (result.changed) {
           changed += 1;
           logger.info(
@@ -285,10 +288,23 @@ export async function refreshOfficialEwcSheets() {
           );
         }
       } catch {
+        reasons.set('failed', (reasons.get('failed') || 0) + 1);
         logger.warn('[tournament-feed] workbook refresh failed');
       }
     }
     if (changed) logger.info(`[tournament-feed] refresh completed for ${changed} tournament(s)`);
+    const summary = [
+      `workbooks=${workbooks.length}`,
+      `refreshed=${changed}`,
+      `unchanged=${reasons.get('unchanged') || 0}`,
+      `unresolved=${reasons.get('unresolved') || 0}`,
+      `unsupported=${reasons.get('unsupported') || 0}`,
+      `failed=${reasons.get('failed') || 0}`,
+    ].join(' ');
+    if (summary !== lastScanSummary) {
+      logger.info(`[tournament-feed] scan completed: ${summary}`);
+      lastScanSummary = summary;
+    }
   } catch {
     logger.warn('[tournament-feed] refresh failed');
   } finally {

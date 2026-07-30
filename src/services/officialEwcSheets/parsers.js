@@ -15,6 +15,7 @@ const WORKBOOK_GAME_ALIASES = new Map([
   ['counter-strike 2', { game: 'counterstrike' }],
   ['crossfire', { game: 'crossfire' }],
   ['dota 2', { game: 'dota2' }],
+  ['dota2', { game: 'dota2' }],
   ['ea sports fc 26', { game: 'easportsfc', tournamentNeedle: 'world championship' }],
   ['ea fc 26', { game: 'easportsfc', tournamentNeedle: 'world championship' }],
   ['fatal fury', { game: 'fighters', tournamentNeedle: 'fatal fury' }],
@@ -22,14 +23,17 @@ const WORKBOOK_GAME_ALIASES = new Map([
   ['free fire', { game: 'freefire' }],
   ['honor of kings', { game: 'honorofkings' }],
   ['league of legends', { game: 'leagueoflegends' }],
+  ['mobile legends bang bang women', { game: 'mobilelegends', tournamentNeedle: 'women' }],
   ["mobile legends women's invitational", { game: 'mobilelegends', tournamentNeedle: 'women' }],
   ['mwi', { game: 'mobilelegends', tournamentNeedle: 'women' }],
   ['mobile legends bang bang', { game: 'mobilelegends', tournamentNeedle: 'mid season cup' }],
+  ['overwatch', { game: 'overwatch' }],
   ['overwatch 2', { game: 'overwatch' }],
   ['pubg', { game: 'pubg' }],
   ['pubg mobile', { game: 'pubgmobile' }],
+  ['rainbow six siege', { game: 'rainbowsix' }],
   ['rainbow six siege x', { game: 'rainbowsix' }],
-  ['rocket league', { game: 'rocketleague' }],
+  ['rocket league', { game: 'rocketleague', tournamentNeedle: 'featuring rocket league' }],
   ['street fighter 6', { game: 'fighters', tournamentNeedle: 'street fighter' }],
   ['teamfight tactics', { game: 'tft' }],
   ['tekken 8', { game: 'fighters', tournamentNeedle: 'tekken' }],
@@ -81,7 +85,11 @@ export function workbookDescriptor(title) {
   if (!label) return null;
   if (WORKBOOK_GAME_ALIASES.has(label)) return { label, ...WORKBOOK_GAME_ALIASES.get(label) };
   for (const [key, descriptor] of [...WORKBOOK_GAME_ALIASES].sort(([a], [b]) => b.length - a.length)) {
-    if (label.includes(key) || key.includes(label)) return { label, ...descriptor };
+    const comparableLabel = normalizedHeader(label);
+    const comparableKey = normalizedHeader(key);
+    if (comparableLabel.includes(comparableKey) || comparableKey.includes(comparableLabel)) {
+      return { label, ...descriptor };
+    }
   }
   return null;
 }

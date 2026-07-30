@@ -154,8 +154,10 @@ export function createOfficialSheetsClient(credentials, options = {}) {
           const params = new URLSearchParams({
             q: `'${safeFolderId}' in parents and mimeType = 'application/vnd.google-apps.spreadsheet' and trashed = false`,
             fields: 'nextPageToken,files(id,name,modifiedTime)',
+            includeItemsFromAllDrives: 'true',
             orderBy: 'name',
             pageSize: '100',
+            supportsAllDrives: 'true',
           });
           if (pageToken) params.set('pageToken', pageToken);
           const data = await fetchJson(`${DRIVE_BASE}/files?${params}`);
