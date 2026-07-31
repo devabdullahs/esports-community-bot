@@ -33,9 +33,15 @@ import {
   weeklyLeaderboard,
 } from '../db/ewcPredictions.js';
 import { getEwcProfileLinkByDiscordUser } from '../db/ewcProfileLinks.js';
-import { effectiveEwcWeekStatus, formatShortDate, formatTimestamp, normalizeClubName } from '../lib/ewcPredictions.js';
+import {
+  effectiveEwcWeekStatus,
+  formatRelativeTimestamp,
+  formatShortDate,
+  formatTimestamp,
+  normalizeClubName,
+} from '../lib/ewcPredictions.js';
 import { predictionRoundCompletion, selectCurrentOpenEwcWeek } from '../lib/ewcPredictionRounds.js';
-import { searchEwcClubChoices } from '../lib/ewcClubCache.js';
+import { ewcClubNameKeysForGame, searchEwcClubChoices } from '../lib/ewcClubCache.js';
 import { ewcGameParticipantTeams } from '../lib/ewcGameTeams.js';
 import { submitSeasonSlot, submitWeeklyGamePick } from '../lib/ewcPredictionWrites.js';
 import { weeklyModalSelection, weeklyPickerPage, weeklyPickerPageForGame } from '../lib/ewcWeeklyPicker.js';
@@ -297,24 +303,38 @@ export async function weeklyPickPayload(guildId, seasonYear, weekKey, userId, pa
       ? `⚠ ${completion.missedGames.length} missed`
       : `${completion.openUnpickedGames.length} remaining`;
 
+  const now = Math.floor(Date.now() / 1000);
+  const reviewOnly = round.games.every((game) => game.lockAt && now >= game.lockAt);
+  const lead = reviewOnly
+    ? 'This week is locked. These are the picks you saved — nothing can change now.'
+    : 'Each game locks independently before it starts. Tap a game to pick or change it.';
+
   // Components V2: one Section per game so its button sits in line with the game,
   // and the message edits in place to show each pick. (V2 messages can't carry an embed.)
-  const container = new ContainerBuilder().setAccentColor(0xf1c40f);
+  const container = new ContainerBuilder().setAccentColor(reviewOnly ? 0x5865f2 : 0xf1c40f);
   container.addTextDisplayComponents(
     new TextDisplayBuilder().setContent(
-      `## EWC Weekly Picks — ${round.label || round.week_key}\n-# Each game locks independently before it starts. Tap a game to pick or change it.`,
+      `## EWC Weekly Picks — ${round.label || round.week_key}\n-# ${lead}`,
     ),
   );
   container.addTextDisplayComponents(
     new TextDisplayBuilder().setContent(
-      `-# Status: ${weeklySelectStatus(round)} · ${pageModel.pickedGames}/${pageModel.totalGames} picked · ${completionState} · ${deadline} · Page ${pageModel.page + 1}/${pageModel.totalPages}`,
+      `-# ${weeklySelectStatus(round)} · **${pageModel.pickedGames}/${pageModel.totalGames}** picked · ${completionState} · ${deadline} · Page ${pageModel.page + 1}/${pageModel.totalPages}`,
     ),
   );
   pageModel.games.forEach((game) => {
     const existing = game.existingPick;
     const locked = Boolean(gameClosedMessage(round, game));
-    const lockTxt = game.lockAt ? ` · locks ${formatTimestamp(game.lockAt)}` : '';
-    const status = locked ? '🔒 Locked' : existing?.pick ? `Pick: **${existing.pick}**` : '*No pick yet*';
+    const lockTxt = game.lockAt ? ` · ${locked ? 'locked' : 'locks'} ${formatRelativeTimestamp(game.lockAt)}` : '';
+    // A locked game still shows the owner their own saved pick — this view is ephemeral and
+    // always rendered for the requesting user, so it never exposes anyone else's prediction.
+    const status = locked
+      ? existing?.pick
+        ? `🔒 Locked · Your pick: **${existing.pick}**`
+        : '🔒 Locked · *No pick made*'
+      : existing?.pick
+        ? `Pick: **${existing.pick}**`
+        : '*No pick yet*';
     const text = `**${game.game || 'Game'}**${game.event ? ` — ${game.event}` : ''}\n${status}${lockTxt}`;
     container.addSectionComponents(
       new SectionBuilder()
@@ -375,6 +395,15 @@ export async function weeklyPickPayload(guildId, seasonYear, weekKey, userId, pa
 export async function currentOpenWeek(guildId, seasonYear) {
   const weeks = await listEwcWeeks(guildId, seasonYear);
   return selectCurrentOpenEwcWeek(weeks);
+}
+
+// Review fallback: once every week has locked there is no open round, but members still
+// need a surface that shows the picks they already made. Use the most recent configured week.
+export async function latestWeekWithGames(guildId, seasonYear, now = Math.floor(Date.now() / 1000)) {
+  const weeks = await listEwcWeeks(guildId, seasonYear);
+  const withGames = weeks.filter((week) => Array.isArray(week.games) && week.games.length);
+  const started = withGames.filter((week) => !week.open_at || week.open_at <= now);
+  return started[started.length - 1] || withGames[0] || null;
 }
 
 // Season picks fill strictly top-down: you can change an already-set rank or set the
@@ -438,7 +467,7 @@ async function getExistingGamePick(guildId, round, userId, gameKey) {
 const HIDDEN_PICK_SUMMARY = 'Participated - picks hidden until lock.';
 const HIDDEN_SEASON_SUMMARY = 'Participated - picks hidden until the season locks.';
 
-function summarizeWeeklyPicks(row, { isOwner = false } = {}) {
+function summarizeWeeklyPicks(row, { isOwner = false, separator = ' | ' } = {}) {
   const picks = row.picks || [];
   if (!picks.length) return 'No picks';
   if (picks.every((pick) => typeof pick === 'string')) {
@@ -450,9 +479,9 @@ function summarizeWeeklyPicks(row, { isOwner = false } = {}) {
     .filter((pick) => pick && typeof pick === 'object')
     .map((pick) => {
       if (!isOwner && !weeklyPickVisible(row, pick)) return `${pick.game || pick.gameKey}: hidden`;
-      return `${pick.game || pick.gameKey}: ${pick.pick}`;
+      return `${pick.game || pick.gameKey}: **${pick.pick}**`;
     })
-    .join(' | ') || 'No picks';
+    .join(separator) || 'No picks';
 }
 
 function limitDiscordText(value, limit = 1024) {
@@ -499,21 +528,81 @@ export function buildScoreBreakdownEmbed(title, breakdown) {
   return embed;
 }
 
+// Every saved pick for one week, game by game. Owners always see their own picks — this
+// embed is only ever rendered ephemerally to the requesting member — while anyone else
+// keeps the weekly leaderboard's rule: a pick stays hidden until its game locks.
+export function buildWeekPicksEmbed(week, { isOwner = false, now = Math.floor(Date.now() / 1000) } = {}) {
+  const embed = new EmbedBuilder()
+    .setColor(0x5865f2)
+    .setTitle(limitDiscordText(`Picks — ${week?.label || week?.week_key || 'Week'}`, 256));
+  if (week?.score != null) embed.setFooter({ text: `Score: ${Number(week.score).toLocaleString()}` });
+
+  const picks = Array.isArray(week?.picks) ? week.picks : [];
+  if (!picks.length) {
+    return embed.setDescription(isOwner ? 'You have no saved picks for this week.' : 'No saved picks for this week.');
+  }
+  // Legacy aggregate rounds stored a flat club list instead of per-game entries.
+  if (picks.every((pick) => typeof pick === 'string')) {
+    const visible = isOwner || weeklyPickVisible(week, picks[0]);
+    return embed.setDescription(limitDiscordText(visible ? formatPicks(picks) : HIDDEN_PICK_SUMMARY, 4000));
+  }
+
+  const byGame = new Map(
+    picks
+      .filter((pick) => pick && typeof pick === 'object' && pick.gameKey)
+      .map((pick) => [String(pick.gameKey), pick]),
+  );
+  const games = Array.isArray(week?.games) && week.games.length
+    ? week.games
+    : [...byGame.values()].map((pick) => ({ key: pick.gameKey, game: pick.game, event: pick.event }));
+  const lines = games.map((game) => {
+    const pick = byGame.get(String(game.key)) || null;
+    const label = `**${game.game || game.key}**${game.event ? ` — ${game.event}` : ''}`;
+    const lock = game.lockAt ? ` · ${now >= game.lockAt ? '🔒 locked' : 'locks'} ${formatTimestamp(game.lockAt)}` : '';
+    if (!pick?.pick) return `${label} — *no pick*${lock}`;
+    if (!isOwner && !weeklyPickVisible(week, pick, now)) return `${label} — hidden until lock${lock}`;
+    return `${label} — ${pick.pick}${lock}`;
+  });
+  return embed.setDescription(limitDiscordText(lines.join('\n'), 4000));
+}
+
+export function buildSeasonPicksEmbed(seasonPrediction, seasonYear, { isOwner = false, round = null } = {}) {
+  const picks = (seasonPrediction?.picks || []).filter((pick) => typeof pick === 'string' && pick.trim());
+  const embed = new EmbedBuilder()
+    .setColor(0x5865f2)
+    .setTitle(limitDiscordText(`Season picks — EWC ${seasonYear}`, 256));
+  if (seasonPrediction?.score != null) embed.setFooter({ text: `Score: ${Number(seasonPrediction.score).toLocaleString()}` });
+  if (!picks.length) return embed.setDescription(isOwner ? 'You have no season picks saved.' : 'No season picks saved.');
+  if (!isOwner && !seasonPicksVisible(round, seasonPrediction?.score)) return embed.setDescription(HIDDEN_SEASON_SUMMARY);
+  return embed.setDescription(limitDiscordText(formatPicks(picks), 4000));
+}
+
+// Menu of everything the profile can drill into. Weeks are listed as soon as they hold a
+// saved pick — not only once scored — so members can always reopen what they predicted.
 export function buildProfileDetailsComponents(profile, seasonYear, targetUserId, ownerId) {
   const options = [];
-  if (profile.season?.score != null) {
+  const seasonPicks = (profile.season?.picks || []).filter((pick) => typeof pick === 'string' && pick.trim()).length;
+  if (profile.season?.score != null || seasonPicks) {
     options.push(
       new StringSelectMenuOptionBuilder()
-        .setLabel('Season result')
-        .setDescription(`Score: ${Number(profile.season.score).toLocaleString()}`)
+        .setLabel('Season picks')
+        .setDescription(
+          limitDiscordText(
+            profile.season?.score != null ? `Score: ${Number(profile.season.score).toLocaleString()}` : `${seasonPicks} picks saved`,
+            100,
+          ),
+        )
         .setValue('season'),
     );
   }
-  for (const week of profile.weekly.filter((row) => row.score != null).slice(-5).reverse()) {
+  for (const week of profile.weekly.filter((row) => row.score != null || row.picks?.length).slice(-24).reverse()) {
+    const pickCount = (week.picks || []).filter(Boolean).length;
     options.push(
       new StringSelectMenuOptionBuilder()
         .setLabel(limitDiscordText(week.label || week.week_key, 100))
-        .setDescription(limitDiscordText(`Score: ${Number(week.score).toLocaleString()}`, 100))
+        .setDescription(
+          limitDiscordText(week.score != null ? `Score: ${Number(week.score).toLocaleString()}` : `${pickCount} picks saved`, 100),
+        )
         .setValue(`week:${week.week_key}`),
     );
   }
@@ -522,7 +611,7 @@ export function buildProfileDetailsComponents(profile, seasonYear, targetUserId,
     new ActionRowBuilder().addComponents(
       new StringSelectMenuBuilder()
         .setCustomId(`ewc_predict:pd:${seasonYear}:${targetUserId}:${ownerId}`)
-        .setPlaceholder('View scored result details')
+        .setPlaceholder('View picks and score details')
         .addOptions(options.slice(0, 25)),
     ),
   ];
@@ -653,15 +742,20 @@ function modalTextValue(interaction, customId) {
 // clubs for that game not already listed. Surfaces game-specific qualifiers (e.g.
 // Free Fire's EVOS Divine) that are not season-long club members. Optional `query`
 // filters for autocomplete. Returns Discord {name, value} options.
+//
+// Solo games (EA FC, Tekken, chess) list individual entrants alongside clubs. Those are
+// labelled "(player)" so the two are never confused: scoring is club-based, and a player
+// pick resolves to the club that fielded them.
 async function weeklyGameTeamOptions(game, query = '', { limit = 25, guildId = null } = {}) {
   const q = normalizeClubName(query);
-  const [participants, clubChoices] = await Promise.all([
+  const [participants, clubChoices, clubKeys] = await Promise.all([
     ewcGameParticipantTeams(game.game, {
       eventUrl: game.eventUrl,
       eventName: game.event,
       guildId,
     }),
     searchEwcClubChoices(query, { game: game.game, strictGame: true }),
+    ewcClubNameKeysForGame(game.game).catch(() => new Set()),
   ]);
   const seen = new Set();
   const out = [];
@@ -669,7 +763,12 @@ async function weeklyGameTeamOptions(game, query = '', { limit = 25, guildId = n
     const key = normalizeClubName(value);
     if (!key || seen.has(key) || (q && !key.includes(q))) continue;
     seen.add(key);
-    out.push({ name: value.slice(0, 100), value: value.slice(0, 100) });
+    const individual = clubKeys.size > 0 && !clubKeys.has(key);
+    out.push({
+      name: `${value}${individual ? ' (player)' : ''}`.slice(0, 100),
+      value: value.slice(0, 100),
+      individual,
+    });
     if (out.length >= limit) break;
   }
   return out;
@@ -706,6 +805,13 @@ async function showWeeklyPickModal(interaction, { seasonYear, weekKey, gameKey, 
     .setCustomId(weeklyPickModalId(seasonYear, weekKey, gameKey, page, interaction.user.id))
     .setTitle(`${game.game || 'Game'} pick`.slice(0, 45));
 
+  // Solo games mix clubs and individual entrants. Say once, where the choice is made, that
+  // a player pick is scored as their club's result — otherwise the two look interchangeable.
+  const hasIndividuals = choices.some((choice) => choice.individual);
+  const pickHint = hasIndividuals
+    ? 'A player counts as their club result.'
+    : 'Use the manual field if your pick is not listed.';
+
   if (choices.length) {
     const choiceChunks = chunk(choices, 25);
     for (const [index, choiceChunk] of choiceChunks.entries()) {
@@ -716,12 +822,14 @@ async function showWeeklyPickModal(interaction, { seasonYear, weekKey, gameKey, 
         .setPlaceholder(choiceChunks.length > 1 ? `Choose a pick (${start}-${end})` : 'Choose a pick')
         .setRequired(false)
         .addOptions(
-          choiceChunk.map((choice) => new StringSelectMenuOptionBuilder().setLabel(choice.value.slice(0, 100)).setValue(choice.value.slice(0, 100))),
+          choiceChunk.map((choice) =>
+            new StringSelectMenuOptionBuilder().setLabel(choice.name.slice(0, 100)).setValue(choice.value.slice(0, 100)),
+          ),
         );
       modal.addLabelComponents(
         new LabelBuilder()
           .setLabel(choiceChunks.length > 1 ? `Pick ${start}-${end}` : 'Pick')
-          .setDescription(`${index === 0 && current?.pick ? `Current pick: ${current.pick}. ` : ''}Use the manual field if your pick is not listed.`.slice(0, 100))
+          .setDescription(`${index === 0 && current?.pick ? `Current pick: ${current.pick}. ` : ''}${pickHint}`.slice(0, 100))
           .setStringSelectMenuComponent(select),
       );
     }
@@ -980,9 +1088,13 @@ export async function execute(interaction) {
   if (sub === 'weekly') {
     let weekKey = interaction.options.getString('week');
     if (!weekKey) {
-      const current = await currentOpenWeek(interaction.guildId, seasonYear);
+      // No open round still opens the picker on the latest week so members can review
+      // the picks they already made instead of hitting a dead end.
+      const current =
+        (await currentOpenWeek(interaction.guildId, seasonYear)) ||
+        (await latestWeekWithGames(interaction.guildId, seasonYear));
       if (!current) {
-        await interaction.reply({ content: '❌ No EWC week is open for predictions right now.', flags: MessageFlags.Ephemeral });
+        await interaction.reply({ content: '❌ No EWC week is configured for predictions yet.', flags: MessageFlags.Ephemeral });
         return;
       }
       weekKey = current.week_key;
@@ -1037,10 +1149,19 @@ export async function execute(interaction) {
     const isOwner = user.id === interaction.user.id;
     const seasonRound = await getEwcSeason(interaction.guildId, seasonYear);
     const profile = await userPredictionProfile(interaction.guildId, seasonYear, user.id);
-    const weekly = profile.weekly
+    // One field per round instead of one shared field: a week of per-game picks no longer
+    // gets truncated away by the 1024-character field cap.
+    const weeklyFields = profile.weekly
       .filter((row) => row.picks?.length || row.score != null)
       .slice(-5)
-      .map((row) => `• **${row.label || row.week_key}** — ${summarizeWeeklyPicks(row, { isOwner })}${row.score != null ? ` — \`${row.score}\`` : ''}`);
+      .reverse()
+      .map((row) => ({
+        name: limitDiscordText(
+          `${row.label || row.week_key}${row.score != null ? ` — ${Number(row.score).toLocaleString()} pts` : ''}`,
+          256,
+        ),
+        value: limitDiscordText(summarizeWeeklyPicks(row, { isOwner, separator: '\n' }), 800),
+      }));
     const showSeasonPicks = isOwner || seasonPicksVisible(seasonRound, profile.season?.score);
     const seasonPicks = profile.season?.picks?.length
       ? showSeasonPicks
@@ -1048,17 +1169,20 @@ export async function execute(interaction) {
         : HIDDEN_SEASON_SUMMARY
       : 'No season picks yet.';
     const seasonValue = `${seasonPicks}${profile.season?.score != null ? ` — \`${profile.season.score}\`` : ''}`;
+    const detailComponents = buildProfileDetailsComponents(profile, seasonYear, user.id, interaction.user.id);
+    const profileEmbed = new EmbedBuilder()
+      .setColor(0x5865f2)
+      .setAuthor({ name: `${user.globalName || user.username} — EWC Prediction Profile`, iconURL: user.displayAvatarURL() })
+      .addFields(
+        { name: 'Season picks', value: seasonValue.slice(0, 1024) },
+        ...(weeklyFields.length ? weeklyFields : [{ name: 'Recent weekly picks', value: 'No weekly picks yet.' }]),
+      );
+    if (detailComponents.length) {
+      profileEmbed.setFooter({ text: 'Use the menu below to open any round and see every pick.' });
+    }
     await interaction.reply({
-      embeds: [
-        new EmbedBuilder()
-          .setColor(0x5865f2)
-          .setAuthor({ name: `${user.globalName || user.username} — EWC Prediction Profile`, iconURL: user.displayAvatarURL() })
-          .addFields(
-            { name: 'Season picks', value: seasonValue.slice(0, 1024) },
-            { name: 'Recent weekly picks', value: (weekly.length ? weekly.join('\n') : 'No weekly picks yet.').slice(0, 1024) },
-          ),
-      ],
-      components: buildProfileDetailsComponents(profile, seasonYear, user.id, interaction.user.id),
+      embeds: [profileEmbed],
+      components: detailComponents,
       flags: MessageFlags.Ephemeral,
     });
     return;
@@ -1163,6 +1287,7 @@ export async function execute(interaction) {
               '**الأسبوعي:** استخدم `/ewc_predict weekly` واختر الأسبوع، اللعبة، والنادي. لكل لعبة اختيار ووقت قفل مستقل. تقدر تغيّر اختيارك قبل وقت القفل فقط، وتعديل لعبة واحدة لا يغيّر باقي اختياراتك.\n\n' +
               '**النقاط:** المركز الأول 1000، الثاني 750، الثالث 500، الرابع 300، الخامس 200، السادس 150، السابع 100، والثامن 50. إذا كان اختيارك خارج التوب 8 لا تحصل على نقاط لتلك اللعبة. إذا أصبت أبطال كل ألعاب الأسبوع تحصل على مكافأة إضافية.\n\n' +
               '**الألعاب الممتدة:** إذا امتدت بطولة لعبة لأكثر من أسبوع، تُحسب في الأسبوع الذي تنتهي فيه، لكن توقّعها يُقفل قبل بداية منافستها.\n\n' +
+              '**الألعاب الفردية:** في ألعاب مثل EA FC وTekken تظهر أسماء اللاعبين بجانب الأندية ومعلّمة بـ (player). اختيار لاعب يُحتسب كنتيجة ناديه: النقاط تُمنح لأفضل مركز يحققه النادي في تلك اللعبة، فاختيار النادي أو أي لاعب من لاعبيه يعطي النقاط نفسها.\n\n' +
               '**الموسم الكامل:** استخدم `/ewc_predict season` لاختيار أفضل الأندية للموسم كاملًا. يفتح افتراضيًا قبل أول منافسة بـ 14 يومًا، ويغلق قبل أول منافسة بـ 8 ساعات. بعد الإغلاق لا يمكن التعديل. تُحسب نقاط الموسم بعد نهاية EWC حسب الترتيب النهائي للأندية، مع مكافأة للتوقعات المطابقة للمركز الصحيح.\n\n' +
               '**الترتيب:** `/ewc_predict leaderboard` للترتيب، `/ewc_predict profile` لتوقعاتك ونتائجك، و`/ewc_predict teams` للبحث عن الأندية. الترتيب العام يجمع نقاط الأسابيع والموسم، وقد يحسب كل الأسابيع أو أفضل عدد محدد منها حسب إعدادات الإدارة.\n\n' +
               '**English**\n' +
@@ -1170,6 +1295,7 @@ export async function execute(interaction) {
               '**Weekly:** Use `/ewc_predict weekly` and choose the week. The bot opens a private game menu; choose a game button, then pick a club from the modal select menu or type the club manually. Each game has its own pick and lock time. You can change that game pick only before it locks, and changing one game does not affect your other picks.\n\n' +
               '**Scoring:** 1st place gives 1000 points, 2nd 750, 3rd 500, 4th 300, 5th 200, 6th 150, 7th 100, and 8th 50. A pick outside top 8 scores 0 for that game. Picking every weekly game winner gives an extra bonus.\n\n' +
               '**Multi-week events:** If a game event spans multiple weeks, it scores in the week where the event ends, but its prediction locks before that game event starts.\n\n' +
+              '**Solo games:** In games like EA FC and Tekken the pick list shows individual players next to clubs, marked `(player)`. A player pick counts as that player\'s club result: points come from the best placement that club reaches in the game, so picking the club or any of its players scores the same.\n\n' +
               '**Season:** Use `/ewc_predict season` to pick your top clubs for the whole season. By default, it opens 14 days before the first EWC competition and closes 8 hours before it. After closing, picks cannot be changed. Season points are scored after EWC ends using the final club standings, with bonuses for exact rank predictions.\n\n' +
               '**Commands:** `/ewc_predict leaderboard` shows rankings, `/ewc_predict profile` shows your picks and results, and `/ewc_predict teams` searches participating clubs. The overall leaderboard combines weekly and season points; admins may count all weeks or only your best N weeks.',
           ),
@@ -1350,20 +1476,26 @@ export async function handleComponent(interaction) {
       return;
     }
     const selected = interaction.values?.[0];
+    const isOwner = targetUserId === interaction.user.id;
     const profile = await userPredictionProfile(interaction.guildId, seasonYear, targetUserId);
-    const seasonDetails = selected === 'season' ? projectSeasonScoreBreakdown(profile.season) : null;
-    const weekKey = typeof selected === 'string' && selected.startsWith('week:') ? selected.slice(5) : null;
-    const week = weekKey ? profile.weekly.find((row) => row.week_key === weekKey) : null;
-    const weeklyDetails = week ? projectWeeklyScoreBreakdown(week) : null;
-    const breakdown = seasonDetails || weeklyDetails;
-    if (!breakdown) {
-      await interaction.reply({ content: 'That scored result is no longer available.', flags: MessageFlags.Ephemeral });
-      return;
+    const embeds = [];
+    if (selected === 'season') {
+      const seasonRound = await getEwcSeason(interaction.guildId, seasonYear);
+      embeds.push(buildSeasonPicksEmbed(profile.season, seasonYear, { isOwner, round: seasonRound }));
+      const breakdown = projectSeasonScoreBreakdown(profile.season);
+      if (breakdown) embeds.push(buildScoreBreakdownEmbed(`EWC ${seasonYear} season`, breakdown));
+    } else {
+      const weekKey = typeof selected === 'string' && selected.startsWith('week:') ? selected.slice(5) : null;
+      const week = weekKey ? profile.weekly.find((row) => row.week_key === weekKey) : null;
+      if (!week) {
+        await interaction.reply({ content: 'That prediction round is no longer available.', flags: MessageFlags.Ephemeral });
+        return;
+      }
+      embeds.push(buildWeekPicksEmbed(week, { isOwner }));
+      const breakdown = projectWeeklyScoreBreakdown(week);
+      if (breakdown) embeds.push(buildScoreBreakdownEmbed(week.label || week.week_key, breakdown));
     }
-    await interaction.reply({
-      embeds: [buildScoreBreakdownEmbed(week?.label || (selected === 'season' ? `EWC ${seasonYear} season` : 'Prediction result'), breakdown)],
-      flags: MessageFlags.Ephemeral,
-    });
+    await interaction.reply({ embeds, flags: MessageFlags.Ephemeral });
     return;
   }
 

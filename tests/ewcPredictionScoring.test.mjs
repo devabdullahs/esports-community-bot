@@ -465,6 +465,30 @@ test('scorePerGameWeeklyPrediction: happy path — correct winner per game score
   assert.equal(out.score, 1750);
 });
 
+test('scorePerGameWeeklyPrediction: any player of a club scores that club result in solo games', () => {
+  const games = [{ key: 'fc-26', game: 'EA SPORTS FC 26', event: 'EWC FC' }];
+  // One club fielded two players; EWC club points keep only its best placement, and both
+  // player names are recorded on that row.
+  const results = [
+    {
+      gameKey: 'fc-26',
+      placements: [
+        { club: 'Team Falcons', points: 1000, place: '1st', participant: 'Nasr', participants: ['Nasr', 'Msdossary'] },
+        { club: 'Twisted Minds', points: 750, place: '2nd', participant: 'Obrun', participants: ['Obrun'] },
+      ],
+    },
+  ];
+
+  const byClub = scorePerGameWeeklyPrediction([{ gameKey: 'fc-26', pick: 'Team Falcons' }], games, results);
+  const byTopPlayer = scorePerGameWeeklyPrediction([{ gameKey: 'fc-26', pick: 'Nasr' }], games, results);
+  const byOtherPlayer = scorePerGameWeeklyPrediction([{ gameKey: 'fc-26', pick: 'Msdossary' }], games, results);
+
+  assert.equal(byClub.score, 1000);
+  assert.equal(byTopPlayer.score, 1000);
+  assert.equal(byOtherPlayer.score, 1000, 'a club second player must not silently score zero');
+  assert.equal(byOtherPlayer.details.picks[0].matchedClub, 'Team Falcons');
+});
+
 test('scorePerGameWeeklyPrediction: picking every game winner adds the all-winners bonus', () => {
   const picks = [
     { gameKey: 'valorant-1', pick: 'Team Falcons' }, // 1st → 1000

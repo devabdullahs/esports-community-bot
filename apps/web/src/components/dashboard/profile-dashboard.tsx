@@ -4,10 +4,8 @@ import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   CalendarDaysIcon,
-  Clock3Icon,
   DownloadIcon,
   ExternalLinkIcon,
-  ListChecksIcon,
   MessageCircleIcon,
   type LucideIcon,
   MedalIcon,
@@ -35,7 +33,6 @@ import {
 } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Progress, ProgressLabel, ProgressValue } from "@/components/ui/progress";
 import { PredictionComparisonWidget, type PredictionComparison } from "@/components/dashboard/prediction-comparison-widget";
 import { PredictionAchievementBadges } from "@/components/predictions/prediction-achievement-badges";
 import { WebPredictionPicker } from "@/components/predictions/web-prediction-picker";
@@ -144,6 +141,13 @@ type MePayload = {
     weekly: Array<{
       weekKey: string;
       label: string;
+      state?: "actionable" | "review";
+      status?: string;
+      closeAt?: number | null;
+      nextLockAt?: number | null;
+      pickedGames?: number;
+      totalGames?: number;
+      score?: number | null;
       games: Array<{
         key: string;
         game: string;
@@ -152,6 +156,7 @@ type MePayload = {
         state: "open" | "locked";
         pick: string | null;
         choices?: string[];
+        result?: { points: number; matchedClub: string | null; place: string | null; winner: string | null } | null;
       }>;
     }>;
     season: {
@@ -267,6 +272,7 @@ export function ProfileDashboard({
   const stats = data.stats;
   const currentRound = data.currentRound;
   const actionableRounds = data.actionableRounds || (currentRound ? [currentRound] : []);
+  const missedPickCount = actionableRounds.reduce((total, round) => total + (round.lockedUnpickedGames || 0), 0);
 
   return (
     <div className="flex flex-col gap-6">
@@ -367,68 +373,31 @@ export function ProfileDashboard({
 
           {section !== "predictions" ? <PredictionComparisonWidget comparison={stats.comparison} locale={locale} /> : null}
 
-          {section !== "overview" ? <>{actionableRounds.length ? (
-            <div className="flex flex-col gap-4">
-              <WebPredictionPicker picker={data.picker} locale={locale} queryKey={["me-ewc", guildId || "", season]} />
-              {actionableRounds.map((round) => (
-                <Card key={round.weekKey}>
-                  <CardHeader>
-                    <CardTitle>{round.label}</CardTitle>
-                    <CardDescription>{text.currentRoundDescription}</CardDescription>
-                    <CardAction>
-                      <Badge variant={round.status === "open" ? "default" : "secondary"}>
-                        <Clock3Icon data-icon="inline-start" />
-                        {text.roundStatus[round.status as keyof typeof text.roundStatus] || round.status}
-                      </Badge>
-                    </CardAction>
-                  </CardHeader>
-                  <CardContent className="flex flex-col gap-5">
-                    <Progress
-                      value={round.totalGames ? Math.min(100, Math.round((round.pickedGames / round.totalGames) * 100)) : 0}
-                    >
-                      <ProgressLabel>{text.pickProgress}</ProgressLabel>
-                      <ProgressValue>
-                        {() => `${formatNumber(round.pickedGames, locale)}/${formatNumber(round.totalGames, locale)}`}
-                      </ProgressValue>
-                    </Progress>
-                    <div className="flex flex-wrap gap-2">
-                      <Badge variant="secondary">
-                        <ListChecksIcon data-icon="inline-start" />
-                        {round.isComplete ? text.picksComplete : text.remainingPicks(round.openUnpickedGames)}
-                      </Badge>
-                      {round.lockedUnpickedGames ? <Badge variant="outline">{text.missedPicks(round.lockedUnpickedGames)}</Badge> : null}
-                      {round.nextLockAt ? (
-                        <Badge variant="outline">
-                          {text.nextLock}{" "}
-                          <LocalDateTime value={new Date(round.nextLockAt * 1000).toISOString()} locale={locale} />
-                        </Badge>
-                      ) : null}
-                    </div>
-                    <div className="flex flex-wrap gap-2">
-                      <Button render={<a href={round.discordUrl} target="_blank" rel="noreferrer" />} nativeButton={false} variant="outline">
-                        <MessageCircleIcon data-icon="inline-start" />
-                        {text.openMyPicks}
-                      </Button>
-                      <Button
-                        render={<Link href={localizedPath(`/leaderboard/${stats.guildId}/${stats.season}`, locale)} />}
-                        nativeButton={false}
-                        variant="outline"
-                      >
-                        <TrophyIcon data-icon="inline-start" />
-                        {text.leaderboard}
-                      </Button>
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
-          ) : (
-            <Alert>
-              <CalendarDaysIcon />
-              <AlertTitle>{text.noCurrentRound}</AlertTitle>
-              <AlertDescription>{text.noCurrentRoundDescription}</AlertDescription>
-            </Alert>
-          )}
+          {section !== "overview" ? <>
+            {/* One surface owns the rounds now: the picker renders each round, its games,
+                its locked picks and its finished history, so nothing is restated here. */}
+            <WebPredictionPicker picker={data.picker} locale={locale} queryKey={["me-ewc", guildId || "", season]} />
+            {actionableRounds.length ? (
+              <div className="flex flex-wrap gap-2">
+                {missedPickCount ? <Badge variant="outline">{text.missedPicks(missedPickCount)}</Badge> : null}
+                <Button
+                  render={<a href={actionableRounds[0].discordUrl} target="_blank" rel="noreferrer" />}
+                  nativeButton={false}
+                  variant="outline"
+                >
+                  <MessageCircleIcon data-icon="inline-start" />
+                  {text.openMyPicks}
+                </Button>
+                <Button
+                  render={<Link href={localizedPath(`/leaderboard/${stats.guildId}/${stats.season}`, locale)} />}
+                  nativeButton={false}
+                  variant="outline"
+                >
+                  <TrophyIcon data-icon="inline-start" />
+                  {text.leaderboard}
+                </Button>
+              </div>
+            ) : null}
 
           <PredictionMiniLeagues locale={locale} />
 

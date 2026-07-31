@@ -331,6 +331,45 @@ test('trackedEwcGamePlacements uses only an exact final standings section', asyn
   );
 });
 
+test('trackedEwcGamePlacements maps solo standings rows to the club that fielded the player', async () => {
+  const fc = await addTournament({
+    source: 'liquipedia',
+    external_id: 'easportsfc/Esports_World_Cup/2026',
+    game: 'easportsfc',
+    name: 'EA SPORTS FC 26 at Esports World Cup 2026',
+    url: 'https://liquipedia.net/easportsfc/Esports_World_Cup/2026',
+    guild_id: 'g-ewc',
+    added_by: 'admin',
+  });
+  await updateTournamentEwc(fc.id, true);
+  await replaceTournamentStandings(fc.id, [{
+    title: 'Final standings',
+    entries: [
+      { rank: 1, team: 'Nasr' },
+      { rank: 2, team: 'Obrun' },
+      { rank: 3, team: 'Msdossary' },
+    ],
+  }]);
+
+  // Two Falcons players placed; club points count the best one, and the other stays as an
+  // alias so a prediction naming either player resolves to the same club result.
+  assert.deepEqual(
+    await trackedEwcGamePlacements('EA SPORTS FC 26', {
+      guildId: 'g-ewc',
+      eventUrl: 'https://liquipedia.net/easportsfc/Esports_World_Cup/2026',
+      players: [
+        { id: 'Nasr', game: 'EA SPORTS FC 26', team: 'Team Falcons' },
+        { id: 'Msdossary', game: 'EA SPORTS FC 26', team: 'Team Falcons' },
+        { id: 'Obrun', game: 'EA SPORTS FC 26', team: 'Twisted Minds' },
+      ],
+    }),
+    [
+      { club: 'Team Falcons', place: '1', points: 1000, participant: 'Nasr', participants: ['Nasr', 'Msdossary'] },
+      { club: 'Twisted Minds', place: '2', points: 750, participant: 'Obrun', participants: ['Obrun'] },
+    ],
+  );
+});
+
 test('trackedEwcGamePlacements rejects non-final standings', async () => {
   const event = await addTournament({
     source: 'liquipedia',

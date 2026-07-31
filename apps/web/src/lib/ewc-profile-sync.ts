@@ -20,7 +20,7 @@ import {
 } from "@bot/lib/ewcProfileStats.js";
 import { getSettings } from "@bot/db/settings.js";
 import { getEwcSeason, getSeasonPrediction, getWeeklyPrediction, listEwcWeeks } from "@bot/db/ewcPredictions.js";
-import { effectiveEwcWeekStatus } from "@bot/lib/ewcPredictions.js";
+import { effectiveEwcWeekStatus, normalizeClubName } from "@bot/lib/ewcPredictions.js";
 import { categorizeEwcPredictionRounds, predictionRoundCompletion } from "@bot/lib/ewcPredictionRounds.js";
 import { ewcGameParticipantTeams } from "@bot/lib/ewcGameTeams.js";
 import {
@@ -105,7 +105,18 @@ type HydratedWeek = {
   games?: Array<{ key?: string; game?: string; event?: string; eventUrl?: string | null; lockAt?: number | null }>;
 };
 
-type WeeklyPrediction = { picks?: Array<string | { gameKey?: string; pick?: string }> } | null;
+type WeeklyPrediction = {
+  picks?: Array<string | { gameKey?: string; pick?: string }>;
+  score?: number | null;
+  details?: {
+    mode?: string;
+    picks?: Array<{ gameKey?: string; points?: number; matchedClub?: string | null; place?: string | null; winner?: string | null }>;
+  } | null;
+} | null;
+
+// How many finished rounds the picker carries as read-only history. Bounded so a long
+// season cannot grow the authenticated payload without limit.
+const REVIEW_ROUND_LIMIT = 4;
 
 async function projectRoundForViewer(
   round: HydratedWeek,
@@ -180,6 +191,103 @@ export async function actionableRoundsForViewer(guildId: string, season: string,
 // This projection is returned only from the authenticated /api/me route. It is
 // intentionally separate from the progress projection above so public/status
 // callers cannot accidentally inherit a member's selected club.
+// Finished rounds the member should still be able to open: everything that already
+// started but is no longer actionable, newest first and bounded.
+function reviewRoundsForViewer(weeks: HydratedWeek[], actionable: HydratedWeek[], now: number) {
+  const actionableKeys = new Set(actionable.map((round) => round.week_key));
+  return weeks
+    .filter(
+      (week) =>
+        !actionableKeys.has(week.week_key) &&
+        (week.games?.length || 0) > 0 &&
+        (week.open_at == null || week.open_at <= now),
+    )
+    .slice(-REVIEW_ROUND_LIMIT)
+    .reverse();
+}
+
+async function projectPickerRound(
+  round: HydratedWeek,
+  guildId: string,
+  discordUserId: string,
+  now: number,
+  state: "actionable" | "review",
+  clubKeys: Set<string>,
+) {
+  const prediction = (await getWeeklyPrediction(guildId, round.id, discordUserId)) as WeeklyPrediction;
+  const picks = new Map(
+    (Array.isArray(prediction?.picks) ? prediction.picks : [])
+      .filter((pick): pick is { gameKey?: string; pick?: string } => Boolean(pick && typeof pick === "object"))
+      .map((pick) => [String(pick.gameKey || ""), String(pick.pick || "")]),
+  );
+  // Scored rounds carry per-game detail rows. Surfacing them beside the pick is what
+  // turns the history section into feedback instead of a list of names.
+  const results = new Map(
+    (prediction?.details?.mode === "per-game" ? prediction.details.picks || [] : []).map((detail) => [
+      String(detail.gameKey || ""),
+      {
+        points: Number(detail.points) || 0,
+        matchedClub: detail.matchedClub || null,
+        place: detail.place || null,
+        winner: detail.winner || null,
+      },
+    ]),
+  );
+  const status = (effectiveEwcWeekStatus(round, now) as { label: string }).label;
+  const completion = predictionRoundCompletion(round, prediction?.picks ?? [], now) as {
+    pickedGames: number;
+    totalGames: number;
+    nextLockAt: number | null;
+  };
+
+  const games = await Promise.all(
+    (round.games || [])
+      .filter((game) => game.key)
+      .map(async (game) => {
+        const existingPick = picks.get(String(game.key)) || null;
+        const open = state === "actionable" && (!game.lockAt || now < game.lockAt);
+        // Club lists are only needed where a pick can still be saved; skipping them for
+        // locked and finished games keeps this route off the participant lookups.
+        const participants = open
+          ? await ewcGameParticipantTeams(game.game || String(game.key), {
+              eventUrl: game.eventUrl || null,
+              eventName: game.event || null,
+              guildId,
+            }).catch(() => [])
+          : [];
+        const choices = open
+          ? [...new Set([...participants, ...(existingPick ? [existingPick] : [])])].filter(Boolean).slice(0, 100)
+          : [];
+        return {
+          key: String(game.key),
+          game: game.game || String(game.key),
+          event: game.event || null,
+          lockAt: game.lockAt ?? null,
+          state: open ? "open" : "locked",
+          pick: existingPick,
+          choices,
+          // Solo games (EA FC, Tekken, chess) list individual entrants next to clubs. Flag
+          // them so the picker can state that a player pick scores as their club's result.
+          individualPicks: clubKeys.size > 0 && choices.some((choice) => !clubKeys.has(normalizeClubName(choice))),
+          result: results.get(String(game.key)) || null,
+        };
+      }),
+  );
+
+  return {
+    weekKey: round.week_key,
+    label: round.label || round.week_key,
+    state,
+    status,
+    closeAt: round.close_at ?? null,
+    nextLockAt: completion.nextLockAt,
+    pickedGames: completion.pickedGames,
+    totalGames: completion.totalGames,
+    score: prediction?.score == null ? null : Number(prediction.score),
+    games,
+  };
+}
+
 export async function privatePickerForViewer(guildId: string, season: string, discordUserId: string) {
   const now = Math.floor(Date.now() / 1000);
   const [weeks, seasonRound, seasonPrediction, clubTracker] = await Promise.all([
@@ -189,44 +297,12 @@ export async function privatePickerForViewer(guildId: string, season: string, di
     getEwcClubTrackerFromDatabase(season),
   ]);
   const { actionable } = categorizeEwcPredictionRounds(weeks, now) as { actionable: HydratedWeek[] };
-  const weekly = await Promise.all(
-    actionable.map(async (round) => {
-      const prediction = (await getWeeklyPrediction(guildId, round.id, discordUserId)) as WeeklyPrediction;
-      const picks = new Map(
-        (Array.isArray(prediction?.picks) ? prediction.picks : [])
-          .filter((pick): pick is { gameKey?: string; pick?: string } => Boolean(pick && typeof pick === "object"))
-          .map((pick) => [String(pick.gameKey || ""), String(pick.pick || "")]),
-      );
-      return {
-        weekKey: round.week_key,
-        label: round.label || round.week_key,
-        games: await Promise.all(
-          (round.games || [])
-            .filter((game) => game.key)
-            .map(async (game) => {
-              const existingPick = picks.get(String(game.key)) || null;
-              const participants = await ewcGameParticipantTeams(game.game || String(game.key), {
-                eventUrl: game.eventUrl || null,
-                eventName: game.event || null,
-                guildId,
-              }).catch(() => []);
-              const choices = [...new Set([...participants, ...(existingPick ? [existingPick] : [])])]
-                .filter(Boolean)
-                .slice(0, 100);
-              return {
-                key: String(game.key),
-                game: game.game || String(game.key),
-                event: game.event || null,
-                lockAt: game.lockAt ?? null,
-                state: !game.lockAt || now < game.lockAt ? "open" : "locked",
-                pick: existingPick,
-                choices,
-              };
-            }),
-        ),
-      };
-    }),
-  );
+  const review = reviewRoundsForViewer(weeks, actionable, now);
+  const clubKeys = new Set(clubTracker.clubs.map((club) => normalizeClubName(club.name)).filter(Boolean));
+  const weekly = await Promise.all([
+    ...actionable.map((round) => projectPickerRound(round, guildId, discordUserId, now, "actionable", clubKeys)),
+    ...review.map((round) => projectPickerRound(round, guildId, discordUserId, now, "review", clubKeys)),
+  ]);
   const seasonStatus = effectiveSeasonPickerStatus(seasonRound ? {
     status: String(seasonRound.status),
     openAt: seasonRound.open_at ?? null,

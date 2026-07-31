@@ -101,7 +101,22 @@ export async function resolveEwcGameEventUrl(gameName, { guildId, eventUrl = nul
 // tracked page has already published an authoritative final standings table.
 // This fallback deliberately accepts only semantically final sections and
 // requires a first-place row; group-stage and live standings fail closed.
-export async function trackedEwcGamePlacements(gameName, { guildId, eventUrl = null, eventName = null } = {}) {
+// Player id -> EWC club, from the official EWC player list. Solo-game standings rows carry
+// a player name where team games carry a club, so without this the fallback would score
+// club picks as misses. Mirrors the prize-table mapping in the Liquipedia parsers.
+function playerClubLookup(players) {
+  const byPlayer = new Map();
+  for (const player of players || []) {
+    if (!player?.id || !player.team || player.team === 'TBD') continue;
+    const idKey = normalizeClubName(player.id);
+    if (!idKey) continue;
+    byPlayer.set(`${normalizeClubName(player.game)}:${idKey}`, player.team);
+    if (!byPlayer.has(idKey)) byPlayer.set(idKey, player.team);
+  }
+  return byPlayer;
+}
+
+export async function trackedEwcGamePlacements(gameName, { guildId, eventUrl = null, eventName = null, players = [] } = {}) {
   const slug = slugForGameName(gameName);
   if (!slug || !guildId) return [];
   const tournaments = await listEwcTournamentsForGame(guildId, slug).catch(() => []);
@@ -116,17 +131,32 @@ export async function trackedEwcGamePlacements(gameName, { guildId, eventUrl = n
     .sort((a, b) => b.priority - a.priority || b.index - a.index)[0]?.section;
   if (!selected) return [];
 
+  const lookup = playerClubLookup(players);
   const placements = [];
-  const seen = new Set();
+  const byKey = new Map();
   for (const row of rows) {
     if (row.section !== selected) continue;
     const rank = Number(row.rank);
     const points = EWC_POINTS_BY_RANK.get(rank) || 0;
-    const club = String(row.team || '').replace(/\s+/g, ' ').trim();
+    const entrant = String(row.team || '').replace(/\s+/g, ' ').trim();
+    if (!entrant || !points) continue;
+    // Solo games: the standings row names a player, so score it as their club — the same
+    // unit weekly picks are graded on. Team games fall through unchanged.
+    const mapped = lookup.get(`${normalizeClubName(gameName)}:${normalizeClubName(entrant)}`) || lookup.get(normalizeClubName(entrant)) || null;
+    const club = mapped || entrant;
+    const participant = mapped ? entrant : null;
     const key = normalizeClubName(club);
-    if (!club || !points || seen.has(key)) continue;
-    seen.add(key);
-    placements.push({ club, place: String(rank), points, participant: null });
+    const existing = byKey.get(key);
+    if (existing) {
+      // A club's best placement already counted; keep the other player as an alias so a
+      // prediction naming them still resolves to this result.
+      if (participant && !existing.participants?.includes(participant)) existing.participants.push(participant);
+      continue;
+    }
+    const placement = { club, place: String(rank), points, participant };
+    if (participant) placement.participants = [participant];
+    byKey.set(key, placement);
+    placements.push(placement);
   }
   return placements.some((row) => row.points === EWC_POINTS_BY_RANK.get(1))
     ? placements.sort((a, b) => b.points - a.points || a.club.localeCompare(b.club))

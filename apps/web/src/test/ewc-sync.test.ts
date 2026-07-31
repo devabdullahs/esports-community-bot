@@ -291,6 +291,54 @@ describe("EWC profile routes", () => {
     expect(JSON.stringify(body.actionableRounds)).not.toContain("Team Falcons");
   });
 
+  test("GET /api/me/ewc keeps finished rounds in the picker with their picks and results", async () => {
+    const user = {
+      authUserId: "dev-ewc-review-user",
+      discordUserId: "200000000000048110",
+      guildId: "920000000000000110",
+    };
+    useDevSession(user.authUserId, user.discordUserId);
+    await seedProfileLink(user);
+    const now = Math.floor(Date.now() / 1000);
+    const { saveWeeklyPredictionScore, setEwcWeekStatus, upsertEwcWeek, upsertWeeklyGamePick } = await import("@bot/db/ewcPredictions.js");
+    const finished = await upsertEwcWeek({
+      guildId: user.guildId,
+      season: SEASON,
+      weekKey: "finished-round",
+      label: "Finished round",
+      openAt: now - 172_800,
+      closeAt: now - 86_400,
+      games: [
+        { key: "valorant", game: "Valorant", event: "EWC Valorant", lockAt: now - 100_000 },
+        { key: "dota", game: "Dota 2", event: "EWC Dota", lockAt: now - 100_000 },
+      ],
+      createdBy: "web-test",
+    });
+    await upsertWeeklyGamePick({
+      guildId: user.guildId,
+      weekId: finished.id,
+      userId: user.discordUserId,
+      gameKey: "valorant",
+      pick: "Team Falcons",
+    });
+    await saveWeeklyPredictionScore(user.guildId, finished.id, user.discordUserId, 1000, {
+      mode: "per-game",
+      bonus: 0,
+      picks: [
+        { gameKey: "valorant", game: "Valorant", pick: "Team Falcons", matchedClub: "Team Falcons", place: "1st", points: 1000, winner: "Team Falcons", resultAvailable: true },
+      ],
+    });
+    await setEwcWeekStatus(finished.id, "scored");
+
+    const body = await (await meGET(new Request("http://localhost/api/me/ewc"))).json();
+    const round = body.picker.weekly.find((entry: { weekKey: string }) => entry.weekKey === "finished-round");
+    expect(round).toMatchObject({ state: "review", status: "scored", score: 1000, pickedGames: 1, totalGames: 2 });
+    expect(round.games).toMatchObject([
+      { key: "valorant", state: "locked", pick: "Team Falcons", choices: [], result: { points: 1000, place: "1st" } },
+      { key: "dota", state: "locked", pick: null, result: null },
+    ]);
+  });
+
   test("GET /api/me/ewc deep-links the private progress action to the persistent picker when configured", async () => {
     const user = {
       authUserId: "dev-ewc-picker-link-user",

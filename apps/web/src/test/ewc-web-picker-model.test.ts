@@ -1,5 +1,14 @@
 import { describe, expect, test } from "vitest";
-import { actionablePickerGames, effectiveSeasonPickerStatus, knownPickerClubs, seasonPickerSlots } from "@/lib/ewc-web-picker-model";
+import {
+  actionablePickerGames,
+  effectiveSeasonPickerStatus,
+  knownPickerClubs,
+  lockedPickerGames,
+  orderedRoundGames,
+  pickerRoundGroups,
+  roundPickProgress,
+  seasonPickerSlots,
+} from "@/lib/ewc-web-picker-model";
 
 describe("web prediction picker model", () => {
   const rounds = [
@@ -31,6 +40,37 @@ describe("web prediction picker model", () => {
       { weekKey: "week-one", key: "open", pick: "Team Falcons" },
       { weekKey: "week-two", key: "overlap", pick: null },
     ]);
+  });
+
+  test("keeps locked games available as a read-only record of the saved pick", () => {
+    const withLockedPick = [{
+      ...rounds[0],
+      games: rounds[0].games.map((game) => (game.key === "locked" ? { ...game, pick: "T1" } : game)),
+    }];
+    expect(lockedPickerGames(withLockedPick)).toMatchObject([{ weekKey: "week-one", key: "locked", pick: "T1" }]);
+    expect(lockedPickerGames(rounds).map((game) => game.key)).toEqual(["locked"]);
+  });
+
+  test("splits rounds into what can still be saved and what is only reviewable", () => {
+    const groups = pickerRoundGroups([
+      { ...rounds[0], state: "actionable" as const },
+      { ...rounds[1], state: "review" as const },
+      rounds[1],
+    ]);
+    expect(groups.live.map((round) => round.weekKey)).toEqual(["week-one", "week-two"]);
+    expect(groups.review.map((round) => round.weekKey)).toEqual(["week-two"]);
+  });
+
+  test("reports round progress from the server counts, falling back to the games list", () => {
+    expect(roundPickProgress({ ...rounds[0], pickedGames: 1, totalGames: 4 })).toEqual({ picked: 1, total: 4, percent: 25 });
+    expect(roundPickProgress(rounds[0])).toEqual({ picked: 1, total: 2, percent: 50 });
+    expect(roundPickProgress({ weekKey: "empty", label: "Empty", games: [] })).toEqual({ picked: 0, total: 0, percent: 0 });
+  });
+
+  test("orders a round so still-open games come before locked ones", () => {
+    const { open, locked } = orderedRoundGames(rounds[0]);
+    expect(open.map((game) => game.key)).toEqual(["open"]);
+    expect(locked.map((game) => game.key)).toEqual(["locked"]);
   });
 
   test("models top-down season slots without a skipped rank", () => {
