@@ -55,7 +55,7 @@ import {
 } from '../lib/ewcPredictions.js';
 import { resolveEwcGameEventUrl, trackedEwcGamePlacements } from '../lib/ewcGameTeams.js';
 import { renderEwcPredictionLeaderboardCard } from '../lib/ewcPredictionLeaderboardCard.js';
-import { fetchEwcClubStandings, fetchEwcWeekGameResults } from '../services/liquipedia.js';
+import { fetchEwcClubStandings, fetchEwcPlayerList, fetchEwcWeekGameResults } from '../services/liquipedia.js';
 import { syncDashboardProfile } from '../services/dashboardInternalClient.js';
 
 const nowSec = () => Math.floor(Date.now() / 1000);
@@ -598,6 +598,20 @@ async function processWeek(client, round, hooks = {}) {
         }),
       })));
       const fetchedAt = nowSec();
+      // Solo-game standings name players, not clubs. Reuse the same official player list the
+      // prize-table path uses so this fallback grades on clubs too. Fetched at most once per
+      // pass, and only when a fallback is actually needed (the page is cached and queued).
+      let ewcPlayers = null;
+      const ewcPlayerList = async () => {
+        if (ewcPlayers) return ewcPlayers;
+        ewcPlayers = await fetchEwcPlayerList()
+          .then((data) => data.players || [])
+          .catch((error) => {
+            logger.warn(`[ewc-predictions] player list unavailable for tracked-standings fallback: ${error.message}`);
+            return [];
+          });
+        return ewcPlayers;
+      };
       const fetched = await Promise.all((await fetchEwcWeekGameResults(resolvedCandidates)).map(async (result) => {
         const game = resolvedCandidates.find((candidate) => candidate.key === result.gameKey);
         if (!game || evaluateEwcGameResultCompleteness(result).ready || fetchedAt < Number(game.endAt || 0)) {
@@ -607,6 +621,7 @@ async function processWeek(client, round, hooks = {}) {
           guildId: round.guild_id,
           eventUrl: game.eventUrl,
           eventName: game.event,
+          players: await ewcPlayerList(),
         });
         if (!placements.length) return { ...result, fetchedAt };
         logger.info(`[ewc-predictions] used final tracked standings for ${round.guild_id}/${round.week_key}/${game.game}`);

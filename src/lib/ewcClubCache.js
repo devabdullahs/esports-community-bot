@@ -109,6 +109,15 @@ export async function searchEwcClubChoices(query, { wait = false, game = null, s
   }));
 }
 
+// Scoring-normalized names of every EWC club eligible for a game. Callers use it to tell
+// a club apart from an individual entrant in a solo game's participant list (EA FC,
+// Tekken, chess), where both share one flat option list.
+export async function ewcClubNameKeysForGame(game, { wait = false } = {}) {
+  const clubs = await getEwcClubsCached({ wait });
+  const { pool } = gameScopedPool(clubs, game, true);
+  return new Set((pool.length ? pool : clubs).map((club) => normalizeClubName(club.name)).filter(Boolean));
+}
+
 export async function resolveEwcClubPick(query, { wait = false, game = null, strictGame = false } = {}) {
   const raw = String(query ?? '').replace(/\s+/g, ' ').trim();
   const q = normalizeClubName(raw);

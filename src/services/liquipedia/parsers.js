@@ -1202,12 +1202,24 @@ function placementsFromPrizepoolTable($, table, event, playerLookup) {
     for (const entry of clubsFromPrizepoolRow($, row, event.game, playerLookup)) {
       const key = normalizeClubName(entry.club);
       const existing = byClub.get(key);
-      if (existing && existing.points >= points) continue;
+      // EWC club points count a club's BEST placement in an event, so a club that fielded
+      // several solo players keeps only its top row. Every one of those players is still
+      // recorded: a prediction naming any of them resolves to this club's result instead
+      // of silently scoring zero.
+      const participants = [...new Set([...(existing?.participants || []), entry.participant].filter(Boolean))];
+      if (existing && existing.points >= points) {
+        if (participants.length !== (existing.participants || []).length) {
+          byClub.set(key, { ...existing, participants });
+        }
+        continue;
+      }
       byClub.set(key, {
         club: entry.club,
         place,
         points,
         participant: entry.participant,
+        // Only solo games have participants; team rows stay on the leaner shape.
+        ...(participants.length ? { participants } : {}),
       });
     }
   });

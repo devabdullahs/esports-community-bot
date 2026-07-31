@@ -59,7 +59,25 @@ test('parseEwcEventPlacements: maps current table2 solo participants back to clu
   assert.deepEqual(parseEwcEventPlacements($, { game: 'Fatal Fury: City of the Wolves' }, [
     { id: 'ChampionPlayer', game: 'Fatal Fury: City of the Wolves', team: 'Natus Vincere' },
   ]), [
-    { club: 'Natus Vincere', place: '1', points: 1000, participant: 'ChampionPlayer' },
+    { club: 'Natus Vincere', place: '1', points: 1000, participant: 'ChampionPlayer', participants: ['ChampionPlayer'] },
+  ]);
+});
+
+test('parseEwcEventPlacements: keeps every solo player of a club on its best placement', () => {
+  const $ = load(`
+    <table class="table2__table prizepooltable prizepooltable-placement">
+      <tr class="prizepooltable-header"><th>Place</th><th>Participant</th><th>Club Points</th></tr>
+      <tr class="table2__row--body"><td class="prizepooltable-place">1</td><td class="prizepooltable-col-team"><span data-highlightingclass="Nasr">Nasr</span></td><td>1,000</td></tr>
+      <tr class="table2__row--body"><td class="prizepooltable-place">5-8</td><td class="prizepooltable-col-team"><span data-highlightingclass="Msdossary">Msdossary</span></td><td>200</td></tr>
+    </table>`);
+
+  // Club points count a club's best placement only, so the 5-8 row collapses into the 1st —
+  // but both players stay listed so either name resolves to this result when scoring.
+  assert.deepEqual(parseEwcEventPlacements($, { game: 'EA SPORTS FC 26' }, [
+    { id: 'Nasr', game: 'EA SPORTS FC 26', team: 'Team Falcons' },
+    { id: 'Msdossary', game: 'EA SPORTS FC 26', team: 'Team Falcons' },
+  ]), [
+    { club: 'Team Falcons', place: '1', points: 1000, participant: 'Nasr', participants: ['Nasr', 'Msdossary'] },
   ]);
 });
 

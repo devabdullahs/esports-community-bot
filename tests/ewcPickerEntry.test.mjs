@@ -11,10 +11,11 @@ process.env.DISCORD_TOKEN = 'test-token';
 process.env.DISCORD_CLIENT_ID = 'test-client-id';
 
 const { closeDb } = await import('../src/db/index.js');
-const { upsertEwcWeek, setEwcWeekStatus, upsertEwcSeason } = await import('../src/db/ewcPredictions.js');
+const { upsertEwcWeek, setEwcWeekStatus, upsertEwcSeason, upsertWeeklyPrediction } = await import('../src/db/ewcPredictions.js');
 const {
   currentOpenWeek,
   handleComponent,
+  latestWeekWithGames,
   seasonSlotState,
   weeklyGameId,
   weeklyPickModalId,
@@ -149,6 +150,70 @@ test('weeklyPickPayload paginates every game and keeps page controls owner-bound
     reply: async (payload) => { replies.push(payload); },
   });
   assert.match(replies[0]?.content || '', /belong to whoever opened/i);
+});
+
+test('weeklyPickPayload still shows the owner their pick after a game locks', async () => {
+  const guildId = 'guild-picker-locked-pick';
+  const now = Math.floor(Date.now() / 1000);
+  const week = await upsertEwcWeek({
+    guildId,
+    season: '2026',
+    weekKey: 'locked-pick-week',
+    label: 'Locked pick week',
+    openAt: now - 7200,
+    closeAt: now + 7200,
+    games: [
+      { key: 'locked-game', game: 'Free Fire', event: 'EWC', lockAt: now - 3600 },
+      { key: 'open-game', game: 'Dota 2', event: 'EWC', lockAt: now + 3600 },
+    ],
+    createdBy: 'admin',
+  });
+  await upsertWeeklyPrediction({
+    guildId,
+    weekId: week.id,
+    userId: 'locked-pick-owner',
+    picks: [
+      { gameKey: 'locked-game', game: 'Free Fire', event: 'EWC', pick: 'Team Falcons' },
+      { gameKey: 'open-game', game: 'Dota 2', event: 'EWC', pick: 'Tundra Esports' },
+    ],
+  });
+
+  const json = (await weeklyPickPayload(guildId, '2026', 'locked-pick-week', 'locked-pick-owner')).components[0].toJSON();
+  const rendered = JSON.stringify(json);
+  assert.match(rendered, /Locked · Your pick: \*\*Team Falcons\*\*/, 'a locked game still renders the saved pick');
+  assert.match(rendered, /Pick: \*\*Tundra Esports\*\*/);
+  const lockedSection = (json.components || []).find((component) =>
+    String(component.accessory?.custom_id || '').includes(':locked-game:'),
+  );
+  assert.equal(lockedSection?.accessory?.disabled, true, 'the locked game stays uneditable');
+});
+
+test('latestWeekWithGames falls back to the most recent started week', async () => {
+  const guildId = 'guild-picker-latest';
+  const now = Math.floor(Date.now() / 1000);
+  await upsertEwcWeek({
+    guildId,
+    season: '2026',
+    weekKey: 'past-week',
+    label: 'Past week',
+    openAt: now - 172800,
+    closeAt: now - 86400,
+    games: [{ key: 'past-game', game: 'Free Fire', event: 'EWC', lockAt: now - 90000 }],
+    createdBy: 'admin',
+  });
+  await upsertEwcWeek({
+    guildId,
+    season: '2026',
+    weekKey: 'future-week',
+    label: 'Future week',
+    openAt: now + 86400,
+    closeAt: now + 172800,
+    games: [{ key: 'future-game', game: 'Dota 2', event: 'EWC', lockAt: now + 90000 }],
+    createdBy: 'admin',
+  });
+
+  assert.equal(await currentOpenWeek(guildId, '2026'), null);
+  assert.equal((await latestWeekWithGames(guildId, '2026'))?.week_key, 'past-week');
 });
 
 test('anyRoundOpen is true when only the season round is open (weekly week opens later)', async () => {

@@ -11,7 +11,13 @@ process.env.DISCORD_TOKEN = 'test-token';
 process.env.DISCORD_CLIENT_ID = 'test-client-id';
 
 const { closeDb } = await import('../src/db/index.js');
-const { buildProfileDetailsComponents, buildScoreBreakdownEmbed, data, handleComponent } = await import('../src/commands/ewc_predict.js');
+const {
+  buildProfileDetailsComponents,
+  buildScoreBreakdownEmbed,
+  buildWeekPicksEmbed,
+  data,
+  handleComponent,
+} = await import('../src/commands/ewc_predict.js');
 
 test.after(() => {
   closeDb();
@@ -72,4 +78,50 @@ test('score details select is owner-bound and Discord-size safe', async () => {
   });
   assert.equal(replies.length, 1);
   assert.match(replies[0].content, /belong to whoever opened/i);
+});
+
+test('profile detail menu offers rounds that only hold saved picks', () => {
+  const components = buildProfileDetailsComponents(
+    {
+      season: { picks: ['Team Falcons', 'T1'] },
+      weekly: [
+        { week_key: 'week-1', label: 'Week 1', picks: [{ gameKey: 'ff', game: 'Free Fire', pick: 'Team Falcons' }] },
+        { week_key: 'week-2', label: 'Week 2', picks: [] },
+      ],
+    },
+    '2026',
+    'target-user',
+    'target-user',
+  );
+  const menu = components[0].toJSON().components[0];
+  assert.deepEqual(menu.options.map((option) => option.value), ['season', 'week:week-1']);
+  assert.ok(menu.options.every((option) => option.description.length <= 100));
+});
+
+test('week picks embed shows the owner every pick and hides unlocked picks from others', () => {
+  const now = Math.floor(Date.now() / 1000);
+  const week = {
+    week_key: 'wk',
+    label: 'Week 1',
+    close_at: now + 7200,
+    games: [
+      { key: 'ff', game: 'Free Fire', event: 'EWC', lockAt: now - 3600 },
+      { key: 'dota', game: 'Dota 2', event: 'EWC', lockAt: now + 3600 },
+      { key: 'cs', game: 'Counter-Strike', event: 'EWC', lockAt: now + 3600 },
+    ],
+    picks: [
+      { gameKey: 'ff', game: 'Free Fire', pick: 'Team Falcons' },
+      { gameKey: 'dota', game: 'Dota 2', pick: 'Tundra Esports' },
+    ],
+  };
+
+  const owner = buildWeekPicksEmbed(week, { isOwner: true, now }).toJSON();
+  assert.match(owner.description, /Team Falcons/);
+  assert.match(owner.description, /Tundra Esports/);
+  assert.match(owner.description, /no pick/);
+
+  const other = buildWeekPicksEmbed(week, { isOwner: false, now }).toJSON();
+  assert.match(other.description, /Team Falcons/, 'a locked game is public once it locks');
+  assert.doesNotMatch(other.description, /Tundra Esports/, 'an unlocked game stays hidden');
+  assert.match(other.description, /hidden until lock/);
 });

@@ -546,8 +546,14 @@ function resultMapForGame(results, gameKey) {
     for (const key of clubNameKeys(row.club)) {
       if (!map.has(key)) map.set(key, value);
     }
-    for (const key of clubNameKeys(row.participant)) {
-      if (!map.has(key)) map.set(key, value);
+    // Solo games (EA FC, Tekken, chess) are picked by player name as often as by club.
+    // Every player a club fielded aliases to that club's placement — the club is the
+    // scoring unit, so which of its players a member named must not change the result.
+    const participants = row.participants?.length ? row.participants : [row.participant];
+    for (const participant of participants) {
+      for (const key of clubNameKeys(participant)) {
+        if (!map.has(key)) map.set(key, value);
+      }
     }
   }
   return { gameResult, map };
@@ -629,6 +635,12 @@ export function scoreSeasonPrediction(picks, finalStandings, topSize = 10) {
 
 export function formatTimestamp(seconds) {
   return seconds ? `<t:${seconds}:f> (<t:${seconds}:R>)` : 'Not set';
+}
+
+// Compact relative-only variant. Per-game lines repeat a timestamp for every game, so
+// the full date form would dominate the picker.
+export function formatRelativeTimestamp(seconds) {
+  return seconds ? `<t:${seconds}:R>` : 'Not set';
 }
 
 export function formatShortDate(seconds) {
