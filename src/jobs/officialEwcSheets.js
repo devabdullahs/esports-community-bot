@@ -21,6 +21,7 @@ import {
 } from '../services/officialEwcSheets/parsers.js';
 
 const MATCH_TIME_WINDOW_SECONDS = 15 * 60;
+const FAST_POLL_PAST_GRACE_SECONDS = 6 * 60 * 60;
 const ATTRIBUTION = '© Esports Foundation 2026. All rights reserved.';
 const DETAIL_SOURCE = 'internal-normalized';
 // Bump whenever the workbook parsers change WHAT they extract, so already-seen workbooks
@@ -30,6 +31,8 @@ export const OFFICIAL_PARSER_VERSION = 2;
 let running = false;
 let client = null;
 let lastScanSummary = null;
+let fastPollWorkbooks = [];
+let cachedTournaments = [];
 
 // The change token is compared BEFORE the workbook is read, so a parser that learns to
 // extract something new stays dormant until an unrelated edit bumps modifiedTime. Folding
@@ -81,6 +84,27 @@ export function findOfficialMatch(matches, update) {
     return timed.length === 1 ? timed[0] : null;
   }
   return candidates.length === 1 ? candidates[0] : null;
+}
+
+export function shouldFastPollOfficialWorkbook(
+  matches,
+  {
+    nowSeconds = Math.floor(Date.now() / 1000),
+    lookaheadSeconds = config.officialEwcSheets.liveLookaheadSeconds,
+  } = {},
+) {
+  const now = Number(nowSeconds);
+  const lookahead = Math.max(0, Number(lookaheadSeconds) || 0);
+  return (matches || []).some((match) => {
+    if (match?.status === 'running') return true;
+    if (match?.status !== 'scheduled') return false;
+    const scheduledAt = Number(match.scheduled_at);
+    return (
+      Number.isFinite(scheduledAt) &&
+      scheduledAt >= now - FAST_POLL_PAST_GRACE_SECONDS &&
+      scheduledAt <= now + lookahead
+    );
+  });
 }
 
 function publicExternalId(tournament, update) {
@@ -284,6 +308,27 @@ async function refreshWorkbook(workbook, tournaments, sheetsClient) {
   };
 }
 
+async function selectFastPollWorkbooks(workbooks, tournaments) {
+  const selected = [];
+  const nowSeconds = Math.floor(Date.now() / 1000);
+  for (const workbook of workbooks) {
+    const descriptor = workbookDescriptor(workbook.name);
+    if (!descriptor) continue;
+    const tournament = resolveOfficialTournament(tournaments, descriptor);
+    if (!tournament) continue;
+    const matches = await listMatchesForTournament(tournament.id);
+    if (
+      shouldFastPollOfficialWorkbook(matches, {
+        nowSeconds,
+        lookaheadSeconds: config.officialEwcSheets.liveLookaheadSeconds,
+      })
+    ) {
+      selected.push(workbook);
+    }
+  }
+  return selected;
+}
+
 export async function refreshOfficialEwcSheets() {
   if (!config.officialEwcSheets.enabled || running) return;
   running = true;
@@ -296,6 +341,7 @@ export async function refreshOfficialEwcSheets() {
       client.listWorkbooks(config.officialEwcSheets.folderId),
       listActiveTournaments(),
     ]);
+    cachedTournaments = tournaments;
     let changed = 0;
     const reasons = new Map();
     for (const workbook of workbooks) {
@@ -326,8 +372,44 @@ export async function refreshOfficialEwcSheets() {
       logger.info(`[tournament-feed] scan completed: ${summary}`);
       lastScanSummary = summary;
     }
+    fastPollWorkbooks = await selectFastPollWorkbooks(workbooks, tournaments);
   } catch {
     logger.warn('[tournament-feed] refresh failed');
+  } finally {
+    running = false;
+  }
+}
+
+export async function refreshLiveOfficialEwcSheets() {
+  if (!config.officialEwcSheets.enabled || running || !fastPollWorkbooks.length) return;
+  running = true;
+  try {
+    client ||= createOfficialSheetsClient({
+      clientEmail: config.officialEwcSheets.clientEmail,
+      privateKey: config.officialEwcSheets.privateKey,
+    });
+    const tournaments = cachedTournaments.length
+      ? cachedTournaments
+      : await listActiveTournaments();
+    const currentMetadata = [];
+    for (const workbook of fastPollWorkbooks) {
+      try {
+        const metadata = await client.getWorkbookMetadata(workbook.id);
+        currentMetadata.push(metadata);
+        const result = await refreshWorkbook(metadata, tournaments, client);
+        if (result.changed) {
+          logger.info(
+            `[tournament-feed] live refresh ${result.game}: ${result.matches} matches, ${result.standings} standings rows`,
+          );
+        }
+      } catch {
+        currentMetadata.push(workbook);
+        logger.warn('[tournament-feed] live workbook refresh failed');
+      }
+    }
+    fastPollWorkbooks = await selectFastPollWorkbooks(currentMetadata, tournaments);
+  } catch {
+    logger.warn('[tournament-feed] live refresh failed');
   } finally {
     running = false;
   }
@@ -353,6 +435,11 @@ export function startOfficialEwcSheets() {
     config.officialEwcSheets.pollMs,
   );
   interval.unref?.();
+  const liveInterval = setInterval(
+    () => refreshLiveOfficialEwcSheets(),
+    config.officialEwcSheets.livePollMs,
+  );
+  liveInterval.unref?.();
   return interval;
 }
 

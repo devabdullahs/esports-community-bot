@@ -145,6 +145,25 @@ export function createOfficialSheetsClient(credentials, options = {}) {
   }
 
   return {
+    getWorkbookMetadata(workbookId) {
+      return serialize(async () => {
+        const safeWorkbookId = resourceId(workbookId, 'official feed workbook');
+        const params = new URLSearchParams({
+          fields: 'id,name,modifiedTime',
+          supportsAllDrives: 'true',
+        });
+        const file = await fetchJson(`${DRIVE_BASE}/files/${safeWorkbookId}?${params}`);
+        if (!file?.id || !file?.name) {
+          throw new Error('Official tournament feed returned incomplete workbook metadata.');
+        }
+        return {
+          id: String(file.id),
+          name: String(file.name),
+          modifiedTime: String(file.modifiedTime || ''),
+        };
+      });
+    },
+
     listWorkbooks(folderId) {
       return serialize(async () => {
         const safeFolderId = resourceId(folderId, 'official feed folder');

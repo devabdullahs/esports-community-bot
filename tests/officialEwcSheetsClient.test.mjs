@@ -46,6 +46,31 @@ test('official sheets client reads Gaxios response data without using Fetch resp
   assert.equal(params.get('supportsAllDrives'), 'true');
 });
 
+test('official sheets client can check one workbook modification without listing the folder', async () => {
+  let requestedUrl = '';
+  const client = clientWith(async (url) => {
+    requestedUrl = url;
+    return {
+      status: 200,
+      headers: {},
+      data: {
+        id: 'workbook_1234567890',
+        name: 'VALORANT - World Championship',
+        modifiedTime: '2026-08-01T12:00:00.000Z',
+      },
+    };
+  });
+
+  assert.deepEqual(await client.getWorkbookMetadata('workbook_1234567890'), {
+    id: 'workbook_1234567890',
+    name: 'VALORANT - World Championship',
+    modifiedTime: '2026-08-01T12:00:00.000Z',
+  });
+  const url = new URL(requestedUrl);
+  assert.equal(url.pathname, '/drive/v3/files/workbook_1234567890');
+  assert.equal(url.searchParams.get('fields'), 'id,name,modifiedTime');
+});
+
 test('official sheets client sanitizes provider failures before they reach callers', async () => {
   const privateIdentifier = 'private-folder-should-not-leak';
   const client = clientWith(async () => {
