@@ -26,7 +26,7 @@ const ATTRIBUTION = '© Esports Foundation 2026. All rights reserved.';
 const DETAIL_SOURCE = 'internal-normalized';
 // Bump whenever parsing or reconciliation changes what gets persisted, so already-seen
 // workbooks are re-read once instead of waiting for the next unrelated edit.
-export const OFFICIAL_PARSER_VERSION = 5;
+export const OFFICIAL_PARSER_VERSION = 6;
 
 let running = false;
 let client = null;
@@ -187,6 +187,44 @@ function authorityFields(update) {
 
 function matchDetailsBase(kind) {
   return { version: 1, kind, patch: null, casters: [], attribution: ATTRIBUTION };
+}
+
+export async function prioritizeOfficialWorkbooks(
+  workbooks,
+  tournaments,
+  {
+    loadMatches = listMatchesForTournament,
+    nowSeconds = Math.floor(Date.now() / 1000),
+  } = {},
+) {
+  const ranked = [];
+  for (const [index, workbook] of (workbooks || []).entries()) {
+    const descriptor = workbookDescriptor(workbook.name);
+    const tournament = descriptor
+      ? resolveOfficialTournament(tournaments, descriptor)
+      : null;
+    let running = false;
+    let nextAt = Number.POSITIVE_INFINITY;
+    if (tournament) {
+      const matches = await loadMatches(tournament.id);
+      running = matches.some((match) => match?.status === 'running');
+      for (const match of matches) {
+        if (match?.status !== 'scheduled') continue;
+        const scheduledAt = Number(match.scheduled_at);
+        if (Number.isFinite(scheduledAt) && scheduledAt >= nowSeconds) {
+          nextAt = Math.min(nextAt, scheduledAt);
+        }
+      }
+    }
+    ranked.push({ workbook, index, running, nextAt });
+  }
+  return ranked
+    .sort((left, right) => {
+      if (left.running !== right.running) return left.running ? -1 : 1;
+      if (left.nextAt !== right.nextAt) return left.nextAt - right.nextAt;
+      return left.index - right.index;
+    })
+    .map(({ workbook }) => workbook);
 }
 
 export function deriveOfficialOverwatchSeriesResult(maps, match) {
@@ -485,9 +523,10 @@ export async function refreshOfficialEwcSheets() {
       listActiveTournaments(),
     ]);
     cachedTournaments = tournaments;
+    const orderedWorkbooks = await prioritizeOfficialWorkbooks(workbooks, tournaments);
     let changed = 0;
     const reasons = new Map();
-    for (const workbook of workbooks) {
+    for (const workbook of orderedWorkbooks) {
       try {
         const result = await refreshWorkbook(workbook, tournaments, client);
         reasons.set(result.reason || 'refreshed', (reasons.get(result.reason || 'refreshed') || 0) + 1);
