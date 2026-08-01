@@ -181,6 +181,13 @@ test('fast official polling targets only running or near-start scheduled matches
       [{ status: 'finished', scheduled_at: nowSeconds - 60 }],
       options,
     ),
+    true,
+  );
+  assert.equal(
+    shouldFastPollOfficialWorkbook(
+      [{ status: 'finished', scheduled_at: nowSeconds - 7 * 60 * 60 }],
+      options,
+    ),
     false,
   );
 });
