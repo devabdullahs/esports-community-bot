@@ -92,6 +92,36 @@ test('fresh official match fields resist fallback overwrite and expired fields r
   assert.equal(publicRow.official_authoritative, 1);
 });
 
+test('official match time remains authoritative after temporary fields expire', async () => {
+  const tournament = await createTournament('valorant/EWC/official-time-authority');
+  const observedAt = 1_785_000_000;
+  const officialTime = 1_785_010_800;
+  await upsertMatch(matchRow(tournament.id, 'Match:official-time', {
+    score_a: 1,
+    score_b: 0,
+    status: 'running',
+    scheduled_at: officialTime,
+  }), {
+    authoritative: true,
+    observedAt,
+    authorityTtlSeconds: 300,
+    authorityFields: ['score_a', 'score_b', 'status', 'scheduled_at'],
+  });
+
+  await upsertMatch(matchRow(tournament.id, 'Match:official-time', {
+    score_a: 3,
+    score_b: 0,
+    status: 'finished',
+    scheduled_at: officialTime + 3_600,
+  }), { observedAt: observedAt + 301 });
+
+  const row = await getMatch('liquipedia', 'Match:official-time');
+  assert.equal(row.score_a, 3);
+  assert.equal(row.score_b, 0);
+  assert.equal(row.status, 'finished');
+  assert.equal(row.scheduled_at, officialTime);
+});
+
 test('fresh official match cannot be removed by duplicate cleanup', async () => {
   const tournament = await createTournament('valorant/EWC/official-cleanup-authority');
   const observedAt = Math.floor(Date.now() / 1000);

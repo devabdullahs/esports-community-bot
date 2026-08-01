@@ -215,3 +215,54 @@ test('fast official polling targets only running or near-start scheduled matches
     false,
   );
 });
+
+test('a unique provider match accepts an official time outside the Liquipedia tolerance', () => {
+  const liquipediaTime = 1_785_000_000;
+  const matches = [
+    {
+      id: 1,
+      external_id: 'Match:overwatch-semifinal-1',
+      team_a: 'ZETA DIVISION',
+      team_b: 'T1',
+      scheduled_at: liquipediaTime,
+    },
+  ];
+
+  assert.equal(
+    findOfficialMatch(matches, {
+      teamA: 'ZETA DIVISION',
+      teamB: 'T1',
+      scheduledAt: liquipediaTime + 3_600,
+    })?.id,
+    1,
+  );
+});
+
+test('an official duplicate folds back onto the stable provider match identity', () => {
+  const officialTime = 1_785_003_600;
+  const matches = [
+    {
+      id: 1,
+      external_id: 'Match:overwatch-semifinal-2',
+      team_a: 'Weibo Gaming',
+      team_b: 'Twisted Minds',
+      scheduled_at: officialTime - 3_600,
+    },
+    {
+      id: 2,
+      external_id: 'official:existing-duplicate',
+      team_a: 'Weibo Gaming',
+      team_b: 'Twisted Minds',
+      scheduled_at: officialTime,
+    },
+  ];
+
+  assert.equal(
+    findOfficialMatch(matches, {
+      teamA: 'Weibo Gaming',
+      teamB: 'Twisted Minds',
+      scheduledAt: officialTime,
+    })?.id,
+    1,
+  );
+});

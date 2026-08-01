@@ -43,13 +43,20 @@ export async function saveOfficialFeedState({ workbookKey, modifiedToken, hash, 
 export async function getFreshMatchAuthority(matchId, { client = null, now = Math.floor(Date.now() / 1000) } = {}) {
   const reader = client || { get };
   const row = await reader.get(
-    'SELECT fields_json, expires_at FROM official_match_authority WHERE match_id = $1 AND expires_at > $2',
-    [matchId, now],
+    'SELECT fields_json, expires_at FROM official_match_authority WHERE match_id = $1',
+    [matchId],
   );
   if (!row) return null;
   try {
     const fields = JSON.parse(row.fields_json);
-    return Array.isArray(fields) ? new Set(fields.filter((field) => typeof field === 'string')) : null;
+    if (!Array.isArray(fields)) return null;
+    const protectedFields = fields.filter((field) => typeof field === 'string');
+    // Scores and lifecycle state may fall back to another provider when the official
+    // feed goes stale. A published official start time remains the schedule of record.
+    if (row.expires_at <= now) {
+      return protectedFields.includes('scheduled_at') ? new Set(['scheduled_at']) : null;
+    }
+    return new Set(protectedFields);
   } catch {
     return null;
   }
