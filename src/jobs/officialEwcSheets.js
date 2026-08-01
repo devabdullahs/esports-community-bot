@@ -26,7 +26,7 @@ const ATTRIBUTION = '© Esports Foundation 2026. All rights reserved.';
 const DETAIL_SOURCE = 'internal-normalized';
 // Bump whenever parsing or reconciliation changes what gets persisted, so already-seen
 // workbooks are re-read once instead of waiting for the next unrelated edit.
-export const OFFICIAL_PARSER_VERSION = 4;
+export const OFFICIAL_PARSER_VERSION = 5;
 
 let running = false;
 let client = null;
@@ -53,6 +53,33 @@ function normalized(value) {
 
 export function normalizedOfficialPair(teamA, teamB) {
   return [normalizeTeamName(teamA), normalizeTeamName(teamB)].sort().join('|');
+}
+
+export function officialScheduleAliases(matches, update) {
+  const pair = normalizedOfficialPair(update?.teamA, update?.teamB);
+  if (!pair || pair === '|') return [];
+  const providers = (matches || []).filter(
+    (match) =>
+      normalizedOfficialPair(match.team_a, match.team_b) === pair &&
+      !String(match.external_id || '').startsWith('official:'),
+  );
+  if (providers.length <= 1) return providers;
+  const timestamps = new Set();
+  for (const match of providers) {
+    const timestamp = Number(match.scheduled_at);
+    if (!Number.isFinite(timestamp) || timestamp <= 0) return [];
+    timestamps.add(Math.trunc(timestamp));
+  }
+  return timestamps.size === 1 ? providers : [];
+}
+
+function preferredProviderAlias(aliases) {
+  return [...aliases].sort((left, right) => {
+    const stable = Number(/^Match:/i.test(right.external_id || '')) -
+      Number(/^Match:/i.test(left.external_id || ''));
+    if (stable) return stable;
+    return Number(left.id || 0) - Number(right.id || 0);
+  })[0] || null;
 }
 
 export function resolveOfficialTournament(tournaments, descriptor) {
@@ -82,19 +109,8 @@ export function findOfficialMatch(matches, update) {
   );
   const scheduledAt = Number(update?.scheduledAt);
   if (Number.isFinite(scheduledAt) && scheduledAt > 0) {
-    const providerCandidates = candidates.filter(
-      (match) => !String(match.external_id || '').startsWith('official:'),
-    );
-    if (
-      providerCandidates.length === 1 &&
-      candidates.length > 1 &&
-      candidates.every(
-        (match) =>
-          match === providerCandidates[0] || String(match.external_id || '').startsWith('official:'),
-      )
-    ) {
-      return providerCandidates[0];
-    }
+    const providerAliases = officialScheduleAliases(candidates, update);
+    if (providerAliases.length) return preferredProviderAlias(providerAliases);
     const timed = candidates.filter((match) => {
       const stored = Number(match.scheduled_at);
       return Number.isFinite(stored) && Math.abs(stored - scheduledAt) <= MATCH_TIME_WINDOW_SECONDS;
@@ -220,13 +236,13 @@ async function persistAuthoritativeMatchUpdate(
   update,
   observedAt,
   ttlSeconds,
-  { allowTerminalCorrection = false } = {},
+  { allowTerminalCorrection = false, authorityFieldsOverride = null } = {},
 ) {
   const stored = await upsertMatch(rowFromUpdate(tournament, existing, update), {
     authoritative: true,
     authorityTtlSeconds: ttlSeconds,
     observedAt,
-    authorityFields: authorityFields(update),
+    authorityFields: authorityFieldsOverride || authorityFields(update),
     allowTerminalCorrection,
   });
   if (existing) Object.assign(existing, stored);
@@ -234,6 +250,9 @@ async function persistAuthoritativeMatchUpdate(
 }
 
 async function applyMatchUpdate(tournament, matches, update, observedAt, ttlSeconds) {
+  const scheduleAliases = update.scheduledAt == null
+    ? []
+    : officialScheduleAliases(matches, update);
   const existing = findOfficialMatch(matches, update);
   const stored = await persistAuthoritativeMatchUpdate(
     tournament,
@@ -243,6 +262,21 @@ async function applyMatchUpdate(tournament, matches, update, observedAt, ttlSeco
     ttlSeconds,
   );
   if (!existing) matches.push(stored);
+  for (const alias of scheduleAliases) {
+    if (alias === existing) continue;
+    await persistAuthoritativeMatchUpdate(
+      tournament,
+      alias,
+      {
+        teamA: alias.team_a,
+        teamB: alias.team_b,
+        scheduledAt: update.scheduledAt,
+      },
+      observedAt,
+      ttlSeconds,
+      { authorityFieldsOverride: ['scheduled_at'] },
+    );
+  }
   return stored;
 }
 
