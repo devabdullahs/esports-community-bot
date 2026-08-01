@@ -125,6 +125,31 @@ test('schedule parser rejects formulas and preserves same-pair rematches as sepa
   assert.equal(parsed[1].status, 'finished');
 });
 
+test('schedule parser accepts qualified Overwatch schedule headers', () => {
+  const parsed = parseSchedule([
+    ['Match Day', 'Match Time (KSA)', 'Stage', 'Matches'],
+    ['2026/08/02', '12:00', 'Playoffs - Semifinal 1', 'ZETA DIVISION vs T1'],
+    ['2026/08/02', '13:45', 'Playoffs - Semifinal 2', 'Weibo Gaming vs Twisted Minds'],
+  ], { game: 'overwatch' });
+
+  assert.deepEqual(parsed.map((match) => ({
+    teamA: match.teamA,
+    teamB: match.teamB,
+    scheduledAt: match.scheduledAt,
+  })), [
+    {
+      teamA: 'ZETA DIVISION',
+      teamB: 'T1',
+      scheduledAt: Math.floor(Date.parse('2026-08-02T09:00:00.000Z') / 1000),
+    },
+    {
+      teamA: 'Weibo Gaming',
+      teamB: 'Twisted Minds',
+      scheduledAt: Math.floor(Date.parse('2026-08-02T10:45:00.000Z') / 1000),
+    },
+  ]);
+});
+
 test('individual results parse player scores without carrying workbook metadata', () => {
   const parsed = parseIndividualResults(
     [

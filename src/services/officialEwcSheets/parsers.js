@@ -5,6 +5,16 @@ const MAX_CELL_LENGTH = 500;
 const MAX_FACTS = 40;
 const MAX_SECTIONS = 30;
 const MAX_ENTRIES = 80;
+const SCHEDULE_DATE_HEADERS = ['date', 'match date', 'match day'];
+const SCHEDULE_TIME_HEADERS = [
+  'start time',
+  'time',
+  'match time',
+  'start time ksa',
+  'time ksa',
+  'match time ksa',
+];
+const SCHEDULE_MATCH_HEADERS = ['match', 'matches', 'matchup', 'fixture', 'match name'];
 
 const PUBLIC_OVERVIEW_FACT_KEYS = new Set([
   'format',
@@ -136,9 +146,9 @@ function findHeader(rows, requiredGroups) {
 function findScheduleHeader(rows) {
   for (let index = 0; index < Math.min(rows.length, 100); index += 1) {
     const row = rows[index] || [];
-    const date = headerIndex(row, ['date', 'match date']);
-    const time = headerIndex(row, ['start time', 'time']);
-    const match = headerIndex(row, ['match', 'matchup', 'fixture']);
+    const date = headerIndex(row, SCHEDULE_DATE_HEADERS);
+    const time = headerIndex(row, SCHEDULE_TIME_HEADERS);
+    const match = headerIndex(row, SCHEDULE_MATCH_HEADERS);
     const teamA = headerIndex(row, ['team a', 'player a', 'home player', 'home team', 'participant a']);
     const teamB = headerIndex(row, ['team b', 'player b', 'away player', 'away team', 'participant b']);
     if (date >= 0 && time >= 0 && (match >= 0 || (teamA >= 0 && teamB >= 0))) {
@@ -211,9 +221,9 @@ function stableExternalId({ game, round, name, teamA, teamB, scheduledAt }) {
 export function parseSchedule(rows, { game }) {
   const found = findScheduleHeader(rows);
   if (!found) return [];
-  const dateIndex = headerIndex(found.row, ['date', 'match date']);
-  const timeIndex = headerIndex(found.row, ['start time', 'time']);
-  const matchIndex = headerIndex(found.row, ['match', 'matchup', 'fixture']);
+  const dateIndex = headerIndex(found.row, SCHEDULE_DATE_HEADERS);
+  const timeIndex = headerIndex(found.row, SCHEDULE_TIME_HEADERS);
+  const matchIndex = headerIndex(found.row, SCHEDULE_MATCH_HEADERS);
   const roundIndex = headerIndex(found.row, ['round', 'stage']);
   const bestOfIndex = headerIndex(found.row, ['best of x', 'best of', 'bo']);
   const teamAIndex = headerIndex(found.row, ['team a', 'player a', 'home player', 'home team']);
