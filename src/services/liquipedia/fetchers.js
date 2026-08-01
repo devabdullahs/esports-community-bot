@@ -4,6 +4,7 @@
 import * as cheerio from 'cheerio';
 import { logger } from '../../lib/logger.js';
 import { isEwcTournamentReference } from '../../lib/ewcTournament.js';
+import { ewcGameResultUsesPlayerEntrants } from '../../lib/ewcPredictions.js';
 import { formatLiquipediaPageTitle } from '../../lib/parseTournamentInput.js';
 import { normalizeTeamName } from '../../lib/render.js';
 import * as lpdb from '../lpdb.js';
@@ -439,18 +440,26 @@ export async function fetchEwcEventPlacements(event, players = [], { parse = par
 }
 
 // Fetch per-game weekly placements for a set of EWC game events. The player
-// list is fetched once and reused as a solo-game scoring fallback. Each event
-// is fetched sequentially so it stays inside the single serialized Liquipedia
-// request queue (never parallelize — see rate rules).
-export async function fetchEwcWeekGameResults(games) {
-  const playerData = await fetchEwcPlayerList().catch((error) => {
-    logger.warn(`[ewc] player list unavailable for solo-game scoring fallback: ${error.message}`);
-    return { players: [] };
-  });
+// list is fetched only when a solo event needs entrant-to-club mapping, then
+// reused for that batch. Events remain sequential inside the shared queue.
+export async function fetchEwcWeekGameResults(games, {
+  players = null,
+  fetchPlayers = fetchEwcPlayerList,
+  fetchPlacements = fetchEwcEventPlacements,
+} = {}) {
+  const events = games || [];
+  let resolvedPlayers = Array.isArray(players) ? players : [];
+  if (players == null && events.some((game) => ewcGameResultUsesPlayerEntrants(game?.game))) {
+    const playerData = await fetchPlayers().catch((error) => {
+      logger.warn(`[ewc] player list unavailable for solo-game scoring fallback: ${error.message}`);
+      return { players: [] };
+    });
+    resolvedPlayers = playerData.players || [];
+  }
   const results = [];
-  for (const game of games || []) {
+  for (const game of events) {
     try {
-      results.push(await fetchEwcEventPlacements(game, playerData.players || []));
+      results.push(await fetchPlacements(game, resolvedPlayers));
     } catch (error) {
       logger.warn(`[ewc] placements unavailable for ${game?.gameKey || game?.key || game?.game || 'event'}: ${error.message}`);
       results.push({

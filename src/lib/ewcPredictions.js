@@ -81,6 +81,12 @@ export const EWC_2026_OFFICIAL_EVENT_DATES = [
   { test: /fortnite|reload elite/i, start: '2026-08-19', end: '2026-08-22' },
 ];
 
+const EWC_PLAYER_ENTRY_GAME = /(?:\bea\s+sports\s+fc\b|\bfc\s+pro\b|\bstreet\s+fighter\b|\btekken\b|\bfatal\s+fury\b|\bfighter\s+games?\b|\b2xko\b|\bchess\b|\bteamfight\s+tactics\b|\btft\b|\btrackmania\b)/i;
+
+export function ewcGameResultUsesPlayerEntrants(gameName) {
+  return EWC_PLAYER_ENTRY_GAME.test(String(gameName || ''));
+}
+
 export function normalizeClubName(name) {
   return String(name ?? '')
     .replace(/[\u200b-\u200f\ufeff]/g, '')

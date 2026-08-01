@@ -41,9 +41,9 @@ import { logger } from '../lib/logger.js';
 import {
   effectiveEwcWeekStatus,
   dueEwcGamesForResults,
-  evaluateEwcGameResultCompleteness,
   evaluateEwcSeasonScoringReadiness,
   evaluateEwcWeekScoringReadiness,
+  ewcGameResultUsesPlayerEntrants,
   ewcPlacementCoveredRanks,
   ewcPredictionScoreAfter,
   mergeEwcGameResults,
@@ -598,9 +598,9 @@ async function processWeek(client, round, hooks = {}) {
         }),
       })));
       const fetchedAt = nowSec();
-      // Solo-game standings name players, not clubs. Reuse the same official player list the
-      // prize-table path uses so this fallback grades on clubs too. Fetched at most once per
-      // pass, and only when a fallback is actually needed (the page is cached and queued).
+      // Prefer final standings already synced from official feeds. Liquipedia is
+      // only a fallback for unresolved events, and its global player list is
+      // needed only when a solo event must map entrants back to their clubs.
       let ewcPlayers = null;
       const ewcPlayerList = async () => {
         if (ewcPlayers) return ewcPlayers;
@@ -612,21 +612,28 @@ async function processWeek(client, round, hooks = {}) {
           });
         return ewcPlayers;
       };
-      const fetched = await Promise.all((await fetchEwcWeekGameResults(resolvedCandidates)).map(async (result) => {
-        const game = resolvedCandidates.find((candidate) => candidate.key === result.gameKey);
-        if (!game || evaluateEwcGameResultCompleteness(result).ready || fetchedAt < Number(game.endAt || 0)) {
-          return { ...result, fetchedAt };
+      const fetched = [];
+      const unresolvedCandidates = [];
+      for (const game of resolvedCandidates) {
+        if (fetchedAt < Number(game.endAt || 0)) {
+          unresolvedCandidates.push(game);
+          continue;
         }
+        const players = ewcGameResultUsesPlayerEntrants(game.game) ? await ewcPlayerList() : [];
         const placements = await trackedEwcGamePlacements(game.game, {
           guildId: round.guild_id,
           eventUrl: game.eventUrl,
           eventName: game.event,
-          players: await ewcPlayerList(),
+          players,
         });
-        if (!placements.length) return { ...result, fetchedAt };
+        if (!placements.length) {
+          unresolvedCandidates.push(game);
+          continue;
+        }
         logger.info(`[ewc-predictions] used final tracked standings for ${round.guild_id}/${round.week_key}/${game.game}`);
-        return {
-          ...result,
+        fetched.push({
+          ...game,
+          gameKey: game.key,
           placements,
           evidence: {
             kind: 'tracked-final-standings',
@@ -635,8 +642,12 @@ async function processWeek(client, round, hooks = {}) {
           },
           resultSource: 'tracked-final-standings',
           fetchedAt,
-        };
-      }));
+        });
+      }
+      if (unresolvedCandidates.length) {
+        const fallbackResults = await fetchEwcWeekGameResults(unresolvedCandidates, { players: ewcPlayers });
+        fetched.push(...fallbackResults.map((result) => ({ ...result, fetchedAt })));
+      }
       results = mergeEwcGameResults(results, fetched);
     }
   }

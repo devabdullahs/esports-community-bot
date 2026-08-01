@@ -57,7 +57,7 @@ test('rate state migrates the old two-field format conservatively', () => {
   });
 });
 
-test('rate state ignores a new-format record when any timestamp is invalid', () => {
+test('rate state applies a cold-start pacing timestamp when a record is invalid', () => {
   const fileSystem = createMemoryFileSystem({
     '/state/liquipedia.json': JSON.stringify({
       lastRequestAt: 12_345,
@@ -70,19 +70,19 @@ test('rate state ignores a new-format record when any timestamp is invalid', () 
   store.loadRateState();
 
   assert.deepEqual(store.rateState, {
-    lastRequestAt: 0,
-    lastParseAt: 0,
+    lastRequestAt: 10_000,
+    lastParseAt: 10_000,
     blockedUntil: 0,
     loaded: true,
   });
 });
 
-test('rate state treats missing and corrupt files as a first run', () => {
+test('rate state paces missing and corrupt first runs without weakening loaded state', () => {
   const missing = createStore(createMemoryFileSystem());
   missing.loadRateState();
   assert.deepEqual(missing.rateState, {
-    lastRequestAt: 0,
-    lastParseAt: 0,
+    lastRequestAt: 10_000,
+    lastParseAt: 10_000,
     blockedUntil: 0,
     loaded: true,
   });
@@ -90,8 +90,8 @@ test('rate state treats missing and corrupt files as a first run', () => {
   const corrupt = createStore(createMemoryFileSystem({ '/state/liquipedia.json': '{not json' }));
   corrupt.loadRateState();
   assert.deepEqual(corrupt.rateState, {
-    lastRequestAt: 0,
-    lastParseAt: 0,
+    lastRequestAt: 10_000,
+    lastParseAt: 10_000,
     blockedUntil: 0,
     loaded: true,
   });
