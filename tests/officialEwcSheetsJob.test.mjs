@@ -9,6 +9,7 @@ const {
   deriveOfficialOverwatchSeriesResult,
   findOfficialMatch,
   normalizedOfficialPair,
+  officialScheduleAliases,
   officialWorkbookToken,
   OFFICIAL_PARSER_VERSION,
   resolveOfficialTournament,
@@ -264,5 +265,68 @@ test('an official duplicate folds back onto the stable provider match identity',
       scheduledAt: officialTime,
     })?.id,
     1,
+  );
+});
+
+test('same-time provider aliases form one official schedule occurrence', () => {
+  const liquipediaTime = 1_785_000_000;
+  const matches = [
+    {
+      id: 1,
+      external_id: 'overwatch:event:bracket:22:weibo gaming vs twisted minds',
+      team_a: 'Weibo Gaming',
+      team_b: 'Twisted Minds',
+      scheduled_at: liquipediaTime,
+    },
+    {
+      id: 2,
+      external_id: 'overwatch:event/playoffs:bracket:22:weibo gaming vs twisted minds',
+      team_a: 'Twisted Minds',
+      team_b: 'Weibo Gaming',
+      scheduled_at: liquipediaTime,
+    },
+    {
+      id: 3,
+      external_id: 'official:existing-duplicate',
+      team_a: 'Weibo Gaming',
+      team_b: 'Twisted Minds',
+      scheduled_at: liquipediaTime - 3_600,
+    },
+  ];
+  const update = {
+    teamA: 'Weibo Gaming',
+    teamB: 'Twisted Minds',
+    scheduledAt: liquipediaTime - 3_600,
+  };
+
+  assert.deepEqual(officialScheduleAliases(matches, update).map((match) => match.id), [1, 2]);
+  assert.equal(findOfficialMatch(matches, update)?.id, 1);
+});
+
+test('different-time provider rows remain ambiguous rematches', () => {
+  const matches = [
+    {
+      id: 1,
+      external_id: 'overwatch:event:bracket:22:alpha vs bravo',
+      team_a: 'Alpha',
+      team_b: 'Bravo',
+      scheduled_at: 1_785_000_000,
+    },
+    {
+      id: 2,
+      external_id: 'overwatch:event:bracket:29:alpha vs bravo',
+      team_a: 'Alpha',
+      team_b: 'Bravo',
+      scheduled_at: 1_785_010_800,
+    },
+  ];
+
+  assert.deepEqual(
+    officialScheduleAliases(matches, {
+      teamA: 'Alpha',
+      teamB: 'Bravo',
+      scheduledAt: 1_785_020_000,
+    }),
+    [],
   );
 });
