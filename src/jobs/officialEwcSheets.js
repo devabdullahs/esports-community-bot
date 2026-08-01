@@ -26,12 +26,13 @@ const ATTRIBUTION = '© Esports Foundation 2026. All rights reserved.';
 const DETAIL_SOURCE = 'internal-normalized';
 // Bump whenever the workbook parsers change WHAT they extract, so already-seen workbooks
 // are re-read once with the new parser instead of waiting for the next unrelated edit.
-export const OFFICIAL_PARSER_VERSION = 2;
+export const OFFICIAL_PARSER_VERSION = 3;
 
 let running = false;
 let client = null;
 let lastScanSummary = null;
 let fastPollWorkbooks = [];
+let fastPollCursor = 0;
 let cachedTournaments = [];
 
 // The change token is compared BEFORE the workbook is read, so a parser that learns to
@@ -156,16 +157,65 @@ function matchDetailsBase(kind) {
   return { version: 1, kind, patch: null, casters: [], attribution: ATTRIBUTION };
 }
 
-async function applyMatchUpdate(tournament, matches, update, observedAt, ttlSeconds) {
-  const existing = findOfficialMatch(matches, update);
+export function deriveOfficialOverwatchSeriesResult(maps, match) {
+  if (!Array.isArray(maps) || !match) return null;
+  const matchTeamA = normalizeTeamName(match.team_a);
+  const matchTeamB = normalizeTeamName(match.team_b);
+  if (!matchTeamA || !matchTeamB || matchTeamA === matchTeamB) return null;
+
+  let scoreA = 0;
+  let scoreB = 0;
+  const completedMaps = new Set();
+  for (const map of maps) {
+    if (normalizedOfficialPair(map?.teamA, map?.teamB) !== normalizedOfficialPair(match.team_a, match.team_b)) {
+      continue;
+    }
+    const mapKey = `${normalized(map?.map)}|${normalized(map?.mode)}`;
+    if (mapKey === '|' || completedMaps.has(mapKey)) continue;
+
+    const mapTeamA = normalizeTeamName(map.teamA);
+    const mapTeamB = normalizeTeamName(map.teamB);
+    const winner = normalizeTeamName(map.winner);
+    let winningTeam = '';
+    if (winner === mapTeamA || winner === mapTeamB) {
+      winningTeam = winner;
+    } else if (Number.isFinite(map.scoreA) && Number.isFinite(map.scoreB) && map.scoreA !== map.scoreB) {
+      winningTeam = map.scoreA > map.scoreB ? mapTeamA : mapTeamB;
+    }
+    if (!winningTeam) continue;
+
+    completedMaps.add(mapKey);
+    if (winningTeam === matchTeamA) scoreA += 1;
+    else if (winningTeam === matchTeamB) scoreB += 1;
+  }
+
+  const round = normalized(maps.find((map) => map?.round)?.round);
+  const winsRequired = round.includes('grand final') ? 4 : 3;
+  if (Math.max(scoreA, scoreB) < winsRequired || scoreA === scoreB) return null;
+  return { scoreA, scoreB, status: 'finished' };
+}
+
+async function persistAuthoritativeMatchUpdate(tournament, existing, update, observedAt, ttlSeconds) {
   const stored = await upsertMatch(rowFromUpdate(tournament, existing, update), {
     authoritative: true,
     authorityTtlSeconds: ttlSeconds,
     observedAt,
     authorityFields: authorityFields(update),
   });
+  if (existing) Object.assign(existing, stored);
+  return stored;
+}
+
+async function applyMatchUpdate(tournament, matches, update, observedAt, ttlSeconds) {
+  const existing = findOfficialMatch(matches, update);
+  const stored = await persistAuthoritativeMatchUpdate(
+    tournament,
+    existing,
+    update,
+    observedAt,
+    ttlSeconds,
+  );
   if (!existing) matches.push(stored);
-  else Object.assign(existing, stored);
   return stored;
 }
 
@@ -179,7 +229,7 @@ function detailMatchByLabel(matches, label) {
   return candidates.length === 1 ? candidates[0] : null;
 }
 
-async function applyDetails(tournament, matches, parsed) {
+async function applyDetails(tournament, matches, parsed, observedAt, ttlSeconds) {
   for (const result of parsed.individualResults) {
     const match = findOfficialMatch(matches, result);
     if (!match) continue;
@@ -234,6 +284,23 @@ async function applyDetails(tournament, matches, parsed) {
         })),
       },
     });
+    if (tournament.game === 'overwatch') {
+      const result = deriveOfficialOverwatchSeriesResult(maps, match);
+      if (result) {
+        await persistAuthoritativeMatchUpdate(
+          tournament,
+          match,
+          {
+            teamA: match.team_a,
+            teamB: match.team_b,
+            scheduledAt: match.scheduled_at,
+            ...result,
+          },
+          observedAt,
+          ttlSeconds,
+        );
+      }
+    }
   }
 
   for (const game of parsed.battleRoyaleGames) {
@@ -268,7 +335,7 @@ async function refreshWorkbook(workbook, tournaments, sheetsClient, { forceRead 
   const tabs = await sheetsClient.readWorkbook(workbook.id);
   const parsed = parseOfficialWorkbook(workbook.name, tabs);
   if (!parsed) return { changed: false, reason: 'unsupported' };
-  const hash = contentHash(parsed);
+  const hash = contentHash({ parserVersion: OFFICIAL_PARSER_VERSION, parsed });
   if (previous?.content_hash === hash) {
     if (previous.modified_token !== modifiedToken) {
       await saveOfficialFeedState({
@@ -301,7 +368,7 @@ async function refreshWorkbook(workbook, tournaments, sheetsClient, { forceRead 
     });
   }
 
-  await applyDetails(tournament, matches, parsed);
+  await applyDetails(tournament, matches, parsed, observedAt, ttlSeconds);
   await upsertOfficialTournamentOverview(
     tournament.id,
     { ...parsed.overview, attribution: ATTRIBUTION },
@@ -325,16 +392,22 @@ async function selectFastPollWorkbooks(workbooks, tournaments) {
     const tournament = resolveOfficialTournament(tournaments, descriptor);
     if (!tournament) continue;
     const matches = await listMatchesForTournament(tournament.id);
+    const hasRunningMatch = matches.some((match) => match?.status === 'running');
     if (
       shouldFastPollOfficialWorkbook(matches, {
         nowSeconds,
         lookaheadSeconds: config.officialEwcSheets.liveLookaheadSeconds,
       })
     ) {
-      selected.push(workbook);
+      selected.push({ ...workbook, fastPollPriority: hasRunningMatch ? 0 : 1 });
     }
   }
-  return selected;
+  return selected.sort((left, right) => left.fastPollPriority - right.fastPollPriority);
+}
+
+function safeFeedFailure(error) {
+  const status = Number(error?.status);
+  return Number.isInteger(status) ? ` (${status})` : '';
 }
 
 export async function refreshOfficialEwcSheets() {
@@ -362,9 +435,9 @@ export async function refreshOfficialEwcSheets() {
             `[tournament-feed] refreshed ${result.game}: ${result.matches} matches, ${result.standings} standings rows`,
           );
         }
-      } catch {
+      } catch (error) {
         reasons.set('failed', (reasons.get('failed') || 0) + 1);
-        logger.warn('[tournament-feed] workbook refresh failed');
+        logger.warn(`[tournament-feed] workbook refresh failed${safeFeedFailure(error)}`);
       }
     }
     if (changed) logger.info(`[tournament-feed] refresh completed for ${changed} tournament(s)`);
@@ -381,6 +454,7 @@ export async function refreshOfficialEwcSheets() {
       lastScanSummary = summary;
     }
     fastPollWorkbooks = await selectFastPollWorkbooks(workbooks, tournaments);
+    fastPollCursor = 0;
   } catch {
     logger.warn('[tournament-feed] refresh failed');
   } finally {
@@ -399,24 +473,21 @@ export async function refreshLiveOfficialEwcSheets() {
     const tournaments = cachedTournaments.length
       ? cachedTournaments
       : await listActiveTournaments();
-    const currentMetadata = [];
-    for (const workbook of fastPollWorkbooks) {
-      try {
-        currentMetadata.push(workbook);
-        // Formula-backed cells can recalculate without changing Drive modifiedTime.
-        // Live polling must read the values; the content hash still suppresses writes.
-        const result = await refreshWorkbook(workbook, tournaments, client, { forceRead: true });
-        if (result.changed) {
-          logger.info(
-            `[tournament-feed] live refresh ${result.game}: ${result.matches} matches, ${result.standings} standings rows`,
-          );
-        }
-      } catch {
-        currentMetadata.push(workbook);
-        logger.warn('[tournament-feed] live workbook refresh failed');
+    if (fastPollCursor >= fastPollWorkbooks.length) fastPollCursor = 0;
+    const workbook = fastPollWorkbooks[fastPollCursor];
+    fastPollCursor = (fastPollCursor + 1) % fastPollWorkbooks.length;
+    try {
+      // Formula-backed cells can recalculate without changing Drive modifiedTime.
+      // Live polling must read the values; the content hash still suppresses writes.
+      const result = await refreshWorkbook(workbook, tournaments, client, { forceRead: true });
+      if (result.changed) {
+        logger.info(
+          `[tournament-feed] live refresh ${result.game}: ${result.matches} matches, ${result.standings} standings rows`,
+        );
       }
+    } catch (error) {
+      logger.warn(`[tournament-feed] live workbook refresh failed${safeFeedFailure(error)}`);
     }
-    fastPollWorkbooks = await selectFastPollWorkbooks(currentMetadata, tournaments);
   } catch {
     logger.warn('[tournament-feed] live refresh failed');
   } finally {

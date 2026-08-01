@@ -6,6 +6,9 @@ const MAX_RESPONSE_BYTES = 12 * 1024 * 1024;
 const MAX_WORKBOOKS = 60;
 const MAX_ROWS = 1_200;
 const MAX_COLUMNS = 84;
+const DEFAULT_RANGE_CACHE_TTL_MS = 15 * 60 * 1_000;
+const DEFAULT_REQUEST_GAP_MS = 150;
+const DEFAULT_RETRY_ATTEMPTS = 2;
 const GOOGLE_RESOURCE_ID = /^[A-Za-z0-9_-]{10,200}$/;
 const ALLOWED_TABS = new Set([
   'Tournament Information',
@@ -69,7 +72,11 @@ function requestError(status = null) {
 
 function readJson(response) {
   const status = safeStatus(response?.status);
-  if (!status || status < 200 || status >= 300) throw requestError(status);
+  if (!status || status < 200 || status >= 300) {
+    const error = requestError(status);
+    error.retryAfter = responseHeader(response?.headers, 'retry-after');
+    throw error;
+  }
 
   const length = Number(responseHeader(response.headers, 'content-length'));
   if (Number.isFinite(length) && length > MAX_RESPONSE_BYTES) {
@@ -120,28 +127,86 @@ function resourceId(value, label) {
 
 export function createOfficialSheetsClient(credentials, options = {}) {
   const auth = options.auth || authClient(credentials);
+  const sleep = options.sleep || ((milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds)));
+  const now = options.now || (() => Date.now());
+  const rangeCacheTtlMs = Math.max(1_000, Number(options.rangeCacheTtlMs) || DEFAULT_RANGE_CACHE_TTL_MS);
+  const requestGapMs = Number.isFinite(Number(options.requestGapMs))
+    ? Math.max(0, Number(options.requestGapMs))
+    : DEFAULT_REQUEST_GAP_MS;
+  const retryAttempts = Number.isFinite(Number(options.retryAttempts))
+    ? Math.max(0, Number(options.retryAttempts))
+    : DEFAULT_RETRY_ATTEMPTS;
+  const rangeCache = new Map();
+  let nextRequestAt = 0;
+  let backoffUntil = 0;
+
+  function retryDelay(error, attempt) {
+    const raw = String(error?.retryAfter || '').trim();
+    if (raw) {
+      const seconds = Number(raw);
+      if (Number.isFinite(seconds) && seconds >= 0) return Math.min(30_000, seconds * 1_000);
+      const retryAt = Date.parse(raw);
+      if (Number.isFinite(retryAt)) return Math.min(30_000, Math.max(0, retryAt - now()));
+    }
+    return Math.min(30_000, 1_000 * (2 ** attempt));
+  }
+
+  function retryable(error) {
+    return error?.status === 403 || error?.status === 429 || error?.status >= 500;
+  }
 
   async function fetchJson(url) {
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 20_000);
-    try {
-      return await readJson(
-        await auth.fetch(url, {
-          signal: controller.signal,
-          headers: { accept: 'application/json' },
-        }),
-      );
-    } catch (error) {
-      if (controller.signal.aborted) {
-        throw new Error('Official tournament feed request timed out.');
+    for (let attempt = 0; attempt <= retryAttempts; attempt += 1) {
+      const waitMs = Math.max(0, nextRequestAt - now(), backoffUntil - now());
+      if (waitMs) await sleep(waitMs);
+
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 20_000);
+      try {
+        const data = await readJson(
+          await auth.fetch(url, {
+            signal: controller.signal,
+            headers: { accept: 'application/json' },
+          }),
+        );
+        backoffUntil = 0;
+        return data;
+      } catch (error) {
+        let safeError = error;
+        if (controller.signal.aborted) {
+          safeError = new Error('Official tournament feed request timed out.');
+        } else if (!String(error?.message || '').startsWith('Official tournament feed ')) {
+          safeError = requestError(safeStatus(error?.status ?? error?.response?.status));
+        }
+        if (attempt >= retryAttempts || !retryable(safeError)) throw safeError;
+        backoffUntil = now() + retryDelay(safeError, attempt);
+      } finally {
+        clearTimeout(timer);
+        nextRequestAt = Math.max(nextRequestAt, now() + requestGapMs);
       }
-      if (String(error?.message || '').startsWith('Official tournament feed ')) {
-        throw error;
-      }
-      throw requestError(safeStatus(error?.status ?? error?.response?.status));
-    } finally {
-      clearTimeout(timer);
     }
+    throw requestError();
+  }
+
+  async function workbookRanges(workbookId) {
+    const cached = rangeCache.get(workbookId);
+    if (cached && cached.expiresAt > now()) return cached.sheets;
+
+    const metadataParams = new URLSearchParams({
+      fields: 'sheets(properties(sheetId,title,hidden,gridProperties(rowCount,columnCount)))',
+    });
+    const metadata = await fetchJson(`${SHEETS_BASE}/${workbookId}?${metadataParams}`);
+    const sheets = (metadata.sheets || [])
+      .map((sheet) => sheet?.properties)
+      .filter(
+        (properties) =>
+          properties &&
+          !properties.hidden &&
+          ALLOWED_TABS.has(String(properties.title || '')),
+      );
+    if (!sheets.length) throw new Error('Official tournament workbook has no supported visible tabs.');
+    rangeCache.set(workbookId, { sheets, expiresAt: now() + rangeCacheTtlMs });
+    return sheets;
   }
 
   return {
@@ -199,19 +264,7 @@ export function createOfficialSheetsClient(credentials, options = {}) {
     readWorkbook(workbookId) {
       return serialize(async () => {
         const safeWorkbookId = resourceId(workbookId, 'official feed workbook');
-        const metadataParams = new URLSearchParams({
-          fields: 'sheets(properties(sheetId,title,hidden,gridProperties(rowCount,columnCount)))',
-        });
-        const metadata = await fetchJson(`${SHEETS_BASE}/${safeWorkbookId}?${metadataParams}`);
-        const sheets = (metadata.sheets || [])
-          .map((sheet) => sheet?.properties)
-          .filter(
-            (properties) =>
-              properties &&
-              !properties.hidden &&
-              ALLOWED_TABS.has(String(properties.title || '')),
-          );
-        if (!sheets.length) throw new Error('Official tournament workbook has no supported visible tabs.');
+        const sheets = await workbookRanges(safeWorkbookId);
 
         const params = new URLSearchParams({
           majorDimension: 'ROWS',

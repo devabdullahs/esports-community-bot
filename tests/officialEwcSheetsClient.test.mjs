@@ -8,12 +8,41 @@ import {
 
 const folderId = 'folder_1234567890';
 
-function clientWith(fetch) {
+function clientWith(fetch, options = {}) {
   return createOfficialSheetsClient(
     { clientEmail: '', privateKey: '' },
-    { auth: { fetch } },
+    { auth: { fetch }, requestGapMs: 0, retryAttempts: 0, ...options },
   );
 }
+
+test('official sheets client reuses workbook ranges during live polling', async () => {
+  const requestedUrls = [];
+  const client = clientWith(async (url) => {
+    requestedUrls.push(url);
+    if (url.includes('/values:batchGet?')) {
+      return { status: 200, headers: {}, data: { valueRanges: [{ values: [['ok']] }] } };
+    }
+    return {
+      status: 200,
+      headers: {},
+      data: {
+        sheets: [{
+          properties: {
+            title: 'Match Results',
+            hidden: false,
+            gridProperties: { rowCount: 10, columnCount: 4 },
+          },
+        }],
+      },
+    };
+  });
+
+  await client.readWorkbook('workbook_1234567890');
+  await client.readWorkbook('workbook_1234567890');
+
+  assert.equal(requestedUrls.filter((url) => !url.includes('/values:batchGet?')).length, 1);
+  assert.equal(requestedUrls.filter((url) => url.includes('/values:batchGet?')).length, 2);
+});
 
 test('official sheets client reads Gaxios response data without using Fetch response methods', async () => {
   let requestedUrl = '';

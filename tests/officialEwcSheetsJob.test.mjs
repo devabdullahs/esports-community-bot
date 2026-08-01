@@ -6,6 +6,7 @@ process.env.DISCORD_CLIENT_ID = 'test-client';
 process.env.LOG_LEVEL = 'error';
 
 const {
+  deriveOfficialOverwatchSeriesResult,
   findOfficialMatch,
   normalizedOfficialPair,
   officialWorkbookToken,
@@ -14,6 +15,39 @@ const {
   shouldFastPollOfficialWorkbook,
   shouldReadOfficialWorkbook,
 } = await import('../src/jobs/officialEwcSheets.js');
+
+test('completed official Overwatch maps promote the series result without finishing partial series', () => {
+  const match = { team_a: 'Weibo Gaming', team_b: 'Spacestation Gaming' };
+  const maps = [
+    ['Nepal', 0, 2, 'Spacestation Gaming'],
+    ['Neon Junction', 3, 2, 'Weibo Gaming'],
+    ['Shambali Monastery', 2, 1, 'Weibo Gaming'],
+    ['New Junk City', 3, 1, 'Weibo Gaming'],
+  ].map(([map, scoreA, scoreB, winner]) => ({
+    teamA: 'Weibo Gaming',
+    teamB: 'Spacestation Gaming',
+    round: 'Playoffs - Quarterfinal 2',
+    map,
+    mode: 'Control',
+    scoreA,
+    scoreB,
+    winner,
+  }));
+
+  assert.deepEqual(deriveOfficialOverwatchSeriesResult(maps, match), {
+    scoreA: 3,
+    scoreB: 1,
+    status: 'finished',
+  });
+  assert.equal(deriveOfficialOverwatchSeriesResult(maps.slice(0, 3), match), null);
+  assert.equal(
+    deriveOfficialOverwatchSeriesResult(
+      maps.slice(0, 3).map((map) => ({ ...map, round: 'Grand Final' })),
+      match,
+    ),
+    null,
+  );
+});
 
 test('a parser version bump re-reads a workbook that has not been edited', () => {
   const modifiedTime = '2026-07-30T13:34:41.000Z';
