@@ -24,9 +24,9 @@ const MATCH_TIME_WINDOW_SECONDS = 15 * 60;
 const FAST_POLL_PAST_GRACE_SECONDS = 6 * 60 * 60;
 const ATTRIBUTION = '© Esports Foundation 2026. All rights reserved.';
 const DETAIL_SOURCE = 'internal-normalized';
-// Bump whenever the workbook parsers change WHAT they extract, so already-seen workbooks
-// are re-read once with the new parser instead of waiting for the next unrelated edit.
-export const OFFICIAL_PARSER_VERSION = 3;
+// Bump whenever parsing or reconciliation changes what gets persisted, so already-seen
+// workbooks are re-read once instead of waiting for the next unrelated edit.
+export const OFFICIAL_PARSER_VERSION = 4;
 
 let running = false;
 let client = null;
@@ -82,11 +82,27 @@ export function findOfficialMatch(matches, update) {
   );
   const scheduledAt = Number(update?.scheduledAt);
   if (Number.isFinite(scheduledAt) && scheduledAt > 0) {
+    const providerCandidates = candidates.filter(
+      (match) => !String(match.external_id || '').startsWith('official:'),
+    );
+    if (
+      providerCandidates.length === 1 &&
+      candidates.length > 1 &&
+      candidates.every(
+        (match) =>
+          match === providerCandidates[0] || String(match.external_id || '').startsWith('official:'),
+      )
+    ) {
+      return providerCandidates[0];
+    }
     const timed = candidates.filter((match) => {
       const stored = Number(match.scheduled_at);
       return Number.isFinite(stored) && Math.abs(stored - scheduledAt) <= MATCH_TIME_WINDOW_SECONDS;
     });
-    return timed.length === 1 ? timed[0] : null;
+    if (timed.length === 1) return timed[0];
+    // A single pairing is unambiguous even when the fallback provider published
+    // a substantially different time. Multiple same-pair matches still fail closed.
+    return candidates.length === 1 ? candidates[0] : null;
   }
   return candidates.length === 1 ? candidates[0] : null;
 }
