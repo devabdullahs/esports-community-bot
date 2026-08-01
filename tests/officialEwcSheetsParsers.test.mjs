@@ -7,10 +7,35 @@ const {
   parseOfficialWorkbook,
   parseSchedule,
   parseStandings,
+  parseTeamMapDetails,
   parseTournamentEnrichment,
   scheduleTimestamp,
   workbookDescriptor,
 } = await import('../src/services/officialEwcSheets/parsers.js');
+
+// Column layout copied from the official Overwatch workbook's MATCH INFO MASTER tab:
+// banner row, header row, then one row per map. Teams are written once per series and
+// the ban-order columns repeat the team header labels.
+const OVERWATCH_MATCH_LOG = [
+  ['', 'TEAMS', '', 'Map & Mode', '', '', 'Hero Bans', '', 'Ban Order', '', 'Scores', '', '', 'ATK/DEF', ''],
+  [
+    'Series', '(A) Home', '(B) Away', 'Mode', 'MapName', 'PickedBy', 'Home Ban', 'Away Ban',
+    '(A) Home', '(B) Away', 'Home Score', 'Away Score', 'Map Winner', 'Left (Blue/Def)', 'Right (Red/Atk)',
+  ],
+  [
+    'Group B - Opening Match #4', 'ZETA DIVISION', 'VARREL', 'Control', 'Busan', 'ZETA DIVISION',
+    'Bastion', 'Mauga', 1, 2, 2, 0, 'ZETA DIVISION', 'VARREL', 'ZETA DIVISION',
+  ],
+  [
+    'Group B - Opening Match #4', '', '', 'Escort', 'Shambali Monastery', 'VARREL',
+    'Kiriko', 'D.Va', 2, 1, 3, 0, 'ZETA DIVISION', 'VARREL', 'ZETA DIVISION',
+  ],
+  ['Group B - Opening Match #4', '', '', '', '', '', '', '', '', '', '', '', '', '', ''],
+  [
+    'Playoffs - Quarterfinal 4', 'Crazy Raccoon', 'T1', 'Control', 'Nepal', 'Crazy Raccoon',
+    'Mauga', 'Bastion', 1, 2, '', '', '', 'Crazy Raccoon', 'T1',
+  ],
+];
 
 test('workbook titles resolve only to supported public tournament identities', () => {
   assert.deepEqual(
@@ -169,6 +194,73 @@ test('tournament enrichment persists only explicitly public aggregate facts', ()
     JSON.stringify(parsed),
     /arrival|camera|admin|private person|participant|qualification|@example|google\.com/i,
   );
+});
+
+test('team map parser reads the official Overwatch match log with its per-map hero bans', () => {
+  const parsed = parseTeamMapDetails(OVERWATCH_MATCH_LOG);
+
+  assert.equal(parsed.length, 3);
+  assert.deepEqual(parsed[0], {
+    teamA: 'ZETA DIVISION',
+    teamB: 'VARREL',
+    round: 'Group B - Opening Match #4',
+    map: 'Busan',
+    mode: 'Control',
+    pickedBy: 'ZETA DIVISION',
+    scoreA: 2,
+    scoreB: 0,
+    winner: 'ZETA DIVISION',
+    banA: 'Bastion',
+    banB: 'Mauga',
+    banOrderA: 1,
+    banOrderB: 2,
+  });
+});
+
+test('team map parser carries a series team pair across its later map rows', () => {
+  const parsed = parseTeamMapDetails(OVERWATCH_MATCH_LOG);
+
+  // The sheet leaves the team cells blank on every map after the first.
+  assert.deepEqual(
+    { teamA: parsed[1].teamA, teamB: parsed[1].teamB, map: parsed[1].map },
+    { teamA: 'ZETA DIVISION', teamB: 'VARREL', map: 'Shambali Monastery' },
+  );
+  // A new series must not inherit the previous one's teams.
+  assert.equal(parsed[2].teamA, 'Crazy Raccoon');
+  assert.equal(parsed[2].round, 'Playoffs - Quarterfinal 4');
+});
+
+test('team map parser keeps a played map that has no result yet', () => {
+  const parsed = parseTeamMapDetails(OVERWATCH_MATCH_LOG);
+  const live = parsed[2];
+
+  assert.equal(live.scoreA, null);
+  assert.equal(live.scoreB, null);
+  assert.equal(live.winner, '');
+  assert.equal(live.banA, 'Mauga', 'bans are known before the map is scored');
+});
+
+test('team map parser still reads a plain one-row-per-map sheet', () => {
+  const parsed = parseTeamMapDetails([
+    ['Round', 'Team A', 'Team B', 'Map', 'Score A', 'Score B', 'Winner'],
+    ['Upper Final', 'Alpha', 'Bravo', 'Ascent', 13, 9, 'Alpha'],
+  ]);
+
+  assert.deepEqual(parsed, [{
+    teamA: 'Alpha',
+    teamB: 'Bravo',
+    round: 'Upper Final',
+    map: 'Ascent',
+    mode: '',
+    pickedBy: '',
+    scoreA: 13,
+    scoreB: 9,
+    winner: 'Alpha',
+    banA: '',
+    banB: '',
+    banOrderA: null,
+    banOrderB: null,
+  }]);
 });
 
 test('battle royale parser keeps per-game placement, elimination, and total points', () => {

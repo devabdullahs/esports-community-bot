@@ -61,6 +61,8 @@ type MatchDetailsCopy = {
   matchDetailsPlacement: string;
   matchDetailsKills: string;
   matchDetailsPoints: string;
+  matchDetailsMode: string;
+  matchDetailsPickedBy: string;
 };
 
 function score(value: number | null) {
@@ -383,17 +385,22 @@ function TeamSeries({
   details,
   teamA,
   teamB,
+  text,
 }: {
   details: TeamSeriesDetails;
   teamA: string;
   teamB: string;
+  text: MatchDetailsCopy;
 }) {
   return (
     <div className="flex flex-col gap-3">
       {details.maps.map((map, index) => (
         <section key={`${map.name}-${map.round}-${index}`} className="flex flex-col gap-3 rounded-xl border p-4">
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <h2 className="font-semibold" dir="auto">{map.name ?? `Map ${index + 1}`}</h2>
+            <div className="flex flex-wrap items-center gap-2">
+              <h2 className="font-semibold" dir="auto">{map.name ?? text.matchDetailsMap(index + 1)}</h2>
+              {map.mode ? <Badge variant="secondary">{map.mode}</Badge> : null}
+            </div>
             {map.round ? <span className="text-sm text-muted-foreground" dir="auto">{map.round}</span> : null}
           </div>
           <ScoreStrip
@@ -409,6 +416,26 @@ function TeamSeries({
                   : null
             }
           />
+          {map.bans ? (
+            <div className="grid gap-3 border-t pt-3 sm:grid-cols-2">
+              {([["a", teamA, map.bans.a], ["b", teamB, map.bans.b]] as const).map(([side, team, ban]) => (
+                <div key={side} className="flex flex-col gap-1">
+                  <span className="text-xs font-medium text-muted-foreground" dir="auto">
+                    {team} · {text.matchDetailsBans}
+                  </span>
+                  <span className="text-sm" dir="auto">
+                    {ban?.hero ?? "-"}
+                    {ban?.order != null ? ` #${ban.order}` : ""}
+                  </span>
+                </div>
+              ))}
+            </div>
+          ) : null}
+          {map.pickedBy ? (
+            <span className="text-xs text-muted-foreground" dir="auto">
+              {text.matchDetailsPickedBy}: {map.pickedBy}
+            </span>
+          ) : null}
         </section>
       ))}
     </div>
@@ -466,7 +493,7 @@ export function MatchDetailTabs({
     return <IndividualResult details={details} teamA={teamA} teamB={teamB} />;
   }
   if (details.kind === "teamSeries") {
-    return <TeamSeries details={details} teamA={teamA} teamB={teamB} />;
+    return <TeamSeries details={details} teamA={teamA} teamB={teamB} text={text} />;
   }
   if (details.kind === "battleRoyale") {
     return <BattleRoyaleGame details={details} locale={locale} />;
