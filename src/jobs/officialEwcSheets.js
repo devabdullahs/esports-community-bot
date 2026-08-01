@@ -191,16 +191,27 @@ export function deriveOfficialOverwatchSeriesResult(maps, match) {
 
   const round = normalized(maps.find((map) => map?.round)?.round);
   const winsRequired = round.includes('grand final') ? 4 : 3;
-  if (Math.max(scoreA, scoreB) < winsRequired || scoreA === scoreB) return null;
-  return { scoreA, scoreB, status: 'finished' };
+  if (completedMaps.size === 0) return null;
+  const status = Math.max(scoreA, scoreB) >= winsRequired && scoreA !== scoreB
+    ? 'finished'
+    : 'running';
+  return { scoreA, scoreB, status };
 }
 
-async function persistAuthoritativeMatchUpdate(tournament, existing, update, observedAt, ttlSeconds) {
+async function persistAuthoritativeMatchUpdate(
+  tournament,
+  existing,
+  update,
+  observedAt,
+  ttlSeconds,
+  { allowTerminalCorrection = false } = {},
+) {
   const stored = await upsertMatch(rowFromUpdate(tournament, existing, update), {
     authoritative: true,
     authorityTtlSeconds: ttlSeconds,
     observedAt,
     authorityFields: authorityFields(update),
+    allowTerminalCorrection,
   });
   if (existing) Object.assign(existing, stored);
   return stored;
@@ -298,6 +309,7 @@ async function applyDetails(tournament, matches, parsed, observedAt, ttlSeconds)
           },
           observedAt,
           ttlSeconds,
+          { allowTerminalCorrection: true },
         );
       }
     }

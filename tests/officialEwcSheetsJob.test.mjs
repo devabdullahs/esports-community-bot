@@ -16,7 +16,7 @@ const {
   shouldReadOfficialWorkbook,
 } = await import('../src/jobs/officialEwcSheets.js');
 
-test('completed official Overwatch maps promote the series result without finishing partial series', () => {
+test('official Overwatch maps publish the partial series score without summing map rounds', () => {
   const match = { team_a: 'Weibo Gaming', team_b: 'Spacestation Gaming' };
   const maps = [
     ['Nepal', 0, 2, 'Spacestation Gaming'],
@@ -39,14 +39,38 @@ test('completed official Overwatch maps promote the series result without finish
     scoreB: 1,
     status: 'finished',
   });
-  assert.equal(deriveOfficialOverwatchSeriesResult(maps.slice(0, 3), match), null);
-  assert.equal(
+  assert.deepEqual(deriveOfficialOverwatchSeriesResult(maps.slice(0, 3), match), {
+    scoreA: 2,
+    scoreB: 1,
+    status: 'running',
+  });
+  assert.deepEqual(
     deriveOfficialOverwatchSeriesResult(
       maps.slice(0, 3).map((map) => ({ ...map, round: 'Grand Final' })),
       match,
     ),
-    null,
+    { scoreA: 2, scoreB: 1, status: 'running' },
   );
+});
+
+test('official Overwatch corrections ignore unfinished maps and reopen a stale final', () => {
+  const match = { team_a: 'Twisted Minds', team_b: 'Geekay Esports' };
+  const maps = [
+    { map: 'Nepal', mode: 'Control', scoreA: 2, scoreB: 0, winner: 'Twisted Minds' },
+    { map: 'Neon Junction', mode: 'Hybrid', scoreA: 1, scoreB: 0, winner: 'Twisted Minds' },
+    { map: 'New Junk City', mode: 'Flashpoint', scoreA: null, scoreB: null, winner: null },
+  ].map((map) => ({
+    ...map,
+    teamA: 'Twisted Minds',
+    teamB: 'Geekay Esports',
+    round: 'Playoffs - Quarterfinal 1',
+  }));
+
+  assert.deepEqual(deriveOfficialOverwatchSeriesResult(maps, match), {
+    scoreA: 2,
+    scoreB: 0,
+    status: 'running',
+  });
 });
 
 test('a parser version bump re-reads a workbook that has not been edited', () => {
