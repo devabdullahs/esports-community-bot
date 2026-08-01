@@ -134,6 +134,7 @@ export function isLocalePreferencePath(pathname: string) {
 export type DateTimeValue = string | number | Date;
 
 const DATE_WITHOUT_ZONE_RE = /^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}(?::\d{2}(?:\.\d{1,6})?)?$/;
+export const DISPLAY_TIME_ZONE = "Asia/Riyadh";
 
 export function parseDateTime(value: DateTimeValue) {
   if (value instanceof Date) return value;
@@ -154,7 +155,13 @@ export function dateTimeIso(value: DateTimeValue) {
 export function formatDateTime(value: DateTimeValue, locale: Locale) {
   const date = parseDateTime(value);
   if (Number.isNaN(date.getTime())) return String(value);
-  return new Intl.DateTimeFormat(numberLocale(locale), { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }).format(date);
+  return new Intl.DateTimeFormat(numberLocale(locale), {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+    timeZone: DISPLAY_TIME_ZONE,
+  }).format(date);
 }
 
 // Match scheduled_at is stored as unix seconds (UTC). Render it with the same

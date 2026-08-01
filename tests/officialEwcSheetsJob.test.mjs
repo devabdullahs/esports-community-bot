@@ -12,6 +12,7 @@ const {
   OFFICIAL_PARSER_VERSION,
   resolveOfficialTournament,
   shouldFastPollOfficialWorkbook,
+  shouldReadOfficialWorkbook,
 } = await import('../src/jobs/officialEwcSheets.js');
 
 test('a parser version bump re-reads a workbook that has not been edited', () => {
@@ -25,6 +26,14 @@ test('a parser version bump re-reads a workbook that has not been edited', () =>
   assert.equal(officialWorkbookToken(modifiedTime), officialWorkbookToken(modifiedTime));
   // A real edit still invalidates it.
   assert.notEqual(officialWorkbookToken('2026-08-01T11:15:00.000Z'), officialWorkbookToken(modifiedTime));
+});
+
+test('live polling reads formula changes even when Drive modifiedTime is unchanged', () => {
+  const modifiedToken = officialWorkbookToken('2026-08-01T11:15:00.000Z');
+  const previous = { modified_token: modifiedToken };
+
+  assert.equal(shouldReadOfficialWorkbook(previous, modifiedToken), false);
+  assert.equal(shouldReadOfficialWorkbook(previous, modifiedToken, { forceRead: true }), true);
 });
 
 function tournament(overrides = {}) {

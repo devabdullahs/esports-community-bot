@@ -1,13 +1,22 @@
 import { describe, expect, test } from "vitest";
 import {
   directionForLocale,
+  formatDateTime,
   formatMatchCount,
   formatMatchStatusCount,
   formatResultCount,
+  formatUnixSeconds,
   isLocalePreferencePath,
   localizedPath,
   stripLocalePrefix,
 } from "@/lib/i18n";
+
+describe("date and time formatting", () => {
+  test("renders stored UTC times in the community's Riyadh timezone", () => {
+    expect(formatUnixSeconds(1_785_589_200, "en")).toBe("Aug 1, 4:00 PM");
+    expect(formatDateTime("2026-08-01 13:35:00", "en")).toBe("Aug 1, 4:35 PM");
+  });
+});
 
 describe("formatMatchCount", () => {
   test("formats English match counts", () => {
