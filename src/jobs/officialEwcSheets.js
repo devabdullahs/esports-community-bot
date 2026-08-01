@@ -26,7 +26,7 @@ const ATTRIBUTION = '© Esports Foundation 2026. All rights reserved.';
 const DETAIL_SOURCE = 'internal-normalized';
 // Bump whenever parsing or reconciliation changes what gets persisted, so already-seen
 // workbooks are re-read once instead of waiting for the next unrelated edit.
-export const OFFICIAL_PARSER_VERSION = 6;
+export const OFFICIAL_PARSER_VERSION = 7;
 
 let running = false;
 let client = null;
