@@ -34,6 +34,7 @@ export function createRateStateStore({
 
   function loadRateState({ force = false } = {}) {
     if (state.loaded && !force) return;
+    const firstLoad = !state.loaded;
     state.loaded = true;
     try {
       const data = JSON.parse(fileSystem.readFileSync(/* turbopackIgnore: true */ rateStatePath, 'utf8'));
@@ -46,8 +47,14 @@ export function createRateStateStore({
       state.lastParseAt = lastParseAt;
       state.blockedUntil = blockedUntil;
     } catch {
-      // Missing or invalid state leaves the current values intact. On the first
-      // run they are zero; after startup this avoids weakening in-memory pacing.
+      // A fresh container has no persisted state. Start its pacing clock now so
+      // deployment cannot send an immediate cold-start request. Later read
+      // failures preserve the in-memory timestamps instead of weakening them.
+      if (firstLoad) {
+        const startedAt = validTimestamp(now());
+        state.lastRequestAt = startedAt;
+        state.lastParseAt = startedAt;
+      }
     }
   }
 
