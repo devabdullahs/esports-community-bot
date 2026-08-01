@@ -11,6 +11,7 @@ const {
   officialWorkbookToken,
   OFFICIAL_PARSER_VERSION,
   resolveOfficialTournament,
+  shouldFastPollOfficialWorkbook,
 } = await import('../src/jobs/officialEwcSheets.js');
 
 test('a parser version bump re-reads a workbook that has not been edited', () => {
@@ -110,5 +111,33 @@ test('different-day rematches remain distinct', () => {
   assert.equal(
     findOfficialMatch(matches, { teamA: 'Bravo', teamB: 'Alpha', scheduledAt: 1_785_086_400 })?.id,
     2,
+  );
+});
+
+test('fast official polling targets only running or near-start scheduled matches', () => {
+  const nowSeconds = 1_785_000_000;
+  const options = { nowSeconds, lookaheadSeconds: 10_800 };
+
+  assert.equal(shouldFastPollOfficialWorkbook([{ status: 'running' }], options), true);
+  assert.equal(
+    shouldFastPollOfficialWorkbook(
+      [{ status: 'scheduled', scheduled_at: nowSeconds + 7_200 }],
+      options,
+    ),
+    true,
+  );
+  assert.equal(
+    shouldFastPollOfficialWorkbook(
+      [{ status: 'scheduled', scheduled_at: nowSeconds + 14_400 }],
+      options,
+    ),
+    false,
+  );
+  assert.equal(
+    shouldFastPollOfficialWorkbook(
+      [{ status: 'finished', scheduled_at: nowSeconds - 60 }],
+      options,
+    ),
+    false,
   );
 });

@@ -108,6 +108,14 @@ export const config = {
     clientEmail: get('EWC_OFFICIAL_SHEETS_CLIENT_EMAIL'),
     privateKey: get('EWC_OFFICIAL_SHEETS_PRIVATE_KEY'),
     pollMs: Math.max(30_000, Number(get('EWC_OFFICIAL_SHEETS_POLL_MS', 60_000)) || 60_000),
+    livePollMs: Math.max(
+      2_000,
+      Number(get('EWC_OFFICIAL_SHEETS_LIVE_POLL_MS', 2_000)) || 2_000,
+    ),
+    liveLookaheadSeconds: Math.max(
+      300,
+      Number(get('EWC_OFFICIAL_SHEETS_LIVE_LOOKAHEAD_SECONDS', 10_800)) || 10_800,
+    ),
     bootDelayMs: Math.max(0, Number(get('EWC_OFFICIAL_SHEETS_BOOT_DELAY_MS', 30_000)) || 0),
     authorityTtlSeconds: Math.max(
       120,
