@@ -128,14 +128,20 @@ function transitionAccepted(existing, incoming, incomingRow) {
   return true;
 }
 
-export function mergeMatchLifecycle(existingInput = {}, incomingInput = {}) {
+export function mergeMatchLifecycle(
+  existingInput = {},
+  incomingInput = {},
+  { allowTerminalCorrection = false } = {},
+) {
   const existing = normalizeMatchLifecycle(existingInput);
   const incoming = normalizeMatchLifecycle(incomingInput);
-  const accepted = transitionAccepted(existing, incoming, {
-    ...incomingInput,
-    previous_scheduled_at:
-      existingInput.scheduled_at ?? existingInput.scheduledAt ?? null,
-  });
+  const accepted = allowTerminalCorrection && incoming.status_known
+    ? true
+    : transitionAccepted(existing, incoming, {
+        ...incomingInput,
+        previous_scheduled_at:
+          existingInput.scheduled_at ?? existingInput.scheduledAt ?? null,
+      });
   const status = accepted ? incoming.status : existing.status || incoming.status || 'scheduled';
 
   if (status === 'cancelled' || status === 'postponed') {

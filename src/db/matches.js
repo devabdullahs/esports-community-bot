@@ -39,6 +39,7 @@ export async function upsertMatch(
     authorityTtlSeconds = 300,
     observedAt = Math.floor(Date.now() / 1000),
     authorityFields = null,
+    allowTerminalCorrection = false,
   } = {},
 ) {
   const merged = {
@@ -73,7 +74,7 @@ export async function upsertMatch(
     }
     const normalizedLifecycle = normalizeMatchLifecycle(merged);
     const lifecycle = existing
-      ? mergeMatchLifecycle(existing, merged)
+      ? mergeMatchLifecycle(existing, merged, { allowTerminalCorrection })
       : {
           ...normalizedLifecycle,
           status: normalizedLifecycle.status || 'scheduled',

@@ -85,6 +85,28 @@ test('finished and cancelled matches cannot regress to active states', () => {
   }
 });
 
+test('an explicit authoritative correction can reopen a falsely finished match', () => {
+  const merged = mergeMatchLifecycle(
+    {
+      status: 'finished',
+      winner_side: 'team1',
+      result_reason: 'normal',
+      scheduled_at: 100,
+    },
+    {
+      status: 'running',
+      score_a: 2,
+      score_b: 0,
+      scheduled_at: 100,
+    },
+    { allowTerminalCorrection: true },
+  );
+
+  assert.equal(merged.status, 'running');
+  assert.equal(merged.winner_side, null);
+  assert.equal(merged.status_accepted, true);
+});
+
 test('postponed matches reopen only with a changed schedule', () => {
   const existing = {
     status: 'postponed',
