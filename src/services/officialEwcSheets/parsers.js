@@ -113,6 +113,18 @@ function headerIndex(row, aliases) {
   return -1;
 }
 
+// Some official sheets repeat a header label for a second block of columns — the
+// Overwatch match log heads both its team columns and its ban-order columns "(A) Home"
+// / "(B) Away". Resolve the later block by searching past the column that separates them.
+function headerIndexAfter(row, aliases, afterIndex) {
+  if (!(afterIndex >= 0)) return -1;
+  const normalized = row.map(normalizedHeader);
+  for (let index = afterIndex + 1; index < normalized.length; index += 1) {
+    if (aliases.includes(normalized[index])) return index;
+  }
+  return -1;
+}
+
 function findHeader(rows, requiredGroups) {
   for (let index = 0; index < Math.min(rows.length, 80); index += 1) {
     const row = rows[index] || [];
@@ -355,34 +367,68 @@ export function parseTournamentEnrichment(tabs) {
   };
 }
 
+const TEAM_A_HEADERS = ['team 1', 'home team', 'team a', 'a home'];
+const TEAM_B_HEADERS = ['team 2', 'away team', 'team b', 'b away'];
+
 export function parseTeamMapDetails(rows) {
   const found = findHeader(rows, [
-    ['team 1', 'home team', 'team a'],
-    ['team 2', 'away team', 'team b'],
-    ['map', 'game'],
+    TEAM_A_HEADERS,
+    TEAM_B_HEADERS,
+    ['map', 'game', 'mapname', 'map name'],
   ]);
   if (!found) return [];
-  const teamAIndex = headerIndex(found.row, ['team 1', 'home team', 'team a']);
-  const teamBIndex = headerIndex(found.row, ['team 2', 'away team', 'team b']);
-  const mapIndex = headerIndex(found.row, ['map', 'game']);
+  const teamAIndex = headerIndex(found.row, TEAM_A_HEADERS);
+  const teamBIndex = headerIndex(found.row, TEAM_B_HEADERS);
+  const mapIndex = headerIndex(found.row, ['map', 'game', 'mapname', 'map name']);
   const scoreAIndex = headerIndex(found.row, ['team 1 score', 'home score', 'score a']);
   const scoreBIndex = headerIndex(found.row, ['team 2 score', 'away score', 'score b']);
-  const winnerIndex = headerIndex(found.row, ['winner']);
-  const roundIndex = headerIndex(found.row, ['round', 'match']);
+  const winnerIndex = headerIndex(found.row, ['winner', 'map winner']);
+  const roundIndex = headerIndex(found.row, ['round', 'match', 'series']);
+  const modeIndex = headerIndex(found.row, ['mode', 'map mode', 'map type']);
+  const pickedByIndex = headerIndex(found.row, ['pickedby', 'picked by', 'picked']);
+  const banAIndex = headerIndex(found.row, ['home ban', 'team a ban', 'ban a']);
+  const banBIndex = headerIndex(found.row, ['away ban', 'team b ban', 'ban b']);
+  // Ban-order columns repeat the team header labels, so they only resolve after the bans.
+  const banOrderAIndex = headerIndexAfter(found.row, TEAM_A_HEADERS, banBIndex);
+  const banOrderBIndex = headerIndexAfter(found.row, TEAM_B_HEADERS, banBIndex);
+
   const details = [];
+  // A series writes its teams once and leaves them blank on its later map rows, so carry
+  // the pair forward until a new series or a new pair starts.
+  let carriedRound = '';
+  let carriedTeamA = '';
+  let carriedTeamB = '';
   for (const row of rows.slice(found.index + 1)) {
-    const teamA = text(row[teamAIndex]);
-    const teamB = text(row[teamBIndex]);
+    const round = roundIndex >= 0 ? text(row[roundIndex]) : '';
+    if (round && round !== carriedRound) {
+      carriedRound = round;
+      carriedTeamA = '';
+      carriedTeamB = '';
+    }
+    const teamA = text(row[teamAIndex]) || carriedTeamA;
+    const teamB = text(row[teamBIndex]) || carriedTeamB;
+    carriedTeamA = teamA;
+    carriedTeamB = teamB;
+
     const map = text(row[mapIndex]);
     if (!teamA || !teamB || !map) continue;
+
+    const banA = banAIndex >= 0 ? text(row[banAIndex]) : '';
+    const banB = banBIndex >= 0 ? text(row[banBIndex]) : '';
     details.push({
       teamA,
       teamB,
-      round: roundIndex >= 0 ? text(row[roundIndex]) : '',
+      round: round || carriedRound,
       map,
+      mode: modeIndex >= 0 ? text(row[modeIndex]) : '',
+      pickedBy: pickedByIndex >= 0 ? text(row[pickedByIndex]) : '',
       scoreA: scoreAIndex >= 0 ? number(row[scoreAIndex]) : null,
       scoreB: scoreBIndex >= 0 ? number(row[scoreBIndex]) : null,
       winner: winnerIndex >= 0 ? text(row[winnerIndex]) : '',
+      banA,
+      banB,
+      banOrderA: banA && banOrderAIndex >= 0 ? number(row[banOrderAIndex]) : null,
+      banOrderB: banB && banOrderBIndex >= 0 ? number(row[banOrderBIndex]) : null,
     });
   }
   return details.slice(0, 1_000);

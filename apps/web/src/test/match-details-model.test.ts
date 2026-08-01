@@ -175,6 +175,38 @@ describe("match details page model", () => {
     expect(battleRoyale?.kind === "battleRoyale" ? battleRoyale.standings : []).toHaveLength(80);
   });
 
+  test("carries per-map mode, picker, and hero bans from the official match log", () => {
+    const details = toMatchDetailsViewModel({
+      version: 1,
+      kind: "teamSeries",
+      maps: [
+        {
+          name: "Busan",
+          mode: "Control",
+          round: "Group B - Opening Match #4",
+          pickedBy: "ZETA DIVISION",
+          scoreA: 2,
+          scoreB: 0,
+          winner: "ZETA DIVISION",
+          bans: { a: { hero: "Bastion", order: 1 }, b: { hero: "Mauga", order: 2 } },
+        },
+        { name: "Nepal", mode: "Control", scoreA: null, scoreB: null, bans: null },
+      ],
+    });
+
+    expect(details?.kind).toBe("teamSeries");
+    const maps = details?.kind === "teamSeries" ? details.maps : [];
+    expect(maps[0]).toMatchObject({
+      name: "Busan",
+      mode: "Control",
+      pickedBy: "ZETA DIVISION",
+      bans: { a: { hero: "Bastion", order: 1 }, b: { hero: "Mauga", order: 2 } },
+    });
+    // A map with no ban recorded stays renderable rather than dropping out.
+    expect(maps[1].bans).toBeNull();
+    expect(maps[1].pickedBy).toBeNull();
+  });
+
   test("accepts only the exact official attribution string", () => {
     expect(toMatchDetailsViewModel({
       version: 1,

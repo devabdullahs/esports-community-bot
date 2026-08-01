@@ -113,10 +113,14 @@ export type TeamSeriesDetails = DetailBase & {
   kind: "teamSeries";
   maps: {
     name: string | null;
+    mode: string | null;
     round: string | null;
+    pickedBy: string | null;
     scoreA: number | null;
     scoreB: number | null;
     winner: string | null;
+    // One ban per team per map in the official Overwatch log; null when the sheet has none.
+    bans: { a: DraftEntry | null; b: DraftEntry | null } | null;
   }[];
 };
 
@@ -353,13 +357,23 @@ export function toMatchDetailsViewModel(payload: unknown): MatchDetailsViewModel
     return {
       ...base,
       kind: "teamSeries",
-      maps: valueByLabel(raw.maps, (map) => ({
-        name: text(map.name),
-        round: text(map.round),
-        scoreA: number(map.scoreA),
-        scoreB: number(map.scoreB),
-        winner: text(map.winner),
-      })).slice(0, 30),
+      maps: valueByLabel(raw.maps, (map) => {
+        const bans = record(map.bans);
+        const banA = bans ? record(bans.a) : null;
+        const banB = bans ? record(bans.b) : null;
+        return {
+          name: text(map.name),
+          mode: text(map.mode),
+          round: text(map.round),
+          pickedBy: text(map.pickedBy),
+          scoreA: number(map.scoreA),
+          scoreB: number(map.scoreB),
+          winner: text(map.winner),
+          bans: banA || banB
+            ? { a: banA ? mapDraftEntry(banA) : null, b: banB ? mapDraftEntry(banB) : null }
+            : null,
+        };
+      }).slice(0, 30),
     };
   }
 

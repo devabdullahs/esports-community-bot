@@ -159,14 +159,16 @@ async function applyDetails(tournament, matches, parsed) {
     });
   }
 
-  const mapsByPair = new Map();
+  // Keyed by pair AND series: the same two teams can meet twice in one event (group
+  // stage then playoffs), and merging those would file one series' maps under the other.
+  const mapsBySeries = new Map();
   for (const map of parsed.mapDetails) {
-    const key = normalizedOfficialPair(map.teamA, map.teamB);
-    const bucket = mapsByPair.get(key) || [];
+    const key = `${normalizedOfficialPair(map.teamA, map.teamB)}#${normalized(map.round)}`;
+    const bucket = mapsBySeries.get(key) || [];
     bucket.push(map);
-    mapsByPair.set(key, bucket);
+    mapsBySeries.set(key, bucket);
   }
-  for (const maps of mapsByPair.values()) {
+  for (const maps of mapsBySeries.values()) {
     const first = maps[0];
     const match = findOfficialMatch(matches, first);
     if (!match) continue;
@@ -178,10 +180,18 @@ async function applyDetails(tournament, matches, parsed) {
         ...matchDetailsBase('teamSeries'),
         maps: maps.map((map) => ({
           name: map.map || null,
+          mode: map.mode || null,
           round: map.round || null,
+          pickedBy: map.pickedBy || null,
           scoreA: map.scoreA,
           scoreB: map.scoreB,
           winner: map.winner || null,
+          bans: map.banA || map.banB
+            ? {
+                a: map.banA ? { hero: map.banA, order: map.banOrderA ?? null } : null,
+                b: map.banB ? { hero: map.banB, order: map.banOrderB ?? null } : null,
+              }
+            : null,
         })),
       },
     });
