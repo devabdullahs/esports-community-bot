@@ -102,7 +102,7 @@ export function shouldFastPollOfficialWorkbook(
   const lookahead = Math.max(0, Number(lookaheadSeconds) || 0);
   return (matches || []).some((match) => {
     if (match?.status === 'running') return true;
-    if (match?.status !== 'scheduled') return false;
+    if (match?.status !== 'scheduled' && match?.status !== 'finished') return false;
     const scheduledAt = Number(match.scheduled_at);
     return (
       Number.isFinite(scheduledAt) &&
