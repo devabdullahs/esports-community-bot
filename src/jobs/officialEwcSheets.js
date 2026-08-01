@@ -23,10 +23,21 @@ import {
 const MATCH_TIME_WINDOW_SECONDS = 15 * 60;
 const ATTRIBUTION = '© Esports Foundation 2026. All rights reserved.';
 const DETAIL_SOURCE = 'internal-normalized';
+// Bump whenever the workbook parsers change WHAT they extract, so already-seen workbooks
+// are re-read once with the new parser instead of waiting for the next unrelated edit.
+export const OFFICIAL_PARSER_VERSION = 2;
 
 let running = false;
 let client = null;
 let lastScanSummary = null;
+
+// The change token is compared BEFORE the workbook is read, so a parser that learns to
+// extract something new stays dormant until an unrelated edit bumps modifiedTime. Folding
+// the parser version in re-reads every workbook exactly once after a parser change, then
+// returns to plain modified-time gating.
+export function officialWorkbookToken(modifiedTime, parserVersion = OFFICIAL_PARSER_VERSION) {
+  return contentHash(`v${parserVersion}:${String(modifiedTime || '')}`);
+}
 
 function normalized(value) {
   return String(value || '').trim().toLowerCase().replace(/[^a-z0-9]+/g, ' ');
@@ -220,7 +231,7 @@ async function refreshWorkbook(workbook, tournaments, sheetsClient) {
   if (!tournament) return { changed: false, reason: 'unresolved' };
 
   const workbookKey = opaqueWorkbookKey(workbook.id);
-  const modifiedToken = contentHash(String(workbook.modifiedTime || ''));
+  const modifiedToken = officialWorkbookToken(workbook.modifiedTime);
   const previous = await getOfficialFeedState(workbookKey);
   if (previous?.modified_token === modifiedToken) return { changed: false, reason: 'unchanged' };
 

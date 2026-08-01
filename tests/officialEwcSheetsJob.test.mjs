@@ -8,8 +8,23 @@ process.env.LOG_LEVEL = 'error';
 const {
   findOfficialMatch,
   normalizedOfficialPair,
+  officialWorkbookToken,
+  OFFICIAL_PARSER_VERSION,
   resolveOfficialTournament,
 } = await import('../src/jobs/officialEwcSheets.js');
+
+test('a parser version bump re-reads a workbook that has not been edited', () => {
+  const modifiedTime = '2026-07-30T13:34:41.000Z';
+  const stored = officialWorkbookToken(modifiedTime, OFFICIAL_PARSER_VERSION - 1);
+
+  // Same sheet, new parser: the token must differ or the workbook is skipped before it is
+  // ever read, leaving the improved parser dormant until an unrelated edit.
+  assert.notEqual(officialWorkbookToken(modifiedTime), stored);
+  // Same sheet, same parser: still skipped, so steady-state polling stays cheap.
+  assert.equal(officialWorkbookToken(modifiedTime), officialWorkbookToken(modifiedTime));
+  // A real edit still invalidates it.
+  assert.notEqual(officialWorkbookToken('2026-08-01T11:15:00.000Z'), officialWorkbookToken(modifiedTime));
+});
 
 function tournament(overrides = {}) {
   return {
