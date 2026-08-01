@@ -12,6 +12,7 @@ const {
   officialScheduleAliases,
   officialWorkbookToken,
   OFFICIAL_PARSER_VERSION,
+  prioritizeOfficialWorkbooks,
   resolveOfficialTournament,
   shouldFastPollOfficialWorkbook,
   shouldReadOfficialWorkbook,
@@ -215,6 +216,37 @@ test('fast official polling targets only running or near-start scheduled matches
     ),
     false,
   );
+});
+
+test('full official refresh prioritizes running and nearest upcoming tournaments', async () => {
+  const workbooks = [
+    { id: 'later', name: 'Overwatch 2' },
+    { id: 'unsupported', name: 'Internal planning' },
+    { id: 'running', name: 'CrossFire' },
+    { id: 'soon', name: 'Call of Duty Black Ops 7' },
+  ];
+  const tournaments = [
+    tournament({ id: 11, game: 'overwatch' }),
+    tournament({ id: 12, game: 'crossfire' }),
+    tournament({ id: 13, game: 'callofduty' }),
+  ];
+  const matches = new Map([
+    [11, [{ status: 'scheduled', scheduled_at: 1_785_020_000 }]],
+    [12, [{ status: 'running', scheduled_at: 1_785_000_000 }]],
+    [13, [{ status: 'scheduled', scheduled_at: 1_785_010_000 }]],
+  ]);
+
+  const ordered = await prioritizeOfficialWorkbooks(workbooks, tournaments, {
+    loadMatches: async (tournamentId) => matches.get(tournamentId) || [],
+    nowSeconds: 1_785_000_000,
+  });
+
+  assert.deepEqual(ordered.map((workbook) => workbook.id), [
+    'running',
+    'soon',
+    'later',
+    'unsupported',
+  ]);
 });
 
 test('a unique provider match accepts an official time outside the Liquipedia tolerance', () => {
