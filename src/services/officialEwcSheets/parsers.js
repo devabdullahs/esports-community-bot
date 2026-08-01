@@ -123,6 +123,14 @@ function headerIndex(row, aliases) {
   return -1;
 }
 
+function scheduleMatchHeaderIndex(row) {
+  const exact = headerIndex(row, SCHEDULE_MATCH_HEADERS);
+  if (exact >= 0) return exact;
+  return row.map(normalizedHeader).findIndex((header) =>
+    header.startsWith('match ') && !['match date', 'match day', 'match time', 'match status'].includes(header),
+  );
+}
+
 // Some official sheets repeat a header label for a second block of columns — the
 // Overwatch match log heads both its team columns and its ban-order columns "(A) Home"
 // / "(B) Away". Resolve the later block by searching past the column that separates them.
@@ -148,7 +156,7 @@ function findScheduleHeader(rows) {
     const row = rows[index] || [];
     const date = headerIndex(row, SCHEDULE_DATE_HEADERS);
     const time = headerIndex(row, SCHEDULE_TIME_HEADERS);
-    const match = headerIndex(row, SCHEDULE_MATCH_HEADERS);
+    const match = scheduleMatchHeaderIndex(row);
     const teamA = headerIndex(row, ['team a', 'player a', 'home player', 'home team', 'participant a']);
     const teamB = headerIndex(row, ['team b', 'player b', 'away player', 'away team', 'participant b']);
     if (date >= 0 && time >= 0 && (match >= 0 || (teamA >= 0 && teamB >= 0))) {
@@ -207,7 +215,7 @@ export function scheduleTimestamp(dateValue, timeValue, timezoneOffsetMinutes = 
 
 function splitPair(value) {
   const raw = text(value);
-  const parts = raw.split(/\s+(?:vs\.?|v)\s+/i).map(text).filter(Boolean);
+  const parts = raw.split(/\s+v(?:s\.?)?\s*/i).map(text).filter(Boolean);
   return parts.length === 2 ? parts : null;
 }
 
@@ -223,7 +231,7 @@ export function parseSchedule(rows, { game }) {
   if (!found) return [];
   const dateIndex = headerIndex(found.row, SCHEDULE_DATE_HEADERS);
   const timeIndex = headerIndex(found.row, SCHEDULE_TIME_HEADERS);
-  const matchIndex = headerIndex(found.row, SCHEDULE_MATCH_HEADERS);
+  const matchIndex = scheduleMatchHeaderIndex(found.row);
   const roundIndex = headerIndex(found.row, ['round', 'stage']);
   const bestOfIndex = headerIndex(found.row, ['best of x', 'best of', 'bo']);
   const teamAIndex = headerIndex(found.row, ['team a', 'player a', 'home player', 'home team']);
@@ -232,6 +240,7 @@ export function parseSchedule(rows, { game }) {
   const scoreBIndex = headerIndex(found.row, ['score b', 'away score', 'team b score', 'player b score']);
   const statusIndex = headerIndex(found.row, ['status', 'match status']);
   const result = [];
+  let activeDate = null;
 
   for (const row of rows.slice(found.index + 1)) {
     const matchLabel = matchIndex >= 0 ? text(row[matchIndex]) : '';
@@ -239,7 +248,8 @@ export function parseSchedule(rows, { game }) {
     let teamB = teamBIndex >= 0 ? text(row[teamBIndex]) : '';
     const pair = splitPair(matchLabel);
     if ((!teamA || !teamB) && pair) [teamA, teamB] = pair;
-    const scheduledAt = scheduleTimestamp(row[dateIndex], row[timeIndex]);
+    if (googleDateParts(row[dateIndex])) activeDate = row[dateIndex];
+    const scheduledAt = scheduleTimestamp(activeDate, row[timeIndex]);
     const round = roundIndex >= 0 ? text(row[roundIndex]) : '';
     const scoreA = scoreAIndex >= 0 ? number(row[scoreAIndex]) : null;
     const scoreB = scoreBIndex >= 0 ? number(row[scoreBIndex]) : null;
