@@ -42,6 +42,10 @@ export function officialWorkbookToken(modifiedTime, parserVersion = OFFICIAL_PAR
   return contentHash(`v${parserVersion}:${String(modifiedTime || '')}`);
 }
 
+export function shouldReadOfficialWorkbook(previous, modifiedToken, { forceRead = false } = {}) {
+  return forceRead || previous?.modified_token !== modifiedToken;
+}
+
 function normalized(value) {
   return String(value || '').trim().toLowerCase().replace(/[^a-z0-9]+/g, ' ');
 }
@@ -248,7 +252,7 @@ async function applyDetails(tournament, matches, parsed) {
   }
 }
 
-async function refreshWorkbook(workbook, tournaments, sheetsClient) {
+async function refreshWorkbook(workbook, tournaments, sheetsClient, { forceRead = false } = {}) {
   const descriptor = workbookDescriptor(workbook.name);
   if (!descriptor) return { changed: false, reason: 'unsupported' };
   const tournament = resolveOfficialTournament(tournaments, descriptor);
@@ -257,19 +261,23 @@ async function refreshWorkbook(workbook, tournaments, sheetsClient) {
   const workbookKey = opaqueWorkbookKey(workbook.id);
   const modifiedToken = officialWorkbookToken(workbook.modifiedTime);
   const previous = await getOfficialFeedState(workbookKey);
-  if (previous?.modified_token === modifiedToken) return { changed: false, reason: 'unchanged' };
+  if (!shouldReadOfficialWorkbook(previous, modifiedToken, { forceRead })) {
+    return { changed: false, reason: 'unchanged' };
+  }
 
   const tabs = await sheetsClient.readWorkbook(workbook.id);
   const parsed = parseOfficialWorkbook(workbook.name, tabs);
   if (!parsed) return { changed: false, reason: 'unsupported' };
   const hash = contentHash(parsed);
   if (previous?.content_hash === hash) {
-    await saveOfficialFeedState({
-      workbookKey,
-      modifiedToken,
-      hash,
-      observedAt: Math.floor(Date.now() / 1000),
-    });
+    if (previous.modified_token !== modifiedToken) {
+      await saveOfficialFeedState({
+        workbookKey,
+        modifiedToken,
+        hash,
+        observedAt: Math.floor(Date.now() / 1000),
+      });
+    }
     return { changed: false, reason: 'unchanged' };
   }
 
@@ -394,9 +402,10 @@ export async function refreshLiveOfficialEwcSheets() {
     const currentMetadata = [];
     for (const workbook of fastPollWorkbooks) {
       try {
-        const metadata = await client.getWorkbookMetadata(workbook.id);
-        currentMetadata.push(metadata);
-        const result = await refreshWorkbook(metadata, tournaments, client);
+        currentMetadata.push(workbook);
+        // Formula-backed cells can recalculate without changing Drive modifiedTime.
+        // Live polling must read the values; the content hash still suppresses writes.
+        const result = await refreshWorkbook(workbook, tournaments, client, { forceRead: true });
         if (result.changed) {
           logger.info(
             `[tournament-feed] live refresh ${result.game}: ${result.matches} matches, ${result.standings} standings rows`,
