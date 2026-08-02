@@ -60,13 +60,27 @@ const READINESS_MESSAGES = Object.freeze({
   [EWC_PREDICTION_READINESS.STALE_RESULT]: 'the stored result snapshot is older than the final scoring time',
 });
 
+// The readiness decision already carries WHEN the block clears and which game is
+// missing. Saying only that it is blocked sends an admin hunting through logs, so
+// surface the detail the check already computed.
+function readinessDetail(decision) {
+  const readyAt = Number(decision?.readyAt);
+  if (Number.isFinite(readyAt) && readyAt > 0) return ` Ready <t:${Math.floor(readyAt)}:R> (<t:${Math.floor(readyAt)}:f>).`;
+  const gameKey = decision?.gameKey;
+  return gameKey ? ` Waiting on \`${gameKey}\`.` : '';
+}
+
 export class EwcPredictionNotReadyError extends Error {
   constructor(decision) {
     const reasonCode = decision?.reason || EWC_PREDICTION_READINESS.INCOMPLETE_RESULT;
-    super(`Prediction scoring is not ready: ${READINESS_MESSAGES[reasonCode] || 'the round is incomplete'} (${reasonCode}).`);
+    super(
+      `Prediction scoring is not ready: ${READINESS_MESSAGES[reasonCode] || 'the round is incomplete'} (${reasonCode}).` +
+        readinessDetail(decision),
+    );
     this.name = 'EwcPredictionNotReadyError';
     this.code = 'EWC_PREDICTION_NOT_READY';
     this.reasonCode = reasonCode;
+    this.readyAt = Number.isFinite(Number(decision?.readyAt)) ? Number(decision.readyAt) : null;
   }
 }
 
