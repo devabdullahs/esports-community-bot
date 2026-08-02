@@ -15,6 +15,11 @@ const OFFICIAL_ATTRIBUTION = '© Esports Foundation 2026. All rights reserved.';
 const NEXT_UP_LOOKAHEAD_SECONDS = 3 * 60 * 60;
 const ALL_GAMES_LIVE_LIMIT = 12;
 const ALL_GAMES_UPCOMING_LIMIT = 12;
+// Absolute ceiling once fighting-game pairings are folded back in, and Discord's own
+// embed description limit. The card must always render: a schedule that grew is never
+// a reason to stop updating it.
+const ALL_GAMES_HARD_LIMIT = 20;
+const EMBED_DESCRIPTION_LIMIT = 4096;
 
 export const MATCH_STATUS = {
   running: { label: 'Live now', color: 0xed4245, order: 0 },
@@ -172,9 +177,14 @@ function isFightingGameMatch(m) {
   return normalizeGameSlug(m.game) === 'fighters';
 }
 
-function ensureFightingGameMatches(selected, rows, sortFn) {
+// Fighting-game pairings are deliberately allowed past the soft cap: one bracket is many
+// individual matches and dropping them hid the whole game. They still need a ceiling —
+// an undrawn SF6 bracket is dozens of "Time TBD" rows, and letting them all through grew
+// the status embed past Discord's description limit until the card stopped updating.
+function ensureFightingGameMatches(selected, rows, sortFn, { max = ALL_GAMES_HARD_LIMIT } = {}) {
   const selectedIds = new Set(selected.map(matchIdentity));
   for (const match of rows) {
+    if (selected.length >= max) break;
     if (!isFightingGameMatch(match) || selectedIds.has(matchIdentity(match))) continue;
     selected.push(match);
     selectedIds.add(matchIdentity(match));
@@ -220,11 +230,21 @@ export function selectAllGamesStatusMatches(
   };
 }
 
-export async function buildAllGamesStatusPayload(matches) {
-  const { live, upcoming } = selectAllGamesStatusMatches(matches);
-  const imageName = `match-card-all-status-${Date.now()}.png`;
-  const attachment = new AttachmentBuilder(await renderAllGamesStatusCard({ live, upcoming }), { name: imageName });
+// Trim whole lines until the description fits, rather than cutting mid-link and leaving
+// broken markdown. Discord rejects an over-long description outright, which silently
+// freezes the card, so this is the last line of defence.
+function clampDescription(lines, limit = EMBED_DESCRIPTION_LIMIT) {
+  const kept = [...lines];
+  let dropped = 0;
+  const render = () => (dropped ? [...kept, `-# +${dropped} more`] : kept).join('\n');
+  while (kept.length > 1 && render().length > limit) {
+    kept.pop();
+    dropped += 1;
+  }
+  return render().slice(0, limit);
+}
 
+export function buildAllGamesStatusDescription(live, upcoming) {
   const lines = [];
   if (live.length) {
     lines.push(
@@ -257,10 +277,18 @@ export async function buildAllGamesStatusPayload(matches) {
     lines.push('**Upcoming**', 'No upcoming matches found.');
   }
 
+  return clampDescription(lines);
+}
+
+export async function buildAllGamesStatusPayload(matches) {
+  const { live, upcoming } = selectAllGamesStatusMatches(matches);
+  const imageName = `match-card-all-status-${Date.now()}.png`;
+  const attachment = new AttachmentBuilder(await renderAllGamesStatusCard({ live, upcoming }), { name: imageName });
+
   const embed = new EmbedBuilder()
     .setColor(live.length ? MATCH_STATUS.running.color : MATCH_STATUS.scheduled.color)
     .setTitle('All Games Status')
-    .setDescription(lines.join('\n'))
+    .setDescription(buildAllGamesStatusDescription(live, upcoming))
     .setImage(`attachment://${imageName}`)
     .setTimestamp(new Date());
   if (matches.some(isLiquipediaMatch)) embed.setFooter({ text: LIQUIPEDIA_FOOTER });

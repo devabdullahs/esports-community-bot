@@ -17,6 +17,7 @@ import {
   saveWeeklyPredictionScore,
   setEwcSeasonStatus,
   setEwcWeekSnapshot,
+  setEwcWeekScoreAfter,
   setEwcWeekStatus,
   upsertEwcSeason,
   upsertEwcWeek,
@@ -176,6 +177,19 @@ export const data = new SlashCommandBuilder()
   )
   .addSubcommand((s) =>
     s
+      .setName('set_score_after')
+      .setDescription('Change only when a weekly round becomes scoreable.')
+      .addStringOption((o) => o.setName('week').setDescription('Week key, e.g. week-4').setRequired(true))
+      .addStringOption((o) =>
+        o
+          .setName('score_after')
+          .setDescription('YYYY-MM-DD HH:mm Riyadh time, Unix seconds, <t:...>, or "now"')
+          .setRequired(true),
+      )
+      .addStringOption((o) => o.setName('season').setDescription('Season year').setRequired(false)),
+  )
+  .addSubcommand((s) =>
+    s
       .setName('set_match_result')
       .setDescription('Pin a match result by hand so no provider can overwrite it.')
       .addIntegerOption((o) =>
@@ -300,6 +314,30 @@ export async function execute(interaction) {
   const seasonYear = season(interaction);
 
   try {
+    if (sub === 'set_score_after') {
+      const weekKey = interaction.options.getString('week', true);
+      const raw = interaction.options.getString('score_after', true).trim();
+      const round = await getEwcWeek(interaction.guildId, seasonYear, weekKey);
+      if (!round) throw new Error(`Week \`${weekKey}\` does not exist.`);
+      const scoreAfter = /^now$/i.test(raw) ? Math.floor(Date.now() / 1000) : parsePredictionDate(raw);
+      if (!scoreAfter) throw new Error('Could not read that time. Use `YYYY-MM-DD HH:mm` Riyadh time, Unix seconds, or `now`.');
+      const saved = await setEwcWeekScoreAfter(round.id, scoreAfter);
+      await interaction.reply({
+        content:
+          `✅ **${saved.label || saved.week_key}** becomes scoreable ${formatTimestamp(saved.score_after)}.\n` +
+          '-# Only the scoring gate moved; the round\'s open/close times and status are untouched.',
+        flags: MessageFlags.Ephemeral,
+      });
+      await sendAuditLog(interaction.client, interaction.guildId, {
+        action: 'EWC Prediction Score Delay Changed',
+        actor: interaction.user,
+        target: `${saved.season} ${saved.week_key}`,
+        details: `Score after: ${formatTimestamp(saved.score_after)}`,
+        color: 'config',
+      });
+      return;
+    }
+
     if (sub === 'set_match_result' || sub === 'clear_match_result') {
       const matchId = interaction.options.getInteger('match_id', true);
       await interaction.deferReply({ flags: MessageFlags.Ephemeral });

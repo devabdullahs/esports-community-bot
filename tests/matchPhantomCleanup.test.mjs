@@ -573,3 +573,21 @@ test('a pinned match result survives an authoritative provider write', async () 
   assert.equal(afterRelease.score_a, 3, 'provider owns it again');
   assert.equal(afterRelease.score_b, 2);
 });
+
+// The Overwatch bracket left "Winner of 2.1 vs Winner of 2.2" sitting at 'scheduled'
+// after the real final had been played under the drawn names. Nothing swept scheduled
+// rows, so the tournament page kept advertising a match that would never happen.
+test('retires an undrawn placeholder that is still scheduled past its start', async () => {
+  const t = await tournament('overwatch/EWC/2026-scheduled-placeholder');
+  const now = 1_785_000_000;
+  await sched(t.id, 'overwatch:ph:scheduled', 'Winner of 2.1', 'Winner of 2.2', now - 5 * 3600);
+  await sched(t.id, 'overwatch:real:final', 'ZETA DIVISION', 'Twisted Minds', now - 5 * 3600);
+  await sched(t.id, 'overwatch:ph:future', 'Winner of 3.1', 'Winner of 3.2', now + 3600);
+
+  const retired = await deleteStaleFinishedMatches(t.id, { nowSeconds: now });
+
+  assert.equal(retired, 1);
+  assert.equal(await getMatch('liquipedia', 'overwatch:ph:scheduled'), null);
+  assert.ok(await getMatch('liquipedia', 'overwatch:real:final'), 'a drawn match is never touched');
+  assert.ok(await getMatch('liquipedia', 'overwatch:ph:future'), 'an upcoming placeholder is still pending');
+});

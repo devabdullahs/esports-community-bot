@@ -87,3 +87,38 @@ test('sheet-backed match embeds include the required official attribution', () =
   );
   assert.equal(embed.toJSON().footer?.text, 'Data from Liquipedia — CC-BY-SA 3.0');
 });
+
+// The all-games status card stopped updating in production on 2026-07-31: every refresh
+// threw "Invalid string length" because the embed description had grown past Discord's
+// 4096-character limit. ensureFightingGameMatches appends EVERY fighting-game match
+// after the cap has already been applied, so an SF6 bracket full of "Time TBD"
+// placeholders pushed the card over the edge and froze it.
+test('an SF6 bracket cannot grow the all-games status past Discord limits', async () => {
+  const { buildAllGamesStatusDescription } = await import('../src/lib/matchMessage.js');
+  const matches = [
+    matchRow({ id: 1, game: 'counterstrike', team_a: 'Astralis', team_b: 'PaiN Gaming', status: 'running' }),
+    matchRow({ id: 2, game: 'callofduty', team_a: 'Group B - Game 9', team_b: 'Lobby', status: 'running' }),
+  ];
+  // A full double-elimination bracket of undrawn slots, exactly the shape that broke it.
+  for (let index = 0; index < 40; index += 1) {
+    matches.push(
+      fatalFuryRow({
+        id: 100 + index,
+        tournament_name: 'Street Fighter 6 - Esports World Cup 2026',
+        team_a: `Loser of UB ${index}.1`,
+        team_b: `Winner of LB ${index}.2`,
+        scheduled_at: null,
+      }),
+    );
+  }
+
+  const { live, upcoming } = selectAllGamesStatusMatches(matches);
+  assert.ok(upcoming.length <= 20, `upcoming stayed bounded, got ${upcoming.length}`);
+  assert.ok(upcoming.some((m) => m.game === 'fighters'), 'fighting-game matches are still surfaced');
+
+  const description = buildAllGamesStatusDescription(live, upcoming);
+  assert.ok(
+    description.length <= 4096,
+    `description must fit Discord's embed limit, got ${description.length}`,
+  );
+});
