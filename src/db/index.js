@@ -380,6 +380,10 @@ ensureColumns('matches', [
   // Special:Stream link). Present only while the match is being streamed.
   ['stream_platform', 'TEXT'],
   ['stream_url', 'TEXT'],
+  // Operator-pinned result. While set, every writer — including the authoritative
+  // official feed — leaves score/status alone, so a hand-entered result survives.
+  ['result_locked_at', 'TEXT'],
+  ['result_locked_by', 'TEXT'],
 ]);
 migrateMatchLifecycleSchema();
 
