@@ -2,6 +2,7 @@ import Link from "next/link";
 import { ExternalLinkIcon, RadioIcon, TvIcon, UsersIcon } from "lucide-react";
 import { MatchReminderButton } from "@/components/tournaments/match-reminder-button";
 import { GameIcon, SourceIcon } from "@/components/tournaments/competition-icons";
+import { PlatformIcon } from "@/components/platform-icon";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import type { MatchPageModel } from "@/lib/match-details";
@@ -13,6 +14,17 @@ import {
   shouldShowOutcomeLabel,
 } from "@/lib/match-lifecycle";
 import { sourceLabel } from "@/lib/tournament-directory";
+
+const PLATFORM_LABELS: Record<string, string> = {
+  twitch: "Twitch",
+  kick: "Kick",
+  youtube: "YouTube",
+  soop: "SOOP",
+};
+
+function platformLabel(platform: string) {
+  return PLATFORM_LABELS[platform.toLowerCase()] ?? platform;
+}
 
 function TeamLogo({ name, url }: { name: string; url: string | null }) {
   if (!url) {
@@ -160,7 +172,9 @@ export function MatchHeader({
                 size="sm"
               >
                 <UsersIcon aria-hidden="true" />
+                <PlatformIcon platform={stream.platform} className="size-3.5" />
                 <bdi>{stream.label}</bdi>
+                <span className="text-muted-foreground">· {platformLabel(stream.platform)}</span>
                 <ExternalLinkIcon aria-hidden="true" />
               </Button>
             )] : [])}

@@ -66,6 +66,31 @@ describe("match destination components", () => {
     expect(html).toContain('title="A very long Alpha team name"');
   });
 
+  test("labels co-stream buttons with their platform", () => {
+    const html = renderToStaticMarkup(
+      <MatchHeader
+        model={matchModel({
+          status: "running",
+          stream: { platform: "twitch", url: null },
+          coStreams: [{
+            platform: "kick",
+            handle: "brain",
+            label: "Brain",
+            url: "https://kick.com/brain",
+          }],
+        })}
+        locale="en"
+        gameTitle="Valorant"
+        reminderState={{ signedIn: false, reminderMatchIds: [] }}
+        callbackPath="/matches/42"
+      />,
+    );
+
+    expect(html).toContain("Brain");
+    expect(html).toContain("Kick");
+    expect(html).toContain('href="https://kick.com/brain"');
+  });
+
   test("renders localized Arabic Dota details with shadcn accordions and named tables", () => {
     const details: DotaDetails = {
       kind: "dota2",

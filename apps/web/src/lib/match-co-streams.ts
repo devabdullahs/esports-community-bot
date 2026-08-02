@@ -19,6 +19,9 @@ type Chan = {
   scope: "game" | "team" | "match" | "ewc";
   teamKey: string | null;
   matchExternalId: string | null;
+  creatorKey?: string | null;
+  isDefault?: boolean;
+  sortOrder?: number;
 };
 
 // Pure: does this channel apply to a given match? game/ewc apply to every match
@@ -28,6 +31,42 @@ export function coStreamApplies(c: Chan, ctx: { matchExternalId?: string; teamKe
   return c.scope === "game" || c.scope === "ewc"
     || (c.scope === "team" && c.teamKey != null && ctx.teamKeys.has(c.teamKey))
     || (c.scope === "match" && c.matchExternalId != null && c.matchExternalId === ctx.matchExternalId);
+}
+
+function creatorKey(channel: Pick<Chan, "creatorKey" | "label" | "handle" | "platform">): string {
+  const configured = channel.creatorKey?.trim().toLowerCase();
+  if (configured) return configured;
+  const label = channel.label.trim().toLowerCase();
+  return label || `${channel.platform}:${channel.handle.trim().toLowerCase()}`;
+}
+
+function preferredChannel(current: Chan, candidate: Chan): Chan {
+  if (Boolean(candidate.isDefault) !== Boolean(current.isDefault)) {
+    return candidate.isDefault ? candidate : current;
+  }
+  const currentOrder = current.sortOrder ?? Number.MAX_SAFE_INTEGER;
+  const candidateOrder = candidate.sortOrder ?? Number.MAX_SAFE_INTEGER;
+  return candidateOrder < currentOrder ? candidate : current;
+}
+
+// Keep the public match strip compact: one live link per configured co-streamer,
+// preferring the platform marked as the default in admin settings. Legacy rows
+// without a default still get one deterministic fallback channel.
+export function selectDefaultCoStreams(channels: Chan[]): Chan[] {
+  const byPlatform = new Map<string, Chan>();
+  for (const channel of channels) {
+    const key = `${channel.platform}:${channel.handle.toLowerCase()}`;
+    const current = byPlatform.get(key);
+    byPlatform.set(key, current ? preferredChannel(current, channel) : channel);
+  }
+
+  const byCreator = new Map<string, Chan>();
+  for (const channel of byPlatform.values()) {
+    const key = creatorKey(channel);
+    const current = byCreator.get(key);
+    byCreator.set(key, current ? preferredChannel(current, channel) : channel);
+  }
+  return [...byCreator.values()];
 }
 
 const norm = normalizeTeamName as unknown as (s: string | null) => string;
@@ -59,15 +98,17 @@ export async function liveCoStreamsByMatch(
   });
   for (const m of running) {
     const teamKeys = new Set([norm(m.team_a), norm(m.team_b)].filter(Boolean));
-    const seen = new Set<string>();
-    const links: MatchCoStream[] = [];
+    const candidates: Chan[] = [];
     for (const c of live) {
       if (!coStreamApplies(c, { matchExternalId: m.external_id, teamKeys })) continue;
-      const key = `${c.platform}:${c.handle}`;
-      if (seen.has(key)) continue;
-      seen.add(key);
-      links.push({ platform: c.platform, handle: c.handle, label: c.label, url: c.url });
+      candidates.push(c);
     }
+    const links = selectDefaultCoStreams(candidates).map((c) => ({
+      platform: c.platform,
+      handle: c.handle,
+      label: c.label,
+      url: c.url,
+    }));
     if (links.length) out.set(m.id, links);
   }
   return out;
