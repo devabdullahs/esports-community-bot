@@ -128,6 +128,7 @@ test('schedule parser rejects formulas and preserves same-pair rematches as sepa
 test('schedule parser accepts the official Overwatch layout and carries merged day dates', () => {
   const parsed = parseSchedule([
     ['', 'Tournament Day #', '', 'Date', 'Week', 'Stream', 'Best of X', 'Start Time', '', '', '', '', '', 'Round', 'Match\n\nCamera left          vs          Camera right', 'Comment'],
+    ['', '', '', '', '', '', '', '- PUBLIC-\n- CEST-', '- PUBLIC-\n- AST -'],
     ['', 5, 46236, 46236, 'MS1', 'Stream A', 'Bo5', '12:00', '', '', '', '', '', 'Playoffs - Semifinal 1', 'ZETA DIVISION vs. T1'],
     ['', '', 46236, '', 'MS1', 'Stream A', 'Bo5', '13:45', '', '', '', '', '', 'Playoffs - Semifinal 2', 'Weibo Gaming vs.Twisted Minds'],
     ['', '', 46236, '', 'MS1', 'Stream A', 'Bo5', '15:45', '', '', '', '', '', 'Playoffs - 3rd place', 'Loser of UB 2.1 vs. Loser of UB 2.2'],
@@ -142,22 +143,22 @@ test('schedule parser accepts the official Overwatch layout and carries merged d
     {
       teamA: 'ZETA DIVISION',
       teamB: 'T1',
-      scheduledAt: Math.floor(Date.parse('2026-08-02T09:00:00.000Z') / 1000),
+      scheduledAt: Math.floor(Date.parse('2026-08-02T10:00:00.000Z') / 1000),
     },
     {
       teamA: 'Weibo Gaming',
       teamB: 'Twisted Minds',
-      scheduledAt: Math.floor(Date.parse('2026-08-02T10:45:00.000Z') / 1000),
+      scheduledAt: Math.floor(Date.parse('2026-08-02T11:45:00.000Z') / 1000),
     },
     {
       teamA: 'Loser of UB 2.1',
       teamB: 'Loser of UB 2.2',
-      scheduledAt: Math.floor(Date.parse('2026-08-02T12:45:00.000Z') / 1000),
+      scheduledAt: Math.floor(Date.parse('2026-08-02T13:45:00.000Z') / 1000),
     },
     {
       teamA: 'Winner of 2.1',
       teamB: 'Winner of 2.2',
-      scheduledAt: Math.floor(Date.parse('2026-08-02T14:30:00.000Z') / 1000),
+      scheduledAt: Math.floor(Date.parse('2026-08-02T15:30:00.000Z') / 1000),
     },
   ]);
 });
