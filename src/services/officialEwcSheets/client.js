@@ -261,10 +261,19 @@ export function createOfficialSheetsClient(credentials, options = {}) {
       });
     },
 
-    readWorkbook(workbookId) {
+    readWorkbook(workbookId, { tabTitles = null } = {}) {
       return serialize(async () => {
         const safeWorkbookId = resourceId(workbookId, 'official feed workbook');
-        const sheets = await workbookRanges(safeWorkbookId);
+        const availableSheets = await workbookRanges(safeWorkbookId);
+        const requestedTitles = Array.isArray(tabTitles)
+          ? new Set(tabTitles.map((title) => String(title || '').trim()).filter(Boolean))
+          : null;
+        const sheets = requestedTitles
+          ? availableSheets.filter((sheet) => requestedTitles.has(String(sheet.title || '')))
+          : availableSheets;
+        if (!sheets.length) {
+          throw new Error('Official tournament workbook has no requested visible tabs.');
+        }
 
         const params = new URLSearchParams({
           majorDimension: 'ROWS',
