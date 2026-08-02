@@ -26,7 +26,7 @@ const ATTRIBUTION = '© Esports Foundation 2026. All rights reserved.';
 const DETAIL_SOURCE = 'internal-normalized';
 // Bump whenever parsing or reconciliation changes what gets persisted, so already-seen
 // workbooks are re-read once instead of waiting for the next unrelated edit.
-export const OFFICIAL_PARSER_VERSION = 9;
+export const OFFICIAL_PARSER_VERSION = 10;
 
 let running = false;
 let client = null;
@@ -154,16 +154,43 @@ function publicExternalId(tournament, update) {
   return `official:${createHash('sha256').update(logical).digest('hex').slice(0, 32)}`;
 }
 
-function rowFromUpdate(tournament, existing, update) {
+export function officialTeamLogo(matches, existing, team) {
+  const target = normalizeTeamName(team);
+  if (!target) return null;
+  const counts = new Map();
+  for (const match of matches || []) {
+    if (existing?.id != null && match?.id === existing.id) continue;
+    const candidates = [];
+    if (normalizeTeamName(match?.team_a) === target) candidates.push(match.logo_a);
+    if (normalizeTeamName(match?.team_b) === target) candidates.push(match.logo_b);
+    for (const logo of candidates) {
+      const value = String(logo || '').trim();
+      if (value) counts.set(value, (counts.get(value) || 0) + 1);
+    }
+  }
+  const canonical = [...counts.entries()].sort(
+    ([leftLogo, leftCount], [rightLogo, rightCount]) =>
+      rightCount - leftCount || leftLogo.localeCompare(rightLogo),
+  )[0]?.[0];
+  if (canonical) return canonical;
+
+  if (normalizeTeamName(existing?.team_a) === target) return existing.logo_a || null;
+  if (normalizeTeamName(existing?.team_b) === target) return existing.logo_b || null;
+  return null;
+}
+
+function rowFromUpdate(tournament, existing, update, matches) {
+  const teamA = update.teamA || existing?.team_a || 'TBD';
+  const teamB = update.teamB || existing?.team_b || 'TBD';
   return {
     tournament_id: tournament.id,
     source: existing?.source || tournament.source,
     external_id: existing?.external_id || publicExternalId(tournament, update),
-    name: update.name || existing?.name || `${update.teamA} vs ${update.teamB}`,
-    team_a: update.teamA || existing?.team_a || 'TBD',
-    team_b: update.teamB || existing?.team_b || 'TBD',
-    logo_a: existing?.logo_a || null,
-    logo_b: existing?.logo_b || null,
+    name: update.name || existing?.name || `${teamA} vs ${teamB}`,
+    team_a: teamA,
+    team_b: teamB,
+    logo_a: officialTeamLogo(matches, existing, teamA),
+    logo_b: officialTeamLogo(matches, existing, teamB),
     score_a: update.scoreA ?? existing?.score_a ?? null,
     score_b: update.scoreB ?? existing?.score_b ?? null,
     status: update.status || existing?.status || 'scheduled',
@@ -272,11 +299,12 @@ async function persistAuthoritativeMatchUpdate(
   tournament,
   existing,
   update,
+  matches,
   observedAt,
   ttlSeconds,
   { allowTerminalCorrection = false, authorityFieldsOverride = null } = {},
 ) {
-  const stored = await upsertMatch(rowFromUpdate(tournament, existing, update), {
+  const stored = await upsertMatch(rowFromUpdate(tournament, existing, update, matches), {
     authoritative: true,
     authorityTtlSeconds: ttlSeconds,
     observedAt,
@@ -296,6 +324,7 @@ async function applyMatchUpdate(tournament, matches, update, observedAt, ttlSeco
     tournament,
     existing,
     update,
+    matches,
     observedAt,
     ttlSeconds,
   );
@@ -310,6 +339,7 @@ async function applyMatchUpdate(tournament, matches, update, observedAt, ttlSeco
         teamB: alias.team_b,
         scheduledAt: update.scheduledAt,
       },
+      matches,
       observedAt,
       ttlSeconds,
       { authorityFieldsOverride: ['scheduled_at'] },
@@ -395,6 +425,7 @@ async function applyDetails(tournament, matches, parsed, observedAt, ttlSeconds)
             scheduledAt: match.scheduled_at,
             ...result,
           },
+          matches,
           observedAt,
           ttlSeconds,
           { allowTerminalCorrection: true },

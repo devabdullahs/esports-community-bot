@@ -9,6 +9,7 @@ const {
   deriveOfficialOverwatchSeriesResult,
   findOfficialMatch,
   normalizedOfficialPair,
+  officialTeamLogo,
   officialScheduleAliases,
   officialWorkbookToken,
   OFFICIAL_PARSER_VERSION,
@@ -94,6 +95,26 @@ test('live polling reads formula changes even when Drive modifiedTime is unchang
 
   assert.equal(shouldReadOfficialWorkbook(previous, modifiedToken), false);
   assert.equal(shouldReadOfficialWorkbook(previous, modifiedToken, { forceRead: true }), true);
+});
+
+test('official logo reconciliation uses the canonical logo for each team, not row position', () => {
+  const weiboLogo = 'https://liquipedia.net/commons/images/Weibo_allmode.png';
+  const twistedLogo = 'https://liquipedia.net/commons/images/Twisted_Minds_2023_allmode.png';
+  const existing = {
+    id: 3,
+    team_a: 'Weibo Gaming',
+    logo_a: twistedLogo,
+    team_b: 'Twisted Minds',
+    logo_b: weiboLogo,
+  };
+  const peers = [
+    { id: 1, team_a: 'Weibo Gaming', logo_a: weiboLogo, team_b: 'Team Liquid', logo_b: 'liquid' },
+    { id: 2, team_a: 'Twisted Minds', logo_a: twistedLogo, team_b: 'Geekay Esports', logo_b: 'geekay' },
+    existing,
+  ];
+
+  assert.equal(officialTeamLogo(peers, existing, 'Weibo Gaming'), weiboLogo);
+  assert.equal(officialTeamLogo(peers, existing, 'Twisted Minds'), twistedLogo);
 });
 
 function tournament(overrides = {}) {
