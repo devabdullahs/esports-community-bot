@@ -13,6 +13,7 @@ const {
   maxAbsentRunSeconds,
   shouldRetireAbsentMatch,
   shouldWatchMatch,
+  stopMatch,
   stopAll,
   transitionType,
 } = await import('../src/jobs/pollingManager.js');
@@ -72,6 +73,17 @@ test('armMatch can delay the first poll for resumed live rows', (t) => {
 
   assert.equal(armMatch(match, { id: 1, source: 'startgg' }, { initialPollDelayMs: 60_000 }), true);
   assert.equal(activeCount(), 1);
+});
+
+test('stopMatch immediately retires a watcher when an authoritative feed finishes it', (t) => {
+  t.after(() => stopAll());
+  stopAll();
+
+  const match = startggMatch('sgg:104353064');
+  assert.equal(armMatch(match, { id: 1, source: 'startgg' }), true);
+  assert.equal(stopMatch(match.external_id), true);
+  assert.equal(activeCount(), 0);
+  assert.equal(stopMatch(match.external_id), false);
 });
 
 test('watchers admit only scheduled and running lifecycle states', (t) => {

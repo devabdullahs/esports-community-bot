@@ -127,6 +127,36 @@ test('a reasserted official series result repairs a stale fallback after its lea
   assert.equal(repaired.status, 'running');
 });
 
+test('a numeric fallback terminal result closes a provisional official live row', async () => {
+  const tournament = await createTournament('overwatch/EWC/official-result-terminal-fallback');
+  const observedAt = 1_785_000_000;
+  const official = matchRow(tournament.id, 'Match:official-result-terminal-fallback', {
+    team_a: 'Weibo Gaming',
+    team_b: 'Twisted Minds',
+    score_a: 2,
+    score_b: 2,
+    status: 'running',
+  });
+
+  await upsertMatch(official, {
+    authoritative: true,
+    observedAt,
+    authorityTtlSeconds: 300,
+    authorityFields: ['score_a', 'score_b', 'status', 'scheduled_at'],
+  });
+  await upsertMatch({
+    ...official,
+    score_a: 2,
+    score_b: 3,
+    status: 'finished',
+  }, { observedAt: observedAt + 60 });
+
+  const repaired = await getMatch('liquipedia', 'Match:official-result-terminal-fallback');
+  assert.equal(repaired.score_a, 2);
+  assert.equal(repaired.score_b, 3);
+  assert.equal(repaired.status, 'finished');
+});
+
 test('official match time remains authoritative after temporary fields expire', async () => {
   const tournament = await createTournament('valorant/EWC/official-time-authority');
   const observedAt = 1_785_000_000;

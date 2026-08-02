@@ -68,7 +68,17 @@ export async function upsertMatch(
         client: tx,
         now: observedAt,
       });
+      // An official live snapshot is provisional until it reaches a terminal
+      // score. Let a fallback provider close that currently-running row when it
+      // has a numeric result; the official schedule and any completed official
+      // result remain protected by the normal authority lease.
+      const allowTerminalFallback =
+        existing.status === 'running' &&
+        merged.status === 'finished' &&
+        merged.score_a != null &&
+        merged.score_b != null;
       for (const field of protectedFields || []) {
+        if (allowTerminalFallback && ['score_a', 'score_b', 'status'].includes(field)) continue;
         if (OFFICIAL_MATCH_FIELDS.includes(field)) merged[field] = existing[field];
       }
     }
@@ -580,6 +590,47 @@ export async function deleteResolvedDuplicateMatches() {
     for (const id of ids) await tx.run('DELETE FROM matches WHERE id = $1', [id]);
   });
   return ids.length;
+}
+
+// A provider can leave a scoreless finished bracket placeholder behind after
+// its source match is replaced. Keep recent unresolved rows for reconciliation,
+// but retire old Liquipedia rows so they do not remain in tournament history.
+export async function deleteStaleFinishedMatches(
+  tournamentId,
+  {
+    staleAfterSeconds = 4 * 3600,
+    nowSeconds = Math.floor(Date.now() / 1000),
+    client = null,
+  } = {},
+) {
+  const reader = client || { all };
+  const cutoff = Number(nowSeconds) - Math.max(0, Number(staleAfterSeconds) || 0);
+  const rows = await reader.all(
+    `SELECT m.id
+       FROM matches m
+      WHERE m.tournament_id = $1
+        AND m.source = 'liquipedia'
+        AND m.status = 'finished'
+        AND m.score_a IS NULL
+        AND m.score_b IS NULL
+        AND m.scheduled_at IS NOT NULL
+        AND m.scheduled_at < $2
+        AND NOT EXISTS (
+          SELECT 1
+            FROM official_match_authority oma
+           WHERE oma.match_id = m.id
+             AND oma.expires_at > $3
+        )`,
+    [tournamentId, cutoff, nowSeconds],
+  );
+  if (!rows.length) return 0;
+
+  const remove = async (tx) => {
+    for (const row of rows) await tx.run('DELETE FROM matches WHERE id = $1', [row.id]);
+  };
+  if (client) await remove(client);
+  else await transaction(remove);
+  return rows.length;
 }
 
 // Live widgets can use redirected short names before the stable match row resolves

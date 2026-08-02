@@ -15,6 +15,7 @@ const {
   OFFICIAL_PARSER_VERSION,
   prioritizeOfficialWorkbooks,
   resolveOfficialTournament,
+  shouldApplyOfficialOverwatchSeriesResult,
   shouldFastPollOfficialWorkbook,
   shouldReadOfficialWorkbook,
 } = await import('../src/jobs/officialEwcSheets.js');
@@ -98,6 +99,31 @@ test('official Overwatch series score follows map winners when round scores use 
     scoreB: 2,
     status: 'running',
   });
+});
+
+test('an incomplete official map snapshot cannot reopen a terminal match', () => {
+  assert.equal(
+    shouldApplyOfficialOverwatchSeriesResult(
+      { id: 19950405, status: 'finished', score_a: 3, score_b: 2 },
+      { scoreA: 2, scoreB: 2, status: 'running' },
+    ),
+    false,
+  );
+  assert.equal(
+    shouldApplyOfficialOverwatchSeriesResult(
+      { id: 19979689, status: 'scheduled', score_a: null, score_b: null },
+      { scoreA: 1, scoreB: 0, status: 'running' },
+    ),
+    true,
+  );
+  assert.equal(
+    shouldApplyOfficialOverwatchSeriesResult(
+      { id: 19950405, status: 'finished', score_a: 3, score_b: 2 },
+      { scoreA: 2, scoreB: 3, status: 'finished' },
+      { terminalMatchIds: new Set([19950405]) },
+    ),
+    false,
+  );
 });
 
 test('a parser version bump re-reads a workbook that has not been edited', () => {

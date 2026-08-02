@@ -133,6 +133,13 @@ export function stopTournament(tournamentId) {
   }
 }
 
+export function stopMatch(externalId) {
+  const key = String(externalId || '');
+  if (!key || !watchers.has(key)) return false;
+  clearWatcher(key);
+  return true;
+}
+
 // Schedule polling for a match: immediately if it has started, else at its start time.
 export function armMatch(match, tournament, { initialPollDelayMs = 0 } = {}) {
   if (!shouldWatchMatch(match)) return false;
