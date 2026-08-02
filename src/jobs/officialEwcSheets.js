@@ -419,7 +419,12 @@ async function applyDetails(tournament, matches, parsed, observedAt, ttlSeconds)
   }
 }
 
-async function refreshWorkbook(workbook, tournaments, sheetsClient, { forceRead = false } = {}) {
+async function refreshWorkbook(
+  workbook,
+  tournaments,
+  sheetsClient,
+  { forceRead = false, liveOnly = false } = {},
+) {
   const descriptor = workbookDescriptor(workbook.name);
   if (!descriptor) return { changed: false, reason: 'unsupported' };
   const tournament = resolveOfficialTournament(tournaments, descriptor);
@@ -432,7 +437,13 @@ async function refreshWorkbook(workbook, tournaments, sheetsClient, { forceRead 
     return { changed: false, reason: 'unchanged' };
   }
 
-  const tabs = await sheetsClient.readWorkbook(workbook.id);
+  const liveTabs = liveOnly && descriptor.game === 'overwatch'
+    ? ['Schedule', 'MATCH INFO MASTER']
+    : null;
+  const tabs = await sheetsClient.readWorkbook(
+    workbook.id,
+    liveTabs ? { tabTitles: liveTabs } : undefined,
+  );
   const parsed = parseOfficialWorkbook(workbook.name, tabs);
   if (!parsed) return { changed: false, reason: 'unsupported' };
   const hash = contentHash({ parserVersion: OFFICIAL_PARSER_VERSION, parsed });
@@ -451,16 +462,20 @@ async function refreshWorkbook(workbook, tournaments, sheetsClient, { forceRead 
   const observedAt = Math.floor(Date.now() / 1000);
   const ttlSeconds = config.officialEwcSheets.authorityTtlSeconds;
   const matches = await listMatchesForTournament(tournament.id);
-  for (const update of [...parsed.schedule, ...parsed.individualResults.map((result) => ({
-    ...result,
-    name: `${result.teamA} vs ${result.teamB}`,
-    status: 'finished',
-    scheduledAt: null,
-  }))]) {
+  const individualUpdates = liveOnly
+    ? []
+    : parsed.individualResults.map((result) => ({
+        ...result,
+        name: `${result.teamA} vs ${result.teamB}`,
+        status: 'finished',
+        scheduledAt: null,
+      }));
+  const updates = [...parsed.schedule, ...individualUpdates];
+  for (const update of updates) {
     await applyMatchUpdate(tournament, matches, update, observedAt, ttlSeconds);
   }
 
-  if (parsed.standings.some((section) => section.entries?.length >= 2)) {
+  if (!liveOnly && parsed.standings.some((section) => section.entries?.length >= 2)) {
     await replaceTournamentStandings(tournament.id, parsed.standings, {
       authoritative: true,
       observedAt,
@@ -469,11 +484,13 @@ async function refreshWorkbook(workbook, tournaments, sheetsClient, { forceRead 
   }
 
   await applyDetails(tournament, matches, parsed, observedAt, ttlSeconds);
-  await upsertOfficialTournamentOverview(
-    tournament.id,
-    { ...parsed.overview, attribution: ATTRIBUTION },
-    { observedAt, ttlSeconds },
-  );
+  if (!liveOnly) {
+    await upsertOfficialTournamentOverview(
+      tournament.id,
+      { ...parsed.overview, attribution: ATTRIBUTION },
+      { observedAt, ttlSeconds },
+    );
+  }
   await saveOfficialFeedState({ workbookKey, modifiedToken, hash, observedAt });
   return {
     changed: true,
@@ -580,7 +597,11 @@ export async function refreshLiveOfficialEwcSheets() {
     try {
       // Formula-backed cells can recalculate without changing Drive modifiedTime.
       // Live polling must read the values; the content hash still suppresses writes.
-      const result = await refreshWorkbook(workbook, tournaments, client, { forceRead: true });
+      const descriptor = workbookDescriptor(workbook.name);
+      const result = await refreshWorkbook(workbook, tournaments, client, {
+        forceRead: true,
+        liveOnly: descriptor?.game === 'overwatch',
+      });
       if (result.changed) {
         logger.info(
           `[tournament-feed] live refresh ${result.game}: ${result.matches} matches, ${result.standings} standings rows`,

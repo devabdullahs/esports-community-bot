@@ -44,6 +44,62 @@ test('official sheets client reuses workbook ranges during live polling', async 
   assert.equal(requestedUrls.filter((url) => url.includes('/values:batchGet?')).length, 2);
 });
 
+test('official sheets client can read only selected tabs for live polling', async () => {
+  const requestedUrls = [];
+  const client = clientWith(async (url) => {
+    requestedUrls.push(url);
+    if (url.includes('/values:batchGet?')) {
+      return {
+        status: 200,
+        headers: {},
+        data: { valueRanges: [{ values: [['schedule']] }, { values: [['details']] }] },
+      };
+    }
+    return {
+      status: 200,
+      headers: {},
+      data: {
+        sheets: [
+          {
+            properties: {
+              title: 'Schedule',
+              hidden: false,
+              gridProperties: { rowCount: 100, columnCount: 10 },
+            },
+          },
+          {
+            properties: {
+              title: 'Tournament Information',
+              hidden: false,
+              gridProperties: { rowCount: 1000, columnCount: 84 },
+            },
+          },
+          {
+            properties: {
+              title: 'MATCH INFO MASTER',
+              hidden: false,
+              gridProperties: { rowCount: 120, columnCount: 20 },
+            },
+          },
+        ],
+      },
+    };
+  });
+
+  const tabs = await client.readWorkbook('workbook_1234567890', {
+    tabTitles: ['Schedule', 'MATCH INFO MASTER'],
+  });
+
+  assert.deepEqual(tabs, {
+    Schedule: [['schedule']],
+    'MATCH INFO MASTER': [['details']],
+  });
+  const valuesUrl = requestedUrls.find((url) => url.includes('/values:batchGet?'));
+  const ranges = new URL(valuesUrl).searchParams.getAll('ranges');
+  assert.deepEqual(ranges, ["'Schedule'!A1:J100", "'MATCH INFO MASTER'!A1:T120"]);
+  assert.equal(ranges.some((range) => range.includes('Tournament Information')), false);
+});
+
 test('official sheets client reads Gaxios response data without using Fetch response methods', async () => {
   let requestedUrl = '';
   const client = clientWith(async (url) => {
