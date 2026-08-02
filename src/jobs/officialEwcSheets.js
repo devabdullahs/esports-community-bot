@@ -358,23 +358,32 @@ function detailMatchByLabel(matches, label) {
   return candidates.length === 1 ? candidates[0] : null;
 }
 
-async function applyDetails(tournament, matches, parsed, observedAt, ttlSeconds) {
+async function applyDetails(
+  tournament,
+  matches,
+  parsed,
+  observedAt,
+  ttlSeconds,
+  { persistDetails = true } = {},
+) {
   for (const result of parsed.individualResults) {
     const match = findOfficialMatch(matches, result);
     if (!match) continue;
-    await upsertMatchDetails({
-      matchId: match.id,
-      sourcePage: DETAIL_SOURCE,
-      game: tournament.game,
-      payload: {
-        ...matchDetailsBase('individual'),
-        round: result.round || null,
-        scoreA: result.scoreA,
-        scoreB: result.scoreB,
-        penaltyA: result.penaltyA,
-        penaltyB: result.penaltyB,
-      },
-    });
+    if (persistDetails) {
+      await upsertMatchDetails({
+        matchId: match.id,
+        sourcePage: DETAIL_SOURCE,
+        game: tournament.game,
+        payload: {
+          ...matchDetailsBase('individual'),
+          round: result.round || null,
+          scoreA: result.scoreA,
+          scoreB: result.scoreB,
+          penaltyA: result.penaltyA,
+          penaltyB: result.penaltyB,
+        },
+      });
+    }
   }
 
   // Keyed by pair AND series: the same two teams can meet twice in one event (group
@@ -390,29 +399,31 @@ async function applyDetails(tournament, matches, parsed, observedAt, ttlSeconds)
     const first = maps[0];
     const match = findOfficialMatch(matches, first);
     if (!match) continue;
-    await upsertMatchDetails({
-      matchId: match.id,
-      sourcePage: DETAIL_SOURCE,
-      game: tournament.game,
-      payload: {
-        ...matchDetailsBase('teamSeries'),
-        maps: maps.map((map) => ({
-          name: map.map || null,
-          mode: map.mode || null,
-          round: map.round || null,
-          pickedBy: map.pickedBy || null,
-          scoreA: map.scoreA,
-          scoreB: map.scoreB,
-          winner: map.winner || null,
-          bans: map.banA || map.banB
-            ? {
-                a: map.banA ? { hero: map.banA, order: map.banOrderA ?? null } : null,
-                b: map.banB ? { hero: map.banB, order: map.banOrderB ?? null } : null,
-              }
-            : null,
-        })),
-      },
-    });
+    if (persistDetails) {
+      await upsertMatchDetails({
+        matchId: match.id,
+        sourcePage: DETAIL_SOURCE,
+        game: tournament.game,
+        payload: {
+          ...matchDetailsBase('teamSeries'),
+          maps: maps.map((map) => ({
+            name: map.map || null,
+            mode: map.mode || null,
+            round: map.round || null,
+            pickedBy: map.pickedBy || null,
+            scoreA: map.scoreA,
+            scoreB: map.scoreB,
+            winner: map.winner || null,
+            bans: map.banA || map.banB
+              ? {
+                  a: map.banA ? { hero: map.banA, order: map.banOrderA ?? null } : null,
+                  b: map.banB ? { hero: map.banB, order: map.banOrderB ?? null } : null,
+                }
+              : null,
+          })),
+        },
+      });
+    }
     if (tournament.game === 'overwatch') {
       const result = deriveOfficialOverwatchSeriesResult(maps, match);
       if (result) {
@@ -437,16 +448,18 @@ async function applyDetails(tournament, matches, parsed, observedAt, ttlSeconds)
   for (const game of parsed.battleRoyaleGames) {
     const match = detailMatchByLabel(matches, game.label);
     if (!match) continue;
-    await upsertMatchDetails({
-      matchId: match.id,
-      sourcePage: DETAIL_SOURCE,
-      game: tournament.game,
-      payload: {
-        ...matchDetailsBase('battleRoyale'),
-        gameLabel: game.label,
-        standings: game.standings,
-      },
-    });
+    if (persistDetails) {
+      await upsertMatchDetails({
+        matchId: match.id,
+        sourcePage: DETAIL_SOURCE,
+        game: tournament.game,
+        payload: {
+          ...matchDetailsBase('battleRoyale'),
+          gameLabel: game.label,
+          standings: game.standings,
+        },
+      });
+    }
   }
 }
 
@@ -479,6 +492,23 @@ async function refreshWorkbook(
   if (!parsed) return { changed: false, reason: 'unsupported' };
   const hash = contentHash({ parserVersion: OFFICIAL_PARSER_VERSION, parsed });
   if (previous?.content_hash === hash) {
+    // Liquipedia is a fallback provider, so its result must not reclaim an
+    // unchanged official Overwatch series merely because the short authority
+    // lease expired between sheet polls. Reassert the derived series score
+    // without rewriting the already-persisted map payload.
+    const renewOverwatchAuthority = descriptor.game === 'overwatch' && parsed.mapDetails.length > 0;
+    if (renewOverwatchAuthority) {
+      const observedAt = Math.floor(Date.now() / 1000);
+      const matches = await listMatchesForTournament(tournament.id);
+      await applyDetails(
+        tournament,
+        matches,
+        parsed,
+        observedAt,
+        config.officialEwcSheets.authorityTtlSeconds,
+        { persistDetails: false },
+      );
+    }
     if (previous.modified_token !== modifiedToken) {
       await saveOfficialFeedState({
         workbookKey,
@@ -487,7 +517,13 @@ async function refreshWorkbook(
         observedAt: Math.floor(Date.now() / 1000),
       });
     }
-    return { changed: false, reason: 'unchanged' };
+    return {
+      changed: renewOverwatchAuthority,
+      reason: renewOverwatchAuthority ? 'authority-renewed' : 'unchanged',
+      game: descriptor.game,
+      matches: parsed.schedule.length + parsed.individualResults.length,
+      standings: parsed.standings.reduce((sum, section) => sum + section.entries.length, 0),
+    };
   }
 
   const observedAt = Math.floor(Date.now() / 1000);

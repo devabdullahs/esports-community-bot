@@ -76,6 +76,30 @@ test('official Overwatch corrections ignore unfinished maps and reopen a stale f
   });
 });
 
+test('official Overwatch series score follows map winners when round scores use the opposite orientation', () => {
+  const match = { team_a: 'Twisted Minds', team_b: 'Weibo Gaming' };
+  const maps = [
+    ['Nepal', 2, 1, 'Weibo Gaming'],
+    ['Route 66', 2, 1, 'Weibo Gaming'],
+    ['Neon Junction', 1, 3, 'Twisted Minds'],
+  ].map(([map, scoreA, scoreB, winner]) => ({
+    teamA: 'Twisted Minds',
+    teamB: 'Weibo Gaming',
+    round: 'Playoffs - Semifinal 2',
+    mode: map === 'Nepal' ? 'Control' : map === 'Route 66' ? 'Escort' : 'Hybrid',
+    map,
+    scoreA,
+    scoreB,
+    winner,
+  }));
+
+  assert.deepEqual(deriveOfficialOverwatchSeriesResult(maps, match), {
+    scoreA: 1,
+    scoreB: 2,
+    status: 'running',
+  });
+});
+
 test('a parser version bump re-reads a workbook that has not been edited', () => {
   const modifiedTime = '2026-07-30T13:34:41.000Z';
   const stored = officialWorkbookToken(modifiedTime, OFFICIAL_PARSER_VERSION - 1);

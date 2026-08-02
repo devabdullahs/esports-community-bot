@@ -92,6 +92,41 @@ test('fresh official match fields resist fallback overwrite and expired fields r
   assert.equal(publicRow.official_authoritative, 1);
 });
 
+test('a reasserted official series result repairs a stale fallback after its lease expires', async () => {
+  const tournament = await createTournament('overwatch/EWC/official-result-renewal');
+  const observedAt = 1_785_000_000;
+  const official = matchRow(tournament.id, 'Match:official-result-renewal', {
+    team_a: 'Twisted Minds',
+    team_b: 'Weibo Gaming',
+    score_a: 1,
+    score_b: 2,
+    status: 'running',
+  });
+  const fields = ['score_a', 'score_b', 'status'];
+
+  await upsertMatch(official, {
+    authoritative: true,
+    observedAt,
+    authorityTtlSeconds: 300,
+    authorityFields: fields,
+  });
+  await upsertMatch({ ...official, score_a: 0, score_b: 2 }, { observedAt: observedAt + 301 });
+  const stale = await getMatch('liquipedia', 'Match:official-result-renewal');
+  assert.equal(stale.score_a, 0);
+  assert.equal(stale.score_b, 2);
+
+  await upsertMatch(official, {
+    authoritative: true,
+    observedAt: observedAt + 302,
+    authorityTtlSeconds: 300,
+    authorityFields: fields,
+  });
+  const repaired = await getMatch('liquipedia', 'Match:official-result-renewal');
+  assert.equal(repaired.score_a, 1);
+  assert.equal(repaired.score_b, 2);
+  assert.equal(repaired.status, 'running');
+});
+
 test('official match time remains authoritative after temporary fields expire', async () => {
   const tournament = await createTournament('valorant/EWC/official-time-authority');
   const observedAt = 1_785_000_000;
