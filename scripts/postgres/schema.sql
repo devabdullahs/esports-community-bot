@@ -1347,3 +1347,12 @@ CREATE TABLE IF NOT EXISTS official_overview_authority (
   content_hash  TEXT NOT NULL
 );
 -- END MIGRATION 0005-official-ewc-sheets.sql
+
+-- BEGIN MIGRATION 0006-manual-match-result.sql
+-- An operator can pin a match result that no provider will publish correctly
+-- (a forfeit, an early stop, a sheet that keeps deriving the wrong series score).
+-- While the lock is set, every writer — including the authoritative official feed —
+-- leaves the result fields alone.
+ALTER TABLE matches ADD COLUMN IF NOT EXISTS result_locked_at TEXT;
+ALTER TABLE matches ADD COLUMN IF NOT EXISTS result_locked_by TEXT;
+-- END MIGRATION 0006-manual-match-result.sql

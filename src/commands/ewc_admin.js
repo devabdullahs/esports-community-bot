@@ -28,6 +28,9 @@ import {
   setEwcPredictionsMentionsLeaderboard,
 } from '../db/settings.js';
 import { updateEwcPredictionLeaderboard } from '../jobs/ewcPredictions.js';
+import { refreshGuild } from '../jobs/refresh.js';
+import { clearManualMatchResult, getMatchById, setManualMatchResult } from '../db/matches.js';
+import { getTournamentById } from '../db/tournaments.js';
 import { transaction } from '../db/client.js';
 import { sendAuditLog } from '../lib/auditLog.js';
 import {
@@ -173,6 +176,33 @@ export const data = new SlashCommandBuilder()
   )
   .addSubcommand((s) =>
     s
+      .setName('set_match_result')
+      .setDescription('Pin a match result by hand so no provider can overwrite it.')
+      .addIntegerOption((o) =>
+        o.setName('match_id').setDescription('Match id (the number in its /matches/... page URL)').setRequired(true),
+      )
+      .addIntegerOption((o) => o.setName('score_a').setDescription('Home/left team score').setRequired(true).setMinValue(0))
+      .addIntegerOption((o) => o.setName('score_b').setDescription('Away/right team score').setRequired(true).setMinValue(0))
+      .addStringOption((o) =>
+        o
+          .setName('status')
+          .setDescription('Defaults to finished')
+          .setRequired(false)
+          .addChoices(
+            { name: 'finished', value: 'finished' },
+            { name: 'cancelled', value: 'cancelled' },
+            { name: 'postponed', value: 'postponed' },
+          ),
+      ),
+  )
+  .addSubcommand((s) =>
+    s
+      .setName('clear_match_result')
+      .setDescription('Release a pinned match result so providers own it again.')
+      .addIntegerOption((o) => o.setName('match_id').setDescription('Match id').setRequired(true)),
+  )
+  .addSubcommand((s) =>
+    s
       .setName('delete_week')
       .setDescription('Permanently delete a prediction week and all its picks.')
       .addStringOption((o) => o.setName('week').setDescription('Week key, e.g. week-8').setRequired(true))
@@ -270,6 +300,60 @@ export async function execute(interaction) {
   const seasonYear = season(interaction);
 
   try {
+    if (sub === 'set_match_result' || sub === 'clear_match_result') {
+      const matchId = interaction.options.getInteger('match_id', true);
+      await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+      const existing = await getMatchById(matchId);
+      if (!existing) {
+        await interaction.editReply({ content: `❌ No match with id \`${matchId}\`.` });
+        return;
+      }
+      const tournament = await getTournamentById(existing.tournament_id);
+      if (tournament?.guild_id && tournament.guild_id !== interaction.guildId) {
+        await interaction.editReply({ content: '❌ That match belongs to another guild.' });
+        return;
+      }
+
+      if (sub === 'clear_match_result') {
+        const cleared = await clearManualMatchResult(matchId);
+        await refreshGuild(interaction.client, interaction.guildId);
+        await interaction.editReply({
+          content: `✅ Released the pinned result for **${cleared.team_a} vs ${cleared.team_b}**. Providers own it again.`,
+        });
+        await sendAuditLog(interaction.client, interaction.guildId, {
+          action: 'Match Result Unpinned',
+          actor: interaction.user,
+          target: `${cleared.team_a} vs ${cleared.team_b} (${matchId})`,
+          color: 'config',
+        });
+        return;
+      }
+
+      const scoreA = interaction.options.getInteger('score_a', true);
+      const scoreB = interaction.options.getInteger('score_b', true);
+      const status = interaction.options.getString('status') || 'finished';
+      const saved = await setManualMatchResult({
+        matchId,
+        scoreA,
+        scoreB,
+        status,
+        actorId: interaction.user.id,
+      });
+      await refreshGuild(interaction.client, interaction.guildId);
+      await interaction.editReply({
+        content:
+          `✅ Pinned **${saved.team_a} ${saved.score_a ?? '-'}-${saved.score_b ?? '-'} ${saved.team_b}** (\`${saved.status}\`).\n` +
+          '-# No provider can overwrite it. Run `/ewc_admin clear_match_result` to hand it back.',
+      });
+      await sendAuditLog(interaction.client, interaction.guildId, {
+        action: 'Match Result Pinned',
+        actor: interaction.user,
+        target: `${saved.team_a} ${saved.score_a}-${saved.score_b} ${saved.team_b} (${matchId})`,
+        color: 'config',
+      });
+      return;
+    }
+
     if (sub === 'set_channel') {
       const channel = interaction.options.getChannel('channel', true);
       const missing = missingBotChannelPermissions(interaction, channel, EMBED_BOARD_PERMISSIONS);

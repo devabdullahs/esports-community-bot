@@ -31,6 +31,10 @@ const OFFICIAL_MATCH_FIELDS = [
   'stream_url',
 ];
 
+// The result an operator pins by hand. Kept narrow on purpose: a lock freezes the
+// outcome, not the match's identity, so team names and stream links keep syncing.
+const MANUAL_RESULT_FIELDS = ['score_a', 'score_b', 'status', 'winner_side', 'result_reason'];
+
 export async function upsertMatch(
   row,
   {
@@ -63,6 +67,12 @@ export async function upsertMatch(
       'SELECT * FROM matches WHERE source = $1 AND external_id = $2',
       [merged.source, merged.external_id],
     );
+    // An operator-pinned result outranks every provider, including the official
+    // feed, which would otherwise re-derive and overwrite it on its next poll.
+    // Everything else about the row (names, logos, stream, schedule) still syncs.
+    if (existing?.result_locked_at) {
+      for (const field of MANUAL_RESULT_FIELDS) merged[field] = existing[field];
+    }
     if (existing && !authoritative) {
       const protectedFields = await getFreshMatchAuthority(existing.id, {
         client: tx,
@@ -91,12 +101,24 @@ export async function upsertMatch(
           status_accepted: true,
         };
     const accepted = !existing || lifecycle.status_accepted;
-    const scoreA = existing && !accepted
+    // A pinned result is decided before lifecycle merging gets a say, so no provider
+    // transition can talk the row back out of it.
+    const locked = Boolean(existing?.result_locked_at);
+    if (locked) {
+      lifecycle.status = existing.status;
+      lifecycle.winner_side = existing.winner_side;
+      lifecycle.result_reason = existing.result_reason;
+    }
+    const scoreA = locked
       ? existing.score_a
-      : merged.score_a ?? existing?.score_a ?? null;
-    const scoreB = existing && !accepted
+      : existing && !accepted
+        ? existing.score_a
+        : merged.score_a ?? existing?.score_a ?? null;
+    const scoreB = locked
       ? existing.score_b
-      : merged.score_b ?? existing?.score_b ?? null;
+      : existing && !accepted
+        ? existing.score_b
+        : merged.score_b ?? existing?.score_b ?? null;
     const scheduledAt = existing && !accepted
       ? existing.scheduled_at
       : merged.scheduled_at ?? existing?.scheduled_at ?? null;
@@ -916,4 +938,50 @@ export async function listTrackedTeamRowsForGame(game, { ewcOnly = false } = {})
       ORDER BY team ASC`,
     [game],
   );
+}
+
+export async function getMatchById(id) {
+  return get('SELECT * FROM matches WHERE id = $1', [id]);
+}
+
+// Pin a result an operator entered by hand. Locking is what makes it survive: the
+// official feed re-derives Overwatch series scores from the sheet on every poll and
+// would otherwise overwrite this within seconds.
+export async function setManualMatchResult({
+  matchId,
+  scoreA,
+  scoreB,
+  status = 'finished',
+  actorId = null,
+  client = null,
+}) {
+  const a = scoreA == null ? null : Number(scoreA);
+  const b = scoreB == null ? null : Number(scoreB);
+  if (status === 'finished' && (!Number.isFinite(a) || !Number.isFinite(b))) {
+    throw new Error('A finished result needs both scores.');
+  }
+  // The matches CHECK constraint ties these together: only a finished row may carry a
+  // winner or a real result reason.
+  const finished = status === 'finished';
+  const winnerSide = !finished ? null : a === b ? 'draw' : a > b ? 'team1' : 'team2';
+  const resultReason = finished ? 'normal' : status === 'cancelled' ? 'cancelled' : status === 'postponed' ? 'postponed' : 'unknown';
+  const runner = client || { run, get };
+  await runner.run(
+    `UPDATE matches
+        SET score_a = $1, score_b = $2, status = $3, winner_side = $4, result_reason = $5,
+            result_locked_at = $6, result_locked_by = $7, updated_at = $6
+      WHERE id = $8`,
+    [finished ? a : null, finished ? b : null, status, winnerSide, resultReason, nowText(), actorId, matchId],
+  );
+  return runner.get('SELECT * FROM matches WHERE id = $1', [matchId]);
+}
+
+// Release the pin so providers own the result again.
+export async function clearManualMatchResult(matchId, { client = null } = {}) {
+  const runner = client || { run, get };
+  await runner.run(
+    'UPDATE matches SET result_locked_at = NULL, result_locked_by = NULL, updated_at = $1 WHERE id = $2',
+    [nowText(), matchId],
+  );
+  return runner.get('SELECT * FROM matches WHERE id = $1', [matchId]);
 }

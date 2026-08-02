@@ -513,3 +513,63 @@ test('does not reconcile an untimed score when same-pair rematches are ambiguous
   assert.equal(reconciled[0].externalId, parsed[0].externalId);
   assert.equal(reconciled[0].scheduledAt, null);
 });
+
+// A pinned result exists because no provider will publish the right one: a forfeit, an
+// early stop, or a sheet whose map rows keep deriving the wrong series score. The
+// official feed re-derives and rewrites Overwatch scores on every poll, so the pin is
+// only useful if it survives an authoritative write.
+test('a pinned match result survives an authoritative provider write', async () => {
+  const { setManualMatchResult, clearManualMatchResult, getMatchById } = await import('../src/db/matches.js');
+  const t = await tournament('overwatch/EWC/2026-manual-result');
+  const stored = await match(t.id, 'overwatch:final', 'ZETA DIVISION', 'Twisted Minds', 3, 2, 1_785_000_000);
+
+  const pinned = await setManualMatchResult({
+    matchId: stored.id,
+    scoreA: 2,
+    scoreB: 1,
+    status: 'finished',
+    actorId: '170115708871507970',
+  });
+  assert.equal(pinned.score_a, 2);
+  assert.equal(pinned.score_b, 1);
+  assert.equal(pinned.winner_side, 'team1');
+
+  // The official feed reasserting the sheet-derived 3-2 must not win.
+  await upsertMatch(
+    {
+      tournament_id: t.id,
+      source: 'liquipedia',
+      external_id: 'overwatch:final',
+      team_a: 'ZETA DIVISION',
+      team_b: 'Twisted Minds',
+      score_a: 3,
+      score_b: 2,
+      status: 'finished',
+      scheduled_at: 1_785_000_000,
+    },
+    { authoritative: true, allowTerminalCorrection: true },
+  );
+  const afterFeed = await getMatchById(stored.id);
+  assert.equal(afterFeed.score_a, 2, 'pinned score held');
+  assert.equal(afterFeed.score_b, 1);
+
+  // Releasing the pin hands the result back to the provider.
+  await clearManualMatchResult(stored.id);
+  await upsertMatch(
+    {
+      tournament_id: t.id,
+      source: 'liquipedia',
+      external_id: 'overwatch:final',
+      team_a: 'ZETA DIVISION',
+      team_b: 'Twisted Minds',
+      score_a: 3,
+      score_b: 2,
+      status: 'finished',
+      scheduled_at: 1_785_000_000,
+    },
+    { authoritative: true, allowTerminalCorrection: true },
+  );
+  const afterRelease = await getMatchById(stored.id);
+  assert.equal(afterRelease.score_a, 3, 'provider owns it again');
+  assert.equal(afterRelease.score_b, 2);
+});
