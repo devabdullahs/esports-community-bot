@@ -189,7 +189,7 @@ export function FixtureRow({
         {status ? <CompetitionStatusBadge status={status} locale={locale} /> : label ? <span>{label}</span> : null}
         {match.scheduled_at ? (
           <LocalDateTime
-            value={match.scheduled_at}
+            value={new Date(match.scheduled_at * 1000).toISOString()}
             locale={locale}
             fallback={copy[locale].tournaments.timeTbd}
             className="whitespace-nowrap tabular-nums"

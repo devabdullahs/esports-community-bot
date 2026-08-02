@@ -213,6 +213,20 @@ export function scheduleTimestamp(dateValue, timeValue, timezoneOffsetMinutes = 
   );
 }
 
+// The official schedule's public Start Time column is commonly labeled CEST.
+// Keep the parser's generic fallback at Riyadh time for legacy/unlabeled feeds,
+// but honor an explicit workbook timezone before converting wall time to UTC.
+function scheduleTimezoneOffsetMinutes(rows, header, timeIndex) {
+  for (const row of rows.slice(header.index + 1, header.index + 8)) {
+    const marker = text(row[timeIndex]).toUpperCase();
+    if (/\bCEST\b/.test(marker)) return 120;
+    if (/\bEEST\b/.test(marker)) return 180;
+    if (/\b(?:CET|BST)\b/.test(marker)) return 60;
+    if (/\b(?:UTC|GMT|WET)\b/.test(marker)) return 0;
+  }
+  return 180;
+}
+
 function splitPair(value) {
   const raw = text(value);
   const parts = raw.split(/\s+v(?:s\.?)?\s*/i).map(text).filter(Boolean);
@@ -241,6 +255,7 @@ export function parseSchedule(rows, { game }) {
   const statusIndex = headerIndex(found.row, ['status', 'match status']);
   const result = [];
   let activeDate = null;
+  const timezoneOffsetMinutes = scheduleTimezoneOffsetMinutes(rows, found, timeIndex);
 
   for (const row of rows.slice(found.index + 1)) {
     const matchLabel = matchIndex >= 0 ? text(row[matchIndex]) : '';
@@ -249,7 +264,7 @@ export function parseSchedule(rows, { game }) {
     const pair = splitPair(matchLabel);
     if ((!teamA || !teamB) && pair) [teamA, teamB] = pair;
     if (googleDateParts(row[dateIndex])) activeDate = row[dateIndex];
-    const scheduledAt = scheduleTimestamp(activeDate, row[timeIndex]);
+    const scheduledAt = scheduleTimestamp(activeDate, row[timeIndex], timezoneOffsetMinutes);
     const round = roundIndex >= 0 ? text(row[roundIndex]) : '';
     const scoreA = scoreAIndex >= 0 ? number(row[scoreAIndex]) : null;
     const scoreB = scoreBIndex >= 0 ? number(row[scoreBIndex]) : null;
