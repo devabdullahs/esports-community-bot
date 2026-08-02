@@ -5,6 +5,7 @@ import {
   fetchTournamentMatchesPage,
   mergeBracketMatchSnapshot,
   shouldPollTournamentMatches,
+  tournamentMatchesRefetchInterval,
   tournamentMatchesQueryKey,
   TournamentRefreshFailureAlert,
   type TournamentMatchesPayload,
@@ -31,19 +32,23 @@ function payload({
   finishedTotal = 2,
   completed = false,
   health = "fresh",
+  game = "valorant",
+  source = "liquipedia",
 }: {
   offset?: number;
   finishedTotal?: number;
   completed?: boolean;
   health?: TournamentMatchesPayload["tournament"]["syncHealth"]["state"];
+  game?: string;
+  source?: string;
 } = {}): TournamentMatchesPayload {
   const finished = [match(10 + offset, "finished"), match(11 + offset, "finished")];
   return {
     tournament: {
       id: 99,
       name: "Fixture event",
-      game: "valorant",
-      source: "liquipedia",
+      game,
+      source,
       url: null,
       ewc: false,
       completed,
@@ -81,6 +86,12 @@ describe("tournament history client behavior", () => {
     expect(shouldPollTournamentMatches(payload())).toBe(true);
     expect(shouldPollTournamentMatches(payload({ health: "final" }))).toBe(false);
     expect(shouldPollTournamentMatches(payload({ completed: true }))).toBe(false);
+  });
+
+  test("polls official Overwatch match pages faster than other tournaments", () => {
+    expect(tournamentMatchesRefetchInterval(payload({ game: "overwatch", source: "official" }))).toBe(15_000);
+    expect(tournamentMatchesRefetchInterval(payload())).toBe(90_000);
+    expect(tournamentMatchesRefetchInterval(payload({ game: "overwatch", source: "official", health: "final" }))).toBe(false);
   });
 
   test("preserves a complete bracket snapshot while overlaying refreshed matches", () => {

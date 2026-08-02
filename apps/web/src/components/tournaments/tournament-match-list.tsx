@@ -142,9 +142,11 @@ export type TournamentResultsNavigation = {
   nextHref: string | null;
 };
 
-// Live data: poll the matches API every 90s. The bot polls at most every 5 min,
-// so 90s keeps the page fresh without adding source-site load.
+// Match data is local DB state, not a source-site request. Official Overwatch
+// sheets can update every few seconds while other providers remain on the
+// lighter 90-second cadence.
 const REFETCH_INTERVAL_MS = 90_000;
+const OFFICIAL_OVERWATCH_REFETCH_INTERVAL_MS = 15_000;
 const NUMBER_LOCALE: Record<Locale, string> = { en: "en-US", ar: "ar-SA" };
 
 export function shouldPollTournamentMatches(data: TournamentMatchesPayload): boolean {
@@ -158,6 +160,15 @@ export function shouldPollTournamentMatches(data: TournamentMatchesPayload): boo
     return false;
   }
   return true;
+}
+
+export function tournamentMatchesRefetchInterval(
+  data: TournamentMatchesPayload,
+): number | false {
+  if (!shouldPollTournamentMatches(data)) return false;
+  return data.tournament.source === "official" && data.tournament.game === "overwatch"
+    ? OFFICIAL_OVERWATCH_REFETCH_INTERVAL_MS
+    : REFETCH_INTERVAL_MS;
 }
 
 export function mergeBracketMatchSnapshot(
@@ -555,7 +566,7 @@ export function TournamentMatchList({
     refetchOnMount: false,
     refetchInterval: (current) => {
       const data = current.state.data as TournamentMatchesPayload | undefined;
-      return data && shouldPollTournamentMatches(data) ? REFETCH_INTERVAL_MS : false;
+      return data ? tournamentMatchesRefetchInterval(data) : false;
     },
     refetchOnReconnect: (current) => {
       const data = current.state.data as TournamentMatchesPayload | undefined;
