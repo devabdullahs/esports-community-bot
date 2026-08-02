@@ -24,7 +24,8 @@ export async function GET(
   const limit = clampInt(url.searchParams.get("limit"), { min: 1, max: 200, fallback: 50 });
   const offset = clampInt(url.searchParams.get("offset"), { min: 0, max: 100_000, fallback: 0 });
 
-  // Cached (60s revalidate); the match list polls every ~90s. unstable_cache keys
+  // Cached (10s revalidate); official Overwatch pages poll every ~15s and other
+  // match lists poll every ~90s. unstable_cache keys
   // by (id, limit, offset), so paginated and per-tournament reads stay distinct.
   const data = await getTournamentMatchesCached(tournamentId, {
     limit,

@@ -710,8 +710,9 @@ export async function getTournamentMatches(
 
 // ---------------------------------------------------------------------------
 // Cached public-read variants.
-// Live data → short revalidate so scores refresh ~every minute even without an
-// admin tag invalidation. Tag `cms-tournaments` lets future admin writes bust it.
+// Live data → short revalidate so scores refresh within a few seconds even
+// without an admin tag invalidation. Tag `cms-tournaments` lets future admin
+// writes bust it.
 // ---------------------------------------------------------------------------
 
 export const listTournamentSummariesCached = unstable_cache(
@@ -723,5 +724,5 @@ export const listTournamentSummariesCached = unstable_cache(
 export const getTournamentMatchesCached = unstable_cache(
   async (id: number, opts?: TournamentMatchOptions) => getTournamentMatches(id, opts),
   ["tournament-matches"],
-  { tags: ["cms-tournaments"], revalidate: 60 },
+  { tags: ["cms-tournaments"], revalidate: 10 },
 );
