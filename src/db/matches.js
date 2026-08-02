@@ -649,7 +649,10 @@ export async function deleteStaleFinishedMatches(
        FROM matches m
       WHERE m.tournament_id = $1
         AND m.source = 'liquipedia'
-        AND m.status = 'finished'
+        -- A slot that was never drawn can sit at 'scheduled' forever once its real
+        -- match has been played under the drawn names, so sweep those too. Both
+        -- states still require the placeholder name check below.
+        AND m.status IN ('finished', 'scheduled')
         AND m.score_a IS NULL
         AND m.score_b IS NULL
         AND m.scheduled_at IS NOT NULL

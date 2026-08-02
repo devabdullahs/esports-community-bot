@@ -571,6 +571,21 @@ export async function closeEwcWeek(weekId, client = null) {
   });
 }
 
+// Move only the scoring gate. upsertEwcWeek would also rewrite the week's other times
+// and flip a closed round back to open, which is not what an operator adjusting the
+// delay is asking for.
+export async function setEwcWeekScoreAfter(weekId, scoreAfter, client = null) {
+  return transactionWith(client)(async (runner) => {
+    const round = await lockEwcWeekForTransitionById(weekId, runner);
+    if (!round) return null;
+    await runner.run('UPDATE ewc_prediction_weeks SET score_after = $1 WHERE id = $2', [
+      scoreAfter ?? null,
+      weekId,
+    ]);
+    return hydrateWeek(await runner.get('SELECT * FROM ewc_prediction_weeks WHERE id = $1', [weekId]));
+  });
+}
+
 export async function setEwcWeekStatus(weekId, status, client = null) {
   return transactionWith(client)(async (runner) => {
     const round = await lockEwcWeekForTransitionById(weekId, runner);

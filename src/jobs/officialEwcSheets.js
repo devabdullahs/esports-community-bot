@@ -527,6 +527,13 @@ async function refreshWorkbook(
   const modifiedToken = officialWorkbookToken(workbook.modifiedTime);
   const previous = await getOfficialFeedState(workbookKey);
   if (!shouldReadOfficialWorkbook(previous, modifiedToken, { forceRead })) {
+    // Undrawn bracket placeholders outlive the workbook edit that replaced them, and the
+    // sweep inside the read path never runs for a workbook that stops changing (and is
+    // suppressed entirely on live ticks). Sweeping here retires them once per full scan.
+    const stale = liveOnly ? 0 : await deleteStaleFinishedMatches(tournament.id, { nowSeconds: Math.floor(Date.now() / 1000) });
+    if (stale) {
+      logger.info(`[tournament-feed] removed ${stale} stale placeholder match(es) for tournament ${tournament.id}`);
+    }
     return { changed: false, reason: 'unchanged' };
   }
 
