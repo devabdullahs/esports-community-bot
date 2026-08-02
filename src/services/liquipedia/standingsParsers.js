@@ -454,6 +454,25 @@ function displayStandingsTitle(title) {
   return cleanText(title);
 }
 
+// True when two sections both place DIFFERENT teams at the same rank, which one table
+// rendered twice can never do. Rows without a usable rank are ignored so a partially
+// parsed fragment still merges.
+function standingsRanksCollide(left, right) {
+  const byRank = new Map();
+  for (const entry of left.entries || []) {
+    const rank = Number(entry?.rank);
+    if (!Number.isFinite(rank) || rank <= 0) continue;
+    if (!byRank.has(rank)) byRank.set(rank, cleanText(entry.team).toLowerCase());
+  }
+  for (const entry of right.entries || []) {
+    const rank = Number(entry?.rank);
+    if (!Number.isFinite(rank) || rank <= 0) continue;
+    const held = byRank.get(rank);
+    if (held && held !== cleanText(entry.team).toLowerCase()) return true;
+  }
+  return false;
+}
+
 function standingsTeamSet(section) {
   return new Set(
     (section.entries || [])
@@ -497,6 +516,11 @@ export function mergeStandingsSectionAliases(sections) {
       if (!candidateTeams.size) return false;
       const overlap = [...teams].filter((team) => candidateTeams.has(team)).length;
       if (!overlap) return false;
+      // Fragments of ONE table never repeat a placement; two real stages do. A page can
+      // label two different tabs identically (Warzone 2026 titles both its Survival
+      // Stage and its Grand Final "Grand Final"), and merging those produced a single
+      // section with two teams at every rank and no readable final standing.
+      if (standingsRanksCollide(candidate, section)) return false;
 
       // The API HTML can contain desktop/mobile/overflow fragments for one
       // field. Those fragments share the full title but only partially overlap.
@@ -536,7 +560,21 @@ export function mergeStandingsSectionAliases(sections) {
       entries,
     };
   }
-  return kept;
+  return disambiguateStandingsTitles(kept);
+}
+
+// Two sections that survived the merge still carry the page's duplicated label. Storage
+// groups by title, so leaving them identical would collapse on read what the merge just
+// kept apart. Number the repeats instead.
+function disambiguateStandingsTitles(sections) {
+  const seen = new Map();
+  return sections.map((section) => {
+    const title = cleanText(section.title);
+    if (!title) return section;
+    const count = (seen.get(title) || 0) + 1;
+    seen.set(title, count);
+    return count === 1 ? section : { ...section, title: `${title} (${count})` };
+  });
 }
 
 function scheduleStageParts(name) {

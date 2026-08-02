@@ -718,3 +718,56 @@ test('hasStandingsRows is false when the DOM has no parseable rows (preserve gua
   assert.equal(hasStandingsRows(emptyTable$), false);
   assert.equal(hasStandingsRows(cheerio.load('<div><p>no standings</p></div>')), false);
 });
+
+// Warzone Resurgence 2026 labels BOTH its Survival Stage tab and its Grand Final tab
+// "Grand Final". Those two stages share teams (survivors advance), so the alias merge
+// treated them as one field rendered twice and produced a single section with two teams
+// at every rank — tournament 41 showed 26 rows and no readable final standing.
+test('two stages sharing a page label are not merged into one standings table', () => {
+  const survival = {
+    title: 'Grand Final',
+    entries: [
+      { rank: 1, team: 'Team Falcons', points: '237' },
+      { rank: 2, team: 'Team Vitality', points: '210.4' },
+      { rank: 3, team: 'G2 Esports', points: '190' },
+    ],
+  };
+  const grandFinal = {
+    title: 'Grand Final',
+    entries: [
+      { rank: 1, team: 'G2 Esports', points: '210.4' },
+      { rank: 2, team: 'T1', points: '182.4' },
+      { rank: 3, team: 'JD Gaming', points: '181.4' },
+    ],
+  };
+
+  const merged = mergeStandingsSectionAliases([survival, grandFinal]);
+
+  assert.equal(merged.length, 2, 'the two stages stay separate');
+  assert.deepEqual(merged.map((s) => s.title), ['Grand Final', 'Grand Final (2)']);
+  assert.equal(merged[0].entries.length, 3);
+  assert.equal(merged[1].entries.length, 3);
+});
+
+test('a table rendered twice on one page still merges', () => {
+  // Desktop and mobile fragments of ONE table: same ranks, same teams, no collision.
+  const desktop = {
+    title: 'Group A',
+    entries: [
+      { rank: 1, team: 'Twisted Minds', points: '313.4' },
+      { rank: 2, team: 'Virtus.pro', points: '198.6' },
+    ],
+  };
+  const mobile = {
+    title: 'Group A',
+    entries: [
+      { rank: 1, team: 'Twisted Minds', points: '313.4' },
+      { rank: 3, team: 'Ravens Esports', points: '185' },
+    ],
+  };
+
+  const merged = mergeStandingsSectionAliases([desktop, mobile]);
+
+  assert.equal(merged.length, 1, 'fragments of one table are still combined');
+  assert.deepEqual(merged[0].entries.map((e) => e.team), ['Twisted Minds', 'Virtus.pro', 'Ravens Esports']);
+});
