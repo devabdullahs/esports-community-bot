@@ -163,6 +163,16 @@ test('schedule parser accepts the official Overwatch layout and carries merged d
   ]);
 });
 
+test('schedule status treats a non-terminal best-of score as running', () => {
+  const parsed = parseSchedule([
+    ['Date', 'Start Time', 'Best of X', 'Round', 'Match', 'Score A', 'Score B'],
+    ['2026/08/02', '12:00', 'Bo5', 'Semifinal', 'Alpha vs Bravo', 2, 2],
+    ['2026/08/02', '13:00', 'Bo5', 'Semifinal', 'Charlie vs Delta', 3, 2],
+  ], { game: 'overwatch' });
+
+  assert.deepEqual(parsed.map((match) => match.status), ['running', 'finished']);
+});
+
 test('individual results parse player scores without carrying workbook metadata', () => {
   const parsed = parseIndividualResults(
     [

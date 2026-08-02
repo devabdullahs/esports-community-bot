@@ -7,13 +7,14 @@ import {
   saveOfficialFeedState,
   upsertOfficialTournamentOverview,
 } from '../db/officialEwcSheets.js';
-import { listMatchesForTournament, upsertMatch } from '../db/matches.js';
+import { deleteStaleFinishedMatches, listMatchesForTournament, upsertMatch } from '../db/matches.js';
 import { upsertMatchDetails } from '../db/matchDetails.js';
 import { replaceTournamentStandings } from '../db/tournamentStandings.js';
 import { listActiveTournaments } from '../db/tournaments.js';
 import { isEwcTournamentReference } from '../lib/ewcTournament.js';
 import { logger } from '../lib/logger.js';
 import { normalizeTeamName } from '../lib/render.js';
+import { armMatch, stopMatch } from './pollingManager.js';
 import { createOfficialSheetsClient } from '../services/officialEwcSheets/client.js';
 import {
   parseOfficialWorkbook,
@@ -26,7 +27,7 @@ const ATTRIBUTION = '© Esports Foundation 2026. All rights reserved.';
 const DETAIL_SOURCE = 'internal-normalized';
 // Bump whenever parsing or reconciliation changes what gets persisted, so already-seen
 // workbooks are re-read once instead of waiting for the next unrelated edit.
-export const OFFICIAL_PARSER_VERSION = 10;
+export const OFFICIAL_PARSER_VERSION = 11;
 
 let running = false;
 let client = null;
@@ -295,6 +296,20 @@ export function deriveOfficialOverwatchSeriesResult(maps, match) {
   return { scoreA, scoreB, status };
 }
 
+export function shouldApplyOfficialOverwatchSeriesResult(
+  match,
+  result,
+  { terminalMatchIds = null } = {},
+) {
+  if (!result || !match) return false;
+  if (terminalMatchIds?.has(match.id)) return false;
+
+  // MATCH INFO MASTER can lag the schedule/provider by one map. Never reopen a
+  // terminal match from that incomplete snapshot; a terminal official result is
+  // still allowed through and can correct a stale fallback score.
+  return !(match.status === 'finished' && result.status === 'running');
+}
+
 async function persistAuthoritativeMatchUpdate(
   tournament,
   existing,
@@ -348,6 +363,39 @@ async function applyMatchUpdate(tournament, matches, update, observedAt, ttlSeco
   return stored;
 }
 
+async function applyScheduleUpdates(tournament, matches, updates, observedAt, ttlSeconds) {
+  const terminalMatchIds = new Set();
+  const updatedMatchIds = new Set();
+  for (const update of updates) {
+    const stored = await applyMatchUpdate(tournament, matches, update, observedAt, ttlSeconds);
+    if (stored) updatedMatchIds.add(stored.id);
+    if (
+      stored &&
+      update.status === 'finished' &&
+      update.scoreA !== null &&
+      update.scoreA !== undefined &&
+      update.scoreB !== null &&
+      update.scoreB !== undefined
+    ) {
+      terminalMatchIds.add(stored.id);
+    }
+  }
+  return { terminalMatchIds, updatedMatchIds };
+}
+
+function syncOfficialWatchers(tournament, matches, candidateIds = new Set()) {
+  let armed = 0;
+  let stopped = 0;
+  for (const match of matches) {
+    if (match.status === 'finished' || match.status === 'cancelled') {
+      if (stopMatch(match.external_id)) stopped += 1;
+      continue;
+    }
+    if (candidateIds.has(match.id) && armMatch(match, tournament)) armed += 1;
+  }
+  return { armed, stopped };
+}
+
 function detailMatchByLabel(matches, label) {
   const key = normalized(label);
   if (!key) return null;
@@ -364,7 +412,7 @@ async function applyDetails(
   parsed,
   observedAt,
   ttlSeconds,
-  { persistDetails = true } = {},
+  { persistDetails = true, terminalMatchIds = null, updatedMatchIds = null } = {},
 ) {
   for (const result of parsed.individualResults) {
     const match = findOfficialMatch(matches, result);
@@ -426,7 +474,7 @@ async function applyDetails(
     }
     if (tournament.game === 'overwatch') {
       const result = deriveOfficialOverwatchSeriesResult(maps, match);
-      if (result) {
+      if (shouldApplyOfficialOverwatchSeriesResult(match, result, { terminalMatchIds })) {
         await persistAuthoritativeMatchUpdate(
           tournament,
           match,
@@ -441,6 +489,7 @@ async function applyDetails(
           ttlSeconds,
           { allowTerminalCorrection: true },
         );
+        updatedMatchIds?.add(match.id);
       }
     }
   }
@@ -494,20 +543,36 @@ async function refreshWorkbook(
   if (previous?.content_hash === hash) {
     // Liquipedia is a fallback provider, so its result must not reclaim an
     // unchanged official Overwatch series merely because the short authority
-    // lease expired between sheet polls. Reassert the derived series score
-    // without rewriting the already-persisted map payload.
-    const renewOverwatchAuthority = descriptor.game === 'overwatch' && parsed.mapDetails.length > 0;
+    // lease expired between sheet polls. Reassert the schedule and derived
+    // series result without rewriting the already-persisted map payload.
+    const renewOverwatchAuthority = descriptor.game === 'overwatch' &&
+      (parsed.schedule.length > 0 || parsed.mapDetails.length > 0);
     if (renewOverwatchAuthority) {
       const observedAt = Math.floor(Date.now() / 1000);
-      const matches = await listMatchesForTournament(tournament.id);
+      let matches = await listMatchesForTournament(tournament.id);
+      const { terminalMatchIds, updatedMatchIds } = await applyScheduleUpdates(
+        tournament,
+        matches,
+        parsed.schedule,
+        observedAt,
+        config.officialEwcSheets.authorityTtlSeconds,
+      );
       await applyDetails(
         tournament,
         matches,
         parsed,
         observedAt,
         config.officialEwcSheets.authorityTtlSeconds,
-        { persistDetails: false },
+        { persistDetails: false, terminalMatchIds, updatedMatchIds },
       );
+      const stale = liveOnly
+        ? 0
+        : await deleteStaleFinishedMatches(tournament.id, { nowSeconds: observedAt });
+      if (stale) {
+        logger.info(`[tournament-feed] removed ${stale} stale finished match(es) for tournament ${tournament.id}`);
+        matches = await listMatchesForTournament(tournament.id);
+      }
+      syncOfficialWatchers(tournament, matches, updatedMatchIds);
     }
     if (previous.modified_token !== modifiedToken) {
       await saveOfficialFeedState({
@@ -528,7 +593,7 @@ async function refreshWorkbook(
 
   const observedAt = Math.floor(Date.now() / 1000);
   const ttlSeconds = config.officialEwcSheets.authorityTtlSeconds;
-  const matches = await listMatchesForTournament(tournament.id);
+  let matches = await listMatchesForTournament(tournament.id);
   const individualUpdates = liveOnly
     ? []
     : parsed.individualResults.map((result) => ({
@@ -538,9 +603,13 @@ async function refreshWorkbook(
         scheduledAt: null,
       }));
   const updates = [...parsed.schedule, ...individualUpdates];
-  for (const update of updates) {
-    await applyMatchUpdate(tournament, matches, update, observedAt, ttlSeconds);
-  }
+  const { terminalMatchIds, updatedMatchIds } = await applyScheduleUpdates(
+    tournament,
+    matches,
+    updates,
+    observedAt,
+    ttlSeconds,
+  );
 
   if (!liveOnly && parsed.standings.some((section) => section.entries?.length >= 2)) {
     await replaceTournamentStandings(tournament.id, parsed.standings, {
@@ -550,7 +619,18 @@ async function refreshWorkbook(
     });
   }
 
-  await applyDetails(tournament, matches, parsed, observedAt, ttlSeconds);
+  await applyDetails(tournament, matches, parsed, observedAt, ttlSeconds, {
+    terminalMatchIds,
+    updatedMatchIds,
+  });
+  const stale = liveOnly
+    ? 0
+    : await deleteStaleFinishedMatches(tournament.id, { nowSeconds: observedAt });
+  if (stale) {
+    logger.info(`[tournament-feed] removed ${stale} stale finished match(es) for tournament ${tournament.id}`);
+    matches = await listMatchesForTournament(tournament.id);
+  }
+  syncOfficialWatchers(tournament, matches, updatedMatchIds);
   if (!liveOnly) {
     await upsertOfficialTournamentOverview(
       tournament.id,

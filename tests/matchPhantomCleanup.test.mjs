@@ -20,6 +20,7 @@ const {
   getMatch,
   deleteResolvedDuplicateMatches,
   deleteResolvedLiveAliasMatches,
+  deleteStaleFinishedMatches,
   deleteTournamentDuplicateMatches,
   reconcileUntimedTournamentMatches,
 } = await import('../src/db/matches.js');
@@ -91,6 +92,19 @@ test('matches the pair regardless of team order', async () => {
   assert.equal(retired, 1, 'reversed-order phantom is matched and retired');
   assert.equal(await getMatch('liquipedia', 'counterstrike:1780999000:FaZe Clan:G2 Esports'), null);
   assert.ok(await getMatch('liquipedia', 'Match:9'));
+});
+
+test('retires old scoreless finished placeholders without removing recent unresolved rows', async () => {
+  const t = await tournament('overwatch/EWC/2026-stale-finished');
+  const now = 1_785_000_000;
+  await match(t.id, 'overwatch:stale:old', 'Old A', 'Old B', null, null, now - 5 * 3600);
+  await match(t.id, 'overwatch:stale:recent', 'Recent A', 'Recent B', null, null, now - 2 * 3600);
+
+  const retired = await deleteStaleFinishedMatches(t.id, { nowSeconds: now });
+
+  assert.equal(retired, 1);
+  assert.equal(await getMatch('liquipedia', 'overwatch:stale:old'), null);
+  assert.ok(await getMatch('liquipedia', 'overwatch:stale:recent'));
 });
 
 // deleteTournamentDuplicateMatches: a page can render the SAME match in both a

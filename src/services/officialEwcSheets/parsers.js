@@ -283,20 +283,28 @@ export function parseSchedule(rows, { game }) {
       teamB,
       scoreA,
       scoreB,
-      status:
-        scoreA !== null && scoreB !== null
-          ? 'finished'
-          : /live|running|in progress/.test(rawStatus)
-            ? 'running'
-            : /complete|finished|final/.test(rawStatus)
-              ? 'finished'
-              : 'scheduled',
+      status: scheduleStatus(rawStatus, scoreA, scoreB, bestOfIndex >= 0 ? number(row[bestOfIndex]) : null),
       scheduledAt,
       round,
       bestOf: bestOfIndex >= 0 ? number(row[bestOfIndex]) : null,
     });
   }
   return result.slice(0, 500);
+}
+
+function scheduleStatus(rawStatus, scoreA, scoreB, bestOf) {
+  if (/live|running|in progress/.test(rawStatus)) return 'running';
+  if (/complete|finished|final/.test(rawStatus)) return 'finished';
+  if (scoreA === null || scoreB === null) return 'scheduled';
+
+  // A score pair on a live series is often only the maps/games already played.
+  // When the sheet exposes a best-of value, only a score that reaches the
+  // winning threshold is terminal; otherwise keep the row running.
+  const winsRequired = Number.isFinite(bestOf) && bestOf > 1 ? Math.floor(bestOf / 2) + 1 : null;
+  if (winsRequired !== null) {
+    return Math.max(scoreA, scoreB) >= winsRequired && scoreA !== scoreB ? 'finished' : 'running';
+  }
+  return 'finished';
 }
 
 export function parseIndividualResults(rows, { game }) {
