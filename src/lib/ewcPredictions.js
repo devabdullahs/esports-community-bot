@@ -419,6 +419,19 @@ function incomingSnapshotIsBetter(current, incoming) {
   return true;
 }
 
+// A re-read that returns an authoritative result we already hold — or a briefly
+// degraded one, mid-edit source pages do that — is still a CONFIRMATION that the
+// stored snapshot stands. Without recording it, `fetchedAt` only ever advances when a
+// snapshot is replaced, so a game whose best result is already stored can never satisfy
+// the post-event freshness rule and its round can never be scored.
+function confirmsStoredSnapshot(incoming) {
+  return Boolean(
+    incoming?.evidence?.authoritative &&
+      Array.isArray(incoming.placements) &&
+      incoming.placements.length > 0,
+  );
+}
+
 export function mergeEwcGameResults(existing = [], incoming = []) {
   const merged = new Map();
   for (const result of existing || []) {
@@ -429,7 +442,16 @@ export function mergeEwcGameResults(existing = [], incoming = []) {
     const key = String(result?.gameKey || '');
     if (!key) continue;
     const current = merged.get(key);
-    if (incomingSnapshotIsBetter(current, result)) merged.set(key, result);
+    if (incomingSnapshotIsBetter(current, result)) {
+      merged.set(key, result);
+      continue;
+    }
+    // Keep the better stored payload, but move its observation time forward. A failed
+    // or empty fetch must NOT do this: that would claim a confirmation we never made.
+    const observedAt = Number(result?.fetchedAt) || 0;
+    if (confirmsStoredSnapshot(result) && observedAt > (Number(current?.fetchedAt) || 0)) {
+      merged.set(key, { ...current, fetchedAt: observedAt });
+    }
   }
   return [...merged.values()];
 }

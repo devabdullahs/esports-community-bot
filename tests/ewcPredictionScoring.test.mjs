@@ -717,11 +717,14 @@ test('mergeEwcGameResults preserves richer snapshots through gaps and replaces t
     placements: complete.placements.slice(0, 4),
     evidence: { ...complete.evidence, coveredRanks: [1, 2, 3, 4] },
   };
-  assert.deepEqual(
-    mergeEwcGameResults([updated], [partialRefresh]),
-    [updated],
-    'a later partial response must not downgrade a complete authoritative snapshot',
-  );
+  // A later partial response must not downgrade a complete authoritative snapshot — but
+  // it IS still a confirmation that the event is over, so it moves the observation time.
+  // Keeping the old timestamp here is what deadlocked week-4 scoring: freshness could
+  // never be satisfied for a game whose best result was already stored.
+  const [refreshed] = mergeEwcGameResults([updated], [partialRefresh]);
+  assert.deepEqual(refreshed.placements, updated.placements, 'payload is not downgraded');
+  assert.deepEqual(refreshed.evidence, updated.evidence);
+  assert.equal(refreshed.fetchedAt, 30_000, 'observation time advances');
 });
 
 test('ewcGameResultsFinalReady requires valid snapshots fetched after every event and the scoring delay', () => {
@@ -822,4 +825,74 @@ test('effectiveEwcWeekStatus: aggregate round (no games) past close_at → "clos
 test('effectiveEwcWeekStatus: scored round reports "scored"; missing round reports "missing"', () => {
   assert.equal(effectiveEwcWeekStatus({ status: 'scored', games: [] }).label, 'scored');
   assert.equal(effectiveEwcWeekStatus(null).label, 'missing');
+});
+
+// Week 4 could not be scored for a full day: street-fighter-6-12 and overwatch-2-13 both
+// held complete, authoritative prize-table snapshots (ranks 1-8), but their fetchedAt
+// predated the post-event freshness cutoff. Every scoring pass re-read the source, got a
+// snapshot that was no BETTER than the stored one, discarded it — and fetchedAt never
+// moved. Freshness could never be satisfied, so the round could never score.
+test('re-reading a source confirms a stored snapshot instead of deadlocking on freshness', () => {
+  const stored = {
+    gameKey: 'street-fighter-6-12',
+    fetchedAt: 1_000,
+    evidence: { kind: 'club-points-prize-table', authoritative: true, coveredRanks: [1, 2, 3, 4, 5, 6, 7, 8] },
+    placements: [
+      { club: 'Team Falcons', place: '1', points: 1000 },
+      { club: 'SBI e-Sports', place: '2', points: 750 },
+    ],
+  };
+  // A later read of the same event that is strictly WORSE (one row, still authoritative).
+  const degraded = {
+    gameKey: 'street-fighter-6-12',
+    fetchedAt: 9_000,
+    evidence: { kind: 'tracked-final-standings', authoritative: true, coveredRanks: [1] },
+    placements: [{ club: 'Team Falcons', place: '1', points: 1000 }],
+  };
+
+  const [merged] = mergeEwcGameResults([stored], [degraded]);
+
+  assert.equal(merged.fetchedAt, 9_000, 'observation time advances');
+  assert.equal(merged.placements.length, 2, 'the better stored payload is kept');
+  assert.equal(merged.evidence.kind, 'club-points-prize-table');
+});
+
+test('a failed or empty re-read never claims a confirmation', () => {
+  const stored = {
+    gameKey: 'overwatch-2-13',
+    fetchedAt: 1_000,
+    evidence: { kind: 'club-points-prize-table', authoritative: true, coveredRanks: [1, 2] },
+    placements: [{ club: 'ZETA DIVISION', place: '1', points: 1000 }],
+  };
+
+  for (const bad of [
+    { gameKey: 'overwatch-2-13', fetchedAt: 9_000, placements: [] },
+    { gameKey: 'overwatch-2-13', fetchedAt: 9_000, placements: [{ club: 'X', place: '1' }], evidence: { authoritative: false } },
+  ]) {
+    const [merged] = mergeEwcGameResults([stored], [bad]);
+    assert.equal(merged.fetchedAt, 1_000, 'stale timestamp is kept when the read proved nothing');
+    assert.equal(merged.placements.length, 1);
+  }
+});
+
+test('a genuinely better snapshot still replaces the stored one outright', () => {
+  const stored = {
+    gameKey: 'g', fetchedAt: 1_000,
+    evidence: { kind: 'tracked-final-standings', authoritative: true, coveredRanks: [1] },
+    placements: [{ club: 'A', place: '1', points: 1000 }],
+  };
+  const better = {
+    gameKey: 'g', fetchedAt: 2_000,
+    evidence: { kind: 'club-points-prize-table', authoritative: true, coveredRanks: [1, 2, 3, 4, 5, 6, 7, 8] },
+    placements: [
+      { club: 'A', place: '1', points: 1000 }, { club: 'B', place: '2', points: 750 },
+      { club: 'C', place: '3', points: 500 }, { club: 'D', place: '4', points: 300 },
+      { club: 'E', place: '5-8', points: 200 },
+    ],
+  };
+
+  const [merged] = mergeEwcGameResults([stored], [better]);
+  assert.equal(merged.evidence.kind, 'club-points-prize-table');
+  assert.equal(merged.placements.length, 5);
+  assert.equal(merged.fetchedAt, 2_000);
 });
