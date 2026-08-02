@@ -669,6 +669,16 @@ async function selectFastPollWorkbooks(workbooks, tournaments) {
   return selected.sort((left, right) => left.fastPollPriority - right.fastPollPriority);
 }
 
+// The live poller reads one workbook per tick, so the rotation length IS each
+// workbook's refresh latency. The fast-poll predicate admits anything scheduled within
+// hours, which during an EWC week is most of the folder — rotating over all of them
+// stretches a 2s tick into a ~34s wait for the event actually being played. Rotate
+// inside the running tier when one exists, and fall back to the full list otherwise.
+export function liveRotationWorkbooks(workbooks) {
+  const live = (workbooks || []).filter((entry) => entry?.fastPollPriority === 0);
+  return live.length ? live : workbooks || [];
+}
+
 function safeFeedFailure(error) {
   const status = Number(error?.status);
   return Number.isInteger(status) ? ` (${status})` : '';
@@ -738,9 +748,10 @@ export async function refreshLiveOfficialEwcSheets() {
     const tournaments = cachedTournaments.length
       ? cachedTournaments
       : await listActiveTournaments();
-    if (fastPollCursor >= fastPollWorkbooks.length) fastPollCursor = 0;
-    const workbook = fastPollWorkbooks[fastPollCursor];
-    fastPollCursor = (fastPollCursor + 1) % fastPollWorkbooks.length;
+    const rotation = liveRotationWorkbooks(fastPollWorkbooks);
+    if (fastPollCursor >= rotation.length) fastPollCursor = 0;
+    const workbook = rotation[fastPollCursor];
+    fastPollCursor = (fastPollCursor + 1) % rotation.length;
     try {
       // Formula-backed cells can recalculate without changing Drive modifiedTime.
       // Live polling must read the values; the content hash still suppresses writes.

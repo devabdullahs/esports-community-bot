@@ -592,9 +592,26 @@ export async function deleteResolvedDuplicateMatches() {
   return ids.length;
 }
 
+// A bracket slot that was never drawn keeps a name that refers to another match
+// instead of a team: "Winner of 2.1", "UBSF M1 Loser", "TBD". A real team name never
+// does. This is what separates an abandoned placeholder from a legitimately scoreless
+// finished row, which a scoreless-finished filter alone cannot tell apart.
+export function isUnresolvedPlaceholderName(name) {
+  const value = String(name ?? '').trim();
+  if (!value) return true;
+  return /^tbd$/i.test(value) ||
+    /\b(?:winner|loser)\s+of\b/i.test(value) ||
+    /\b(?:winner|loser)$/i.test(value);
+}
+
 // A provider can leave a scoreless finished bracket placeholder behind after
 // its source match is replaced. Keep recent unresolved rows for reconciliation,
 // but retire old Liquipedia rows so they do not remain in tournament history.
+//
+// Scorelessness alone is NOT enough to call a row abandoned: battle-royale and lobby
+// games (Warzone, Apex, PUBG, Fortnite) rank by placement and legitimately finish with
+// no score, as do head-to-head rows whose score was never published. Requiring an
+// unresolved placeholder name keeps those in tournament history.
 export async function deleteStaleFinishedMatches(
   tournamentId,
   {
@@ -605,8 +622,8 @@ export async function deleteStaleFinishedMatches(
 ) {
   const reader = client || { all };
   const cutoff = Number(nowSeconds) - Math.max(0, Number(staleAfterSeconds) || 0);
-  const rows = await reader.all(
-    `SELECT m.id
+  const candidates = await reader.all(
+    `SELECT m.id, m.team_a, m.team_b
        FROM matches m
       WHERE m.tournament_id = $1
         AND m.source = 'liquipedia'
@@ -622,6 +639,9 @@ export async function deleteStaleFinishedMatches(
              AND oma.expires_at > $3
         )`,
     [tournamentId, cutoff, nowSeconds],
+  );
+  const rows = candidates.filter(
+    (row) => isUnresolvedPlaceholderName(row.team_a) || isUnresolvedPlaceholderName(row.team_b),
   );
   if (!rows.length) return 0;
 

@@ -4,6 +4,16 @@ import { updateLeaderboard } from './leaderboard.js';
 import { updateVoiceChannel } from './voiceStatus.js';
 import { updateMatchCards } from './matchCardBoard.js';
 
+// discord.js validates payloads with @sapphire/shapeshift, whose combined errors all
+// carry the same useless message ("Received one or more errors") and hide the field that
+// actually failed. Unwrap the nested causes so a broken card is diagnosable from the log.
+function describeError(error, depth = 0) {
+  const message = error?.message || String(error);
+  const nested = Array.isArray(error?.errors) ? error.errors : null;
+  if (!nested?.length || depth >= 2) return message;
+  return `${message} [${nested.slice(0, 5).map((cause) => describeError(cause, depth + 1)).join('; ')}]`;
+}
+
 // Coalesces rapid match updates into one leaderboard+voice refresh per guild.
 const DEBOUNCE_MS = 2500;
 const pending = new Map(); // guildId -> timer
@@ -25,7 +35,7 @@ export function refreshGuild(client, guildId) {
     try {
       await updateMatchCards(client, guildId);
     } catch (e) {
-      logger.error(`[refresh] match card ${guildId}: ${e.message}`);
+      logger.error(`[refresh] match card ${guildId}: ${describeError(e)}`);
     }
   }, DEBOUNCE_MS);
   t.unref?.();

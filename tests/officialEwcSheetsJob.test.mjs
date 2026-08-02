@@ -8,6 +8,7 @@ process.env.LOG_LEVEL = 'error';
 const {
   deriveOfficialOverwatchSeriesResult,
   findOfficialMatch,
+  liveRotationWorkbooks,
   normalizedOfficialPair,
   officialTeamLogo,
   officialScheduleAliases,
@@ -432,4 +433,21 @@ test('different-time provider rows remain ambiguous rematches', () => {
     }),
     [],
   );
+});
+
+test('the live rotation narrows to workbooks with a running match', () => {
+  const workbooks = [
+    { id: 'live-a', fastPollPriority: 0 },
+    { id: 'soon-a', fastPollPriority: 1 },
+    { id: 'soon-b', fastPollPriority: 1 },
+    { id: 'live-b', fastPollPriority: 0 },
+  ];
+
+  // One workbook is read per tick, so rotating over all four quadruples the wait for the
+  // event being played right now.
+  assert.deepEqual(liveRotationWorkbooks(workbooks).map((entry) => entry.id), ['live-a', 'live-b']);
+  // With nothing running, keep sweeping every candidate so upcoming events still land.
+  const upcoming = workbooks.filter((entry) => entry.fastPollPriority === 1);
+  assert.deepEqual(liveRotationWorkbooks(upcoming).map((entry) => entry.id), ['soon-a', 'soon-b']);
+  assert.deepEqual(liveRotationWorkbooks([]), []);
 });
