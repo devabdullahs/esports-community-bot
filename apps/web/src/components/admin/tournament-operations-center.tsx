@@ -291,7 +291,12 @@ async function jsonRequest(url: string, init: RequestInit) {
     headers: { "Content-Type": "application/json", ...init.headers },
   });
   const data = (await response.json().catch(() => ({}))) as { error?: string };
-  if (!response.ok) throw new Error(data.error || "Request failed.");
+  // A route that rejects before it returns JSON — a 403 from the origin check, an auth
+  // redirect, a 500 HTML page — leaves no `error` field, and reporting a bare
+  // "Request failed." hides whether the cause was permissions, validation or an outage.
+  if (!response.ok) {
+    throw new Error(data.error || `${response.statusText || "Request failed"} (HTTP ${response.status})`);
+  }
   return data;
 }
 
