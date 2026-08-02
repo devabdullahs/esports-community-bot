@@ -97,14 +97,35 @@ test('matches the pair regardless of team order', async () => {
 test('retires old scoreless finished placeholders without removing recent unresolved rows', async () => {
   const t = await tournament('overwatch/EWC/2026-stale-finished');
   const now = 1_785_000_000;
-  await match(t.id, 'overwatch:stale:old', 'Old A', 'Old B', null, null, now - 5 * 3600);
-  await match(t.id, 'overwatch:stale:recent', 'Recent A', 'Recent B', null, null, now - 2 * 3600);
+  await match(t.id, 'overwatch:stale:old', 'UBSF M1 Loser', 'Dallas Fuel', null, null, now - 5 * 3600);
+  await match(t.id, 'overwatch:stale:recent', 'Winner of 2.1', 'Winner of 2.2', null, null, now - 2 * 3600);
 
   const retired = await deleteStaleFinishedMatches(t.id, { nowSeconds: now });
 
   assert.equal(retired, 1);
   assert.equal(await getMatch('liquipedia', 'overwatch:stale:old'), null);
   assert.ok(await getMatch('liquipedia', 'overwatch:stale:recent'));
+});
+
+// Regression: the sweep keyed only on "finished with no score", which is the NORMAL
+// shape of a battle-royale game — they are ranked by placement and never carry a score.
+// That deleted 35 real games from the Warzone Resurgence championship in one pass.
+test('keeps finished battle-royale games and unscored real matches', async () => {
+  const t = await tournament('callofduty/Warzone_Resurgence/2026');
+  const now = 1_785_000_000;
+  const old = now - 5 * 3600;
+  await match(t.id, 'callofduty:br:grand-final-game-9', 'Grand Final - Game 9', 'Lobby', null, null, old);
+  await match(t.id, 'callofduty:br:grand-final-game-10', 'Grand Final - Game 10', 'Lobby', null, null, old);
+  await match(t.id, 'callofduty:h2h:arrow-vs-pit', 'Arrow Tech Edge', 'The Pit EU', null, null, old);
+  await match(t.id, 'callofduty:br:tbd-slot', 'TBD', 'TBD', null, null, old);
+
+  const retired = await deleteStaleFinishedMatches(t.id, { nowSeconds: now });
+
+  assert.equal(retired, 1, 'only the undrawn TBD slot is retired');
+  assert.ok(await getMatch('liquipedia', 'callofduty:br:grand-final-game-9'));
+  assert.ok(await getMatch('liquipedia', 'callofduty:br:grand-final-game-10'));
+  assert.ok(await getMatch('liquipedia', 'callofduty:h2h:arrow-vs-pit'));
+  assert.equal(await getMatch('liquipedia', 'callofduty:br:tbd-slot'), null);
 });
 
 // deleteTournamentDuplicateMatches: a page can render the SAME match in both a
