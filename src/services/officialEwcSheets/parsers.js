@@ -104,15 +104,26 @@ function normalizedTitle(value) {
     .replace(/\s+/g, ' ');
 }
 
+// Several games run a last-chance qualifier as its OWN workbook and its own tournament,
+// under the same game and with a name the main event's needle also matches — "TEKKEN 8"
+// matches both the main bracket and "…: TEKKEN 8 - LCQ". Two candidates is not unique, so
+// resolution failed and the main event was never ingested at all. Tag both sides instead.
+export const LCQ_PATTERN = /\blcq\b|last chance qualifier/i;
+
+export function isLcqLabel(value) {
+  return LCQ_PATTERN.test(String(value ?? ''));
+}
+
 export function workbookDescriptor(title) {
   const label = normalizedTitle(title);
   if (!label) return null;
-  if (WORKBOOK_GAME_ALIASES.has(label)) return { label, ...WORKBOOK_GAME_ALIASES.get(label) };
+  const lcq = isLcqLabel(label);
+  if (WORKBOOK_GAME_ALIASES.has(label)) return { label, lcq, ...WORKBOOK_GAME_ALIASES.get(label) };
   for (const [key, descriptor] of [...WORKBOOK_GAME_ALIASES].sort(([a], [b]) => b.length - a.length)) {
     const comparableLabel = normalizedHeader(label);
     const comparableKey = normalizedHeader(key);
     if (comparableLabel.includes(comparableKey) || comparableKey.includes(comparableLabel)) {
-      return { label, ...descriptor };
+      return { label, lcq, ...descriptor };
     }
   }
   return null;

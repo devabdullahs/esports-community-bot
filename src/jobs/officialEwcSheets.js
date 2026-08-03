@@ -17,6 +17,7 @@ import { normalizeTeamName } from '../lib/render.js';
 import { armMatch, stopMatch } from './pollingManager.js';
 import { createOfficialSheetsClient } from '../services/officialEwcSheets/client.js';
 import {
+  isLcqLabel,
   parseOfficialWorkbook,
   workbookDescriptor,
 } from '../services/officialEwcSheets/parsers.js';
@@ -27,7 +28,7 @@ const ATTRIBUTION = '© Esports Foundation 2026. All rights reserved.';
 const DETAIL_SOURCE = 'internal-normalized';
 // Bump whenever parsing or reconciliation changes what gets persisted, so already-seen
 // workbooks are re-read once instead of waiting for the next unrelated edit.
-export const OFFICIAL_PARSER_VERSION = 13;
+export const OFFICIAL_PARSER_VERSION = 14;
 
 let running = false;
 let client = null;
@@ -84,12 +85,17 @@ function preferredProviderAlias(aliases) {
 }
 
 export function resolveOfficialTournament(tournaments, descriptor) {
+  // A last-chance qualifier is a separate workbook AND a separate tournament of the same
+  // game, so the two must never see each other as candidates: a main-event needle like
+  // "tekken" matches the LCQ too, and two candidates resolve to nothing at all.
+  const wantLcq = Boolean(descriptor?.lcq);
   const candidates = (tournaments || []).filter(
     (tournament) =>
       tournament?.active === 1 &&
       tournament?.archived_at == null &&
       tournament?.game === descriptor?.game &&
-      isEwcTournamentReference(tournament),
+      isEwcTournamentReference(tournament) &&
+      isLcqLabel(`${tournament.name || ''} ${tournament.external_id || ''}`) === wantLcq,
   );
   const needle = normalized(descriptor?.tournamentNeedle);
   const narrowed = needle

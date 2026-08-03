@@ -8,6 +8,7 @@ const {
   parseSchedule,
   parseStandings,
   parseTeamMapDetails,
+  isLcqLabel,
   parseTournamentEnrichment,
   scheduleTimestamp,
   workbookDescriptor,
@@ -42,6 +43,7 @@ test('workbook titles resolve only to supported public tournament identities', (
     workbookDescriptor('[PUBLIC] EA SPORTS FC 26 | Tournament Overview | Esports World Cup 2026'),
     {
       label: 'ea sports fc 26',
+      lcq: false,
       game: 'easportsfc',
       tournamentNeedle: 'world championship',
     },
@@ -50,6 +52,7 @@ test('workbook titles resolve only to supported public tournament identities', (
     workbookDescriptor('[PUBLIC] Mobile Legends Women\'s Invitational | Tournament Overview'),
     {
       label: 'mobile legends women\'s invitational',
+      lcq: false,
       game: 'mobilelegends',
       tournamentNeedle: 'women',
     },
@@ -58,6 +61,7 @@ test('workbook titles resolve only to supported public tournament identities', (
     workbookDescriptor('[PUBLIC] Call of Duty: Black Ops 7 (COD BO7) | Tournament Overview | Esports World Cup 2026'),
     {
       label: 'call of duty: black ops 7 (cod bo7)',
+      lcq: false,
       game: 'callofduty',
       tournamentNeedle: 'black ops',
     },
@@ -66,6 +70,7 @@ test('workbook titles resolve only to supported public tournament identities', (
     workbookDescriptor('[PUBLIC] Call of Duty: Warzone | Tournament Overview | Esports World Cup 2026'),
     {
       label: 'call of duty: warzone',
+      lcq: false,
       game: 'callofduty',
       tournamentNeedle: 'warzone',
     },
@@ -74,6 +79,7 @@ test('workbook titles resolve only to supported public tournament identities', (
     workbookDescriptor('[PUBLIC] Dota2 | Tournament Overview | Esports World Cup 2026'),
     {
       label: 'dota2',
+      lcq: false,
       game: 'dota2',
     },
   );
@@ -81,6 +87,7 @@ test('workbook titles resolve only to supported public tournament identities', (
     workbookDescriptor('[PUBLIC] Overwatch | Tournament Overview | Esports World Cup 2026'),
     {
       label: 'overwatch',
+      lcq: false,
       game: 'overwatch',
     },
   );
@@ -88,6 +95,7 @@ test('workbook titles resolve only to supported public tournament identities', (
     workbookDescriptor('[PUBLIC] Rainbow Six Siege | Tournament Overview | Esports World Cup 2026'),
     {
       label: 'rainbow six siege',
+      lcq: false,
       game: 'rainbowsix',
     },
   );
@@ -95,6 +103,7 @@ test('workbook titles resolve only to supported public tournament identities', (
     workbookDescriptor('[PUBLIC] Mobile Legends: Bang Bang Women (MLBBW / MWI) | Tournament Overview'),
     {
       label: 'mobile legends: bang bang women (mlbbw / mwi)',
+      lcq: false,
       game: 'mobilelegends',
       tournamentNeedle: 'women',
     },
@@ -103,11 +112,27 @@ test('workbook titles resolve only to supported public tournament identities', (
     workbookDescriptor('[PUBLIC] Rocket League | Tournament Overview | Esports World Cup 2026'),
     {
       label: 'rocket league',
+      lcq: false,
       game: 'rocketleague',
       tournamentNeedle: 'featuring rocket league',
     },
   );
   assert.equal(workbookDescriptor('Internal credentials'), null);
+});
+
+// A last-chance qualifier ships as its own workbook for the same game, so the descriptor
+// has to say which side of the split it is on before a tournament can be picked.
+test('workbook titles mark last-chance qualifiers apart from their main event', () => {
+  const lcqOf = (title) => workbookDescriptor(`[PUBLIC] ${title} | Tournament Overview | Esports World Cup 2026`);
+
+  assert.equal(lcqOf('TEKKEN 8 (T8)').lcq, false);
+  assert.equal(lcqOf('LCQ for Rocket League').lcq, true);
+  assert.equal(lcqOf('Chess - LCQ').lcq, true);
+  assert.equal(lcqOf('LCQ for Call of Duty: Black Ops 7 (COD BO7)').lcq, true);
+  // Both spellings appear in tournament names; the workbook titles only use one.
+  assert.equal(isLcqLabel('FC Pro Last Chance Qualifier at 2026 Esports World Cup'), true);
+  assert.equal(isLcqLabel('Esports World Cup 2026: TEKKEN 8 - LCQ'), true);
+  assert.equal(isLcqLabel('Tekken 8 - Esports World Cup 2026'), false);
 });
 
 test('schedule timestamps treat sheet dates as Riyadh local time', () => {

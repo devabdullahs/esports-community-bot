@@ -252,6 +252,36 @@ test('tournament resolution keeps the two Call of Duty workbooks apart', () => {
   );
 });
 
+// TEKKEN 8 runs a last-chance qualifier as its own EWC tournament under the same
+// `fighters` game. The main event's needle matches the LCQ name too, so both survived
+// filtering, "exactly one candidate" failed, and the main bracket was never ingested.
+test('tournament resolution keeps a last-chance qualifier out of its main event', () => {
+  const main = tournament({
+    id: 50,
+    game: 'fighters',
+    name: 'Tekken 8 - Esports World Cup 2026',
+    external_id: 'fighters/Esports_World_Cup/2026/Tekken_8',
+  });
+  const lcq = tournament({
+    id: 97,
+    game: 'fighters',
+    name: 'Esports World Cup 2026: TEKKEN 8 - LCQ',
+    external_id: 'fighters/Esports_World_Cup/2026/Tekken_8/Last_Chance_Qualifier',
+  });
+  const descriptor = { game: 'fighters', tournamentNeedle: 'tekken', lcq: false };
+
+  assert.equal(resolveOfficialTournament([main, lcq], descriptor)?.id, 50);
+  assert.equal(resolveOfficialTournament([main, lcq], { ...descriptor, lcq: true })?.id, 97);
+  // A sibling game in the same tournament family must still be excluded by its needle.
+  const streetFighter = tournament({
+    id: 49,
+    game: 'fighters',
+    name: 'Street Fighter 6 - Esports World Cup 2026',
+    external_id: 'fighters/Esports_World_Cup/2026/Street_Fighter_6',
+  });
+  assert.equal(resolveOfficialTournament([main, lcq, streetFighter], descriptor)?.id, 50);
+});
+
 test('pair matching is order-independent and requires a unique timed candidate', () => {
   const scheduledAt = 1_785_000_000;
   const matches = [
