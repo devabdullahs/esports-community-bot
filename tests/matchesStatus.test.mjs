@@ -267,6 +267,71 @@ test('dedupeMatches preserves legitimate same-pair rematches later on the same d
   assert.notEqual(matchEventKey(first), matchEventKey(rematch));
 });
 
+// A provider publishes the same fixture as an untimed row beside the timed one it was
+// played under. The duplicate sweep skips untimed rows on purpose, so once the event ends
+// nothing clears them and they sit on the cards as "Time TBD" indefinitely.
+test('placeholder sweep retires untimed rows once a tournament has concluded', async () => {
+  const now = Math.floor(Date.now() / 1000);
+  const newTournament = async (externalId) => {
+    const row = await run(
+      `INSERT INTO tournaments (source, external_id, game, name, guild_id)
+       VALUES ($1, $2, $3, $4, $5)`,
+      ['liquipedia', externalId, 'mobilelegends', externalId, 'guild-1'],
+    );
+    return Number(row.lastInsertRowid);
+  };
+  const addMatch = (tournamentId, externalId, overrides) =>
+    upsertMatch({
+      tournament_id: tournamentId,
+      source: 'liquipedia',
+      external_id: externalId,
+      name: externalId,
+      team_a: 'Bigetron by Vitality',
+      team_b: 'Team Falcons PH',
+      status: 'scheduled',
+      scheduled_at: null,
+      ...overrides,
+    });
+
+  const concluded = await newTournament('mobilelegends/Concluded');
+  await addMatch(concluded, 'played', {
+    status: 'finished',
+    score_a: 2,
+    score_b: 0,
+    scheduled_at: now - 48 * 3600,
+  });
+  await addMatch(concluded, 'untimed-duplicate');
+  // A finished row without a time is real history for providers that publish no clock.
+  await addMatch(concluded, 'untimed-finished', { status: 'finished', score_a: 3, score_b: 1 });
+
+  assert.equal(await deleteTournamentPlaceholderMatches(concluded, ['played']), 1);
+  assert.equal(await getMatch('liquipedia', 'untimed-duplicate'), null);
+  assert.equal((await getMatch('liquipedia', 'played')).status, 'finished');
+  assert.equal((await getMatch('liquipedia', 'untimed-finished')).status, 'finished');
+
+  // Still on the clock: an undrawn later round must survive the rounds already played.
+  const running = await newTournament('mobilelegends/Running');
+  await addMatch(running, 'running-played', {
+    status: 'finished',
+    score_a: 2,
+    score_b: 1,
+    scheduled_at: now - 48 * 3600,
+  });
+  await addMatch(running, 'running-upcoming', { scheduled_at: now + 6 * 3600 });
+  await addMatch(running, 'running-undrawn');
+
+  assert.equal(await deleteTournamentPlaceholderMatches(running, ['running-played', 'running-upcoming']), 0);
+  assert.notEqual(await getMatch('liquipedia', 'running-undrawn'), null);
+
+  // Never started: an entirely untimed bracket has no finished match to conclude it.
+  const unstarted = await newTournament('mobilelegends/Unstarted');
+  await addMatch(unstarted, 'unstarted-a');
+  await addMatch(unstarted, 'unstarted-b');
+
+  assert.equal(await deleteTournamentPlaceholderMatches(unstarted, ['unstarted-a', 'unstarted-b']), 0);
+  assert.notEqual(await getMatch('liquipedia', 'unstarted-a'), null);
+});
+
 test('markStaleActiveFinished retires old scheduled and running rows only', async (t) => {
   t.after(async () => {
     await closeDbClient();
