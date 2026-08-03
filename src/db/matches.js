@@ -758,6 +758,7 @@ export async function deleteTournamentPlaceholderMatches(
   const now = Math.floor(Date.now() / 1000);
   const rows = await reader.all(
     `SELECT m.id, m.external_id, m.team_a, m.team_b, m.scheduled_at,
+            m.status, m.score_a, m.score_b,
             CASE WHEN EXISTS (
               SELECT 1 FROM official_match_authority oma
                WHERE oma.match_id = m.id AND oma.expires_at > $2
@@ -778,9 +779,29 @@ export async function deleteTournamentPlaceholderMatches(
     return !text || /^TBD$/i.test(text);
   };
 
+  // A provider can publish the same fixture as an untimed row alongside the timed one it
+  // actually played under, and the duplicate sweep deliberately leaves untimed rows alone
+  // because it cannot tell which of two same-pair rematches they belong to. Nothing revisits
+  // them once the event ends, so they linger on cards forever as "Time TBD".
+  //
+  // After the tournament concludes that ambiguity no longer matters: a row with no time, no
+  // score and no terminal status will never resolve into anything. Concluded means it has
+  // played at least one match AND has nothing left on the clock — an unstarted bracket has
+  // no finished match, so its undrawn rows are never touched by this.
+  const concluded =
+    rows.some((row) => String(row.status ?? '') === 'finished') &&
+    !rows.some((row) => Number(row.scheduled_at) > now - staleAfterSeconds);
+  const abandonedAfterConclusion = (row) =>
+    concluded &&
+    row.scheduled_at == null &&
+    String(row.status ?? '') !== 'finished' &&
+    row.score_a == null &&
+    row.score_b == null;
+
   const ids = rows
     .filter((row) => {
       if (row.official_fresh) return false;
+      if (abandonedAfterConclusion(row)) return true;
       if (/^sgg:preview_/i.test(String(row.external_id ?? ''))) {
         return current && !current.has(row.external_id);
       }
