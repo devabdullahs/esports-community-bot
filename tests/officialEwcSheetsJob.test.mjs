@@ -216,6 +216,42 @@ test('tournament resolution selects the Rocket League main event over its LCQ', 
   assert.equal(resolveOfficialTournament([target, lcq], descriptor)?.id, 7);
 });
 
+// Warzone and Black Ops 7 are separate EWC events whose tournaments are both stored under
+// the `callofduty` game. Without a needle on each, the sole active Call of Duty tournament
+// is a unique candidate for BOTH workbooks, so Black Ops 7 wrote its fixtures into the
+// Warzone championship while the Warzone workbook resolved to nothing.
+test('tournament resolution keeps the two Call of Duty workbooks apart', () => {
+  const warzone = tournament({
+    id: 41,
+    game: 'callofduty',
+    name: 'Warzone Resurgence Series 2026 Championship',
+  });
+
+  assert.equal(
+    resolveOfficialTournament([warzone], { game: 'callofduty', tournamentNeedle: 'warzone' })?.id,
+    41,
+  );
+  // No Black Ops 7 tournament is tracked yet: staying unresolved is the correct outcome.
+  assert.equal(
+    resolveOfficialTournament([warzone], { game: 'callofduty', tournamentNeedle: 'black ops' }),
+    null,
+  );
+
+  const blackOps = tournament({
+    id: 200,
+    game: 'callofduty',
+    name: 'Call of Duty: Black Ops 7 at Esports World Cup 2026',
+  });
+  assert.equal(
+    resolveOfficialTournament([warzone, blackOps], { game: 'callofduty', tournamentNeedle: 'black ops' })?.id,
+    200,
+  );
+  assert.equal(
+    resolveOfficialTournament([warzone, blackOps], { game: 'callofduty', tournamentNeedle: 'warzone' })?.id,
+    41,
+  );
+});
+
 test('pair matching is order-independent and requires a unique timed candidate', () => {
   const scheduledAt = 1_785_000_000;
   const matches = [
@@ -300,7 +336,11 @@ test('full official refresh prioritizes running and nearest upcoming tournaments
   const tournaments = [
     tournament({ id: 11, game: 'overwatch' }),
     tournament({ id: 12, game: 'crossfire' }),
-    tournament({ id: 13, game: 'callofduty' }),
+    tournament({
+      id: 13,
+      game: 'callofduty',
+      name: 'Call of Duty: Black Ops 7 at Esports World Cup 2026',
+    }),
   ];
   const matches = new Map([
     [11, [{ status: 'scheduled', scheduled_at: 1_785_020_000 }]],

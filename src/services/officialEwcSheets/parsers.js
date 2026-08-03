@@ -36,7 +36,11 @@ const PUBLIC_OVERVIEW_FACT_KEYS = new Set([
 const WORKBOOK_GAME_ALIASES = new Map([
   ['apex', { game: 'apexlegends' }],
   ['apex legends', { game: 'apexlegends' }],
-  ['call of duty black ops 7', { game: 'callofduty' }],
+  // Both Call of Duty events store their tournament under the `callofduty` game, so each
+  // needs a needle: without one, whichever workbook resolves first claims the only active
+  // Call of Duty tournament. Black Ops 7 has no tracked tournament yet and stays unresolved
+  // until one appears, which is the correct outcome — better than landing in Warzone's.
+  ['call of duty black ops 7', { game: 'callofduty', tournamentNeedle: 'black ops' }],
   ['chess', { game: 'chess' }],
   ['counter-strike 2', { game: 'counterstrike' }],
   ['crossfire', { game: 'crossfire' }],
@@ -65,7 +69,7 @@ const WORKBOOK_GAME_ALIASES = new Map([
   ['tekken 8', { game: 'fighters', tournamentNeedle: 'tekken' }],
   ['trackmania', { game: 'trackmania' }],
   ['valorant', { game: 'valorant' }],
-  ['warzone', { game: 'warzone' }],
+  ['warzone', { game: 'callofduty', tournamentNeedle: 'warzone' }],
 ]);
 
 function text(value) {

@@ -59,6 +59,15 @@ test('workbook titles resolve only to supported public tournament identities', (
     {
       label: 'call of duty: black ops 7 (cod bo7)',
       game: 'callofduty',
+      tournamentNeedle: 'black ops',
+    },
+  );
+  assert.deepEqual(
+    workbookDescriptor('[PUBLIC] Call of Duty: Warzone | Tournament Overview | Esports World Cup 2026'),
+    {
+      label: 'call of duty: warzone',
+      game: 'callofduty',
+      tournamentNeedle: 'warzone',
     },
   );
   assert.deepEqual(
