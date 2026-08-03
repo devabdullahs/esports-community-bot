@@ -163,6 +163,27 @@ test('schedule parser accepts the official Overwatch layout and carries merged d
   ]);
 });
 
+// Rows copied from the official Rainbow Six Siege workbook. A team name whose second
+// word starts with "V" used to swallow the separator search: the pair split three ways,
+// was rejected, and the row landed as one blob team against a "Lobby" placeholder —
+// a ghost fixture beside the real match instead of matching it on the team pair.
+test('schedule parser splits pairs when a team name contains a V-initial word', () => {
+  const parsed = parseSchedule([
+    ['', 'Tournament Day #', '', 'Date', 'Week', 'Stream', 'Best of X', 'Start Time', '', '', '', '', '', 'Round', 'Match', 'Comment'],
+    ['', '', '', '', '', '', '', '- PUBLIC-\n- CEST-', '- PUBLIC-\n- AST -'],
+    ['', 'Day 1', 46238, 46238, 'SS1', 'Stream A', 'Bo1', '14:00', '', '', '', '', '', 'PL - Group B - UB 1.1', 'CAG by VARREL vs Fnatic'],
+    ['', '', 46238, '', 'SS2', 'Stream B', 'Bo1', '14:00', '', '', '', '', '', 'PL - Group B - UB 1.2', 'KINGZERO eSports vs MIBR.LOS'],
+    ['', '', 46238, '', 'SS1', 'Stream A', 'Bo3', '16:00', '', '', '', '', '', 'PL - Group A - UB 2.1', 'Twisted Minds vs Team Vitality'],
+  ], { game: 'rainbowsix' });
+
+  assert.deepEqual(parsed.map((match) => [match.teamA, match.teamB]), [
+    ['CAG by VARREL', 'Fnatic'],
+    ['KINGZERO eSports', 'MIBR.LOS'],
+    ['Twisted Minds', 'Team Vitality'],
+  ]);
+  assert.equal(parsed.some((match) => match.teamB === 'Lobby'), false);
+});
+
 test('schedule status treats a non-terminal best-of score as running', () => {
   const parsed = parseSchedule([
     ['Date', 'Start Time', 'Best of X', 'Round', 'Match', 'Score A', 'Score B'],

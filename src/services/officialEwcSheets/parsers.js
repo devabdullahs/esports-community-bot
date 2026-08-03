@@ -227,9 +227,14 @@ function scheduleTimezoneOffsetMinutes(rows, header, timeIndex) {
   return 180;
 }
 
+// The separator must be a standalone token, so it needs whitespace on BOTH sides —
+// except "vs." where the dot already closes it and the sheets often omit the space
+// ("Weibo Gaming vs.Twisted Minds"). Allowing a bare "v" to end at any character
+// instead lets a team's own initial start the match: "CAG by VARREL vs Fnatic"
+// splits three ways, is rejected, and the row degrades into a ghost fixture.
 function splitPair(value) {
   const raw = text(value);
-  const parts = raw.split(/\s+v(?:s\.?)?\s*/i).map(text).filter(Boolean);
+  const parts = raw.split(/\s+(?:vs\.\s*|vs?\s+)/i).map(text).filter(Boolean);
   return parts.length === 2 ? parts : null;
 }
 
