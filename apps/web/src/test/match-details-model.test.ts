@@ -222,7 +222,7 @@ describe("match details page model", () => {
           otSidePick: { team: "Fnatic", side: "Attacking" },
         },
         // The decider is chosen by neither side and the sheet leaves its sides empty.
-        { name: "Club House", scoreA: null, scoreB: null, sidePick: null, otSidePick: {} },
+        { name: "Club House", decider: true, scoreA: null, scoreB: null, sidePick: null, otSidePick: {} },
       ],
       mapBans: [
         { map: "Border", team: "Fnatic", order: 1 },
@@ -243,6 +243,9 @@ describe("match details page model", () => {
     // A side choice with no side left is nothing to show.
     expect(series?.maps[1].otSidePick).toBeNull();
     // Bans belong to the series; one with no map name is unrenderable and drops out.
+    // The decider is chosen by neither team; the flag keeps that distinct from a gap.
+    expect(series?.maps[0].decider).toBe(false);
+    expect(series?.maps[1].decider).toBe(true);
     expect(series?.mapBans).toEqual([
       { map: "Border", team: "Fnatic", order: 1 },
       { map: "Bank", team: "MIBR.LOS", order: 2 },

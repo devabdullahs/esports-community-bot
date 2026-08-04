@@ -116,6 +116,8 @@ export type TeamSeriesDetails = DetailBase & {
     mode: string | null;
     round: string | null;
     pickedBy: string | null;
+    // The map the veto leaves behind: chosen by neither team, so it never has a picker.
+    decider: boolean;
     scoreA: number | null;
     scoreB: number | null;
     winner: string | null;
@@ -380,6 +382,7 @@ export function toMatchDetailsViewModel(payload: unknown): MatchDetailsViewModel
           mode: text(map.mode),
           round: text(map.round),
           pickedBy: text(map.pickedBy),
+          decider: map.decider === true,
           scoreA: number(map.scoreA),
           scoreB: number(map.scoreB),
           winner: text(map.winner),
