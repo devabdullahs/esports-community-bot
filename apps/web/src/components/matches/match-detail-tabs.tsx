@@ -64,6 +64,7 @@ type MatchDetailsCopy = {
   matchDetailsMode: string;
   matchDetailsPickedBy: string;
   matchDetailsMapBans: string;
+  matchDetailsDecider: string;
   matchDetailsSidePick: string;
   matchDetailsOtSidePick: string;
 };
@@ -433,6 +434,7 @@ function TeamSeries({
             <div className="flex flex-wrap items-center gap-2">
               <h2 className="font-semibold" dir="auto">{map.name ?? text.matchDetailsMap(index + 1)}</h2>
               {map.mode ? <Badge variant="secondary">{map.mode}</Badge> : null}
+              {map.decider ? <Badge variant="outline">{text.matchDetailsDecider}</Badge> : null}
             </div>
             {map.round ? <span className="text-sm text-muted-foreground" dir="auto">{map.round}</span> : null}
           </div>

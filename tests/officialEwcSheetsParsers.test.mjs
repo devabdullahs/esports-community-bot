@@ -181,6 +181,7 @@ test('veto parser reads the Rainbow Six map ban sequence down to its decider', (
     map: 'Bank',
     order: 1,
     step: 9,
+    decider: true,
     pickedBy: '',
     sidePick: 'Attacking',
     sidePickTeam: 'CAG by VARREL',
@@ -207,6 +208,8 @@ test('veto parser keeps a best-of-three picking order apart from its ban order',
     [6, 8, 'Chalet'],
   ]);
   assert.deepEqual(bo3.maps.map((map) => map.step), [5, 6, 9]);
+  // Nobody picks a decider, so an empty picker there is the answer, not a gap.
+  assert.deepEqual(bo3.maps.map((map) => map.decider), [false, false, true]);
   // The decider carries no side choice; the sheet leaves those columns empty.
   assert.equal(bo3.maps[2].sidePick, '');
   assert.equal(bo3.maps[0].sidePickTeam, 'MIBR.LOS');

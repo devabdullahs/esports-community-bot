@@ -506,8 +506,11 @@ const VETO_STEP_ROLES = new Map([
   ['team b ban', { kind: 'ban', side: 'b' }],
   ['team a map pick', { kind: 'pick', side: 'a' }],
   ['team b map pick', { kind: 'pick', side: 'b' }],
-  ['final map', { kind: 'pick', side: null }],
-  ['decider', { kind: 'pick', side: null }],
+  // Nobody picks a decider — it is whatever map the bans and picks leave behind — so it
+  // has no team, and Bo3 gives it no side columns either. Mark it rather than leaving a
+  // map that reads as though its picker went missing.
+  ['final map', { kind: 'pick', side: null, decider: true }],
+  ['decider', { kind: 'pick', side: null, decider: true }],
 ]);
 
 // Side-choice columns are labelled with the team, not the header: "Fnatic OT Side Choice".
@@ -567,6 +570,7 @@ export function parseSeriesVetoes(rows) {
         map,
         order: maps.length + 1,
         step: step_,
+        decider: Boolean(step.decider),
         pickedBy: sideFor(step.side),
         sidePick: step.sideIndex >= 0 ? text(row[step.sideIndex]) : '',
         sidePickTeam: step.sideTeamIndex >= 0 ? vetoSideChoiceTeam(row[step.sideTeamIndex]) : '',
@@ -602,6 +606,7 @@ export function seriesVetoesToMapDetails(series) {
         round: entry.round,
         map: map.map,
         mode: '',
+        decider: map.decider,
         pickedBy: map.pickedBy,
         scoreA: null,
         scoreB: null,
