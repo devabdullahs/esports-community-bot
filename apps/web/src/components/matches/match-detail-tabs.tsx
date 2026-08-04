@@ -63,6 +63,9 @@ type MatchDetailsCopy = {
   matchDetailsPoints: string;
   matchDetailsMode: string;
   matchDetailsPickedBy: string;
+  matchDetailsMapBans: string;
+  matchDetailsSidePick: string;
+  matchDetailsOtSidePick: string;
 };
 
 function score(value: number | null) {
@@ -82,10 +85,23 @@ function ScoreStrip({
   scoreB: number | null;
   winner: Side | null;
 }) {
+  // A map veto is agreed before the series is played, so its maps carry no result at all.
+  // A row of "- - -" between two names the match header already shows states nothing, so
+  // drop the strip until there is a score or a winner to report.
+  const hasScore = scoreA !== null || scoreB !== null;
+  if (!hasScore && !winner) return null;
   return (
-    <div className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-3 rounded-lg bg-muted/50 px-3 py-2 text-sm" dir="ltr">
+    <div
+      className={cn(
+        "grid items-center gap-3 rounded-lg bg-muted/50 px-3 py-2 text-sm",
+        hasScore ? "grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)]" : "grid-cols-2",
+      )}
+      dir="ltr"
+    >
       <span className={cn("truncate font-medium", winner === "a" && "text-primary")}>{teamA}</span>
-      <span className="tabular-nums font-semibold">{score(scoreA)} - {score(scoreB)}</span>
+      {hasScore ? (
+        <span className="tabular-nums font-semibold">{score(scoreA)} - {score(scoreB)}</span>
+      ) : null}
       <span className={cn("truncate text-end font-medium", winner === "b" && "text-primary")}>{teamB}</span>
     </div>
   );
@@ -394,6 +410,23 @@ function TeamSeries({
 }) {
   return (
     <div className="flex flex-col gap-3">
+      {details.mapBans.length ? (
+        <section className="flex flex-col gap-2 rounded-xl border p-4">
+          <h2 className="text-sm font-semibold">{text.matchDetailsMapBans}</h2>
+          <ol className="flex flex-wrap gap-2">
+            {details.mapBans.map((ban, index) => (
+              <li
+                key={`${ban.map}-${index}`}
+                className="flex items-baseline gap-1.5 rounded-lg bg-muted/50 px-2.5 py-1 text-sm"
+                dir="auto"
+              >
+                <span className="line-through decoration-muted-foreground/60">{ban.map}</span>
+                {ban.team ? <span className="text-xs text-muted-foreground">{ban.team}</span> : null}
+              </li>
+            ))}
+          </ol>
+        </section>
+      ) : null}
       {details.maps.map((map, index) => (
         <section key={`${map.name}-${map.round}-${index}`} className="flex flex-col gap-3 rounded-xl border p-4">
           <div className="flex flex-wrap items-center justify-between gap-2">
@@ -431,10 +464,22 @@ function TeamSeries({
               ))}
             </div>
           ) : null}
-          {map.pickedBy ? (
-            <span className="text-xs text-muted-foreground" dir="auto">
-              {text.matchDetailsPickedBy}: {map.pickedBy}
-            </span>
+          {map.pickedBy || map.sidePick || map.otSidePick ? (
+            <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground" dir="auto">
+              {map.pickedBy ? <span>{text.matchDetailsPickedBy}: {map.pickedBy}</span> : null}
+              {map.sidePick ? (
+                <span>
+                  {text.matchDetailsSidePick}: {map.sidePick.side}
+                  {map.sidePick.team ? ` (${map.sidePick.team})` : ""}
+                </span>
+              ) : null}
+              {map.otSidePick ? (
+                <span>
+                  {text.matchDetailsOtSidePick}: {map.otSidePick.side}
+                  {map.otSidePick.team ? ` (${map.otSidePick.team})` : ""}
+                </span>
+              ) : null}
+            </div>
           ) : null}
         </section>
       ))}

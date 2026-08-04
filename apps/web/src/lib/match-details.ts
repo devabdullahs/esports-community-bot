@@ -121,7 +121,13 @@ export type TeamSeriesDetails = DetailBase & {
     winner: string | null;
     // One ban per team per map in the official Overwatch log; null when the sheet has none.
     bans: { a: DraftEntry | null; b: DraftEntry | null } | null;
+    // Rainbow Six chooses starting sides per map during the veto.
+    sidePick: { team: string | null; side: string } | null;
+    otSidePick: { team: string | null; side: string } | null;
   }[];
+  // Map bans belong to the SERIES, not to any one map: Rainbow Six bans maps out of the
+  // pool before picking, where Overwatch bans heroes on each map individually.
+  mapBans: { map: string; team: string | null; order: number | null }[];
 };
 
 export type OfficialBattleRoyaleDetails = DetailBase & {
@@ -245,6 +251,14 @@ function mapDotaPlayer(row: RawRecord): DotaPlayer {
 
 function mapDraftEntry(row: RawRecord): DraftEntry {
   return { hero: text(row.hero), order: number(row.order) };
+}
+
+// The side is the point of the entry, so drop a choice that has lost it; the team may be
+// missing on its own, which only costs the label.
+function mapSideChoice(value: unknown): { team: string | null; side: string } | null {
+  const row = record(value);
+  const choice = row ? text(row.side) : null;
+  return choice ? { team: row ? text(row.team) : null, side: choice } : null;
 }
 
 function mapTeamStats(row: RawRecord) {
@@ -372,8 +386,17 @@ export function toMatchDetailsViewModel(payload: unknown): MatchDetailsViewModel
           bans: banA || banB
             ? { a: banA ? mapDraftEntry(banA) : null, b: banB ? mapDraftEntry(banB) : null }
             : null,
+          sidePick: mapSideChoice(map.sidePick),
+          otSidePick: mapSideChoice(map.otSidePick),
         };
       }).slice(0, 30),
+      mapBans: valueByLabel(raw.mapBans, (ban) => ({
+        map: text(ban.map),
+        team: text(ban.team),
+        order: number(ban.order),
+      }))
+        .flatMap((ban) => (ban.map ? [{ ...ban, map: ban.map }] : []))
+        .slice(0, 30),
     };
   }
 

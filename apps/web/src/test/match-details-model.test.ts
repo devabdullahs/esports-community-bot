@@ -207,6 +207,57 @@ describe("match details page model", () => {
     expect(maps[1].pickedBy).toBeNull();
   });
 
+  test("carries the Rainbow Six series map bans and per-map side choices", () => {
+    const details = toMatchDetailsViewModel({
+      version: 1,
+      kind: "teamSeries",
+      maps: [
+        {
+          name: "Fortress",
+          round: "Stream A - Day 1, Match 3",
+          pickedBy: "Fnatic",
+          scoreA: null,
+          scoreB: null,
+          sidePick: { team: "MIBR.LOS", side: "Defending" },
+          otSidePick: { team: "Fnatic", side: "Attacking" },
+        },
+        // The decider is chosen by neither side and the sheet leaves its sides empty.
+        { name: "Club House", scoreA: null, scoreB: null, sidePick: null, otSidePick: {} },
+      ],
+      mapBans: [
+        { map: "Border", team: "Fnatic", order: 1 },
+        { map: "Bank", team: "MIBR.LOS", order: 2 },
+        { map: "", team: "Fnatic", order: 3 },
+      ],
+    });
+
+    const series = details?.kind === "teamSeries" ? details : null;
+    expect(series).not.toBeNull();
+    expect(series?.maps[0]).toMatchObject({
+      name: "Fortress",
+      pickedBy: "Fnatic",
+      sidePick: { team: "MIBR.LOS", side: "Defending" },
+      otSidePick: { team: "Fnatic", side: "Attacking" },
+    });
+    expect(series?.maps[1].sidePick).toBeNull();
+    // A side choice with no side left is nothing to show.
+    expect(series?.maps[1].otSidePick).toBeNull();
+    // Bans belong to the series; one with no map name is unrenderable and drops out.
+    expect(series?.mapBans).toEqual([
+      { map: "Border", team: "Fnatic", order: 1 },
+      { map: "Bank", team: "MIBR.LOS", order: 2 },
+    ]);
+  });
+
+  test("a series with no map bans still yields an empty list, not a missing one", () => {
+    const details = toMatchDetailsViewModel({
+      version: 1,
+      kind: "teamSeries",
+      maps: [{ name: "Busan", scoreA: 2, scoreB: 0 }],
+    });
+    expect(details?.kind === "teamSeries" ? details.mapBans : null).toEqual([]);
+  });
+
   test("accepts only the exact official attribution string", () => {
     expect(toMatchDetailsViewModel({
       version: 1,
