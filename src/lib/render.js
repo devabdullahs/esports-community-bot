@@ -19,6 +19,11 @@ const NORMALIZED_TEAM_ALIASES = new Map([
   ['poorrangers', 'powerrangers'],
   ['bbteam', 'betboomteam'],
   ['runeeatersesports', 'runeeaters'],
+  // Rainbow Six at EWC 2026: the official sheet writes the full org name where the
+  // provider uses the roster's own. Without these the sheet cannot find the tracked
+  // match, so it creates a duplicate beside it and its map veto attaches to that copy.
+  ['los', 'mibrlos'],
+  ['alulaclubesports', 'alulaclub'],
 ]);
 
 // Normalized key for recognizing the same team/player across sources and name forms — e.g.

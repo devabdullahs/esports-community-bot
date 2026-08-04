@@ -35,6 +35,12 @@ test('normalizeTeamName resolves known Liquipedia short-name redirects', () => {
   assert.equal(normalizeTeamName('BetBoom Team'), 'betboomteam');
   assert.equal(normalizeTeamName('Rune Eaters'), 'runeeaters');
   assert.equal(normalizeTeamName('Rune Eaters Esports'), 'runeeaters');
+  // Rainbow Six at EWC 2026: the official sheet writes the org, the provider the roster.
+  assert.equal(normalizeTeamName('MIBR.LOS'), normalizeTeamName('LOS'));
+  assert.equal(normalizeTeamName('AlUla Club Esports'), normalizeTeamName('Al-Ula Club'));
+  // Neighbouring names must not be swept up by either alias.
+  assert.notEqual(normalizeTeamName('MIBR'), normalizeTeamName('MIBR.LOS'));
+  assert.notEqual(normalizeTeamName('AlUla Esports'), normalizeTeamName('Al-Ula Club'));
 });
 
 test('dedupeMatches collapses live-widget alias rows by timestamp and shared team', () => {
