@@ -6,6 +6,7 @@ const {
   parseIndividualResults,
   parseOfficialWorkbook,
   parseSchedule,
+  parseSeriesVetoes,
   parseStandings,
   parseTeamMapDetails,
   isLcqLabel,
@@ -133,6 +134,99 @@ test('workbook titles mark last-chance qualifiers apart from their main event', 
   assert.equal(isLcqLabel('FC Pro Last Chance Qualifier at 2026 Esports World Cup'), true);
   assert.equal(isLcqLabel('Esports World Cup 2026: TEKKEN 8 - LCQ'), true);
   assert.equal(isLcqLabel('Tekken 8 - Esports World Cup 2026'), false);
+});
+
+// Rows copied from the official Rainbow Six workbook's veto tabs. One row per series, one
+// column per veto step, so the three formats differ only in width — Bo1 bans eight maps
+// down to a decider, Bo3 bans four, picks two, then bans two more before its decider.
+const R6_BO1_VETOS = [
+  ['Event', 'Match', 'Confirmed', 'Team A', 'Team B', 'Team A Ban ', 'Team B Ban ', 'Team A Ban ', 'Team B Ban ', 'Team A Ban', 'Team B Ban ', 'Team A Ban ', 'Team B Ban', 'Final Map', 'Team', 'Side Pick', 'Team', 'OT Side Pick', 'Date'],
+  [
+    'EWC 2026', 'Stream A - Day 1, Match 1', 'Confirmed', 'CAG by VARREL', 'Fnatic',
+    'Border', 'Club House', 'Kafe', 'Consulate', 'Chalet', 'Lair', 'Fortress', 'Nighthaven Labs',
+    'Bank', 'CAG by VARREL Side Choice', 'Attacking ', 'Fnatic OT Side Choice', 'Attacking ', 46238.54469196759,
+  ],
+];
+
+const R6_BO3_VETOS = [
+  ['Event', 'Match', 'Confirmed', 'Team A', 'Team B', 'Team A Ban ', 'Team B Ban ', 'Team A Ban ', 'Team B Ban ', 'Team A Map Pick', 'Team B', 'Side Pick', 'Team A ', 'OT Side Pick', 'Team B Map Pick', 'Team A', 'Side Pick', 'Team B', 'OT Side Pick', 'Team A Ban ', 'Team B Ban ', 'Decider', 'Date'],
+  [
+    'EWC 2026', 'Stream A - Day 1, Match 3', 'Confirmed', 'Fnatic', 'MIBR.LOS',
+    'Border', 'Bank', 'Consulate', 'Lair',
+    'Fortress', 'MIBR.LOS Side Choice', 'Defending', 'Fnatic OT Side Choice', 'Attacking ',
+    'Kafe', 'Fnatic Side Choice', 'Defending', 'MIBR.LOS OT Side Choice', 'Defending',
+    'Nighthaven Labs', 'Chalet', 'Club House', 46238.65527185185,
+  ],
+];
+
+test('veto parser reads the Rainbow Six map ban sequence down to its decider', () => {
+  const [bo1] = parseSeriesVetoes(R6_BO1_VETOS);
+
+  assert.equal(bo1.teamA, 'CAG by VARREL');
+  assert.equal(bo1.teamB, 'Fnatic');
+  assert.equal(bo1.confirmed, true);
+  assert.equal(bo1.bans.length, 8);
+  assert.deepEqual(bo1.bans.map((ban) => [ban.team, ban.map]), [
+    ['CAG by VARREL', 'Border'],
+    ['Fnatic', 'Club House'],
+    ['CAG by VARREL', 'Kafe'],
+    ['Fnatic', 'Consulate'],
+    ['CAG by VARREL', 'Chalet'],
+    ['Fnatic', 'Lair'],
+    ['CAG by VARREL', 'Fortress'],
+    ['Fnatic', 'Nighthaven Labs'],
+  ]);
+  // Eight bans out of a nine-map pool leave exactly one map, chosen by neither side.
+  assert.deepEqual(bo1.maps, [{
+    map: 'Bank',
+    order: 1,
+    step: 9,
+    pickedBy: '',
+    sidePick: 'Attacking',
+    sidePickTeam: 'CAG by VARREL',
+    otSidePick: 'Attacking',
+    otSidePickTeam: 'Fnatic',
+  }]);
+});
+
+test('veto parser keeps a best-of-three picking order apart from its ban order', () => {
+  const [bo3] = parseSeriesVetoes(R6_BO3_VETOS);
+
+  assert.deepEqual(bo3.maps.map((map) => [map.order, map.map, map.pickedBy]), [
+    [1, 'Fortress', 'Fnatic'],
+    [2, 'Kafe', 'MIBR.LOS'],
+    [3, 'Club House', ''],
+  ]);
+  // Bo3 bans two more maps AFTER both picks, so ban order and veto order diverge.
+  assert.deepEqual(bo3.bans.map((ban) => [ban.order, ban.step, ban.map]), [
+    [1, 1, 'Border'],
+    [2, 2, 'Bank'],
+    [3, 3, 'Consulate'],
+    [4, 4, 'Lair'],
+    [5, 7, 'Nighthaven Labs'],
+    [6, 8, 'Chalet'],
+  ]);
+  assert.deepEqual(bo3.maps.map((map) => map.step), [5, 6, 9]);
+  // The decider carries no side choice; the sheet leaves those columns empty.
+  assert.equal(bo3.maps[2].sidePick, '');
+  assert.equal(bo3.maps[0].sidePickTeam, 'MIBR.LOS');
+  assert.equal(bo3.maps[0].otSidePickTeam, 'Fnatic');
+});
+
+test('veto tabs flow into the shared map-detail shape', () => {
+  const parsed = parseOfficialWorkbook(
+    '[PUBLIC] Rainbow Six Siege | Tournament Overview | Esports World Cup 2026',
+    { BO1_VETOS: R6_BO1_VETOS, BO3_VETOS: R6_BO3_VETOS },
+  );
+
+  assert.equal(parsed.seriesVetoes.length, 2);
+  assert.equal(parsed.mapDetails.length, 4);
+  const bo3Maps = parsed.mapDetails.filter((detail) => detail.teamA === 'Fnatic');
+  assert.deepEqual(bo3Maps.map((detail) => detail.map), ['Fortress', 'Kafe', 'Club House']);
+  // The veto is agreed before the series is played, so it never carries a result.
+  assert.equal(bo3Maps.every((detail) => detail.scoreA === null && detail.scoreB === null), true);
+  // Map bans belong to the series, so every map of it carries the same list.
+  assert.equal(bo3Maps[0].mapBans.length, 6);
 });
 
 test('schedule timestamps treat sheet dates as Riyadh local time', () => {
