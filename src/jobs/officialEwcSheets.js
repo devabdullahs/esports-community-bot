@@ -28,7 +28,7 @@ const ATTRIBUTION = '© Esports Foundation 2026. All rights reserved.';
 const DETAIL_SOURCE = 'internal-normalized';
 // Bump whenever parsing or reconciliation changes what gets persisted, so already-seen
 // workbooks are re-read once instead of waiting for the next unrelated edit.
-export const OFFICIAL_PARSER_VERSION = 17;
+export const OFFICIAL_PARSER_VERSION = 18;
 
 let running = false;
 let client = null;
@@ -97,13 +97,21 @@ export function resolveOfficialTournament(tournaments, descriptor) {
       isEwcTournamentReference(tournament) &&
       isLcqLabel(`${tournament.name || ''} ${tournament.external_id || ''}`) === wantLcq,
   );
-  const needle = normalized(descriptor?.tournamentNeedle);
-  const narrowed = needle
-    ? candidates.filter((tournament) =>
-        normalized(`${tournament.name || ''} ${tournament.external_id || ''} ${tournament.url || ''}`).includes(
-          needle,
-        ),
-      )
+  // One game can be tracked under either of its names — "Call of Duty: Black Ops 7" or
+  // "COD BO7" — and no single substring covers both, so a needle may offer alternatives.
+  // They are alternatives, not a widening: each still has to identify the event on its own.
+  const needles = (Array.isArray(descriptor?.tournamentNeedle)
+    ? descriptor.tournamentNeedle
+    : [descriptor?.tournamentNeedle])
+    .map(normalized)
+    .filter(Boolean);
+  const narrowed = needles.length
+    ? candidates.filter((tournament) => {
+        const haystack = normalized(
+          `${tournament.name || ''} ${tournament.external_id || ''} ${tournament.url || ''}`,
+        );
+        return needles.some((needle) => haystack.includes(needle));
+      })
     : candidates;
   return narrowed.length === 1 ? narrowed[0] : null;
 }

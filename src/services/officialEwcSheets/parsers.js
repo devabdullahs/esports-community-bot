@@ -40,7 +40,7 @@ const WORKBOOK_GAME_ALIASES = new Map([
   // needs a needle: without one, whichever workbook resolves first claims the only active
   // Call of Duty tournament. Black Ops 7 has no tracked tournament yet and stays unresolved
   // until one appears, which is the correct outcome — better than landing in Warzone's.
-  ['call of duty black ops 7', { game: 'callofduty', tournamentNeedle: 'black ops' }],
+  ['call of duty black ops 7', { game: 'callofduty', tournamentNeedle: ['black ops', 'bo7'] }],
   ['chess', { game: 'chess' }],
   ['counter-strike 2', { game: 'counterstrike' }],
   ['crossfire', { game: 'crossfire' }],

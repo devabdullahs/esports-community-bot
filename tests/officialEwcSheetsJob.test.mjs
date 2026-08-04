@@ -231,6 +231,29 @@ test('tournament resolution keeps the two Call of Duty workbooks apart', () => {
     resolveOfficialTournament([warzone], { game: 'callofduty', tournamentNeedle: 'warzone' })?.id,
     41,
   );
+  // The event is tracked under either of its names, and no single substring covers both.
+  const codBo7 = tournament({
+    id: 184,
+    game: 'callofduty',
+    name: 'COD BO7 at Esports World Cup 2026',
+  });
+  const needles = ['black ops', 'bo7'];
+  assert.equal(
+    resolveOfficialTournament([warzone, codBo7], { game: 'callofduty', tournamentNeedle: needles })?.id,
+    184,
+  );
+  assert.equal(
+    resolveOfficialTournament(
+      [warzone, tournament({ id: 185, game: 'callofduty', name: 'Call of Duty: Black Ops 7 at EWC' })],
+      { game: 'callofduty', tournamentNeedle: needles },
+    )?.id,
+    185,
+  );
+  // Alternatives are not a widening: Warzone still fails its own needle against them.
+  assert.equal(
+    resolveOfficialTournament([warzone, codBo7], { game: 'callofduty', tournamentNeedle: 'warzone' })?.id,
+    41,
+  );
   // No Black Ops 7 tournament is tracked yet: staying unresolved is the correct outcome.
   assert.equal(
     resolveOfficialTournament([warzone], { game: 'callofduty', tournamentNeedle: 'black ops' }),

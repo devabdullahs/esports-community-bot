@@ -64,7 +64,7 @@ test('workbook titles resolve only to supported public tournament identities', (
       label: 'call of duty: black ops 7 (cod bo7)',
       lcq: false,
       game: 'callofduty',
-      tournamentNeedle: 'black ops',
+      tournamentNeedle: ['black ops', 'bo7'],
     },
   );
   assert.deepEqual(
