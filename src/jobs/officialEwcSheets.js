@@ -28,7 +28,7 @@ const ATTRIBUTION = '© Esports Foundation 2026. All rights reserved.';
 const DETAIL_SOURCE = 'internal-normalized';
 // Bump whenever parsing or reconciliation changes what gets persisted, so already-seen
 // workbooks are re-read once instead of waiting for the next unrelated edit.
-export const OFFICIAL_PARSER_VERSION = 14;
+export const OFFICIAL_PARSER_VERSION = 15;
 
 let running = false;
 let client = null;
@@ -474,7 +474,17 @@ async function applyDetails(
                   b: map.banB ? { hero: map.banB, order: map.banOrderB ?? null } : null,
                 }
               : null,
+            // Rainbow Six chooses starting sides per map during the veto.
+            sidePick: map.sidePick
+              ? { team: map.sidePickTeam || null, side: map.sidePick }
+              : null,
+            otSidePick: map.otSidePick
+              ? { team: map.otSidePickTeam || null, side: map.otSidePick }
+              : null,
           })),
+          // Map bans belong to the SERIES, not to any one map: Rainbow Six bans maps out of
+          // the pool before picking, where Overwatch bans heroes on each map individually.
+          mapBans: first.mapBans?.length ? first.mapBans : null,
         },
       });
     }

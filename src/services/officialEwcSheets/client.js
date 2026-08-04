@@ -22,6 +22,10 @@ const ALLOWED_TABS = new Set([
   'Match Results',
   'Drafts',
   'MATCH INFO MASTER',
+  // Rainbow Six publishes its map veto per series format, one tab each.
+  'BO1_VETOS',
+  'BO3_VETOS',
+  'BO5_VETO',
 ]);
 
 let queueTail = Promise.resolve();

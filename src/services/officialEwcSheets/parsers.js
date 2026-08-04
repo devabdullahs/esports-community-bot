@@ -497,6 +497,130 @@ export function parseTeamMapDetails(rows) {
   return details.slice(0, 1_000);
 }
 
+// Rainbow Six keeps its map veto in BO1_VETOS / BO3_VETOS / BO5_VETO, one row per series
+// and one COLUMN per veto step, so a Bo5 row is 35 columns wide. The three layouts differ
+// only in how many steps they hold, and every step names itself in the header, so walk the
+// header left to right instead of pinning column numbers per format.
+const VETO_STEP_ROLES = new Map([
+  ['team a ban', { kind: 'ban', side: 'a' }],
+  ['team b ban', { kind: 'ban', side: 'b' }],
+  ['team a map pick', { kind: 'pick', side: 'a' }],
+  ['team b map pick', { kind: 'pick', side: 'b' }],
+  ['final map', { kind: 'pick', side: null }],
+  ['decider', { kind: 'pick', side: null }],
+]);
+
+// Side-choice columns are labelled with the team, not the header: "Fnatic OT Side Choice".
+function vetoSideChoiceTeam(value) {
+  return text(value).replace(/\s*(?:ot\s*)?side\s*choice\s*$/i, '').trim();
+}
+
+export function parseSeriesVetoes(rows) {
+  const header = (rows || [])[0] || [];
+  const normalizedRow = header.map(normalizedHeader);
+  const teamAIndex = normalizedRow.indexOf('team a');
+  const teamBIndex = normalizedRow.indexOf('team b');
+  const matchIndex = normalizedRow.indexOf('match');
+  if (teamAIndex < 0 || teamBIndex < 0) return [];
+  const confirmedIndex = normalizedRow.indexOf('confirmed');
+
+  // Steps in column order. A side pick attaches to the map picked immediately before it,
+  // and the column just before it carries the team that made the choice.
+  const steps = [];
+  for (let index = 0; index < normalizedRow.length; index += 1) {
+    const role = VETO_STEP_ROLES.get(normalizedRow[index]);
+    if (role) {
+      steps.push({ ...role, index });
+      continue;
+    }
+    const overtime = normalizedRow[index] === 'ot side pick';
+    if (!overtime && normalizedRow[index] !== 'side pick') continue;
+    const target = [...steps].reverse().find((step) => step.kind === 'pick');
+    if (!target) continue;
+    target[overtime ? 'otSideIndex' : 'sideIndex'] = index;
+    target[overtime ? 'otSideTeamIndex' : 'sideTeamIndex'] = index - 1;
+  }
+  if (!steps.length) return [];
+
+  const series = [];
+  for (const row of (rows || []).slice(1)) {
+    const teamA = text(row[teamAIndex]);
+    const teamB = text(row[teamBIndex]);
+    if (!teamA || !teamB) continue;
+    const sideFor = (side) => (side === 'a' ? teamA : side === 'b' ? teamB : '');
+
+    const maps = [];
+    const bans = [];
+    // `order` counts within its own list — ban 1..n, map 1..n in play order — while `step`
+    // is the position in the veto itself. Bo3 bans two more maps AFTER both picks, so the
+    // two numbers genuinely differ and collapsing them would misreport the sequence.
+    let step_ = 0;
+    for (const step of steps) {
+      const map = text(row[step.index]);
+      if (!map) continue;
+      step_ += 1;
+      if (step.kind === 'ban') {
+        bans.push({ map, team: sideFor(step.side), order: bans.length + 1, step: step_ });
+        continue;
+      }
+      maps.push({
+        map,
+        order: maps.length + 1,
+        step: step_,
+        pickedBy: sideFor(step.side),
+        sidePick: step.sideIndex >= 0 ? text(row[step.sideIndex]) : '',
+        sidePickTeam: step.sideTeamIndex >= 0 ? vetoSideChoiceTeam(row[step.sideTeamIndex]) : '',
+        otSidePick: step.otSideIndex >= 0 ? text(row[step.otSideIndex]) : '',
+        otSidePickTeam: step.otSideTeamIndex >= 0 ? vetoSideChoiceTeam(row[step.otSideTeamIndex]) : '',
+      });
+    }
+    if (!maps.length && !bans.length) continue;
+
+    series.push({
+      teamA,
+      teamB,
+      round: matchIndex >= 0 ? text(row[matchIndex]) : '',
+      confirmed: confirmedIndex >= 0 ? /^confirmed$/i.test(text(row[confirmedIndex])) : false,
+      maps,
+      bans,
+    });
+  }
+  return series.slice(0, 500);
+}
+
+// The veto tabs describe the same thing the Overwatch match log does — which maps a series
+// played, and who chose them — so flatten them into the shared map-detail shape rather than
+// giving Rainbow Six its own persistence path. Scores stay null: the veto is agreed before
+// the series is played and the sheet never fills results back in.
+export function seriesVetoesToMapDetails(series) {
+  const details = [];
+  for (const entry of series || []) {
+    for (const map of entry.maps) {
+      details.push({
+        teamA: entry.teamA,
+        teamB: entry.teamB,
+        round: entry.round,
+        map: map.map,
+        mode: '',
+        pickedBy: map.pickedBy,
+        scoreA: null,
+        scoreB: null,
+        winner: '',
+        banA: '',
+        banB: '',
+        banOrderA: null,
+        banOrderB: null,
+        sidePick: map.sidePick,
+        sidePickTeam: map.sidePickTeam,
+        otSidePick: map.otSidePick,
+        otSidePickTeam: map.otSidePickTeam,
+        mapBans: entry.bans,
+      });
+    }
+  }
+  return details;
+}
+
 export function parseBattleRoyaleGames(rows) {
   const games = new Map();
   for (let rowIndex = 0; rowIndex < Math.min(rows.length, 1_100); rowIndex += 1) {
@@ -557,7 +681,15 @@ export function parseOfficialWorkbook(title, tabs) {
       ) === index,
   );
   const overview = parseTournamentEnrichment(tabs);
-  const mapDetails = parseTeamMapDetails(tabs['MATCH INFO MASTER'] || []);
+  const seriesVetoes = [
+    ...parseSeriesVetoes(tabs.BO1_VETOS || []),
+    ...parseSeriesVetoes(tabs.BO3_VETOS || []),
+    ...parseSeriesVetoes(tabs.BO5_VETO || []),
+  ];
+  const mapDetails = [
+    ...parseTeamMapDetails(tabs['MATCH INFO MASTER'] || []),
+    ...seriesVetoesToMapDetails(seriesVetoes),
+  ];
   const battleRoyaleGames = [
     ...parseBattleRoyaleGames(tabs.Visualization || []),
     ...parseBattleRoyaleGames(tabs['Match Results'] || []),
@@ -569,6 +701,7 @@ export function parseOfficialWorkbook(title, tabs) {
     standings,
     overview,
     mapDetails,
+    seriesVetoes,
     battleRoyaleGames,
   };
 }
