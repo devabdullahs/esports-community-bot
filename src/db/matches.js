@@ -798,10 +798,35 @@ export async function deleteTournamentPlaceholderMatches(
     row.score_a == null &&
     row.score_b == null;
 
+  // An undrawn slot ("Winner of UB 1.1") and the match it became are the same fixture at
+  // the same minute, so once a round is drawn its undrawn copies are duplicates on every
+  // upcoming list. deleteStaleFinishedMatches only retires those four hours after start;
+  // a drawn sibling in the same slot is positive evidence now.
+  //
+  // Compare COUNTS, not names — the drawn rows cannot be paired back to the slots they
+  // came from. A round drawn only in part keeps its remaining placeholders, because its
+  // drawn rows do not yet cover them.
+  const undrawn = (row) =>
+    isUnresolvedPlaceholderName(row.team_a) || isUnresolvedPlaceholderName(row.team_b);
+  const slots = new Map();
+  for (const row of rows) {
+    const at = Number(row.scheduled_at);
+    if (!Number.isFinite(at) || at <= 0) continue;
+    const slot = slots.get(at) || { drawn: 0, undrawn: 0 };
+    slot[undrawn(row) ? 'undrawn' : 'drawn'] += 1;
+    slots.set(at, slot);
+  }
+  const supersededByDraw = (row) => {
+    if (!undrawn(row) || row.score_a != null || row.score_b != null) return false;
+    const slot = slots.get(Number(row.scheduled_at));
+    return Boolean(slot) && slot.drawn >= slot.undrawn;
+  };
+
   const ids = rows
     .filter((row) => {
       if (row.official_fresh) return false;
       if (abandonedAfterConclusion(row)) return true;
+      if (supersededByDraw(row)) return true;
       if (/^sgg:preview_/i.test(String(row.external_id ?? ''))) {
         return current && !current.has(row.external_id);
       }

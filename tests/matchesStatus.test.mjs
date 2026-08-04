@@ -276,6 +276,53 @@ test('dedupeMatches preserves legitimate same-pair rematches later on the same d
 // A provider publishes the same fixture as an untimed row beside the timed one it was
 // played under. The duplicate sweep skips untimed rows on purpose, so once the event ends
 // nothing clears them and they sit on the cards as "Time TBD" indefinitely.
+// An undrawn slot and the match it became sit at the same minute, so a drawn round leaves
+// its placeholders behind as duplicates on every upcoming list until the four-hour stale
+// sweep catches them. A drawn sibling in the same slot is evidence enough to retire now.
+test('placeholder sweep retires an undrawn slot once its round has been drawn', async () => {
+  const now = Math.floor(Date.now() / 1000);
+  const soon = now + 3 * 3600;
+  const later = now + 5 * 3600;
+  const row = await run(
+    `INSERT INTO tournaments (source, external_id, game, name, guild_id)
+     VALUES ($1, $2, $3, $4, $5)`,
+    ['liquipedia', 'rainbowsix/Drawn', 'rainbowsix', 'Drawn Bracket', 'guild-1'],
+  );
+  const tournamentId = Number(row.lastInsertRowid);
+  const add = (externalId, teamA, teamB, scheduledAt) =>
+    upsertMatch({
+      tournament_id: tournamentId,
+      source: 'liquipedia',
+      external_id: externalId,
+      name: `${teamA} vs ${teamB}`,
+      team_a: teamA,
+      team_b: teamB,
+      status: 'scheduled',
+      scheduled_at: scheduledAt,
+    });
+
+  // Fully drawn: two real rows cover the two undrawn ones in the same slot.
+  await add('drawn-a', 'Shopify Rebellion', 'TYLOO', soon);
+  await add('drawn-b', 'Al-Ula Club', 'Chiefs Esports Club', soon);
+  await add('undrawn-a', 'Winner of UB 1.1', 'Winner of UB 1.2', soon);
+  await add('undrawn-b', 'Loser of UB 1.1', 'Loser of UB 1.2', soon);
+  // Drawn only in part: one real row cannot cover two undrawn ones.
+  await add('partial-drawn', 'Fnatic', 'LOS', later);
+  await add('partial-undrawn-a', 'Winner of UB 2.1', 'Winner of UB 2.2', later);
+  await add('partial-undrawn-b', 'Loser of UB 2.1', 'Loser of UB 2.2', later);
+
+  const current = [
+    'drawn-a', 'drawn-b', 'undrawn-a', 'undrawn-b',
+    'partial-drawn', 'partial-undrawn-a', 'partial-undrawn-b',
+  ];
+  assert.equal(await deleteTournamentPlaceholderMatches(tournamentId, current), 2);
+  assert.equal(await getMatch('liquipedia', 'undrawn-a'), null);
+  assert.equal(await getMatch('liquipedia', 'undrawn-b'), null);
+  assert.notEqual(await getMatch('liquipedia', 'drawn-a'), null);
+  assert.notEqual(await getMatch('liquipedia', 'partial-undrawn-a'), null);
+  assert.notEqual(await getMatch('liquipedia', 'partial-undrawn-b'), null);
+});
+
 test('placeholder sweep retires untimed rows once a tournament has concluded', async () => {
   const now = Math.floor(Date.now() / 1000);
   const newTournament = async (externalId) => {
