@@ -86,7 +86,11 @@ self.addEventListener("fetch", (event) => {
   event.respondWith(
     caches.match(request).then((cached) => cached || fetch(request).then((response) => {
       if (response.ok && response.type === "basic") {
-        void caches.open(STATIC_CACHE).then((cache) => cache.put(request, response.clone()));
+        // Clone BEFORE handing the response back: caches.open is async, and by the time it
+        // resolves the page has already consumed this body, so cloning there throws
+        // "Response body is already used" and nothing is ever cached.
+        const copy = response.clone();
+        void caches.open(STATIC_CACHE).then((cache) => cache.put(request, copy));
       }
       return response;
     })),
