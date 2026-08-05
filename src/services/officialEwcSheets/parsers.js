@@ -135,6 +135,15 @@ function headerIndex(row, aliases) {
     const index = normalized.indexOf(alias);
     if (index >= 0) return index;
   }
+  // A header can pick up an annotation and still be the same column — Rainbow Six retitled
+  // "Start Time" to "Start Time\nROLLING SCHEDULE", which silently took its whole schedule
+  // to zero fixtures. Fall back to a leading-phrase match, but only for aliases that are
+  // already several words: a one-word alias like "time" would otherwise claim "Time Zone".
+  for (const alias of aliases) {
+    if (!alias.includes(' ')) continue;
+    const index = normalized.findIndex((header) => header.startsWith(`${alias} `));
+    if (index >= 0) return index;
+  }
   return -1;
 }
 

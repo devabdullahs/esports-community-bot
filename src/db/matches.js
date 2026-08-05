@@ -640,7 +640,13 @@ export function isUnresolvedPlaceholderName(name) {
   if (!value) return true;
   return /^tbd$/i.test(value) ||
     /\b(?:winner|loser)\s+of\b/i.test(value) ||
-    /\b(?:winner|loser)$/i.test(value);
+    /\b(?:winner|loser)$/i.test(value) ||
+    // A bracket also refers to a slot by where it finishes rather than by another match:
+    // "Group A #1", "Group B #2", "Seed #9", "Seed #8/#9". A real team never names itself
+    // that way, and the provider republishes these as the draw resolves, so the earlier
+    // generations pile up beside the drawn fixture.
+    /^group\s+\S+\s*#\s*\d+$/i.test(value) ||
+    /^seed\s*#?\s*\d+(?:\s*\/\s*#?\d+)*$/i.test(value);
 }
 
 // A provider can leave a scoreless finished bracket placeholder behind after
