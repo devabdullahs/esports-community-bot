@@ -35,6 +35,11 @@ const OFFICIAL_MATCH_FIELDS = [
 // outcome, not the match's identity, so team names and stream links keep syncing.
 const MANUAL_RESULT_FIELDS = ['score_a', 'score_b', 'status', 'winner_side', 'result_reason'];
 
+// One fixture published twice — by the sheet and by the provider — lands minutes apart
+// rather than at the same instant, so the pairing is matched inside a window rather than on
+// an exact timestamp. Kept well under the gap between two legitimate same-pair meetings.
+const DUPLICATE_FIXTURE_WINDOW_SECONDS = 30 * 60;
+
 export async function upsertMatch(
   row,
   {
@@ -845,11 +850,44 @@ export async function deleteTournamentPlaceholderMatches(
     return Boolean(slot) && slot.drawn >= slot.undrawn;
   };
 
+  // The official sheet publishes a fixture before the provider does, so the feed creates a
+  // row of its own. Once the provider publishes the same pair, the feed writes to THAT row
+  // instead and its earlier copy is left behind — one fixture showing twice, minutes apart,
+  // under slightly different spellings of the same names.
+  //
+  // The copy is always the `official:` one, and retiring it loses nothing: the sheet's
+  // values keep winning on the surviving row through their authority lease. It also
+  // un-splits the pair, which a same-pair lookup needs to resolve at all.
+  const isOfficialRow = (row) => String(row.external_id ?? '').startsWith('official:');
+  const pairKey = (row) => {
+    const a = normalizeTeamName(row.team_a);
+    const b = normalizeTeamName(row.team_b);
+    return a && b ? [a, b].sort().join('|') : '';
+  };
+  const providerRows = rows.filter((row) => !isOfficialRow(row));
+  const supersededByProvider = (row) => {
+    if (!isOfficialRow(row)) return false;
+    const at = Number(row.scheduled_at);
+    if (!Number.isFinite(at)) return false;
+    const pair = pairKey(row);
+    if (!pair) return false;
+    return providerRows.some((other) => {
+      const otherAt = Number(other.scheduled_at);
+      if (!Number.isFinite(otherAt) || Math.abs(at - otherAt) > DUPLICATE_FIXTURE_WINDOW_SECONDS) return false;
+      if (pairKey(other) !== pair) return false;
+      // Never trade a recorded result for one that has none.
+      const copyHasScore = row.score_a != null || row.score_b != null;
+      const keptHasScore = other.score_a != null || other.score_b != null;
+      return keptHasScore || !copyHasScore;
+    });
+  };
+
   const ids = rows
     .filter((row) => {
       if (row.official_fresh) return false;
       if (abandonedAfterConclusion(row)) return true;
       if (supersededByDraw(row)) return true;
+      if (supersededByProvider(row)) return true;
       if (/^sgg:preview_/i.test(String(row.external_id ?? ''))) {
         return current && !current.has(row.external_id);
       }

@@ -348,6 +348,81 @@ test('a side swap carries the logos with it', async () => {
   assert.equal(redrawn.logo_b, null);
 });
 
+// The sheet publishes a fixture before the provider does, so the feed creates a row of its
+// own. Once the provider publishes the same pair, the feed writes to THAT row and its
+// earlier copy is left behind — one Tekken series showed twice, ten minutes apart, as
+// "M. Zubair vs KEISUKE" and "M._Zubair vs Keisuke_(Tekken_Player)". The split pair also
+// stopped a same-pair lookup resolving at all, which is why bracket results stopped joining.
+test('the sheet copy retires once the provider publishes the same fixture', async () => {
+  const now = Math.floor(Date.now() / 1000);
+  const row = await run(
+    `INSERT INTO tournaments (source, external_id, game, name, guild_id)
+     VALUES ($1, $2, $3, $4, $5)`,
+    ['liquipedia', 'fighters/Dupes', 'fighters', 'Dupes', 'guild-1'],
+  );
+  const tournamentId = Number(row.lastInsertRowid);
+  const add = (source, externalId, teamA, teamB, at, extra = {}) =>
+    upsertMatch({
+      tournament_id: tournamentId,
+      source,
+      external_id: externalId,
+      name: `${teamA} vs ${teamB}`,
+      team_a: teamA,
+      team_b: teamB,
+      status: 'scheduled',
+      scheduled_at: at,
+      ...extra,
+    });
+
+  // Same series, ten minutes apart, spelled differently by each source.
+  await add('official', 'official:zubair', 'M. Zubair', 'KEISUKE', now + 3600);
+  await add('liquipedia', 'fighters:zubair', 'M._Zubair', 'Keisuke_(Tekken_Player)', now + 4200, {
+    status: 'finished',
+    score_a: 0,
+    score_b: 3,
+  });
+  // A different pair entirely is untouched.
+  await add('official', 'official:other', 'Yagami', 'MulGold', now + 3600);
+
+  assert.equal(await deleteTournamentPlaceholderMatches(tournamentId, null), 1);
+  assert.equal(await getMatch('official', 'official:zubair'), null);
+  const kept = await getMatch('liquipedia', 'fighters:zubair');
+  assert.equal(kept.score_b, 3, 'the provider row survives with its result');
+  assert.notEqual(await getMatch('official', 'official:other'), null);
+});
+
+test('a sheet copy holding the only result is not traded away', async () => {
+  const now = Math.floor(Date.now() / 1000);
+  const row = await run(
+    `INSERT INTO tournaments (source, external_id, game, name, guild_id)
+     VALUES ($1, $2, $3, $4, $5)`,
+    ['liquipedia', 'fighters/Dupes2', 'fighters', 'Dupes2', 'guild-1'],
+  );
+  const tournamentId = Number(row.lastInsertRowid);
+  const add = (source, externalId, teamA, teamB, at, extra = {}) =>
+    upsertMatch({
+      tournament_id: tournamentId,
+      source,
+      external_id: externalId,
+      name: `${teamA} vs ${teamB}`,
+      team_a: teamA,
+      team_b: teamB,
+      status: 'scheduled',
+      scheduled_at: at,
+      ...extra,
+    });
+
+  await add('official', 'official:scored', 'Ulsan', 'Knee', now + 3600, {
+    status: 'finished',
+    score_a: 3,
+    score_b: 0,
+  });
+  await add('liquipedia', 'fighters:scoreless', 'ULSAN', 'knee', now + 4200);
+
+  assert.equal(await deleteTournamentPlaceholderMatches(tournamentId, null), 0);
+  assert.notEqual(await getMatch('official', 'official:scored'), null);
+});
+
 test('placeholder sweep retires an undrawn slot once its round has been drawn', async () => {
   const now = Math.floor(Date.now() / 1000);
   const soon = now + 3 * 3600;
