@@ -124,7 +124,7 @@ const LIVE_PAGE = `
 <meta name="title" content="EWC Finals Watch Party &amp; More">
 </head><body>
 <script>var ytInitialPlayerResponse = {"videoDetails":{"videoId":"dQw4w9WgXcQ","isLiveContent":true},"microformat":{"liveBroadcastDetails":{"isLiveNow":true}}};</script>
-<span>12,345 watching now</span>
+<script>var ytInitialData = {"names":["videoViewCountRenderer","menuRenderer"],"videoViewCountRenderer":{"viewCount":{"runs":[{"text":"12,345"},{"text":" watching now"}]},"isLive":true,"originalViewCount":"12345"}};</script>
 </body></html>`;
 
 const UPCOMING_PAGE = `
@@ -144,6 +144,25 @@ test('youtube.parseLivePage detects a current broadcast with video id, title, vi
   assert.equal(parsed.title, 'EWC Finals Watch Party & More'); // entity decoded
   assert.equal(parsed.viewerCount, 12345);
   assert.match(parsed.thumbnailUrl, /dQw4w9WgXcQ/);
+});
+
+// The page lists "videoViewCountRenderer" as a bare string in an array of renderer type
+// names BEFORE the real object. Anchoring on that decoy reported null viewers for every
+// live channel, which the UI rendered as 0.
+test('youtube.parseLivePage reads viewers past the renderer-name decoy', () => {
+  const decoyFirst = LIVE_PAGE.replace(
+    '"names":["videoViewCountRenderer","menuRenderer"],',
+    '"names":["videoViewCountRenderer","menuRenderer","videoViewCountRenderer"],',
+  );
+  assert.equal(youtube.parseLivePage(decoyFirst).viewerCount, 12345);
+
+  // The count and its label are separate runs, so they are never adjacent in the markup.
+  const runsOnly = LIVE_PAGE.replace(',"isLive":true,"originalViewCount":"12345"', ',"isLive":true');
+  assert.equal(youtube.parseLivePage(runsOnly).viewerCount, 12345);
+
+  // A live page with no count at all stays null rather than reporting a wrong number.
+  const noCount = LIVE_PAGE.replace(/"videoViewCountRenderer":\{[^}]*\}[^}]*\}[^}]*\}/, '"x":1');
+  assert.equal(youtube.parseLivePage(noCount).viewerCount, null);
 });
 
 test('youtube.parseLivePage treats upcoming/offline pages as not live', () => {
