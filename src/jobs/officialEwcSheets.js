@@ -28,7 +28,7 @@ const ATTRIBUTION = '© Esports Foundation 2026. All rights reserved.';
 const DETAIL_SOURCE = 'internal-normalized';
 // Bump whenever parsing or reconciliation changes what gets persisted, so already-seen
 // workbooks are re-read once instead of waiting for the next unrelated edit.
-export const OFFICIAL_PARSER_VERSION = 19;
+export const OFFICIAL_PARSER_VERSION = 20;
 
 let running = false;
 let client = null;
@@ -397,6 +397,44 @@ async function applyScheduleUpdates(tournament, matches, updates, observedAt, tt
   return { terminalMatchIds, updatedMatchIds };
 }
 
+// The bracket carries the score a schedule tab does not, and it runs AHEAD of the fallback
+// provider — a series can read 3-0 there while Liquipedia still calls it running. Apply it
+// with the same authority lease the schedule uses so the provider cannot walk the result
+// back for as long as the sheet keeps saying so.
+//
+// Results only ever land on a match that already exists: the bracket names a fixture in its
+// own words and gives no start time, so creating from it would mint duplicates rather than
+// correct anything. A row that matches nothing is skipped.
+export async function applyBracketResults(tournament, matches, results, observedAt, ttlSeconds) {
+  const terminalMatchIds = new Set();
+  const updatedMatchIds = new Set();
+  for (const result of results || []) {
+    const existing = findOfficialMatch(matches, result);
+    if (!existing) continue;
+    const stored = await persistAuthoritativeMatchUpdate(
+      tournament,
+      existing,
+      {
+        teamA: existing.team_a,
+        teamB: existing.team_b,
+        scoreA: result.scoreA,
+        scoreB: result.scoreB,
+        status: result.status,
+      },
+      matches,
+      observedAt,
+      ttlSeconds,
+      // The bracket is the source of record for the result, so it may also correct one the
+      // provider already called final.
+      { allowTerminalCorrection: true },
+    );
+    if (!stored) continue;
+    updatedMatchIds.add(stored.id);
+    if (result.status === 'finished') terminalMatchIds.add(stored.id);
+  }
+  return { terminalMatchIds, updatedMatchIds };
+}
+
 function syncOfficialWatchers(tournament, matches, candidateIds = new Set()) {
   let armed = 0;
   let stopped = 0;
@@ -642,6 +680,15 @@ async function refreshWorkbook(
     observedAt,
     ttlSeconds,
   );
+  const bracket = await applyBracketResults(
+    tournament,
+    matches,
+    parsed.bracketResults,
+    observedAt,
+    ttlSeconds,
+  );
+  for (const id of bracket.terminalMatchIds) terminalMatchIds.add(id);
+  for (const id of bracket.updatedMatchIds) updatedMatchIds.add(id);
 
   if (!liveOnly && parsed.standings.some((section) => section.entries?.length >= 2)) {
     await replaceTournamentStandings(tournament.id, parsed.standings, {

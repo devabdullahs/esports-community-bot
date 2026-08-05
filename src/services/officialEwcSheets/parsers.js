@@ -327,6 +327,76 @@ function scheduleStatus(rawStatus, scoreA, scoreB, bestOf) {
   return 'finished';
 }
 
+// The Visualization tab draws the bracket rather than tabulating it: each match is a label
+// row followed by its two teams, with the series score in the NEXT column over, and the
+// round's best-of sitting on its own as a bare number above the block.
+//
+//   col 3          col 4
+//   UB Ro8 …
+//   5                        <- best-of for every match in this column
+//   UB 1.1                   <- match label
+//   FaZe Clan      3
+//   The Pit        0
+//
+// Several brackets share the sheet side by side, so find the name columns by looking for
+// the score beside them rather than assuming where they are.
+export function parseBracketResults(rows) {
+  const grid = rows || [];
+  const width = Math.max(...grid.map((row) => (row || []).length), 0);
+  const results = [];
+
+  for (let column = 0; column + 1 < width; column += 1) {
+    const scored = grid.some(
+      (row) => text(row?.[column]) && Number.isFinite(number(row?.[column + 1])),
+    );
+    if (!scored) continue;
+
+    let bestOf = null;
+    let round = '';
+    let pair = [];
+    for (const row of grid) {
+      const name = text(row?.[column]);
+      const score = number(row?.[column + 1]);
+      if (!name) {
+        // A blank cell ends whatever block was being read; half a pair is not a match.
+        pair = [];
+        continue;
+      }
+      if (!Number.isFinite(score)) {
+        // Text with no score beside it is a heading: a bare number is the best-of, and
+        // anything else names the match the following rows belong to. Test the RAW cell,
+        // because a label like "UB 1.1" parses loosely as the number 1.1 and would
+        // otherwise replace a real best-of of 5.
+        if (typeof row?.[column] === 'number') bestOf = row[column];
+        else round = name;
+        pair = [];
+        continue;
+      }
+      pair.push({ name, score });
+      if (pair.length < 2) continue;
+      const [a, b] = pair;
+      pair = [];
+      // An undrawn slot carries no result, and 0-0 is how the bracket draws "not played".
+      if (isBracketPlaceholder(a.name) || isBracketPlaceholder(b.name)) continue;
+      if (a.score === 0 && b.score === 0) continue;
+      results.push({
+        round,
+        teamA: a.name,
+        teamB: b.name,
+        scoreA: a.score,
+        scoreB: b.score,
+        bestOf,
+        status: scheduleStatus('', a.score, b.score, bestOf),
+      });
+    }
+  }
+  return results.slice(0, 500);
+}
+
+function isBracketPlaceholder(value) {
+  return /\b(?:winner|loser)\s+of\b|^(?:tbd|q)$/i.test(text(value));
+}
+
 export function parseIndividualResults(rows, { game }) {
   const found = findHeader(rows, [
     ['home player', 'player a', 'home'],
@@ -806,6 +876,7 @@ export function parseOfficialWorkbook(title, tabs) {
           section.entries.map((entry) => `${entry.rank}:${normalizeTeamName(entry.team)}:${entry.points}`).join('|'),
       ) === index,
   );
+  const bracketResults = parseBracketResults(tabs.Visualization || []);
   const overview = parseTournamentEnrichment(tabs);
   const seriesVetoes = [
     ...parseSeriesVetoes(tabs.BO1_VETOS || []),
@@ -829,6 +900,7 @@ export function parseOfficialWorkbook(title, tabs) {
     overview,
     mapDetails,
     seriesVetoes,
+    bracketResults,
     battleRoyaleGames,
   };
 }
