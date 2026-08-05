@@ -7,6 +7,7 @@ const {
   parseOfficialWorkbook,
   parseSchedule,
   parseSeriesVetoes,
+  parseTransposedSeriesVetoes,
   parseStandings,
   parseTeamMapDetails,
   isLcqLabel,
@@ -214,6 +215,79 @@ test('veto parser keeps a best-of-three picking order apart from its ban order',
   assert.equal(bo3.maps[2].sidePick, '');
   assert.equal(bo3.maps[0].sidePickTeam, 'MIBR.LOS');
   assert.equal(bo3.maps[0].otSidePickTeam, 'Fnatic');
+});
+
+// Rows copied from the official Call of Duty workbook's FullMapvetos tab. Transposed
+// relative to Rainbow Six: one COLUMN per series, one ROW per veto step, with mode
+// headers between the steps and a second (empty) grid stacked underneath for longer
+// series. Call of Duty bans within EACH mode rather than once for the whole series.
+const COD_FULL_MAP_VETOS = [
+  ['', 1, 2],
+  ['', 'Groupstage - Group A - Opening Match #2', 'Groupstage - Group A - Opening Match #1'],
+  ['', 'Movistar KOI vs. Carolina Royal Ravens', 'FaZe Clan vs. The Pit'],
+  ['Higher seed', 'Movistar KOI', 'FaZe Clan'],
+  ['Team A', 'Movistar KOI', 'FaZe Clan'],
+  ['Team B', 'Carolina Royal Ravens', 'The Pit'],
+  ['Hardpoint', '', ''],
+  ['Team A bans', 'Scar', 'Hacienda'],
+  ['Team B bans', 'Sake', 'Den'],
+  ['Team A picks Game 1', 'Den', 'Scar'],
+  ['Team B chooses sides for Game 1', 'Attackers', 'Attackers'],
+  ['Team B picks Game 4', 'Hacienda', 'Sake'],
+  ['Team A chooses sides for Game 4', 'Attackers', 'Defenders'],
+  ['Team B picks Game 8', '', ''],
+  ['Team A chooses sides for Game 8', '', ''],
+  [],
+  ['Search and Destroy', '', ''],
+  ['Team B bans', 'Sake', 'Fringe'],
+  ['Team A bans', 'Den', 'Sake'],
+  ['Team B picks Game 2', 'Raid', 'Gridlock'],
+  ['Team A chooses sides for Game 2', 'Attackers', 'Defenders'],
+  ['Remaining map (Game 5)', 'Gridlock', 'Hacienda'],
+  ['Team B chooses sides for Game 5', 'Defenders', 'Defenders'],
+  [],
+  ['Team A', '', ''],
+  ['Team B', '', ''],
+  ['Hardpoint', '', ''],
+  ['Team A bans', '', ''],
+];
+
+test('veto parser reads the transposed Call of Duty grid, banning per mode', () => {
+  const series = parseTransposedSeriesVetoes(COD_FULL_MAP_VETOS);
+
+  // The stacked second grid names no teams, so it yields no series.
+  assert.equal(series.length, 2);
+  const [koi] = series;
+  assert.equal(koi.teamA, 'Movistar KOI');
+  assert.equal(koi.teamB, 'Carolina Royal Ravens');
+  assert.equal(koi.round, 'Groupstage - Group A - Opening Match #2');
+
+  // Maps are ordered by GAME number, not by the row they were vetoed on.
+  assert.deepEqual(koi.maps.map((map) => [map.order, map.map, map.mode, map.pickedBy]), [
+    [1, 'Den', 'Hardpoint', 'Movistar KOI'],
+    [2, 'Raid', 'Search and Destroy', 'Carolina Royal Ravens'],
+    [4, 'Hacienda', 'Hardpoint', 'Carolina Royal Ravens'],
+    [5, 'Gridlock', 'Search and Destroy', ''],
+  ]);
+  // Game 5 is whatever the mode has left, so it carries no picker.
+  assert.equal(koi.maps.at(-1).decider, true);
+  assert.equal(koi.maps[0].decider, false);
+  // The side choice belongs to the team that did NOT pick the map.
+  assert.equal(koi.maps[0].sidePickTeam, 'Carolina Royal Ravens');
+  assert.equal(koi.maps[0].sidePick, 'Attackers');
+
+  // A ban only means something with its mode: Scar is banned in Hardpoint here while the
+  // same map stays pickable in another mode.
+  assert.deepEqual(koi.bans.map((ban) => [ban.mode, ban.team, ban.map]), [
+    ['Hardpoint', 'Movistar KOI', 'Scar'],
+    ['Hardpoint', 'Carolina Royal Ravens', 'Sake'],
+    ['Search and Destroy', 'Carolina Royal Ravens', 'Sake'],
+    ['Search and Destroy', 'Movistar KOI', 'Den'],
+  ]);
+
+  // Every column is read, not just the first.
+  assert.equal(series[1].teamA, 'FaZe Clan');
+  assert.equal(series[1].maps[0].map, 'Scar');
 });
 
 test('veto tabs flow into the shared map-detail shape', () => {

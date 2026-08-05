@@ -421,6 +421,7 @@ function TeamSeries({
                 className="flex items-baseline gap-1.5 rounded-lg bg-muted/50 px-2.5 py-1 text-sm"
                 dir="auto"
               >
+                {ban.mode ? <span className="text-xs text-muted-foreground">{ban.mode}</span> : null}
                 <span className="line-through decoration-muted-foreground/60">{ban.map}</span>
                 {ban.team ? <span className="text-xs text-muted-foreground">{ban.team}</span> : null}
               </li>

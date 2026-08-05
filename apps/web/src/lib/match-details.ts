@@ -129,7 +129,10 @@ export type TeamSeriesDetails = DetailBase & {
   }[];
   // Map bans belong to the SERIES, not to any one map: Rainbow Six bans maps out of the
   // pool before picking, where Overwatch bans heroes on each map individually.
-  mapBans: { map: string; team: string | null; order: number | null }[];
+  // `mode` is set where a game bans per mode (Call of Duty) and null where it bans once
+  // for the whole series (Rainbow Six) — the same map can be banned in one mode and
+  // played in another, so the ban says little without it.
+  mapBans: { map: string; team: string | null; mode: string | null; order: number | null }[];
 };
 
 export type OfficialBattleRoyaleDetails = DetailBase & {
@@ -396,6 +399,7 @@ export function toMatchDetailsViewModel(payload: unknown): MatchDetailsViewModel
       mapBans: valueByLabel(raw.mapBans, (ban) => ({
         map: text(ban.map),
         team: text(ban.team),
+        mode: text(ban.mode),
         order: number(ban.order),
       }))
         .flatMap((ban) => (ban.map ? [{ ...ban, map: ban.map }] : []))
