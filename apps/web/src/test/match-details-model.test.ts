@@ -246,10 +246,28 @@ describe("match details page model", () => {
     // The decider is chosen by neither team; the flag keeps that distinct from a gap.
     expect(series?.maps[0].decider).toBe(false);
     expect(series?.maps[1].decider).toBe(true);
+    // Rainbow Six bans once for the whole series, so its bans carry no mode.
     expect(series?.mapBans).toEqual([
-      { map: "Border", team: "Fnatic", order: 1 },
-      { map: "Bank", team: "MIBR.LOS", order: 2 },
+      { map: "Border", team: "Fnatic", mode: null, order: 1 },
+      { map: "Bank", team: "MIBR.LOS", mode: null, order: 2 },
     ]);
+  });
+
+  test("keeps the mode on a ban for games that ban per mode", () => {
+    const details = toMatchDetailsViewModel({
+      version: 1,
+      kind: "teamSeries",
+      maps: [{ name: "Den", mode: "Hardpoint", scoreA: null, scoreB: null }],
+      // Call of Duty bans within each mode, so the same map can be banned in one and
+      // played in another — Scar here is banned for Hardpoint only.
+      mapBans: [{ map: "Scar", team: "Movistar KOI", mode: "Hardpoint", order: 1 }],
+    });
+
+    const series = details?.kind === "teamSeries" ? details : null;
+    expect(series?.mapBans).toEqual([
+      { map: "Scar", team: "Movistar KOI", mode: "Hardpoint", order: 1 },
+    ]);
+    expect(series?.maps[0].mode).toBe("Hardpoint");
   });
 
   test("a series with no map bans still yields an empty list, not a missing one", () => {

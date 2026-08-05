@@ -596,6 +596,126 @@ export function parseSeriesVetoes(rows) {
 // played, and who chose them — so flatten them into the shared map-detail shape rather than
 // giving Rainbow Six its own persistence path. Scores stay null: the veto is agreed before
 // the series is played and the sheet never fills results back in.
+// Call of Duty publishes its veto TRANSPOSED relative to Rainbow Six: one COLUMN per
+// series, one ROW per veto step, and the sheet stacks several grids (a 9-game one above a
+// 7-game one) each introduced by its own "Team A" / "Team B" pair. Rows in between name
+// the mode, and Call of Duty bans within EACH mode rather than once for the series, so a
+// ban carries the mode it belongs to.
+//
+// Every step names itself, so read the labels rather than pinning row numbers — the same
+// reason the Rainbow Six reader walks its header instead of counting columns.
+const TRANSPOSED_STEPS = [
+  { kind: 'ban', pattern: /^team (a|b) bans$/i },
+  { kind: 'pick', pattern: /^team (a|b) picks game (\d+)$/i },
+  { kind: 'decider', pattern: /^remaining map \(game (\d+)\)$/i },
+  { kind: 'side', pattern: /^team (a|b) chooses sides for game (\d+)$/i },
+];
+
+function transposedStep(label) {
+  for (const { kind, pattern } of TRANSPOSED_STEPS) {
+    const match = label.match(pattern);
+    if (!match) continue;
+    const side = /^(a|b)$/i.test(match[1] ?? '') ? match[1].toLowerCase() : null;
+    const game = Number(kind === 'decider' ? match[1] : match[2]);
+    return { kind, side, game: Number.isFinite(game) ? game : null };
+  }
+  return null;
+}
+
+export function parseTransposedSeriesVetoes(rows) {
+  const grid = rows || [];
+  const label = (index) => text(grid[index]?.[0]);
+  const blocks = [];
+  for (let index = 0; index < grid.length; index += 1) {
+    if (/^team a$/i.test(label(index)) && /^team b$/i.test(label(index + 1))) blocks.push(index);
+  }
+  if (!blocks.length) return [];
+
+  // Identity rows sit above the first block with no label of their own: the matchup row is
+  // the one naming both teams, and the round row is the other text row beside it.
+  const identity = [];
+  for (let index = 0; index < blocks[0]; index += 1) {
+    if (!label(index) && (grid[index] || []).some((cell) => text(cell))) identity.push(index);
+  }
+  const matchupRow = identity.find((index) =>
+    (grid[index] || []).some((cell) => splitPair(cell)),
+  );
+  const roundRow = identity.find(
+    (index) => index !== matchupRow && (grid[index] || []).some((cell) => /[a-z]/i.test(text(cell))),
+  );
+
+  const series = [];
+  for (let block = 0; block < blocks.length; block += 1) {
+    const teamARow = blocks[block];
+    const end = blocks[block + 1] ?? grid.length;
+    const width = Math.max(...grid.slice(teamARow, end).map((row) => (row || []).length), 0);
+
+    for (let column = 1; column < width; column += 1) {
+      const teamA = text(grid[teamARow]?.[column]);
+      const teamB = text(grid[teamARow + 1]?.[column]);
+      if (!teamA || !teamB) continue;
+      const sideFor = (side) => (side === 'a' ? teamA : side === 'b' ? teamB : '');
+
+      const bans = [];
+      const byGame = new Map();
+      let mode = '';
+      let step = 0;
+      for (let row = teamARow + 2; row < end; row += 1) {
+        const rowLabel = label(row);
+        if (!rowLabel) continue;
+        const parsed = transposedStep(rowLabel);
+        if (!parsed) {
+          mode = rowLabel;
+          continue;
+        }
+        const value = text(grid[row]?.[column]);
+        if (!value) continue;
+        step += 1;
+        if (parsed.kind === 'ban') {
+          bans.push({ map: value, team: sideFor(parsed.side), mode, order: bans.length + 1, step });
+          continue;
+        }
+        const game = byGame.get(parsed.game) || {
+          map: '',
+          mode: '',
+          order: parsed.game,
+          step,
+          decider: false,
+          pickedBy: '',
+          sidePick: '',
+          sidePickTeam: '',
+          otSidePick: '',
+          otSidePickTeam: '',
+        };
+        if (parsed.kind === 'side') {
+          game.sidePick = value;
+          game.sidePickTeam = sideFor(parsed.side);
+        } else {
+          game.map = value;
+          game.mode = mode;
+          game.step = step;
+          game.decider = parsed.kind === 'decider';
+          game.pickedBy = sideFor(parsed.side);
+        }
+        byGame.set(parsed.game, game);
+      }
+
+      // A side choice can be recorded before its map is; without a map there is nothing to show.
+      const maps = [...byGame.values()].filter((game) => game.map).sort((a, b) => a.order - b.order);
+      if (!maps.length && !bans.length) continue;
+      series.push({
+        teamA,
+        teamB,
+        round: roundRow == null ? '' : text(grid[roundRow]?.[column]),
+        confirmed: true,
+        maps,
+        bans,
+      });
+    }
+  }
+  return series.slice(0, 500);
+}
+
 export function seriesVetoesToMapDetails(series) {
   const details = [];
   for (const entry of series || []) {
@@ -605,7 +725,8 @@ export function seriesVetoesToMapDetails(series) {
         teamB: entry.teamB,
         round: entry.round,
         map: map.map,
-        mode: '',
+        // Rainbow Six has no per-map mode; Call of Duty vetoes each mode separately.
+        mode: map.mode || '',
         decider: map.decider,
         pickedBy: map.pickedBy,
         scoreA: null,
@@ -690,6 +811,7 @@ export function parseOfficialWorkbook(title, tabs) {
     ...parseSeriesVetoes(tabs.BO1_VETOS || []),
     ...parseSeriesVetoes(tabs.BO3_VETOS || []),
     ...parseSeriesVetoes(tabs.BO5_VETO || []),
+    ...parseTransposedSeriesVetoes(tabs.FullMapvetos || []),
   ];
   const mapDetails = [
     ...parseTeamMapDetails(tabs['MATCH INFO MASTER'] || []),

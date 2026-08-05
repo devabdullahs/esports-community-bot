@@ -26,6 +26,8 @@ const ALLOWED_TABS = new Set([
   'BO1_VETOS',
   'BO3_VETOS',
   'BO5_VETO',
+  // Call of Duty puts every series in one transposed grid instead.
+  'FullMapvetos',
 ]);
 
 let queueTail = Promise.resolve();
