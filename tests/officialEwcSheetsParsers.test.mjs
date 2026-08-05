@@ -367,6 +367,23 @@ test('bracket parser keeps a match label from being read as a best-of', () => {
   assert.equal(first.status, 'finished');
 });
 
+test('bracket parser ignores the numeric tables sharing the tab', () => {
+  // A ranking grid also reads as "a name beside a number", and one of these once parsed
+  // as the series "1 0-721 2". A competitor's name always contains a letter.
+  const results = parseBracketResults([
+    ['', '', '', 'Group Stage'],
+    ['', '', '', 14],
+    ['', '', '', 1, 0],
+    ['', '', '', 2, 721],
+    [],
+    ['', '', '', 'UB 1.1'],
+    ['', '', '', 'FaZe Clan', 3],
+    ['', '', '', 'The Pit', 0],
+  ]);
+
+  assert.deepEqual(results.map((r) => [r.teamA, r.teamB]), [['FaZe Clan', 'The Pit']]);
+});
+
 test('schedule timestamps treat sheet dates as Riyadh local time', () => {
   assert.equal(
     scheduleTimestamp('2026/07/30', '6:30 PM'),

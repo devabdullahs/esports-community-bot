@@ -28,7 +28,7 @@ const ATTRIBUTION = '© Esports Foundation 2026. All rights reserved.';
 const DETAIL_SOURCE = 'internal-normalized';
 // Bump whenever parsing or reconciliation changes what gets persisted, so already-seen
 // workbooks are re-read once instead of waiting for the next unrelated edit.
-export const OFFICIAL_PARSER_VERSION = 21;
+export const OFFICIAL_PARSER_VERSION = 22;
 
 let running = false;
 let client = null;
@@ -411,14 +411,18 @@ export async function applyBracketResults(tournament, matches, results, observed
   for (const result of results || []) {
     const existing = findOfficialMatch(matches, result);
     if (!existing) continue;
+    // The pair matches regardless of order, so the bracket can list the sides the other way
+    // round from the stored row — "NOBI 3-1 AK" against a row of "AK vs Nobi". Orient the
+    // score to the row before writing it, or the result lands inverted.
+    const flipped = normalizeTeamName(result.teamA) === normalizeTeamName(existing.team_b);
     const stored = await persistAuthoritativeMatchUpdate(
       tournament,
       existing,
       {
         teamA: existing.team_a,
         teamB: existing.team_b,
-        scoreA: result.scoreA,
-        scoreB: result.scoreB,
+        scoreA: flipped ? result.scoreB : result.scoreA,
+        scoreB: flipped ? result.scoreA : result.scoreB,
         status: result.status,
       },
       matches,

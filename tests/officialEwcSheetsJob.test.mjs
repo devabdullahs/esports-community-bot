@@ -5,6 +5,7 @@ process.env.DISCORD_TOKEN = 'test-token';
 process.env.DISCORD_CLIENT_ID = 'test-client';
 process.env.LOG_LEVEL = 'error';
 
+const { normalizeTeamName } = await import('../src/lib/render.js');
 const {
   deriveOfficialOverwatchSeriesResult,
   findOfficialMatch,
@@ -328,6 +329,25 @@ test('bracket results only ever land on a match that already exists', async () =
   assert.deepEqual(persisted, [{ id: 1, scoreA: 3, scoreB: 0, status: 'finished' }]);
   // The unmatched row created nothing.
   assert.equal(matches.length, 1);
+});
+
+// The pair matches regardless of order, so the bracket can list the sides the other way
+// round from the stored row. Assigning its scores positionally inverts the result.
+test('a bracket result is oriented to the row it lands on', () => {
+  const matches = [{ id: 7, team_a: 'AK', team_b: 'Nobi', status: 'finished', score_a: 1, score_b: 3 }];
+  const applied = [];
+
+  for (const result of [
+    { teamA: 'NOBI', teamB: 'AK', scoreA: 3, scoreB: 1, status: 'finished' },
+    { teamA: 'AK', teamB: 'NOBI', scoreA: 1, scoreB: 3, status: 'finished' },
+  ]) {
+    const existing = findOfficialMatch(matches, result);
+    const flipped = normalizeTeamName(result.teamA) === normalizeTeamName(existing.team_b);
+    applied.push([flipped ? result.scoreB : result.scoreA, flipped ? result.scoreA : result.scoreB]);
+  }
+
+  // Either ordering must land as AK 1 - 3 Nobi, matching the row.
+  assert.deepEqual(applied, [[1, 3], [1, 3]]);
 });
 
 test('pair matching is order-independent and requires a unique timed candidate', () => {

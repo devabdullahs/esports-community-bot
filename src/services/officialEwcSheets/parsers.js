@@ -388,6 +388,10 @@ export function parseBracketResults(rows) {
       // An undrawn slot carries no result, and 0-0 is how the bracket draws "not played".
       if (isBracketPlaceholder(a.name) || isBracketPlaceholder(b.name)) continue;
       if (a.score === 0 && b.score === 0) continue;
+      // The tab also holds numeric tables — group rankings, points — whose rows look like a
+      // name beside a number. A competitor's name always has a letter in it; "11 4-0 12" is
+      // a row of a standings grid, not a series.
+      if (!/[a-z]/i.test(a.name) || !/[a-z]/i.test(b.name)) continue;
       results.push({
         round,
         teamA: a.name,
