@@ -14,6 +14,7 @@ const {
   getMatch,
   getMatchesForGuild,
   matchEventKey,
+  isUnresolvedPlaceholderName,
   markStaleActiveFinished,
   upsertMatch,
 } = await import('../src/db/matches.js');
@@ -41,6 +42,19 @@ test('normalizeTeamName resolves known Liquipedia short-name redirects', () => {
   // Neighbouring names must not be swept up by either alias.
   assert.notEqual(normalizeTeamName('MIBR'), normalizeTeamName('MIBR.LOS'));
   assert.notEqual(normalizeTeamName('AlUla Esports'), normalizeTeamName('Al-Ula Club'));
+});
+
+// A bracket names a slot by where it finishes as well as by another match, and the
+// provider republishes each generation as the draw resolves, so the earlier ones pile up
+// beside the drawn fixture.
+test('slot references count as unresolved placeholders', () => {
+  for (const name of ['TBD', 'Winner of UB 1.1', 'Loser of UB 2.2', 'Group A #1', 'Group B #2', 'Seed #9', 'Seed #8/#9', '']) {
+    assert.equal(isUnresolvedPlaceholderName(name), true, name || '(empty)');
+  }
+  // Real teams, including ones whose names contain the same words.
+  for (const name of ['Fnatic', 'Al-Ula Club', 'Shopify Rebellion', 'Group Fortress', 'Seeded Esports', 'CAG by VARREL']) {
+    assert.equal(isUnresolvedPlaceholderName(name), false, name);
+  }
 });
 
 test('dedupeMatches collapses live-widget alias rows by timestamp and shared team', () => {

@@ -374,6 +374,33 @@ test('schedule timestamps treat sheet dates as Riyadh local time', () => {
   );
 });
 
+// Rainbow Six retitled its time column to "Start Time\nROLLING SCHEDULE" mid-event. The
+// header lookup matched aliases exactly, so findScheduleHeader stopped finding the header
+// and the whole schedule silently parsed to zero fixtures.
+test('schedule parser survives an annotation appended to a header', () => {
+  const rows = [
+    ['', 'Tournament Day #', '', 'Date', 'Week', 'Stream', 'Best of X', 'Start Time\nROLLING SCHEDULE', '', '', '', '', '', 'Round', 'Match', 'Comment'],
+    ['', '', '', '', '', '', '', '- PUBLIC-\n- CEST-', '- PUBLIC-\n- AST -'],
+    ['', 'Day 2', 46239, 46239, 'SS1', 'Stream A', 'Bo3', '18:15', '', '', '', '', '', 'PL - Semifinal 2', 'Fnatic vs. AlUla Club Esports'],
+  ];
+
+  const parsed = parseSchedule(rows, { game: 'rainbowsix' });
+  assert.equal(parsed.length, 1);
+  assert.equal(parsed[0].teamA, 'Fnatic');
+  assert.equal(parsed[0].teamB, 'AlUla Club Esports');
+  // The header row marks the column CEST, so 18:15 there is 16:15 UTC (19:15 in Riyadh).
+  assert.equal(parsed[0].scheduledAt, Math.floor(Date.parse('2026-08-05T16:15:00.000Z') / 1000));
+});
+
+test('a one-word header alias does not claim a longer neighbouring column', () => {
+  // "time" must not latch onto "Time Zone" — only multi-word aliases match by prefix.
+  const rows = [
+    ['Date', 'Time Zone', 'Round', 'Match'],
+    ['2026/08/05', 'CEST', 'Semifinal', 'Fnatic vs AlUla Club Esports'],
+  ];
+  assert.deepEqual(parseSchedule(rows, { game: 'rainbowsix' }), []);
+});
+
 test('schedule parser rejects formulas and preserves same-pair rematches as separate timed rows', () => {
   const rows = [
     ['Date', 'Start Time', 'Round', 'Match', 'Score A', 'Score B', 'Status'],
