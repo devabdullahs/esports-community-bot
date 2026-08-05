@@ -74,8 +74,9 @@ export function StreamEmbed({
         key={src}
         src={src}
         title={`${label} on ${PLATFORM_LABELS[platform] ?? platform}`}
+        // `allow` already grants fullscreen and takes precedence over the legacy
+        // allowFullScreen attribute, which only made the browser log a warning.
         allow="autoplay; fullscreen; encrypted-media; picture-in-picture"
-        allowFullScreen
         referrerPolicy="strict-origin-when-cross-origin"
         className="absolute inset-0 size-full"
       />

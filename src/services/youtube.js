@@ -37,6 +37,33 @@ function channelLiveUrl(handle) {
 
 // Parse one /live page into the poller's status shape, or null when the fetch
 // itself said nothing usable (caller treats null as offline).
+// Concurrent viewers. YouTube splits the number from its label across SEPARATE
+// JSON runs, so the rendered "2,081 watching now" never exists as one string:
+//   "viewCount":{"videoViewCountRenderer":{"viewCount":{"runs":[
+//     {"text":"2,081"},{"text":" watching now"}]},"isLive":true,
+//     "originalViewCount":"2081"}}
+// Prefer originalViewCount — the same number without locale separators or digit
+// shaping, so an Arabic channel's page needs no special handling. Search only
+// inside the renderer, since a watch page also carries view counts for every
+// recommended video beside it.
+function parseViewerCount(text) {
+  // Require the ":{" — the page also lists "videoViewCountRenderer" as a bare string
+  // inside an array of renderer type names, and anchoring on that decoy finds nothing.
+  // Scan every real occurrence rather than only the first.
+  for (const match of text.matchAll(/"videoViewCountRenderer"\s*:\s*\{/g)) {
+    const block = text.slice(match.index, match.index + 600);
+    const raw =
+      block.match(/"originalViewCount"\s*:\s*"(\d+)"/)?.[1] ??
+      block.match(/"runs"\s*:\s*\[\s*\{\s*"text"\s*:\s*"([\d,.\s]+)"/)?.[1] ??
+      block.match(/"simpleText"\s*:\s*"([\d,.\s]+?) watching/)?.[1] ??
+      '';
+    // Thousands separators are locale-dependent (1,234 / 1.234 / 1 234), so keep digits only.
+    const digits = raw.replace(/\D/g, '');
+    if (digits) return Number(digits);
+  }
+  return null;
+}
+
 export function parseLivePage(html) {
   const text = String(html ?? '');
   if (!text) return null;
@@ -47,9 +74,7 @@ export function parseLivePage(html) {
     text.match(/<meta name="title" content="([^"]*)"/)?.[1] ??
     text.match(/<meta property="og:title" content="([^"]*)"/)?.[1] ??
     null;
-  // Rough concurrent viewers ("1,234 watching now" in the watch page metadata).
-  const watching = text.match(/([\d,.]+)\s+watching now/);
-  const viewerCount = watching ? Number(watching[1].replace(/[,.]/g, '')) || null : null;
+  const viewerCount = parseViewerCount(text);
   if (!isLive || !videoId) return { isLive: false };
   return {
     isLive: true,
