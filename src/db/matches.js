@@ -119,6 +119,21 @@ export async function upsertMatch(
       : existing && !accepted
         ? existing.score_b
         : merged.score_b ?? existing?.score_b ?? null;
+    // A provider can report the same fixture with its sides flipped. Team names always take
+    // the incoming value, so a logo the row omits must be carried by TEAM rather than by
+    // slot — otherwise the names swap, the crests stay put, and each team wears the other's.
+    // A stored logo whose team is no longer in the row belongs to nobody: drop it rather
+    // than leave the wrong crest behind.
+    const storedLogoFor = (team) => {
+      const target = normalizeTeamName(team);
+      if (!existing || !target) return null;
+      if (normalizeTeamName(existing.team_a) === target) return existing.logo_a ?? null;
+      if (normalizeTeamName(existing.team_b) === target) return existing.logo_b ?? null;
+      return null;
+    };
+    const logoA = merged.logo_a ?? storedLogoFor(merged.team_a);
+    const logoB = merged.logo_b ?? storedLogoFor(merged.team_b);
+
     const scheduledAt = existing && !accepted
       ? existing.scheduled_at
       : merged.scheduled_at ?? existing?.scheduled_at ?? null;
@@ -139,8 +154,10 @@ export async function upsertMatch(
          name          = excluded.name,
          team_a        = excluded.team_a,
          team_b        = excluded.team_b,
-         logo_a        = COALESCE(excluded.logo_a, matches.logo_a),
-         logo_b        = COALESCE(excluded.logo_b, matches.logo_b),
+         -- Already resolved by team identity above, so take it verbatim: a COALESCE onto
+         -- the stored slot is what let a side swap leave the crests behind.
+         logo_a        = excluded.logo_a,
+         logo_b        = excluded.logo_b,
          score_a       = excluded.score_a,
          score_b       = excluded.score_b,
          status        = excluded.status,
@@ -159,8 +176,8 @@ export async function upsertMatch(
         merged.name,
         merged.team_a,
         merged.team_b,
-        merged.logo_a,
-        merged.logo_b,
+        logoA,
+        logoB,
         scoreA,
         scoreB,
         lifecycle.status,
