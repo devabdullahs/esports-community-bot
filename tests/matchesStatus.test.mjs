@@ -279,6 +279,61 @@ test('dedupeMatches preserves legitimate same-pair rematches later on the same d
 // An undrawn slot and the match it became sit at the same minute, so a drawn round leaves
 // its placeholders behind as duplicates on every upcoming list until the four-hour stale
 // sweep catches them. A drawn sibling in the same slot is evidence enough to retire now.
+// A provider can report the same fixture with its sides flipped. Names always take the
+// incoming value while an omitted logo used to fall back to the stored SLOT, so the crests
+// stayed put and each team wore the other's — OpTic Gaming's badge sat beside "Team WaR".
+test('a side swap carries the logos with it', async () => {
+  const row = await run(
+    `INSERT INTO tournaments (source, external_id, game, name, guild_id)
+     VALUES ($1, $2, $3, $4, $5)`,
+    ['liquipedia', 'callofduty/Sides', 'callofduty', 'Side Swap', 'guild-1'],
+  );
+  const tournamentId = Number(row.lastInsertRowid);
+  const optic = 'https://liquipedia.net/commons/images/OpTic_Gaming.png';
+  const war = 'https://liquipedia.net/commons/images/Team_WaR.png';
+
+  await upsertMatch({
+    tournament_id: tournamentId,
+    source: 'liquipedia',
+    external_id: 'sides',
+    name: 'OpTic Gaming vs Team WaR',
+    team_a: 'OpTic Gaming',
+    team_b: 'Team WaR',
+    logo_a: optic,
+    logo_b: war,
+    status: 'scheduled',
+  });
+
+  // The same match, sides flipped, and no logos on the incoming row.
+  const swapped = await upsertMatch({
+    tournament_id: tournamentId,
+    source: 'liquipedia',
+    external_id: 'sides',
+    name: 'Team WaR vs OpTic Gaming',
+    team_a: 'Team WaR',
+    team_b: 'OpTic Gaming',
+    status: 'running',
+  });
+
+  assert.equal(swapped.team_a, 'Team WaR');
+  assert.equal(swapped.logo_a, war, 'the crest follows its team across the swap');
+  assert.equal(swapped.logo_b, optic);
+
+  // A team that leaves the fixture entirely takes its crest with it: a stale logo belongs
+  // to nobody, and showing it is worse than showing none.
+  const redrawn = await upsertMatch({
+    tournament_id: tournamentId,
+    source: 'liquipedia',
+    external_id: 'sides',
+    name: 'FaZe Clan vs Cloud9',
+    team_a: 'FaZe Clan',
+    team_b: 'Cloud9',
+    status: 'scheduled',
+  });
+  assert.equal(redrawn.logo_a, null);
+  assert.equal(redrawn.logo_b, null);
+});
+
 test('placeholder sweep retires an undrawn slot once its round has been drawn', async () => {
   const now = Math.floor(Date.now() / 1000);
   const soon = now + 3 * 3600;
