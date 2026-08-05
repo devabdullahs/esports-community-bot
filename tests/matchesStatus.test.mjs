@@ -353,6 +353,73 @@ test('a side swap carries the logos with it', async () => {
 // earlier copy is left behind — one Tekken series showed twice, ten minutes apart, as
 // "M. Zubair vs KEISUKE" and "M._Zubair vs Keisuke_(Tekken_Player)". The split pair also
 // stopped a same-pair lookup resolving at all, which is why bracket results stopped joining.
+// Liquipedia carries a bracket slot for every position the same two competitors COULD meet
+// in. Once the draw settles the unused one stays behind as a finished row with no decisive
+// result, sitting beside the real one and splitting the pair for any same-pair lookup.
+test('an abandoned bracket slot yields to the meeting that actually happened', async () => {
+  const now = Math.floor(Date.now() / 1000);
+  const row = await run(
+    `INSERT INTO tournaments (source, external_id, game, name, guild_id)
+     VALUES ($1, $2, $3, $4, $5)`,
+    ['liquipedia', 'fighters/Slots', 'fighters', 'Slots', 'guild-1'],
+  );
+  const tournamentId = Number(row.lastInsertRowid);
+  const add = (externalId, teamA, teamB, at, extra = {}) =>
+    upsertMatch({
+      tournament_id: tournamentId,
+      source: 'liquipedia',
+      external_id: externalId,
+      name: `${teamA} vs ${teamB}`,
+      team_a: teamA,
+      team_b: teamB,
+      status: 'finished',
+      scheduled_at: at,
+      ...extra,
+    });
+
+  await add('bracket:21', 'Mulgold', 'Yagami_(Australian_Player)', now - 7200, { score_a: 2, score_b: 3 });
+  // The slot the draw never used: level, and no longer published.
+  await add('bracket:27', 'Yagami_(Australian_Player)', 'Mulgold', now - 3600, { score_a: 0, score_b: 0 });
+  // The same shape but with no score at all.
+  await add('bracket:29', 'Numan_Ch', 'Atif_Butt', now - 3600);
+  await add('bracket:24', 'Atif_Butt', 'Numan_Ch', now - 7200, { score_a: 2, score_b: 3 });
+
+  assert.equal(await deleteTournamentPlaceholderMatches(tournamentId, ['bracket:21', 'bracket:24']), 2);
+  assert.equal(await getMatch('liquipedia', 'bracket:27'), null);
+  assert.equal(await getMatch('liquipedia', 'bracket:29'), null);
+  assert.notEqual(await getMatch('liquipedia', 'bracket:21'), null);
+  assert.notEqual(await getMatch('liquipedia', 'bracket:24'), null);
+});
+
+test('a level result the provider still publishes is left alone', async () => {
+  const now = Math.floor(Date.now() / 1000);
+  const row = await run(
+    `INSERT INTO tournaments (source, external_id, game, name, guild_id)
+     VALUES ($1, $2, $3, $4, $5)`,
+    ['liquipedia', 'easportsfc/Draws', 'easportsfc', 'Draws', 'guild-1'],
+  );
+  const tournamentId = Number(row.lastInsertRowid);
+  const add = (externalId, teamA, teamB, at, extra = {}) =>
+    upsertMatch({
+      tournament_id: tournamentId,
+      source: 'liquipedia',
+      external_id: externalId,
+      name: `${teamA} vs ${teamB}`,
+      team_a: teamA,
+      team_b: teamB,
+      status: 'finished',
+      scheduled_at: at,
+      ...extra,
+    });
+
+  // Two legs of the same fixture: one drawn, one decisive. Both are still published.
+  await add('leg:1', 'Falcons', 'T1', now - 7200, { score_a: 1, score_b: 1 });
+  await add('leg:2', 'T1', 'Falcons', now - 3600, { score_a: 2, score_b: 0 });
+
+  assert.equal(await deleteTournamentPlaceholderMatches(tournamentId, ['leg:1', 'leg:2']), 0);
+  assert.notEqual(await getMatch('liquipedia', 'leg:1'), null);
+});
+
 test('the sheet copy retires once the provider publishes the same fixture', async () => {
   const now = Math.floor(Date.now() / 1000);
   const row = await run(

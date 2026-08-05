@@ -882,12 +882,30 @@ export async function deleteTournamentPlaceholderMatches(
     });
   };
 
+  // Liquipedia carries a bracket slot for every position the same two competitors COULD
+  // meet in. Once the draw settles, the unused slot stays behind as a finished row with no
+  // decisive result — "Yagami vs Mulgold 0:0" sitting beside the real "Mulgold 2:3 Yagami".
+  //
+  // Requiring the row to be ABSENT from the latest fetch is what makes this safe: a real
+  // drawn match is still published and keeps its place, and a game whose matches genuinely
+  // finish level is untouched as long as the provider still lists them.
+  const decisive = (row) =>
+    row.score_a != null && row.score_b != null && Number(row.score_a) !== Number(row.score_b);
+  const supersededByResult = (row) => {
+    if (!current || current.has(row.external_id)) return false;
+    if (String(row.status ?? '') !== 'finished' || decisive(row)) return false;
+    const pair = pairKey(row);
+    if (!pair) return false;
+    return rows.some((other) => other.id !== row.id && pairKey(other) === pair && decisive(other));
+  };
+
   const ids = rows
     .filter((row) => {
       if (row.official_fresh) return false;
       if (abandonedAfterConclusion(row)) return true;
       if (supersededByDraw(row)) return true;
       if (supersededByProvider(row)) return true;
+      if (supersededByResult(row)) return true;
       if (/^sgg:preview_/i.test(String(row.external_id ?? ''))) {
         return current && !current.has(row.external_id);
       }
