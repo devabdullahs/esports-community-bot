@@ -305,6 +305,31 @@ test('tournament resolution keeps a last-chance qualifier out of its main event'
   assert.equal(resolveOfficialTournament([main, lcq, streetFighter], descriptor)?.id, 50);
 });
 
+// The bracket runs AHEAD of the fallback provider: a series can read 3-0 there while
+// Liquipedia still calls it running. It names its fixtures in its own words and gives no
+// start time, so a row that matches nothing must be skipped rather than inserted.
+test('bracket results only ever land on a match that already exists', async () => {
+  const matches = [
+    { id: 1, team_a: 'Gentle Mates', team_b: 'OMiT', status: 'running', score_a: 2, score_b: 0 },
+  ];
+  const persisted = [];
+  const results = [
+    { teamA: 'Gentle Mates', teamB: 'OMiT', scoreA: 3, scoreB: 0, status: 'finished' },
+    // No such match is tracked, so this one has nothing to correct.
+    { teamA: 'OpTic Gaming', teamB: 'Team WaR', scoreA: 3, scoreB: 1, status: 'finished' },
+  ];
+
+  for (const result of results) {
+    const existing = findOfficialMatch(matches, result);
+    if (!existing) continue;
+    persisted.push({ id: existing.id, scoreA: result.scoreA, scoreB: result.scoreB, status: result.status });
+  }
+
+  assert.deepEqual(persisted, [{ id: 1, scoreA: 3, scoreB: 0, status: 'finished' }]);
+  // The unmatched row created nothing.
+  assert.equal(matches.length, 1);
+});
+
 test('pair matching is order-independent and requires a unique timed candidate', () => {
   const scheduledAt = 1_785_000_000;
   const matches = [

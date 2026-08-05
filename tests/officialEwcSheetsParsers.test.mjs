@@ -6,6 +6,7 @@ const {
   parseIndividualResults,
   parseOfficialWorkbook,
   parseSchedule,
+  parseBracketResults,
   parseSeriesVetoes,
   parseTransposedSeriesVetoes,
   parseStandings,
@@ -304,6 +305,66 @@ test('veto tabs flow into the shared map-detail shape', () => {
   assert.equal(bo3Maps.every((detail) => detail.scoreA === null && detail.scoreB === null), true);
   // Map bans belong to the series, so every map of it carries the same list.
   assert.equal(bo3Maps[0].mapBans.length, 6);
+});
+
+// Rows copied from the official Call of Duty workbook's Visualization tab. The bracket is
+// drawn, not tabulated: a best-of as a bare number, then a match label, then its two teams
+// with the series score in the NEXT column. Two brackets sit side by side.
+const COD_VISUALIZATION = [
+  ['GROUPSTAGE', '', '', '', '', '', '', '', '', '', '', '', '', '', '', 'PLAYOFFS'],
+  ['Group A'],
+  ['', '', '', 'UB Ro8 (Quarter-finals)', '', '', '', 'UB Ro4 (Semi-finals)'],
+  ['', '', '', 5, '', '', '', 5],
+  ['', '', '', 'UB 1.1'],
+  ['', '', '', 'FaZe Clan', 3],
+  ['', '', '', 'The Pit', 0, '', '', 'UB 2.1'],
+  ['', '', '', '', '', '', '', 'FaZe Clan'],
+  ['', '', '', 'UB 1.2', '', '', '', 'Movistar KOI'],
+  ['', '', '', 'Movistar KOI', 3],
+  ['', '', '', 'Carolina Royal Ravens', 0],
+  [],
+  ['', '', '', 'UB 1.3'],
+  // Still being played: a Bo5 at 2-0 has not reached three wins.
+  ['', '', '', 'G2 Esports', 2],
+  ['', '', '', 'Cloud9', 0],
+  [],
+  ['', '', '', 'UB 1.4'],
+  // Drawn but not played: the bracket writes 0-0 until it starts.
+  ['', '', '', 'OpTic Gaming', 0],
+  ['', '', '', 'Team WaR', 0],
+  [],
+  ['', '', '', 'LB 1.1 (loser out)'],
+  // Not drawn yet: an undrawn slot must never be reported as a result.
+  ['', '', '', 'Winner of UB 2.1', 1],
+  ['', '', '', 'Loser of UB 2.2', 0],
+];
+
+test('bracket parser reads drawn series scores and leaves the undecided alone', () => {
+  const results = parseBracketResults(COD_VISUALIZATION);
+
+  assert.deepEqual(
+    results.map((r) => [r.round, r.teamA, r.scoreA, r.scoreB, r.teamB, r.bestOf, r.status]),
+    [
+      ['UB 1.1', 'FaZe Clan', 3, 0, 'The Pit', 5, 'finished'],
+      ['UB 1.2', 'Movistar KOI', 3, 0, 'Carolina Royal Ravens', 5, 'finished'],
+      // A Bo5 at 2-0 is still running, so the provider keeps driving it.
+      ['UB 1.3', 'G2 Esports', 2, 0, 'Cloud9', 5, 'running'],
+    ],
+  );
+});
+
+test('bracket parser keeps a match label from being read as a best-of', () => {
+  const results = parseBracketResults(COD_VISUALIZATION);
+  // "UB 1.1" parses loosely as the number 1.1; taking that as the best-of would make a
+  // single map win look terminal.
+  assert.equal(results.every((r) => r.bestOf === 5), true);
+
+  // A best-of only comes from a genuine number in the sheet, so a bracket without one
+  // still reports its scores and falls back to treating any score pair as final.
+  const noBestOf = COD_VISUALIZATION.filter((row) => row[3] !== 5);
+  const [first] = parseBracketResults(noBestOf);
+  assert.equal(first.bestOf, null);
+  assert.equal(first.status, 'finished');
 });
 
 test('schedule timestamps treat sheet dates as Riyadh local time', () => {
