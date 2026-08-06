@@ -544,7 +544,15 @@ export function parseBracketStructure(rows) {
       if (group.slots.length >= MAX_ENTRIES) break;
     }
   }
-  return groups.filter((entry) => entry.slots.length).slice(0, MAX_SECTIONS);
+  const drawn = groups.filter((entry) => entry.slots.length);
+  // A battle royale's points grid reads exactly like a bracket column — two names and a
+  // number — so PUBG Mobile produced "groups" of sixteen teams with a section named "2".
+  // What actually makes a bracket is that its slots are POSITIONS in a draw: they carry a
+  // slot label ("UB 1.1") or an edge ("Winner of UB 2.1"). A tab with neither is a table.
+  const isDraw = drawn.some((entry) =>
+    entry.slots.some((slot) => slot.label || slot.sourceA || slot.sourceB),
+  );
+  return isDraw ? drawn.slice(0, MAX_SECTIONS) : [];
 }
 
 function isBracketPlaceholder(value) {
