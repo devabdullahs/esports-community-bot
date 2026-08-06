@@ -131,9 +131,26 @@ function BracketMatchCard({
   );
 }
 
+// A double-elimination draw is two brackets, not one row of rounds. Laying every round out
+// side by side puts "Lower Bracket Round 1" after the upper final, so a team's fall reads as
+// a jump along the same line. Stack the branches instead, the way a drawn bracket does, and
+// let the round columns line up between them.
+const BRANCH_BANDS = ["upper", "lower", null] as const;
+
+function bandRounds(rounds: BracketRound[], branch: BracketRound["branch"]) {
+  return rounds.filter((round) => round.branch === branch);
+}
+
 export function BracketView({ bracket, locale }: { bracket: TournamentBracket; locale: Locale }) {
   const text = copy[locale].tournaments;
   const headingId = "tournament-bracket-heading";
+  const bands = BRANCH_BANDS.map((branch) => ({ branch, rounds: bandRounds(bracket.rounds, branch) })).filter(
+    (band) => band.rounds.length,
+  );
+  // With one branch there is nothing to separate, so the band heading would only repeat the
+  // section title above it.
+  const showBandHeadings = bands.filter((band) => band.branch).length > 1;
+  const widest = Math.max(...bands.map((band) => band.rounds.length), 1);
 
   return (
     <section data-bracket-view="true" aria-labelledby={headingId} dir={directionForLocale(locale)} className="flex flex-col gap-3">
@@ -147,22 +164,33 @@ export function BracketView({ bracket, locale }: { bracket: TournamentBracket; l
         tabIndex={0}
         className="overflow-x-auto overscroll-x-contain pb-2 outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
       >
-        <div
-          data-bracket-columns={bracket.rounds.length}
-          className="grid min-w-max grid-flow-col auto-cols-[13rem] gap-3 snap-x snap-mandatory lg:min-w-full lg:grid-flow-row lg:auto-cols-auto"
-          style={{ gridTemplateColumns: `repeat(${bracket.rounds.length}, minmax(13rem, 1fr))` }}
-        >
-          {bracket.rounds.map((round) => (
-            <section key={round.key} data-bracket-round={round.key} className="min-w-[13rem] snap-start">
-              <h3 className="sticky top-0 z-10 mb-2 border-b bg-background/95 px-1.5 py-2 text-sm font-semibold backdrop-blur">
-                {roundLabel(round, text)}
-              </h3>
-              <div className="flex flex-col gap-2">
-                {round.matches.map((match) => (
-                  <BracketMatchCard key={match.id} match={match} locale={locale} text={text} />
+        <div className="flex min-w-max flex-col gap-6 lg:min-w-full">
+          {bands.map((band) => (
+            <div key={band.branch ?? "open"} data-bracket-branch={band.branch ?? "open"} className="flex flex-col gap-2">
+              {showBandHeadings && band.branch ? (
+                <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  {band.branch === "upper" ? text.bracketUpper : text.bracketLower}
+                </h3>
+              ) : null}
+              <div
+                data-bracket-columns={band.rounds.length}
+                className="grid gap-3 snap-x snap-mandatory"
+                style={{ gridTemplateColumns: `repeat(${widest}, minmax(13rem, 1fr))` }}
+              >
+                {band.rounds.map((round) => (
+                  <section key={round.key} data-bracket-round={round.key} className="min-w-[13rem] snap-start">
+                    <h4 className="sticky top-0 z-10 mb-2 border-b bg-background/95 px-1.5 py-2 text-sm font-semibold backdrop-blur">
+                      {showBandHeadings && band.branch ? phaseLabel(round, text) : roundLabel(round, text)}
+                    </h4>
+                    <div className="flex flex-col gap-2">
+                      {round.matches.map((match) => (
+                        <BracketMatchCard key={match.id} match={match} locale={locale} text={text} />
+                      ))}
+                    </div>
+                  </section>
                 ))}
               </div>
-            </section>
+            </div>
           ))}
         </div>
       </div>

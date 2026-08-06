@@ -79,6 +79,44 @@ function renderMatchList(data: TournamentMatchesPayload) {
 }
 
 describe("BracketView", () => {
+  test("stacks the upper and lower brackets instead of running them in one line", () => {
+    // A double-elimination draw is two brackets. Laid out as one row of rounds, "Lower
+    // Bracket Round 1" lands after the upper final and a team's fall reads as a jump
+    // along the same line.
+    const bracket = projectTournamentBracket([
+      match({ id: 1, round: "Upper Bracket Round 1", scheduled_at: 100 }),
+      match({ id: 2, round: "Upper Bracket Final", scheduled_at: 200 }),
+      match({ id: 3, round: "Lower Bracket Round 1", scheduled_at: 300 }),
+      match({ id: 4, round: "Lower Bracket Final", scheduled_at: 400 }),
+    ]);
+    if (!bracket) throw new Error("Bracket fixture should project");
+
+    const html = renderToStaticMarkup(
+      <QueryClientProvider client={new QueryClient()}>
+        <BracketView bracket={bracket} locale="en" />
+      </QueryClientProvider>,
+    );
+
+    expect(html).toContain('data-bracket-branch="upper"');
+    expect(html).toContain('data-bracket-branch="lower"');
+    // The upper band comes first, and every round sits inside a band rather than beside it.
+    expect(html.indexOf('data-bracket-branch="upper"')).toBeLessThan(
+      html.indexOf('data-bracket-branch="lower"'),
+    );
+  });
+
+  test("keeps a single-branch draw as one band with no redundant heading", () => {
+    const html = renderToStaticMarkup(
+      <QueryClientProvider client={new QueryClient()}>
+        <BracketView bracket={bracketFixture()} locale="en" />
+      </QueryClientProvider>,
+    );
+
+    // Nothing to separate, so the band heading would only repeat the section title.
+    expect(html).toContain('data-bracket-branch="open"');
+    expect(html).not.toContain('data-bracket-branch="upper"');
+  });
+
   test("renders responsive columns and links every match to its canonical page", () => {
     const html = renderToStaticMarkup(<BracketView bracket={bracketFixture()} locale="en" />);
 
