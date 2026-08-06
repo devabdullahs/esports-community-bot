@@ -235,6 +235,8 @@ await recordTournamentSyncSuccess({
 console.log(`tournament seeded: ${tournament.name} (#${tournament.id}) with ${matchCount} matches`);
 
 // 3c-ii) A drawn bracket, the way the official workbooks persist one: two groups drawn with
+// its own set of teams — the live-match-center e2e test matches "Team Falcons" exactly and
+// expects the Valorant fixture above to be the only place it appears.
 // the same round titles, slots keyed by position, and feeder edges READ off the sheet
 // ("Winner of UB 1.1") rather than inferred. Nothing else in the seed exercises the bracket
 // view, because a round label does not survive ingest — see apps/web/src/lib/tournament-draw.ts.
@@ -247,9 +249,9 @@ const drawTournament = await addTournament({
   guild_id: GUILD,
 });
 const drawFixtures = [
-  { external_id: 'Match:bo7-ub11', team_a: 'Team Falcons', team_b: 'OpTic Texas', score_a: 3, score_b: 1, status: 'finished', scheduled_at: nowSeconds - 10_800 },
+  { external_id: 'Match:bo7-ub11', team_a: 'Boston Breach', team_b: 'OpTic Texas', score_a: 3, score_b: 1, status: 'finished', scheduled_at: nowSeconds - 10_800 },
   { external_id: 'Match:bo7-ub12', team_a: 'Atlanta FaZe', team_b: 'Toronto Ultra', score_a: 1, score_b: 3, status: 'finished', scheduled_at: nowSeconds - 7200 },
-  { external_id: 'Match:bo7-ub21', team_a: 'Team Falcons', team_b: 'Toronto Ultra', score_a: 2, score_b: 2, status: 'running', scheduled_at: nowSeconds - 900 },
+  { external_id: 'Match:bo7-ub21', team_a: 'Boston Breach', team_b: 'Toronto Ultra', score_a: 2, score_b: 2, status: 'running', scheduled_at: nowSeconds - 900 },
   { external_id: 'Match:bo7-lb11', team_a: 'OpTic Texas', team_b: 'Atlanta FaZe', score_a: null, score_b: null, status: 'scheduled', scheduled_at: nowSeconds + 5400 },
 ];
 let drawMatchCount = 0;
@@ -271,7 +273,7 @@ await upsertOfficialTournamentOverview(drawTournament.id, {
       bracket: 'upper',
       bestOf: 5,
       slots: [
-        drawSlot('UB 1.1', 'upper', 'Team Falcons', 'OpTic Texas', 3, 1, 'finished', null, null),
+        drawSlot('UB 1.1', 'upper', 'Boston Breach', 'OpTic Texas', 3, 1, 'finished', null, null),
         drawSlot('UB 1.2', 'upper', 'Atlanta FaZe', 'Toronto Ultra', 1, 3, 'finished', null, null),
       ],
     },
@@ -282,7 +284,7 @@ await upsertOfficialTournamentOverview(drawTournament.id, {
       bracket: 'upper',
       bestOf: 5,
       slots: [
-        drawSlot('UB 2.1', 'upper', 'Team Falcons', 'Toronto Ultra', 2, 2, 'running',
+        drawSlot('UB 2.1', 'upper', 'Boston Breach', 'Toronto Ultra', 2, 2, 'running',
           { outcome: 'winner', slot: 'UB 1.1' }, { outcome: 'winner', slot: 'UB 1.2' }),
       ],
     },
