@@ -8,6 +8,7 @@ const {
   parseSchedule,
   parseBattleRoyaleStandings,
   parseBracketResults,
+  parseBracketStructure,
   parseSeriesVetoes,
   parseTransposedSeriesVetoes,
   parseStandings,
@@ -435,6 +436,65 @@ test('a lobby game is named by its round, not by the map it is played on', () =>
   // A head-to-head game still prefers its Match column, which names the fixture.
   const headToHead = parseSchedule(rows, { game: 'rainbowsix' });
   assert.equal(headToHead[0].teamA, 'Rondo');
+});
+
+// The Visualization tab is the drawn bracket, so it carries the geometry a results list
+// throws away: a name column is a round, slots run down it in order, and a later slot
+// literally reads "Loser of UB 1.1" — so the edges are read rather than inferred.
+const COD_BRACKET = [
+  ['GROUPSTAGE'],
+  ['Group A'],
+  ['', '', '', 'UB Ro8 (Quarter-finals)', '', '', '', 'UB Ro4 (Semi-finals)'],
+  ['', '', '', 5, '', '', '', 5],
+  ['', '', '', 'UB 1.1'],
+  ['', '', '', 'FaZe Clan', 3],
+  ['', '', '', 'The Pit', 0, '', '', 'UB 2.1'],
+  ['', '', '', '', '', '', '', 'FaZe Clan'],
+  ['', '', '', 'UB 1.2', '', '', '', 'Movistar KOI'],
+  ['', '', '', 'Movistar KOI', 3],
+  ['', '', '', 'Carolina Royal Ravens', 0],
+  [],
+  // A round whose slots are undrawn consumes no slot label. The heading must not leak on
+  // to the block below it in the same column.
+  ['', '', '', 'LB Ro4a'],
+  ['', '', '', 'LB 1.1 (loser out)'],
+  ['', '', '', 'Loser of UB 1.1', 0],
+  ['', '', '', 'Loser of UB 1.2', 0],
+  [],
+  ['Group B'],
+  ['', '', '', 'UB Ro8 (Quarter-finals)'],
+  ['', '', '', 'UB 1.1'],
+  ['', '', '', 'OpTic Gaming', 3],
+  ['', '', '', 'Team WaR', 1],
+];
+
+test('bracket structure keeps the draw as a graph, not a list of results', () => {
+  const groups = parseBracketStructure(COD_BRACKET);
+
+  assert.deepEqual(
+    groups.map((g) => [g.column, g.bracket, g.title, g.slots.length]),
+    [
+      [3, 'upper', 'UB Ro8 (Quarter-finals)', 2],
+      [3, 'lower', 'LB Ro4a', 1],
+      [3, 'upper', 'UB Ro8 (Quarter-finals)', 1],
+    ],
+  );
+  // Group B's upper bracket must not be filed under Group A's lower-bracket heading.
+  assert.equal(groups[2].slots[0].teamA, 'OpTic Gaming');
+  assert.equal(groups[2].bracket, 'upper');
+
+  // The edge is read off the sheet, not derived from bracket arithmetic.
+  const undrawn = groups[1].slots[0];
+  assert.deepEqual(undrawn.sourceA, { outcome: 'loser', slot: 'UB 1.1' });
+  assert.deepEqual(undrawn.sourceB, { outcome: 'loser', slot: 'UB 1.2' });
+  // 0-0 is how the bracket draws a slot nobody has played yet.
+  assert.equal(undrawn.scoreA, null);
+  assert.equal(undrawn.status, 'scheduled');
+
+  const played = groups[0].slots[0];
+  assert.equal(played.label, 'UB 1.1');
+  assert.equal(played.status, 'finished');
+  assert.equal(played.scoreA, 3);
 });
 
 test('schedule timestamps treat sheet dates as Riyadh local time', () => {
