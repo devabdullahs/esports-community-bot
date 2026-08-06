@@ -32,6 +32,7 @@ const {
 const { upsertEwcProfileLink, markEwcProfileLinkSynced } = await import('../src/db/ewcProfileLinks.js');
 const { addTournament } = await import('../src/db/tournaments.js');
 const { upsertMatch, getMatch } = await import('../src/db/matches.js');
+const { upsertOfficialTournamentOverview } = await import('../src/db/officialEwcSheets.js');
 const { recordTournamentSyncSuccess } = await import('../src/db/tournamentSyncHealth.js');
 const { upsertTeam } = await import('../src/db/teams.js');
 const { upsertFollow } = await import('../src/db/userFollows.js');
@@ -232,6 +233,103 @@ await recordTournamentSyncSuccess({
   at: nowSeconds,
 });
 console.log(`tournament seeded: ${tournament.name} (#${tournament.id}) with ${matchCount} matches`);
+
+// 3c-ii) A drawn bracket, the way the official workbooks persist one: two groups drawn with
+// its own set of teams — the live-match-center e2e test matches "Team Falcons" exactly and
+// expects the Valorant fixture above to be the only place it appears.
+// the same round titles, slots keyed by position, and feeder edges READ off the sheet
+// ("Winner of UB 1.1") rather than inferred. Nothing else in the seed exercises the bracket
+// view, because a round label does not survive ingest — see apps/web/src/lib/tournament-draw.ts.
+const drawTournament = await addTournament({
+  source: 'liquipedia',
+  external_id: 'EWC/2026/Black-Ops-7',
+  game: 'callofduty',
+  name: 'EWC 2026 — Black Ops 7',
+  url: null,
+  guild_id: GUILD,
+});
+const drawFixtures = [
+  { external_id: 'Match:bo7-ub11', team_a: 'Boston Breach', team_b: 'OpTic Texas', score_a: 3, score_b: 1, status: 'finished', scheduled_at: nowSeconds - 10_800 },
+  { external_id: 'Match:bo7-ub12', team_a: 'Atlanta FaZe', team_b: 'Toronto Ultra', score_a: 1, score_b: 3, status: 'finished', scheduled_at: nowSeconds - 7200 },
+  { external_id: 'Match:bo7-ub21', team_a: 'Boston Breach', team_b: 'Toronto Ultra', score_a: 2, score_b: 2, status: 'running', scheduled_at: nowSeconds - 900 },
+  { external_id: 'Match:bo7-lb11', team_a: 'OpTic Texas', team_b: 'Atlanta FaZe', score_a: null, score_b: null, status: 'scheduled', scheduled_at: nowSeconds + 5400 },
+];
+let drawMatchCount = 0;
+for (const m of drawFixtures) {
+  try { await upsertMatch({ tournament_id: drawTournament.id, source: 'liquipedia', ...m }); drawMatchCount += 1; }
+  catch (e) { console.warn('draw match skip:', e.message); }
+}
+const drawSlot = (label, bracket, teamA, teamB, scoreA, scoreB, status, sourceA, sourceB) => ({
+  label, bracket, teamA, teamB, scoreA, scoreB, status, sourceA, sourceB,
+});
+await upsertOfficialTournamentOverview(drawTournament.id, {
+  attribution: '© Esports Foundation 2026. All rights reserved.',
+  facts: [{ label: 'Format', value: 'Double elimination' }],
+  bracket: [
+    {
+      column: 1,
+      section: 'Group A',
+      title: 'UB Ro4',
+      bracket: 'upper',
+      bestOf: 5,
+      slots: [
+        drawSlot('UB 1.1', 'upper', 'Boston Breach', 'OpTic Texas', 3, 1, 'finished', null, null),
+        drawSlot('UB 1.2', 'upper', 'Atlanta FaZe', 'Toronto Ultra', 1, 3, 'finished', null, null),
+      ],
+    },
+    {
+      column: 3,
+      section: 'Group A',
+      title: 'UB Final',
+      bracket: 'upper',
+      bestOf: 5,
+      slots: [
+        drawSlot('UB 2.1', 'upper', 'Boston Breach', 'Toronto Ultra', 2, 2, 'running',
+          { outcome: 'winner', slot: 'UB 1.1' }, { outcome: 'winner', slot: 'UB 1.2' }),
+      ],
+    },
+    {
+      column: 3,
+      section: 'Group A',
+      title: 'LB Round 1',
+      bracket: 'lower',
+      bestOf: 3,
+      slots: [
+        drawSlot('LB 1.1', 'lower', 'OpTic Texas', 'Atlanta FaZe', null, null, 'scheduled',
+          { outcome: 'loser', slot: 'UB 1.1' }, { outcome: 'loser', slot: 'UB 1.2' }),
+      ],
+    },
+    {
+      column: 5,
+      section: 'Group A',
+      title: 'Grand Final',
+      bracket: 'final',
+      bestOf: 7,
+      slots: [
+        drawSlot('Grand Final', 'final', 'Winner of UB 2.1', 'Winner of LB 1.1', null, null, 'scheduled',
+          { outcome: 'winner', slot: 'UB 2.1' }, { outcome: 'winner', slot: 'LB 1.1' }),
+      ],
+    },
+    {
+      column: 1,
+      section: 'Group B',
+      title: 'UB Ro4',
+      bracket: 'upper',
+      bestOf: 5,
+      slots: [
+        drawSlot('UB 1.1', 'upper', 'Twisted Minds', 'NRG', null, null, 'scheduled', null, null),
+        drawSlot('UB 1.2', 'upper', 'LA Thieves', 'Vegas Falcons', null, null, 'scheduled', null, null),
+      ],
+    },
+  ],
+});
+await recordTournamentSyncSuccess({
+  tournamentId: drawTournament.id,
+  source: drawTournament.source,
+  itemCount: drawMatchCount,
+  at: nowSeconds,
+});
+console.log(`draw seeded: ${drawTournament.name} (#${drawTournament.id}) with ${drawMatchCount} matches`);
 
 // 3d) The authenticated account overview reads these same stored rows; no E2E
 // fixture reaches an upstream provider or needs a production auth bypass.
