@@ -442,7 +442,7 @@ test('a lobby game is named by its round, not by the map it is played on', () =>
 // throws away: a name column is a round, slots run down it in order, and a later slot
 // literally reads "Loser of UB 1.1" — so the edges are read rather than inferred.
 const COD_BRACKET = [
-  ['GROUPSTAGE'],
+  ['GROUPSTAGE', '', '', '', '', '', '', '', '', '', '', '', '', '', '', 'PLAYOFFS'],
   ['Group A'],
   ['', '', '', 'UB Ro8 (Quarter-finals)', '', '', '', 'UB Ro4 (Semi-finals)'],
   ['', '', '', 5, '', '', '', 5],
@@ -472,11 +472,13 @@ test('bracket structure keeps the draw as a graph, not a list of results', () =>
   const groups = parseBracketStructure(COD_BRACKET);
 
   assert.deepEqual(
-    groups.map((g) => [g.column, g.bracket, g.title, g.slots.length]),
+    groups.map((g) => [g.column, g.bracket, g.section, g.title, g.slots.length]),
     [
-      [3, 'upper', 'UB Ro8 (Quarter-finals)', 2],
-      [3, 'lower', 'LB Ro4a', 1],
-      [3, 'upper', 'UB Ro8 (Quarter-finals)', 1],
+      [3, 'upper', 'Group A', 'UB Ro8 (Quarter-finals)', 2],
+      [3, 'lower', 'Group A', 'LB Ro4a', 1],
+      // Two groups draw the same round in the same column, so only the section tells them
+      // apart — without it both read "UB Ro8 (Quarter-finals)".
+      [3, 'upper', 'Group B', 'UB Ro8 (Quarter-finals)', 1],
     ],
   );
   // Group B's upper bracket must not be filed under Group A's lower-bracket heading.

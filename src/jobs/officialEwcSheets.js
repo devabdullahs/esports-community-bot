@@ -28,7 +28,7 @@ const ATTRIBUTION = '© Esports Foundation 2026. All rights reserved.';
 const DETAIL_SOURCE = 'internal-normalized';
 // Bump whenever parsing or reconciliation changes what gets persisted, so already-seen
 // workbooks are re-read once instead of waiting for the next unrelated edit.
-export const OFFICIAL_PARSER_VERSION = 23;
+export const OFFICIAL_PARSER_VERSION = 24;
 
 let running = false;
 let client = null;
@@ -717,7 +717,14 @@ async function refreshWorkbook(
   if (!liveOnly) {
     await upsertOfficialTournamentOverview(
       tournament.id,
-      { ...parsed.overview, attribution: ATTRIBUTION },
+      {
+        ...parsed.overview,
+        // The drawn bracket rides with the overview rather than in a table of its own: it
+        // is one document per tournament, replaced whole on every read, which is exactly
+        // what the overview already is.
+        bracket: parsed.bracket,
+        attribution: ATTRIBUTION,
+      },
       { observedAt, ttlSeconds },
     );
   }
