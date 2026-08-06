@@ -449,23 +449,52 @@ export function parseBracketStructure(rows) {
   const grid = rows || [];
   const width = Math.max(...grid.map((row) => (row || []).length), 0);
   const groups = [];
+  const isNameColumn = (column) =>
+    grid.some((row) => text(row?.[column]) && Number.isFinite(number(row?.[column + 1])));
+
+  // "GROUPSTAGE", "Group A", "PLAYOFFS" — a heading that stands on its own away from the
+  // slots, telling two identical-looking rounds apart. Black Ops 7 draws both of its
+  // groups as "UB Ro8 (Quarter-finals)" in the same column.
+  const markers = [];
+  grid.forEach((row, rowIndex) => {
+    (row || []).forEach((cell, column) => {
+      const label = text(cell);
+      if (!label || isNameColumn(column) || isNameColumn(column - 1)) return;
+      markers.push({ row: rowIndex, column, label });
+    });
+  });
+  // Nearest heading at or left of the round, preferring one that starts the same column
+  // block over a page-wide title further left.
+  const sectionFor = (column, row) => {
+    const candidates = markers.filter((marker) => marker.column <= column && marker.row <= row);
+    if (!candidates.length) return '';
+    const nearestColumn = Math.max(...candidates.map((marker) => marker.column));
+    const inColumn = candidates.filter((marker) => marker.column === nearestColumn);
+    return inColumn[inColumn.length - 1].label;
+  };
 
   for (let column = 0; column + 1 < width; column += 1) {
-    const scored = grid.some(
-      (row) => text(row?.[column]) && Number.isFinite(number(row?.[column + 1])),
-    );
-    if (!scored) continue;
+    if (!isNameColumn(column)) continue;
 
     let bestOf = null;
     let pendingSlot = '';
     let pair = [];
     let group = null;
+    let rowIndex = -1;
     const startGroup = (heading) => {
-      group = { column, title: heading, bracket: bracketKind(heading), bestOf, slots: [] };
+      group = {
+        column,
+        section: sectionFor(column, rowIndex),
+        title: heading,
+        bracket: bracketKind(heading),
+        bestOf,
+        slots: [],
+      };
       groups.push(group);
     };
 
     for (const row of grid) {
+      rowIndex += 1;
       const name = text(row?.[column]);
       const score = number(row?.[column + 1]);
       if (!name) {
