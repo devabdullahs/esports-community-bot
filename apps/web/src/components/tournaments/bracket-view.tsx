@@ -100,7 +100,7 @@ function BracketMatchCard({
     <Link
       href={href}
       data-bracket-match={match.id}
-      className="group flex min-h-20 flex-col justify-center gap-1.5 rounded-lg border bg-card px-2.5 py-2 text-sm shadow-xs transition-colors hover:border-primary/50 hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
+      className="group flex min-h-20 w-full flex-col justify-center gap-1.5 rounded-lg border bg-card px-2.5 py-2 text-sm shadow-xs transition-colors hover:border-primary/50 hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
       aria-label={`${teamA} ${text.vs} ${teamB}`}
     >
       <span className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-2">
@@ -178,13 +178,22 @@ export function BracketView({ bracket, locale }: { bracket: TournamentBracket; l
                 style={{ gridTemplateColumns: `repeat(${widest}, minmax(13rem, 1fr))` }}
               >
                 {band.rounds.map((round) => (
-                  <section key={round.key} data-bracket-round={round.key} className="min-w-[13rem] snap-start">
+                  <section key={round.key} data-bracket-round={round.key} className="flex min-w-[13rem] flex-col snap-start">
                     <h4 className="sticky top-0 z-10 mb-2 border-b bg-background/95 px-1.5 py-2 text-sm font-semibold backdrop-blur">
                       {showBandHeadings && band.branch ? phaseLabel(round, text) : roundLabel(round, text)}
                     </h4>
-                    <div className="flex flex-col gap-2">
+                    {/*
+                      A round is as tall as the widest one beside it, and each match takes an
+                      equal share of that height. A round with half as many matches therefore
+                      centres each one against the pair that feeds it, which is what makes the
+                      columns read as one bracket rather than three separate lists — and it
+                      needs no measured connector geometry to do it.
+                    */}
+                    <div className="flex flex-1 flex-col gap-2">
                       {round.matches.map((match) => (
-                        <BracketMatchCard key={match.id} match={match} locale={locale} text={text} />
+                        <div key={match.id} className="flex flex-1 items-center">
+                          <BracketMatchCard match={match} locale={locale} text={text} />
+                        </div>
                       ))}
                     </div>
                   </section>
