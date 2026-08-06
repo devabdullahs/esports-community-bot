@@ -6,6 +6,7 @@ const {
   parseIndividualResults,
   parseOfficialWorkbook,
   parseSchedule,
+  parseBattleRoyaleStandings,
   parseBracketResults,
   parseSeriesVetoes,
   parseTransposedSeriesVetoes,
@@ -382,6 +383,58 @@ test('bracket parser ignores the numeric tables sharing the tab', () => {
   ]);
 
   assert.deepEqual(results.map((r) => [r.teamA, r.teamB]), [['FaZe Clan', 'The Pit']]);
+});
+
+// Rows copied from the official PUBG Mobile workbook. A battle royale tabulates its stages
+// SIDE BY SIDE and ranks by a points breakdown, with the rank as an unlabelled number
+// beside the team and annotation rows between the stage name and the header.
+const PUBGM_STANDINGS = [
+  [],
+  ['', 'Group Stage - Group A', '', '', '', '', '', '', '', 'Group Stage - Group B', '', '', '', '', '', '', '', 'Survival Stage'],
+  [],
+  ['', '', 'From game:', 1, '', 'Till game:', 12, '', '', '', 'From game:', 13, '', 'Till game:', 24, '', '', '', 'From game:', 25],
+  ['', '', 'Team Name', 'WWCD', 'Place Points', 'Elimination Points', 'Total', 'Played matches', '', '', 'Team Name', 'WWCD', 'Place Points', 'Elimination Points', 'Total', 'Played matches', '', '', 'Team Name', 'WWCD', 'Place Points', 'Elimination Points', 'Total', 'Played matches'],
+  ['', 1, 'FURIA', 2, 34, 18, 52, 12, '', 1, 'IDA Esports', 1, 30, 21, 51, 12, '', 1, '', 0, 0, 0, 0, 0],
+  ['', 2, 'ULF Esports', 1, 28, 15, 43, 12, '', 2, 'YANGON GALACTICOS', 0, 26, 14, 40, 12, '', 2, '', 0, 0, 0, 0, 0],
+];
+
+test('battle-royale standings read each stage tabulated beside the others', () => {
+  const sections = parseBattleRoyaleStandings(PUBGM_STANDINGS);
+
+  // The Survival Stage has no teams drawn yet, so it yields nothing.
+  assert.deepEqual(sections.map((s) => s.title), ['Group Stage - Group A', 'Group Stage - Group B']);
+  assert.deepEqual(sections[0].entries.map((e) => [e.rank, e.team, e.points]), [
+    [1, 'FURIA', '52'],
+    [2, 'ULF Esports', '43'],
+  ]);
+  // The breakdown a single points column cannot carry.
+  assert.equal(sections[0].entries[0].extra, 'WWCD 2 · 34 placement · 18 elims · 12 played');
+  assert.equal(sections[1].entries[0].team, 'IDA Esports');
+});
+
+test('battle-royale standings take the stage name, not the annotation above the header', () => {
+  // "From game:" sits between the stage name and the header row, in the same column.
+  const sections = parseBattleRoyaleStandings(PUBGM_STANDINGS);
+  assert.equal(sections.every((s) => !s.title.endsWith(':')), true);
+});
+
+// A battle royale has no fixture to name, so its Match column carries the MAP while the
+// round says which game of which group it is. Taking the map made every PUBG game read
+// "Rondo vs Lobby".
+test('a lobby game is named by its round, not by the map it is played on', () => {
+  const rows = [
+    ['', 'Tournament Day #', '', 'Date', 'Week', 'Stream', 'Best of X', 'Start Time', '', '', '', '', '', 'Round', 'Match', 'Comment'],
+    ['', '', '', '', '', '', '', '- PUBLIC-\n- CEST-'],
+    ['', '', 46240, 46240, 'MS2', 'Stream A', 'Bo1', '13:00', '', '', '', '', '', 'Group Stage - Group A - Match 1', 'Rondo'],
+  ];
+
+  const lobby = parseSchedule(rows, { game: 'pubgmobile' });
+  assert.equal(lobby[0].teamA, 'Group Stage - Group A - Match 1');
+  assert.equal(lobby[0].teamB, 'Lobby');
+
+  // A head-to-head game still prefers its Match column, which names the fixture.
+  const headToHead = parseSchedule(rows, { game: 'rainbowsix' });
+  assert.equal(headToHead[0].teamA, 'Rondo');
 });
 
 test('schedule timestamps treat sheet dates as Riyadh local time', () => {

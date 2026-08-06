@@ -28,6 +28,8 @@ const ALLOWED_TABS = new Set([
   'BO5_VETO',
   // Call of Duty puts every series in one transposed grid instead.
   'FullMapvetos',
+  // A battle royale ranks by a points breakdown on its own tab rather than in a bracket.
+  'Standings',
 ]);
 
 let queueTail = Promise.resolve();
