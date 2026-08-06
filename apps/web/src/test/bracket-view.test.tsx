@@ -260,9 +260,9 @@ describe("BracketView, draw mode", () => {
     );
   }
 
-  test("renders each drawn section separately", () => {
-    // Black Ops 7 draws both groups with identical round titles; merged they would read as
-    // one round that never took place.
+  test("offers each drawn section and shows one at a time", () => {
+    // Black Ops 7 draws both groups with identical round titles; merged they would read as one
+    // round that never took place, and stacked they make a wall of cards.
     const html = renderDraw(
       drawFixture([
         drawRound(1, "Group A", [drawSlot()]),
@@ -271,9 +271,48 @@ describe("BracketView, draw mode", () => {
     );
 
     expect(html).toContain('data-bracket-source="sheet"');
-    expect(html).toContain('data-bracket-section="groupa"');
-    expect(html).toContain('data-bracket-section="groupb"');
+    expect(html).toContain('data-bracket-sections="2"');
     expect(html).toContain("Group A");
+    expect(html).toContain("Group B");
+    // Only the selected section's panel is rendered.
+    expect(html).toContain('data-bracket-section="groupa"');
+    expect(html).not.toContain('data-bracket-section="groupb"');
+  });
+
+  test("opens on the section being played rather than the first one drawn", () => {
+    // A tournament with several groups should answer "what is happening now", not "what
+    // happened first" — Group A is often over for days before the event is.
+    const html = renderDraw(
+      drawFixture([
+        drawRound(1, "Group A", [drawSlot({ scoreA: 3, scoreB: 1, status: "finished" })]),
+        drawRound(1, "Group B", [
+          drawSlot({ teamA: "Charlie", teamB: "Delta", scoreA: 1, scoreB: 1, status: "running" }),
+        ]),
+      ]),
+    );
+
+    expect(html).toContain('data-bracket-section="groupb"');
+    expect(html).not.toContain('data-bracket-section="groupa"');
+  });
+
+  test("falls back to the most recently decided section when nothing is live", () => {
+    const html = renderDraw(
+      drawFixture([
+        drawRound(1, "Group A", [drawSlot({ scoreA: 3, scoreB: 1, status: "finished" })]),
+        drawRound(1, "Group B", [
+          drawSlot({ teamA: "Charlie", teamB: "Delta", scoreA: 3, scoreB: 0, status: "finished" }),
+        ]),
+      ]),
+    );
+
+    expect(html).toContain('data-bracket-section="groupb"');
+  });
+
+  test("keeps a single-section draw free of a selector", () => {
+    const html = renderDraw(drawFixture([drawRound(1, "Playoffs", [drawSlot()])]));
+
+    expect(html).not.toContain("data-bracket-sections");
+    expect(html).toContain('data-bracket-section="playoffs"');
   });
 
   test("names the feeder a slot is waiting on instead of showing a dash", () => {

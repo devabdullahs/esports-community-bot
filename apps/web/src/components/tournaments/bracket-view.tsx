@@ -3,7 +3,13 @@
 import { TrophyIcon } from "lucide-react";
 import { useState } from "react";
 import { BracketMatchCard } from "@/components/tournaments/bracket-match-card";
-import { buildBracketLayout, drawCompetitors, type LayoutRound, type LayoutSection } from "@/lib/bracket-layout";
+import {
+  buildBracketLayout,
+  defaultSectionKey,
+  drawCompetitors,
+  type LayoutRound,
+  type LayoutSection,
+} from "@/lib/bracket-layout";
 import type { TournamentBracket } from "@/lib/tournament-brackets";
 import { copy, directionForLocale, type Locale } from "@/lib/i18n";
 import { drawFromLabelProjection, type TournamentDraw } from "@/lib/tournament-draw";
@@ -68,6 +74,13 @@ export function BracketView({
   const layout = buildBracketLayout(model);
   const teams = drawCompetitors(model);
   const [followed, setFollowed] = useState<string | null>(null);
+  // A tournament draws several sections — groups, play-ins, playoffs — and stacking them all
+  // makes the page a wall of cards where the one being played is somewhere in the middle.
+  // Show one at a time and open on the one that is live, so the default view answers "what is
+  // happening now" rather than "what happened first".
+  const [section, setSection] = useState<string | null>(() => defaultSectionKey(layout));
+  const shown = layout.sections.find((entry) => entry.key === section) ?? layout.sections[0];
+  const tabbed = layout.sections.length > 1;
 
   return (
     <section
@@ -113,6 +126,37 @@ export function BracketView({
           </div>
         </div>
       ) : null}
+      {tabbed ? (
+        <div
+          role="tablist"
+          aria-label={text.bracket}
+          data-bracket-sections={layout.sections.length}
+          className="-mx-1 flex gap-1 overflow-x-auto px-1 pb-1"
+        >
+          {layout.sections.map((entry) => {
+            const current = entry.key === shown?.key;
+            return (
+              <button
+                key={entry.key}
+                type="button"
+                role="tab"
+                id={`bracket-tab-${entry.key}`}
+                aria-selected={current}
+                aria-controls={`bracket-panel-${entry.key}`}
+                onClick={() => setSection(entry.key)}
+                className={[
+                  "shrink-0 rounded-md border px-3 py-1.5 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50",
+                  current
+                    ? "border-primary bg-primary/10 text-foreground"
+                    : "text-muted-foreground hover:bg-muted",
+                ].join(" ")}
+              >
+                {entry.title ?? text.bracket}
+              </button>
+            );
+          })}
+        </div>
+      ) : null}
       <div
         data-bracket-scroll="true"
         aria-label={text.bracketScrollLabel}
@@ -120,16 +164,16 @@ export function BracketView({
         className="overflow-x-auto overscroll-x-contain pb-2 outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
       >
         <div className="flex min-w-max flex-col gap-8 lg:min-w-full">
-          {layout.sections.map((section) => (
+          {shown ? (
             <BracketSection
-              key={section.key}
-              section={section}
-              showSectionHeading={layout.sections.length > 1}
+              key={shown.key}
+              section={shown}
+              showSectionHeading={false}
               locale={locale}
               text={text}
               followed={followed}
             />
-          ))}
+          ) : null}
         </div>
       </div>
     </section>
@@ -154,7 +198,13 @@ function BracketSection({
   const showBandHeadings = section.bands.filter((band) => band.branch).length > 1;
 
   return (
-    <div data-bracket-section={section.key} className="flex flex-col gap-3">
+    <div
+      data-bracket-section={section.key}
+      id={`bracket-panel-${section.key}`}
+      role="tabpanel"
+      aria-labelledby={`bracket-tab-${section.key}`}
+      className="flex flex-col gap-3"
+    >
       {showSectionHeading && section.title ? (
         <h3 className="text-sm font-semibold">{section.title}</h3>
       ) : null}
