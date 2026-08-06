@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { isLobbyGame } from '../../lib/games.js';
 import { normalizeTeamName } from '../../lib/render.js';
 
 const MAX_CELL_LENGTH = 500;
@@ -300,7 +301,12 @@ export function parseSchedule(rows, { game }) {
     const rawStatus = statusIndex >= 0 ? text(row[statusIndex]).toLowerCase() : '';
     if (!matchLabel && !teamA && !teamB) continue;
     if (!teamA || !teamB) {
-      teamA = matchLabel || round || 'Lobby';
+      // A battle royale has no fixture to name, so its Match column carries the MAP —
+      // "Rondo", "Erangel" — while the round says which game of which group it is. Taking
+      // the map made every PUBG game read "Rondo vs Lobby". The round is the identity.
+      teamA = isLobbyGame(game)
+        ? round || matchLabel || 'Lobby'
+        : matchLabel || round || 'Lobby';
       teamB = 'Lobby';
     }
     const name = matchLabel || `${teamA} vs ${teamB}`;
@@ -484,6 +490,82 @@ export function parseStandings(rows) {
     if (sections.length >= MAX_SECTIONS) break;
   }
   return sections.map(({ signature: _signature, ...section }) => section);
+}
+
+// A battle royale tabulates its stages SIDE BY SIDE on one tab — Group A, Group B, the
+// Survival Stage and the Grand Finals share every row — and ranks its teams by a points
+// breakdown rather than a single column:
+//
+//   Group Stage - Group A                        Group Stage - Group B
+//   Team Name  WWCD  Place  Elims  Total  Played Team Name  WWCD  ...
+// 1 FURIA         2     34     18     52      12 IDA Esports ...
+//
+// parseStandings reads one block per header row and wants a labelled rank column, so it
+// finds none of this. Read each block from its own "Team Name" instead: the rank is the
+// unlabelled number beside it and the stage title sits above it in the same column.
+export function parseBattleRoyaleStandings(rows) {
+  const sections = [];
+  for (let rowIndex = 0; rowIndex < Math.min(rows.length, 400); rowIndex += 1) {
+    const header = (rows[rowIndex] || []).map(normalizedHeader);
+    for (let column = 0; column < header.length; column += 1) {
+      if (header[column] !== 'team name') continue;
+      // Everything up to the next block belongs to this one.
+      const next = header.indexOf('team name', column + 1);
+      const end = next < 0 ? header.length : next;
+      const statIndex = (label) => {
+        for (let index = column + 1; index < end; index += 1) if (header[index] === label) return index;
+        return -1;
+      };
+      const totalIndex = statIndex('total');
+      if (totalIndex < 0) continue;
+      const wwcdIndex = statIndex('wwcd');
+      const placeIndex = statIndex('place points');
+      const elimIndex = statIndex('elimination points');
+      const playedIndex = statIndex('played matches');
+      const rankIndex = column - 1;
+      if (rankIndex < 0) continue;
+
+      // Walk up for the stage name, skipping the annotation rows that sit between it and
+      // the header — "From game: 1", "Till game: 12" — whose labels end in a colon.
+      let title = '';
+      for (let above = rowIndex - 1; above >= 0 && !title; above -= 1) {
+        for (let near = column; near >= Math.max(0, column - 2) && !title; near -= 1) {
+          const candidate = text(rows[above]?.[near]);
+          if (candidate && !candidate.endsWith(':')) title = candidate;
+        }
+      }
+
+      const entries = [];
+      const seen = new Set();
+      for (const row of rows.slice(rowIndex + 1, rowIndex + 1 + MAX_ENTRIES)) {
+        const team = text(row[column]);
+        const rank = number(row[rankIndex]);
+        if (!team && rank === null) break;
+        if (!team || rank === null || rank < 1 || rank > 256) continue;
+        const key = normalizeTeamName(team);
+        if (!key || seen.has(key)) continue;
+        seen.add(key);
+        const stat = (index) => (index >= 0 ? number(row[index]) : null);
+        const detail = [
+          wwcdIndex >= 0 ? `WWCD ${stat(wwcdIndex) ?? 0}` : '',
+          placeIndex >= 0 ? `${stat(placeIndex) ?? 0} placement` : '',
+          elimIndex >= 0 ? `${stat(elimIndex) ?? 0} elims` : '',
+          playedIndex >= 0 ? `${stat(playedIndex) ?? 0} played` : '',
+        ].filter(Boolean).join(' · ');
+        entries.push({
+          rank: Math.max(0, Math.trunc(rank)),
+          team,
+          points: String(stat(totalIndex) ?? 0),
+          extra: detail,
+          logo: null,
+        });
+      }
+      // A stage that has not been drawn yet lists no teams at all.
+      if (entries.length >= 2) sections.push({ title: title || 'Standings', entries });
+      if (sections.length >= MAX_SECTIONS) return sections;
+    }
+  }
+  return sections;
 }
 
 export function parseTournamentOverview(rows) {
@@ -881,6 +963,7 @@ export function parseOfficialWorkbook(title, tabs) {
   const standings = [
     ...parseStandings(tabs.Visualization || []),
     ...parseStandings(tabs['League Table'] || []),
+    ...parseBattleRoyaleStandings(tabs.Standings || []),
   ].filter(
     (section, index, all) =>
       all.findIndex(
