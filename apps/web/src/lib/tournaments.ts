@@ -9,6 +9,7 @@ import {
   listStandingsForTournament as _listStandingsForTournament,
 } from "@bot/db/tournamentStandings.js";
 import { getTournamentOverview as _getTournamentOverview } from "@bot/db/officialEwcSheets.js";
+import { projectTournamentDraw, type TournamentDraw } from "@/lib/tournament-draw";
 import {
   getTournamentSyncHealth as _getTournamentSyncHealth,
   listTournamentSyncHealth as _listTournamentSyncHealth,
@@ -198,6 +199,8 @@ export type TournamentMatches = {
     cancelled: MatchRow[];
   };
   bracketMatches?: MatchRow[];
+  /** The drawn bracket read off the official workbook; absent when none was persisted. */
+  draw?: TournamentDraw;
   standings: StandingRow[];
   overview: TournamentOverview | null;
   totals: MatchCounts & { all: number };
@@ -680,6 +683,14 @@ export async function getTournamentMatches(
     }));
   }
 
+  const drawnBracket = options.includeBracket
+    ? projectTournamentDraw(
+        rawOverview,
+        [...running, ...scheduled, ...postponed, ...finishedAll, ...cancelled],
+        { normalizeName: normalizeTeamName },
+      )
+    : null;
+
   return {
     tournament: {
       id: tournament.id,
@@ -696,6 +707,9 @@ export async function getTournamentMatches(
     ...(options.includeBracket
       ? { bracketMatches: [...running, ...scheduled, ...postponed, ...finishedAll, ...cancelled] }
       : {}),
+    // The workbook's own draw, which unlike a round label survives ingest with its feeder
+    // edges intact. Read off the overview row already fetched above, so no extra query.
+    ...(options.includeBracket && drawnBracket ? { draw: drawnBracket } : {}),
     standings,
     overview: publicTournamentOverview(rawOverview),
     totals,

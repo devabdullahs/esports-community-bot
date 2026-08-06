@@ -49,7 +49,11 @@ import {
 } from "@/lib/match-lifecycle";
 import { withProfileReturn, type ProfileReturnContext } from "@/lib/profile-navigation";
 import { safeUrlOrUndefined } from "@/lib/safe-url";
-import { projectTournamentBracket } from "@/lib/tournament-brackets";
+import { projectTournamentBracket, type TournamentBracket } from "@/lib/tournament-brackets";
+import type { TournamentDraw } from "@/lib/tournament-draw";
+
+/** A draw with no label projection behind it still renders; the view only needs one source. */
+const EMPTY_BRACKET: TournamentBracket = { rounds: [] };
 import { cn } from "@/lib/utils";
 
 type TournamentCopy = (typeof copy)[Locale]["tournaments"];
@@ -119,6 +123,7 @@ export type TournamentMatchesPayload = {
     cancelled: MatchRow[];
   };
   bracketMatches?: MatchRow[];
+  draw?: TournamentDraw | null;
   standings?: StandingRow[];
   totals: {
     running: number;
@@ -601,6 +606,9 @@ export function TournamentMatchList({
     [...running, ...scheduled, ...finished, ...postponed, ...cancelled],
   );
   const bracket = projectTournamentBracket(bracketMatches);
+  // The workbook draw carries the real feeder edges; a label-projected bracket carries none.
+  // Either is enough to render, so the section shows whenever one of them exists.
+  const draw = data.draw ?? null;
   const tbd = text.tbd;
   const reminderMatchIds = new Set(reminderState.reminderMatchIds);
   const reminderCallbackPath = callbackPath
@@ -649,9 +657,9 @@ export function TournamentMatchList({
       {standingsOnly ? null : (
         <>
       {standings.length ? <Separator /> : null}
-      {bracket ? (
+      {draw || bracket ? (
         <>
-          <BracketView bracket={bracket} locale={locale} />
+          <BracketView bracket={bracket ?? EMPTY_BRACKET} draw={draw} locale={locale} />
           <Separator />
         </>
       ) : null}

@@ -129,6 +129,12 @@
   --chart-4: oklch(0.6 0.12 180);
   --chart-5: oklch(0.5 0.18 275);
   --radius: 0.625rem;
+  /* Bracket geometry: the gutter connectors are drawn in, the minimum height a slot row
+     divides between its cells, and the fixed score column that makes a round's scores read
+     as one vertical rule. */
+  --bracket-gutter: 1.5rem;
+  --bracket-track: 2.75rem;
+  --bracket-score-w: 2.25rem;
   --sidebar: oklch(0.985 0.005 260);
   --sidebar-foreground: oklch(0.22 0.02 262);
   --sidebar-primary: oklch(0.55 0.2 258);
@@ -505,4 +511,59 @@
   width: calc(100vw - 2rem);
   max-width: calc(100vw - 2rem);
   margin-inline: auto;
+}
+
+/*
+  Bracket connectors.
+
+  The elbow is drawn on the cell that RECEIVES the pairing, in percentages of that cell, and
+  only where the layout has already confirmed two real feeder edges land on the cell's two
+  halves. Because the geometry is expressed as fractions of the cell and in logical
+  properties, it survives resize, zoom, font swap, RTL, and horizontal scroll without a single
+  measurement or effect — which is also why it can be asserted from server-rendered markup.
+*/
+[data-bracket-cell] {
+  --bracket-gutter: 0px;
+}
+
+@media (min-width: 48rem) {
+  [data-bracket-cell] {
+    --bracket-gutter: 1.5rem;
+  }
+}
+
+/* The bridge down the gutter, spanning the two feeders' centres at 25% and 75%. */
+[data-bracket-cell][data-connector="pair"]::before {
+  content: "";
+  position: absolute;
+  inset-inline-start: calc(var(--bracket-gutter) / -2);
+  top: 25%;
+  bottom: 25%;
+  border-inline-start: 1px solid var(--color-border);
+}
+
+/* The stub from that bridge into this card. */
+[data-bracket-cell][data-connector="pair"]::after {
+  content: "";
+  position: absolute;
+  inset-inline-start: calc(var(--bracket-gutter) / -2);
+  top: 50%;
+  width: calc(var(--bracket-gutter) / 2);
+  border-block-start: 1px solid var(--color-border);
+}
+
+/* The stub out of each feeder, meeting the bridge halfway across the gutter. */
+[data-bracket-cell][data-feeds="pair"]::after {
+  content: "";
+  position: absolute;
+  inset-inline-end: calc(var(--bracket-gutter) / -2);
+  top: 50%;
+  width: calc(var(--bracket-gutter) / 2);
+  border-block-start: 1px solid var(--color-border);
+}
+
+/* A followed run lights its own connectors so the path reads as one line. */
+[data-bracket-cell]:has([data-bracket-path])::before,
+[data-bracket-cell]:has([data-bracket-path])::after {
+  border-color: var(--color-primary);
 }
