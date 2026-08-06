@@ -499,6 +499,23 @@ test('bracket structure keeps the draw as a graph, not a list of results', () =>
   assert.equal(played.scoreA, 3);
 });
 
+test('a battle-royale points grid is a table, not a bracket', () => {
+  // Sixteen teams and a running total read exactly like a bracket column — two names and a
+  // number — which had PUBG Mobile reporting groups of sixteen "slots" and a section
+  // named "2". A bracket's slots are positions in a draw; these are rows of a table.
+  const pointsGrid = [
+    ['', 'Group A'],
+    ['', '', 'Team Name', 'Total'],
+    ['', 1, 'FURIA', 52],
+    ['', 2, 'ULF Esports', 43],
+    ['', 3, 'Team Flash', 41],
+  ];
+
+  assert.deepEqual(parseBracketStructure(pointsGrid), []);
+  // The real bracket still reads, so the guard is not simply refusing everything.
+  assert.equal(parseBracketStructure(COD_BRACKET).length, 3);
+});
+
 test('schedule timestamps treat sheet dates as Riyadh local time', () => {
   assert.equal(
     scheduleTimestamp('2026/07/30', '6:30 PM'),
