@@ -224,6 +224,35 @@ function markConnectors(
   }
 }
 
+/**
+ * The section to open on, which is the one worth looking at right now: whichever is playing,
+ * else whichever finished a match most recently, else the first drawn. A tournament with four
+ * groups should not open on Group A for three days after Group A is over.
+ */
+export function defaultSectionKey(layout: BracketLayout): string | null {
+  const slots = layout.sections.flatMap((section, sectionIndex) =>
+    section.bands.flatMap((band) =>
+      band.rounds.flatMap((round) =>
+        round.cells.map((cell, cellIndex) => ({
+          key: section.key,
+          status: cell.slot.status,
+          // No timestamp reaches the draw, so "most recent" is read off the draw's own order:
+          // a later column is a later match, and a later section was drawn after an earlier one.
+          rank: sectionIndex * 1_000_000 + round.column * 1_000 + cellIndex,
+        })),
+      ),
+    ),
+  );
+
+  const live = slots.find((slot) => slot.status === "running");
+  if (live) return live.key;
+  const decided = slots.filter((slot) => slot.status === "finished");
+  const latest = decided.length
+    ? decided.reduce((best, slot) => (slot.rank > best.rank ? slot : best))
+    : null;
+  return latest?.key ?? layout.sections[0]?.key ?? null;
+}
+
 /** Every distinct competitor in the draw, first-appearance order, for the follow control. */
 export function drawCompetitors(draw: TournamentDraw): Array<{ key: string; label: string }> {
   const teams: Array<{ key: string; label: string }> = [];
