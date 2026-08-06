@@ -412,6 +412,112 @@ export function parseBracketResults(rows) {
   return results.slice(0, 500);
 }
 
+// The same drawn bracket, kept as a GRAPH rather than a list of results, so it can be
+// drawn rather than tabulated. The tab already holds the geometry: a name column is a
+// round, the slots run down it in order, and the headings above each slot name it.
+//
+// A column can carry more than one round — Rainbow Six stacks "UB Ro4" above
+// "LB Semi-Final" in the same column — so a new heading starts a new group rather than a
+// new column.
+//
+// Edges come from the sheet too: a later slot literally reads "Winner of UB 2.1", so the
+// link is read, never inferred from bracket arithmetic.
+const BRACKET_SOURCE = /^(winner|loser)\s+of\s+(.+)$/i;
+
+function bracketKind(label) {
+  const value = text(label);
+  if (/grand\s*final/i.test(value)) return 'final';
+  if (/^lb\b|lower/i.test(value)) return 'lower';
+  if (/^ub\b|upper/i.test(value)) return 'upper';
+  return 'other';
+}
+
+function bracketSource(name) {
+  const match = text(name).match(BRACKET_SOURCE);
+  if (!match) return null;
+  return { outcome: match[1].toLowerCase(), slot: text(match[2]) };
+}
+
+// A position in the draw rather than a round that opens one: "UB 1.1", "LB 2.2 (loser
+// out)", "Semi-Final 1", "Grand Final", "3rd place match".
+function isBracketSlotLabel(value) {
+  const label = text(value);
+  return /\d+\.\d+/.test(label) || /^(?:semi[-\s]?final|grand\s*final|final|3rd\s*place)/i.test(label);
+}
+
+export function parseBracketStructure(rows) {
+  const grid = rows || [];
+  const width = Math.max(...grid.map((row) => (row || []).length), 0);
+  const groups = [];
+
+  for (let column = 0; column + 1 < width; column += 1) {
+    const scored = grid.some(
+      (row) => text(row?.[column]) && Number.isFinite(number(row?.[column + 1])),
+    );
+    if (!scored) continue;
+
+    let bestOf = null;
+    let pendingSlot = '';
+    let pair = [];
+    let group = null;
+    const startGroup = (heading) => {
+      group = { column, title: heading, bracket: bracketKind(heading), bestOf, slots: [] };
+      groups.push(group);
+    };
+
+    for (const row of grid) {
+      const name = text(row?.[column]);
+      const score = number(row?.[column + 1]);
+      if (!name) {
+        pair = [];
+        continue;
+      }
+      if (!Number.isFinite(score)) {
+        if (typeof row?.[column] === 'number') bestOf = row[column];
+        // A slot names a position in the draw — "UB 1.1", "Semi-Final 2", "Grand Final".
+        // Anything else opens a round. Telling them apart by SHAPE rather than by order
+        // matters because a round whose slots are undrawn consumes no slot label, and the
+        // heading would otherwise leak onto the next block down the same column — which
+        // filed Black Ops 7's Group B upper bracket under Group A's "LB Ro4a".
+        else if (isBracketSlotLabel(name)) pendingSlot = name;
+        else startGroup(name);
+        pair = [];
+        continue;
+      }
+      pair.push({ name, score });
+      if (pair.length < 2) continue;
+      const [a, b] = pair;
+      pair = [];
+      // Ranking grids share the tab and read as a name beside a number.
+      if (!/[a-z]/i.test(a.name) || !/[a-z]/i.test(b.name)) {
+        pendingSlot = '';
+        continue;
+      }
+      const slotLabel = pendingSlot;
+      pendingSlot = '';
+      if (!group) startGroup('Bracket');
+      group.bestOf = group.bestOf ?? bestOf;
+      group.slots.push({
+        label: slotLabel,
+        bracket: bracketKind(slotLabel) === 'other' ? group.bracket : bracketKind(slotLabel),
+        teamA: a.name,
+        teamB: b.name,
+        // 0-0 is how the bracket draws a slot that has not been played, so it carries no
+        // score rather than a level one — the same reading parseBracketResults uses.
+        scoreA: a.score === 0 && b.score === 0 ? null : a.score,
+        scoreB: a.score === 0 && b.score === 0 ? null : b.score,
+        status: a.score === 0 && b.score === 0
+          ? 'scheduled'
+          : scheduleStatus('', a.score, b.score, bestOf),
+        sourceA: bracketSource(a.name),
+        sourceB: bracketSource(b.name),
+      });
+      if (group.slots.length >= MAX_ENTRIES) break;
+    }
+  }
+  return groups.filter((entry) => entry.slots.length).slice(0, MAX_SECTIONS);
+}
+
 function isBracketPlaceholder(value) {
   return /\b(?:winner|loser)\s+of\b|^(?:tbd|q)$/i.test(text(value));
 }
@@ -973,6 +1079,7 @@ export function parseOfficialWorkbook(title, tabs) {
       ) === index,
   );
   const bracketResults = parseBracketResults(tabs.Visualization || []);
+  const bracket = parseBracketStructure(tabs.Visualization || []);
   const overview = parseTournamentEnrichment(tabs);
   const seriesVetoes = [
     ...parseSeriesVetoes(tabs.BO1_VETOS || []),
@@ -997,6 +1104,7 @@ export function parseOfficialWorkbook(title, tabs) {
     mapDetails,
     seriesVetoes,
     bracketResults,
+    bracket,
     battleRoyaleGames,
   };
 }
