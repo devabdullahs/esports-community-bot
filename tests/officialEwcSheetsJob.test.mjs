@@ -8,6 +8,7 @@ process.env.LOG_LEVEL = 'error';
 const { normalizeTeamName } = await import('../src/lib/render.js');
 const {
   deriveOfficialOverwatchSeriesResult,
+  supersededScheduleMatchIds,
   findOfficialMatch,
   liveRotationWorkbooks,
   normalizedOfficialPair,
@@ -588,4 +589,37 @@ test('the live rotation narrows to workbooks with a running match', () => {
   const upcoming = workbooks.filter((entry) => entry.fastPollPriority === 1);
   assert.deepEqual(liveRotationWorkbooks(upcoming).map((entry) => entry.id), ['soon-a', 'soon-b']);
   assert.deepEqual(liveRotationWorkbooks([]), []);
+});
+
+test('a fixture the sheet reassigned to another pairing is retired', () => {
+  // findOfficialMatch keys on the pair, so when the workbook changes who occupies a slot the
+  // new fixture is created beside the old one and both show as upcoming — Black Ops 7's
+  // Group A decider read "Movistar KOI vs The Pit" for hours after the sheet had made it
+  // Movistar KOI vs Cloud9, with The Pit apparently playing twice at once.
+  const updates = [
+    { teamA: 'Movistar KOI', teamB: 'Cloud9', scheduledAt: 1_000_000 },
+    { teamA: 'Gentle Mates', teamB: 'The Pit', scheduledAt: 1_009_000 },
+  ];
+  const matches = [
+    // The slot the sheet reassigned: same time, shares Movistar KOI, pairing gone from the sheet.
+    { id: 1, team_a: 'Movistar KOI', team_b: 'The Pit', scheduled_at: 1_000_300, status: 'scheduled' },
+    // Still published, so untouched.
+    { id: 2, team_a: 'Gentle Mates', team_b: 'The Pit', scheduled_at: 1_009_000, status: 'scheduled' },
+    // The sheet does not mention it at all — not listing a match is not replacing it.
+    { id: 3, team_a: 'Team Falcons', team_b: 'OpTic Gaming', scheduled_at: 1_000_000, status: 'scheduled' },
+    // Same reassignment, but it is already under way: never rewrite a match in progress.
+    { id: 4, team_a: 'Movistar KOI', team_b: 'The Pit', scheduled_at: 1_000_300, status: 'running' },
+  ];
+
+  assert.deepEqual(supersededScheduleMatchIds(matches, updates), [1]);
+});
+
+test('nothing is retired when the sheet published no timed fixtures', () => {
+  // A tab that failed to parse must not be read as "the sheet has cancelled everything".
+  const matches = [
+    { id: 1, team_a: 'Movistar KOI', team_b: 'The Pit', scheduled_at: 1_000_300, status: 'scheduled' },
+  ];
+
+  assert.deepEqual(supersededScheduleMatchIds(matches, []), []);
+  assert.deepEqual(supersededScheduleMatchIds(matches, [{ teamA: 'A', teamB: 'B' }]), []);
 });
