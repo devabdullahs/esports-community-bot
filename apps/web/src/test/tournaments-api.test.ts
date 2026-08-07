@@ -32,6 +32,7 @@ import { GET as listGET } from "@/app/api/tournaments/route";
 import { GET as matchesGET } from "@/app/api/tournaments/[id]/matches/route";
 import TournamentArchivePage from "@/app/tournaments/archive/page";
 import { getTournamentMatches, listArchivedTournamentSummaries } from "@/lib/tournaments";
+import { upsertOfficialTournamentOverview } from "@bot/db/officialEwcSheets.js";
 
 function matchesReq(query = ""): Request {
   return new Request(`http://localhost/api/tournaments/x/matches${query}`);
@@ -329,6 +330,46 @@ describe("GET /api/tournaments/[id]/matches", () => {
     // finished ordered most-recent-first (scheduled_at DESC)
     const finishedTimes = body.matches.finished.map((m: { scheduled_at: number }) => m.scheduled_at);
     expect(finishedTimes).toEqual([...finishedTimes].sort((a, b) => b - a));
+  });
+
+  test("carries the drawn bracket on a plain poll, not only when bracket matches are asked for", async () => {
+    // The match list polls this route and re-renders the bracket from what comes back. Gating
+    // the draw on includeBracket made the whole bracket vanish a minute after the page opened.
+    await upsertOfficialTournamentOverview(tournamentId, {
+      attribution: "\u00a9 Esports Foundation 2026. All rights reserved.",
+      facts: [],
+      bracket: [
+        {
+          column: 1,
+          section: "Group A",
+          title: "UB Ro4",
+          bracket: "upper",
+          bestOf: 5,
+          slots: [
+            {
+              label: "UB 1.1",
+              bracket: "upper",
+              teamA: "Alpha",
+              teamB: "Bravo",
+              scoreA: null,
+              scoreB: null,
+              status: "scheduled",
+              sourceA: null,
+              sourceB: null,
+            },
+          ],
+        },
+      ],
+    });
+
+    // A limit this route has not been called with yet, so the 10s cache cannot serve a
+    // response captured before the overview existed.
+    const res = await matchesGET(matchesReq("?limit=7"), ctx(String(tournamentId)));
+    const body = await res.json();
+
+    expect(body.bracketMatches).toBeUndefined();
+    expect(body.draw?.source).toBe("sheet");
+    expect(body.draw?.sections?.[0]?.title).toBe("Group A");
   });
 
   test("still serves archived tournament detail data", async () => {

@@ -608,7 +608,11 @@ export function TournamentMatchList({
   const bracket = projectTournamentBracket(bracketMatches);
   // The workbook draw carries the real feeder edges; a label-projected bracket carries none.
   // Either is enough to render, so the section shows whenever one of them exists.
-  const draw = data.draw ?? null;
+  //
+  // Fall back to the server-rendered draw rather than to nothing: a response that omits it
+  // means "no fresher copy", not "this tournament stopped having a bracket", and dropping it
+  // unmounted the whole section mid-visit.
+  const draw = data.draw ?? initialData.draw ?? null;
   const tbd = text.tbd;
   const reminderMatchIds = new Set(reminderState.reminderMatchIds);
   const reminderCallbackPath = callbackPath
