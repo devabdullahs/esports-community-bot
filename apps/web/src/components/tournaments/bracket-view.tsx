@@ -39,11 +39,25 @@ function phaseLabel(round: LayoutRound, text: TournamentCopy): string {
   }
 }
 
+/**
+ * A drawn round is titled by the heading above it, but a workbook does not always give one —
+ * the grand final is written as a slot ("Grand Final") under no heading at all, and the round
+ * then falls back to the parser's generic "Bracket". Where every slot in the round agrees on
+ * a name, that name IS the round.
+ */
+function drawnRoundTitle(round: LayoutRound): string {
+  const title = round.title?.trim() ?? "";
+  if (title && !/^bracket$/i.test(title)) return title;
+  const labels = round.cells.map((cell) => cell.slot.label?.trim() ?? "");
+  const shared = labels[0];
+  return shared && labels.every((label) => label === shared) ? shared : title;
+}
+
 function roundLabel(round: LayoutRound, text: TournamentCopy, showBandHeadings: boolean): string {
   // A drawn round already carries the name the workbook gave it ("UB Ro4"), which is more
   // specific than anything derived from a branch; only a label-projected round needs the
   // branch spelled out, and only when the band above it does not already say so.
-  if (!round.phase) return round.title ?? "";
+  if (!round.phase) return drawnRoundTitle(round);
   const phase = phaseLabel(round, text);
   if (showBandHeadings || !round.branch) return phase;
   const branch = round.branch === "upper" ? text.bracketUpper : text.bracketLower;
