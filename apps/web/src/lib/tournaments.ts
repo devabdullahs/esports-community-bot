@@ -683,13 +683,14 @@ export async function getTournamentMatches(
     }));
   }
 
-  const drawnBracket = options.includeBracket
-    ? projectTournamentDraw(
-        rawOverview,
-        [...running, ...scheduled, ...postponed, ...finishedAll, ...cancelled],
-        { normalizeName: normalizeTeamName },
-      )
-    : null;
+  // Always, not only under includeBracket: the match list polls this endpoint and re-renders
+  // the bracket from whatever comes back, so omitting the draw on a refetch made the whole
+  // bracket vanish a minute after the page opened. It is derived from rows already in hand.
+  const drawnBracket = projectTournamentDraw(
+    rawOverview,
+    [...running, ...scheduled, ...postponed, ...finishedAll, ...cancelled],
+    { normalizeName: normalizeTeamName },
+  );
 
   return {
     tournament: {
@@ -709,7 +710,7 @@ export async function getTournamentMatches(
       : {}),
     // The workbook's own draw, which unlike a round label survives ingest with its feeder
     // edges intact. Read off the overview row already fetched above, so no extra query.
-    ...(options.includeBracket && drawnBracket ? { draw: drawnBracket } : {}),
+    ...(drawnBracket ? { draw: drawnBracket } : {}),
     standings,
     overview: publicTournamentOverview(rawOverview),
     totals,
