@@ -662,6 +662,21 @@ export function isUnresolvedPlaceholderName(name) {
 // games (Warzone, Apex, PUBG, Fortnite) rank by placement and legitimately finish with
 // no score, as do head-to-head rows whose score was never published. Requiring an
 // unresolved placeholder name keeps those in tournament history.
+// Retire specific rows the caller has already judged. The official feed uses this for a
+// fixture the workbook reassigned to another pairing, which no pattern-based sweep can
+// recognise: both sides are real names and the row looks perfectly healthy on its own — it
+// is only wrong relative to what the sheet now says occupies that slot.
+export async function deleteMatchesByIds(ids, { client = null } = {}) {
+  const wanted = [...new Set((ids || []).map(Number).filter(Number.isSafeInteger))];
+  if (!wanted.length) return 0;
+  const remove = async (tx) => {
+    for (const id of wanted) await tx.run('DELETE FROM matches WHERE id = $1', [id]);
+  };
+  if (client) await remove(client);
+  else await transaction(remove);
+  return wanted.length;
+}
+
 export async function deleteStaleFinishedMatches(
   tournamentId,
   {

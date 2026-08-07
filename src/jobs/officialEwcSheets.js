@@ -7,7 +7,12 @@ import {
   saveOfficialFeedState,
   upsertOfficialTournamentOverview,
 } from '../db/officialEwcSheets.js';
-import { deleteStaleFinishedMatches, listMatchesForTournament, upsertMatch } from '../db/matches.js';
+import {
+  deleteMatchesByIds,
+  deleteStaleFinishedMatches,
+  listMatchesForTournament,
+  upsertMatch,
+} from '../db/matches.js';
 import { upsertMatchDetails } from '../db/matchDetails.js';
 import { replaceTournamentStandings } from '../db/tournamentStandings.js';
 import { listActiveTournaments } from '../db/tournaments.js';
@@ -377,9 +382,80 @@ async function applyMatchUpdate(tournament, matches, update, observedAt, ttlSeco
   return stored;
 }
 
+/**
+ * Stored fixtures the sheet has replaced rather than merely not mentioned.
+ *
+ * findOfficialMatch keys on the PAIR, so when the workbook changes who occupies a slot the
+ * new fixture matches nothing and is created beside the old one. Both then show as upcoming:
+ * Black Ops 7's Group A decider read "Movistar KOI vs The Pit" on a schedule card for hours
+ * after the sheet had made it Movistar KOI vs Cloud9, with The Pit apparently playing twice
+ * at once.
+ *
+ * A row is only superseded when the sheet has taken its slot with a DIFFERENT pairing that
+ * shares one of its competitors, AND the sheet does not list that row's pairing anywhere at
+ * all. Both halves matter: the first says the slot was reassigned rather than left alone, and
+ * the second keeps a fixture the sheet simply moved to another time. Anything the sheet does
+ * not mention is left to the existing sweeps — not listing a match is not the same as
+ * replacing it, and the workbook does not always cover every stream.
+ */
+export function supersededScheduleMatchIds(matches, updates) {
+  const fixtures = (updates || [])
+    .filter((update) => Number.isFinite(Number(update?.scheduledAt)))
+    .map((update) => ({
+      pair: normalizedOfficialPair(update.teamA, update.teamB),
+      sides: [normalizeTeamName(update.teamA), normalizeTeamName(update.teamB)],
+      scheduledAt: Number(update.scheduledAt),
+    }))
+    .filter((fixture) => fixture.pair && fixture.pair !== '|');
+  if (!fixtures.length) return [];
+
+  const published = new Set(fixtures.map((fixture) => fixture.pair));
+  const ids = [];
+
+  for (const match of matches || []) {
+    // Never rewrite history, and never touch a match already under way.
+    if (match.status !== 'scheduled') continue;
+    const pair = normalizedOfficialPair(match.team_a, match.team_b);
+    if (!pair || pair === '|' || published.has(pair)) continue;
+    const sides = [normalizeTeamName(match.team_a), normalizeTeamName(match.team_b)];
+    if (!sides[0] || !sides[1]) continue;
+    const scheduledAt = Number(match.scheduled_at);
+    if (!Number.isFinite(scheduledAt)) continue;
+
+    const claimed = fixtures.filter(
+      (fixture) =>
+        Math.abs(fixture.scheduledAt - scheduledAt) <= MATCH_TIME_WINDOW_SECONDS &&
+        fixture.sides.filter((side) => sides.includes(side)).length === 1,
+    );
+    if (claimed.length) ids.push(match.id);
+  }
+  return ids;
+}
+
+async function retireSupersededFixtures(tournament, matches, updates) {
+  const ids = supersededScheduleMatchIds(matches, updates);
+  if (!ids.length) return 0;
+  const removed = await deleteMatchesByIds(ids);
+  const dropped = new Set(ids);
+  for (let index = matches.length - 1; index >= 0; index -= 1) {
+    if (!dropped.has(matches[index].id)) continue;
+    stopMatch(matches[index].external_id);
+    matches.splice(index, 1);
+  }
+  if (removed) {
+    logger.info(
+      `[tournament-feed] retired ${removed} fixture(s) the sheet reassigned for tournament ${tournament.id}`,
+    );
+  }
+  return removed;
+}
+
 async function applyScheduleUpdates(tournament, matches, updates, observedAt, ttlSeconds) {
   const terminalMatchIds = new Set();
   const updatedMatchIds = new Set();
+  // Before applying, so a row the sheet has reassigned cannot be matched against and
+  // resurrected by the very fixture that replaced it.
+  await retireSupersededFixtures(tournament, matches, updates);
   for (const update of updates) {
     const stored = await applyMatchUpdate(tournament, matches, update, observedAt, ttlSeconds);
     if (stored) updatedMatchIds.add(stored.id);
