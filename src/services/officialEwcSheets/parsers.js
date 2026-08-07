@@ -578,15 +578,21 @@ export function parseBracketStructure(rows) {
       if (group.slots.length >= MAX_ENTRIES) break;
     }
   }
-  const drawn = groups.filter((entry) => entry.slots.length);
   // A battle royale's points grid reads exactly like a bracket column — two names and a
   // number — so PUBG Mobile produced "groups" of sixteen teams with a section named "2".
   // What actually makes a bracket is that its slots are POSITIONS in a draw: they carry a
-  // slot label ("UB 1.1") or an edge ("Winner of UB 2.1"). A tab with neither is a table.
-  const isDraw = drawn.some((entry) =>
-    entry.slots.some((slot) => slot.label || slot.sourceA || slot.sourceB),
+  // slot label ("UB 1.1") or an edge ("Winner of UB 2.1"). A column with neither is a list.
+  //
+  // Judged per BLOCK rather than per tab. Tekken draws a column of the players who qualified
+  // out of each group, two per group with a "Q" where a score would be, and the tab passed
+  // the test on its real brackets — so those names were paired off into eight fixtures that
+  // do not exist ("Qasim Meer vs Arslan Ash"), filed under the group nearest to them.
+  // Inventing a match is worse than missing one.
+  const drawn = groups.filter(
+    (entry) =>
+      entry.slots.length && entry.slots.some((slot) => slot.label || slot.sourceA || slot.sourceB),
   );
-  return isDraw ? drawn.slice(0, MAX_SECTIONS) : [];
+  return drawn.slice(0, MAX_SECTIONS);
 }
 
 function isBracketPlaceholder(value) {
