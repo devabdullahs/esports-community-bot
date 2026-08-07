@@ -253,24 +253,4 @@ export function defaultSectionKey(layout: BracketLayout): string | null {
   return latest?.key ?? layout.sections[0]?.key ?? null;
 }
 
-/** Every distinct competitor in the draw, first-appearance order, for the follow control. */
-export function drawCompetitors(draw: TournamentDraw): Array<{ key: string; label: string }> {
-  const teams: Array<{ key: string; label: string }> = [];
-  const seen = new Set<string>();
-  for (const section of draw.sections) {
-    for (const round of section.rounds) {
-      for (const slot of round.slots) {
-        for (const name of [slot.teamA, slot.teamB]) {
-          const label = (name ?? "").trim();
-          const key = label.toLocaleLowerCase();
-          if (!key || seen.has(key)) continue;
-          seen.add(key);
-          teams.push({ key, label });
-        }
-      }
-    }
-  }
-  return teams;
-}
-
 export type { DrawSlot };

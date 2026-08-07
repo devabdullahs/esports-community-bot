@@ -6,7 +6,6 @@ import { BracketMatchCard } from "@/components/tournaments/bracket-match-card";
 import {
   buildBracketLayout,
   defaultSectionKey,
-  drawCompetitors,
   type LayoutRound,
   type LayoutSection,
 } from "@/lib/bracket-layout";
@@ -72,8 +71,6 @@ export function BracketView({
   const headingId = "tournament-bracket-heading";
   const model = draw ?? drawFromLabelProjection(bracket);
   const layout = buildBracketLayout(model);
-  const teams = drawCompetitors(model);
-  const [followed, setFollowed] = useState<string | null>(null);
   // A tournament draws several sections — groups, play-ins, playoffs — and stacking them all
   // makes the page a wall of cards where the one being played is somewhere in the middle.
   // Show one at a time and open on the one that is live, so the default view answers "what is
@@ -94,38 +91,6 @@ export function BracketView({
         <TrophyIcon className="size-4 text-primary" aria-hidden="true" />
         {text.bracket}
       </h2>
-      {teams.length > 1 ? (
-        <div data-bracket-follow="true" className="flex flex-col gap-1.5">
-          <p className="text-xs text-muted-foreground">{text.bracketFollowHint}</p>
-          <div role="group" aria-label={text.bracketFollow} className="flex flex-wrap gap-1.5">
-            {followed ? (
-              <button
-                type="button"
-                onClick={() => setFollowed(null)}
-                className="rounded-full border px-2.5 py-1 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
-              >
-                {text.bracketFollowClear}
-              </button>
-            ) : null}
-            {teams.map((team) => (
-              <button
-                key={team.key}
-                type="button"
-                aria-pressed={followed === team.key}
-                onClick={() => setFollowed(followed === team.key ? null : team.key)}
-                className={[
-                  "rounded-full border px-2.5 py-1 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50",
-                  followed === team.key
-                    ? "border-primary bg-primary/10 text-foreground"
-                    : "text-muted-foreground hover:bg-muted",
-                ].join(" ")}
-              >
-                <bdi>{team.label}</bdi>
-              </button>
-            ))}
-          </div>
-        </div>
-      ) : null}
       {tabbed ? (
         <div
           role="tablist"
@@ -171,7 +136,6 @@ export function BracketView({
               showSectionHeading={false}
               locale={locale}
               text={text}
-              followed={followed}
             />
           ) : null}
         </div>
@@ -185,13 +149,11 @@ function BracketSection({
   showSectionHeading,
   locale,
   text,
-  followed,
 }: {
   section: LayoutSection;
   showSectionHeading: boolean;
   locale: Locale;
   text: TournamentCopy;
-  followed: string | null;
 }) {
   // With one branch there is nothing to separate, so the band heading would only repeat the
   // section title above it.
@@ -265,7 +227,6 @@ function BracketSection({
                     cell={cell}
                     locale={locale}
                     text={text}
-                    followed={followed}
                     roundTitle={roundLabel(round, text, showBandHeadings)}
                   />
                 </div>
