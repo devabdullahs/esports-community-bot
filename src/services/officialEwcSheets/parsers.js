@@ -438,10 +438,20 @@ function bracketSource(name) {
   return { outcome: match[1].toLowerCase(), slot: text(match[2]) };
 }
 
+// A side of a slot the draw has not filled in yet. "Winner of 2.1" names a competitor by
+// where it will come from, so it belongs to a slot rather than opening a round.
+function isUndrawnSide(value) {
+  const label = text(value);
+  return Boolean(bracketSource(label)) || /^(?:tbd|t\.b\.d\.?)$/i.test(label);
+}
+
 // A position in the draw rather than a round that opens one: "UB 1.1", "LB 2.2 (loser
 // out)", "Semi-Final 1", "Grand Final", "3rd place match".
 function isBracketSlotLabel(value) {
   const label = text(value);
+  // "Winner of 1.1" carries a slot number but names a COMPETITOR, so the shape test alone
+  // would swallow every undrawn side as the label of the round it feeds.
+  if (isUndrawnSide(label)) return false;
   return /\d+\.\d+/.test(label) || /^(?:semi[-\s]?final|grand\s*final|final|3rd\s*place)/i.test(label);
 }
 
@@ -449,8 +459,15 @@ export function parseBracketStructure(rows) {
   const grid = rows || [];
   const width = Math.max(...grid.map((row) => (row || []).length), 0);
   const groups = [];
+  // A column of the draw usually reads as a name beside a score. A round nobody has reached
+  // has no scores at all, so it is recognised instead by the edges it carries: only a slot
+  // column ever says "Winner of 2.1".
   const isNameColumn = (column) =>
-    grid.some((row) => text(row?.[column]) && Number.isFinite(number(row?.[column + 1])));
+    grid.some(
+      (row) =>
+        (text(row?.[column]) && Number.isFinite(number(row?.[column + 1]))) ||
+        Boolean(bracketSource(text(row?.[column]))),
+    );
 
   // "GROUPSTAGE", "Group A", "PLAYOFFS" — a heading that stands on its own away from the
   // slots, telling two identical-looking rounds apart. Black Ops 7 draws both of its
@@ -503,17 +520,29 @@ export function parseBracketStructure(rows) {
       }
       if (!Number.isFinite(score)) {
         if (typeof row?.[column] === 'number') bestOf = row[column];
+        // A round nobody has reached yet carries NO score cell at all, so requiring a number
+        // beside the name hid every upcoming round: Black Ops 7 publishes its semi-finals,
+        // grand final and third-place match as "Winner of 2.1" against "Winner of 2.2" with
+        // the score columns blank, and none of them reached the site. A side that names its
+        // feeder, or reads TBD, is a competitor slot rather than a heading.
+        else if (isUndrawnSide(name)) pair.push({ name, score: null });
         // A slot names a position in the draw — "UB 1.1", "Semi-Final 2", "Grand Final".
         // Anything else opens a round. Telling them apart by SHAPE rather than by order
         // matters because a round whose slots are undrawn consumes no slot label, and the
         // heading would otherwise leak onto the next block down the same column — which
         // filed Black Ops 7's Group B upper bracket under Group A's "LB Ro4a".
-        else if (isBracketSlotLabel(name)) pendingSlot = name;
-        else startGroup(name);
-        pair = [];
-        continue;
+        else if (isBracketSlotLabel(name)) {
+          pendingSlot = name;
+          pair = [];
+          continue;
+        } else {
+          startGroup(name);
+          pair = [];
+          continue;
+        }
+      } else {
+        pair.push({ name, score });
       }
-      pair.push({ name, score });
       if (pair.length < 2) continue;
       const [a, b] = pair;
       pair = [];
@@ -526,18 +555,18 @@ export function parseBracketStructure(rows) {
       pendingSlot = '';
       if (!group) startGroup('Bracket');
       group.bestOf = group.bestOf ?? bestOf;
+      // 0-0 is how the bracket draws a slot that has not been played, and a blank score is how
+      // it draws one nobody has reached; neither is a result.
+      const undrawn =
+        !Number.isFinite(a.score) || !Number.isFinite(b.score) || (a.score === 0 && b.score === 0);
       group.slots.push({
         label: slotLabel,
         bracket: bracketKind(slotLabel) === 'other' ? group.bracket : bracketKind(slotLabel),
         teamA: a.name,
         teamB: b.name,
-        // 0-0 is how the bracket draws a slot that has not been played, so it carries no
-        // score rather than a level one — the same reading parseBracketResults uses.
-        scoreA: a.score === 0 && b.score === 0 ? null : a.score,
-        scoreB: a.score === 0 && b.score === 0 ? null : b.score,
-        status: a.score === 0 && b.score === 0
-          ? 'scheduled'
-          : scheduleStatus('', a.score, b.score, bestOf),
+        scoreA: undrawn ? null : a.score,
+        scoreB: undrawn ? null : b.score,
+        status: undrawn ? 'scheduled' : scheduleStatus('', a.score, b.score, bestOf),
         sourceA: bracketSource(a.name),
         sourceB: bracketSource(b.name),
       });
