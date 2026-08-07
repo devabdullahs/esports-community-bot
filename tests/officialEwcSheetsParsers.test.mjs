@@ -559,6 +559,35 @@ test('a round nobody has reached yet still draws', () => {
   assert.equal(quarterFinal.status, 'scheduled');
 });
 
+test('a column of qualified players is a list, not a round of matches', () => {
+  // Tekken draws the players who came out of each group in a column of their own, two per
+  // group with a "Q" where a score would be. The tab passes the is-this-a-draw test on its
+  // real brackets, so those names were paired off into fixtures that never existed —
+  // "Qasim Meer vs Arslan Ash" — and filed under whichever group was drawn nearest.
+  const grid = [
+    ['GROUP AA'],
+    ['', '', '', 'UB Ro8'],
+    ['', '', '', 'UB 1.1'],
+    ['', '', '', 'Qasim Meer', 3, '', '', '', '', '', '', 'Qasim Meer', 'Q'],
+    ['', '', '', 'Breadman', 2, '', '', '', '', '', '', 'Arslan Ash', 'Q'],
+    ['', '', '', 'UB 1.2'],
+    ['', '', '', 'Hafiz', 3, '', '', '', '', '', '', 'Raef', 'Q'],
+    ['', '', '', 'MATSUBA', 2, '', '', '', '', '', '', 'THE JON', 'Q'],
+  ];
+
+  const groups = parseBracketStructure(grid);
+
+  // Only the drawn round survives; the qualifier column carries no position in any draw.
+  assert.deepEqual(
+    groups.map((g) => [g.column, g.title, g.slots.length]),
+    [[3, 'UB Ro8', 2]],
+  );
+  assert.deepEqual(
+    groups[0].slots.map((s) => [s.label, s.teamA, s.teamB]),
+    [['UB 1.1', 'Qasim Meer', 'Breadman'], ['UB 1.2', 'Hafiz', 'MATSUBA']],
+  );
+});
+
 test('a battle-royale points grid is a table, not a bracket', () => {
   // Sixteen teams and a running total read exactly like a bracket column — two names and a
   // number — which had PUBG Mobile reporting groups of sixteen "slots" and a section
