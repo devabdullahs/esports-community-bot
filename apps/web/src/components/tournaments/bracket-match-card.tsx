@@ -92,7 +92,9 @@ function TeamRow({
         {undrawn ? null : <TeamLogo url={logo} alt={label} />}
         <bdi
           className={[
-            "truncate",
+            // The trailing padding is not decoration: an italic glyph leans past its own box,
+            // so `truncate` shaved the last character off "Winner of 2.1".
+            "truncate pe-0.5",
             winner ? "font-bold" : "",
             undrawn ? "text-muted-foreground italic" : "",
           ]
@@ -156,8 +158,19 @@ export function BracketMatchCard({
     .filter(Boolean)
     .join(" — ");
 
+  // What this slot IS, when the sheet named it. A third-place match and a semi-final sit in
+  // the same column and read identically without it.
+  // ...unless the round is already named after it, which happens when every slot agrees.
+  const ownLabel = slot.label?.trim();
+  const slotLabel = ownLabel && ownLabel !== roundTitle?.trim() ? ownLabel : null;
+
   const body = (
     <>
+      {slotLabel ? (
+        <span className="truncate text-[0.7rem] font-medium uppercase tracking-wide text-muted-foreground">
+          {slotLabel}
+        </span>
+      ) : null}
       {live ? (
         <span className="flex items-center gap-1.5 text-[0.7rem] font-semibold uppercase tracking-wide text-primary">
           <span

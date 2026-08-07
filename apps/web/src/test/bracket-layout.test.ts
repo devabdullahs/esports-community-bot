@@ -125,6 +125,28 @@ describe("buildBracketLayout", () => {
     expect(columns).toEqual({ ub1: 1, ub2: 2, lb1: 2, gf: 3 });
   });
 
+
+  test("steps a second round in the same column aside instead of stacking it", () => {
+    // The third-place match is drawn beside the semi-finals that feed it, sharing their sheet
+    // column. Both are in the same band, so they cannot hold the same grid column.
+    const layout = buildBracketLayout(
+      draw([
+        round("r1", 3, [slot("a"), slot("b"), slot("c"), slot("d")]),
+        round("semis", 7, [slot("e"), slot("f")]),
+        round("third", 7, [slot("g")]),
+        round("final", 11, [slot("h")]),
+      ]),
+    );
+
+    const columns = Object.fromEntries(
+      layout.sections[0].bands.flatMap((band) => band.rounds.map((entry) => [entry.key, entry.column] as const)),
+    );
+    // The third-place match steps off the semi-finals' column, and the final steps off it in
+    // turn, so no two rounds in the band share a grid column.
+    expect(columns).toEqual({ r1: 1, semis: 2, third: 3, final: 4 });
+    expect(new Set(Object.values(columns)).size).toBe(4);
+  });
+
   test("draws an elbow only where real edges arrive on aligned halves", () => {
     const layout = buildBracketLayout(
       draw(

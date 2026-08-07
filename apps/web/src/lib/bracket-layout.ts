@@ -68,11 +68,22 @@ function layoutSection(section: DrawSection, source: TournamentDraw["source"]): 
 
   const laidOut: LayoutBand[] = bands.map(({ branch, rounds }) => {
     const tracks = Math.max(...rounds.map((round) => round.slots.length), 1);
+    // Two rounds can share a sheet column and still both belong to this band — the
+    // third-place match is drawn beside the semi-finals that feed it. They align across
+    // bands by column, but inside one band they cannot occupy the same grid column, so the
+    // later one steps right rather than landing on top of the earlier one.
+    const taken = new Set<number>();
+    const trackOf = (round: DrawRound) => {
+      let column = columnOf(round);
+      while (taken.has(column)) column += 1;
+      taken.add(column);
+      return column;
+    };
     return {
       branch,
       tracks,
       rounds: rounds.map((round) => {
-        const column = columnOf(round);
+        const column = trackOf(round);
         const cells = round.slots.map((slot, index) => {
           const { row, span } = trackSpan(index, round.slots.length, tracks);
           placements.set(slot.key, { column, row, span });
@@ -225,9 +236,14 @@ function markConnectors(
 }
 
 /**
- * The section to open on, which is the one worth looking at right now: whichever is playing,
- * else whichever finished a match most recently, else the first drawn. A tournament with four
- * groups should not open on Group A for three days after Group A is over.
+ * The section to open on: whatever is being played, else whatever is about to be, else the
+ * last thing that happened.
+ *
+ * "About to be" comes before "most recently decided" because a tournament moves forward — with
+ * the groups over and the playoffs drawn, opening on the group that finished last shows a
+ * section nothing further will happen in. A stage only counts as upcoming once it has real
+ * competitors in it, so a bracket of nothing but TBD does not claim the opening view from the
+ * round currently deciding who fills it.
  */
 export function defaultSectionKey(layout: BracketLayout): string | null {
   const slots = layout.sections.flatMap((section, sectionIndex) =>
@@ -236,8 +252,9 @@ export function defaultSectionKey(layout: BracketLayout): string | null {
         round.cells.map((cell, cellIndex) => ({
           key: section.key,
           status: cell.slot.status,
-          // No timestamp reaches the draw, so "most recent" is read off the draw's own order:
-          // a later column is a later match, and a later section was drawn after an earlier one.
+          drawn: Boolean(cell.slot.teamA?.trim() && cell.slot.teamB?.trim()),
+          // No timestamp reaches the draw, so order is read off the draw itself: a later
+          // column is a later match, and a later section was drawn after an earlier one.
           rank: sectionIndex * 1_000_000 + round.column * 1_000 + cellIndex,
         })),
       ),
@@ -246,6 +263,14 @@ export function defaultSectionKey(layout: BracketLayout): string | null {
 
   const live = slots.find((slot) => slot.status === "running");
   if (live) return live.key;
+
+  // The earliest undecided match, not the latest: what is about to be played comes before
+  // what is furthest away, so two groups still to come open on the first of them.
+  const upcoming = slots.filter((slot) => slot.status === "scheduled" && slot.drawn);
+  if (upcoming.length) {
+    return upcoming.reduce((best, slot) => (slot.rank < best.rank ? slot : best)).key;
+  }
+
   const decided = slots.filter((slot) => slot.status === "finished");
   const latest = decided.length
     ? decided.reduce((best, slot) => (slot.rank > best.rank ? slot : best))

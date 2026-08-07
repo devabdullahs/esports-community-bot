@@ -532,7 +532,12 @@ export function parseBracketStructure(rows) {
         // heading would otherwise leak onto the next block down the same column — which
         // filed Black Ops 7's Group B upper bracket under Group A's "LB Ro4a".
         else if (isBracketSlotLabel(name)) {
-          pendingSlot = name;
+          // The third-place match is played at the same stage as the semi-finals but is not
+          // part of that bracket. Folded in as a third slot it leaves the round with an odd
+          // number of positions, which both hides what the match is and breaks the feeder
+          // alignment the connectors depend on — so it opens a round of its own.
+          if (/\b(?:3rd|third)\s*place\b/i.test(name) && group && group.slots.length) startGroup(name);
+          else pendingSlot = name;
           pair = [];
           continue;
         } else {
