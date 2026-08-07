@@ -499,6 +499,66 @@ test('bracket structure keeps the draw as a graph, not a list of results', () =>
   assert.equal(played.scoreA, 3);
 });
 
+// The playoffs half of Black Ops 7's Visualization tab, columns and blanks as published: the
+// quarter-finals carry a 0 beside each name, and every round past them carries no score cell
+// at all.
+const COD_PLAYOFFS = [
+  ['', '', '', '', '', '', '', '', '', '', '', '', '', '', 'PLAYOFFS'],
+  [],
+  ['', '', '', '', '', '', '', '', '', '', '', '', '', '', '', 'Ro8 (Quarter-finals)', '', '', '', 'Ro4 (Semi-finals)', '', '', '', '', '', 'Grand Final'],
+  ['', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '1.1 (loser out)'],
+  ['', '', '', '', '', '', '', '', '', '', '', '', '', '', '', 'G2 Esports', 0],
+  ['', '', '', '', '', '', '', '', '', '', '', '', '', '', '', 'Team Heretics', 0, '', '', '2.1 (loser out)'],
+  ['', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', 'Winner of 1.1'],
+  ['', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '1.2 (loser out)', '', '', '', 'Winner of 1.2'],
+  ['', '', '', '', '', '', '', '', '', '', '', '', '', '', '', 'Team Falcons', 0],
+  ['', '', '', '', '', '', '', '', '', '', '', '', '', '', '', 'Gentle Mates', 0, '', '', '2.2 (loser out)'],
+  ['', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', 'Winner of 1.3'],
+  ['', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', 'Winner of 1.4'],
+  ['', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', 'Winner of 2.1'],
+  ['', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', 'Winner of 2.2'],
+  ['', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '3rd place match'],
+  ['', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '(bo7)'],
+  ['', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', 'Loser of UB 2.1'],
+  ['', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', 'Loser of UB 2.2', '', '', '', '', '', '', ''],
+];
+
+test('a round nobody has reached yet still draws', () => {
+  // The quarter-finals carry a 0 beside each name; the rounds after them carry no score cell
+  // at all. Requiring a number beside the name meant the semi-finals, grand final and
+  // third-place match never reached the site, so the bracket stopped at whatever had been
+  // played and a reader could not see what was still to come.
+  const groups = parseBracketStructure(COD_PLAYOFFS);
+
+  assert.deepEqual(
+    groups.map((g) => [g.column, g.section, g.slots.length]),
+    [
+      [15, 'PLAYOFFS', 2],
+      [19, 'PLAYOFFS', 2],
+      [19, 'PLAYOFFS', 1],
+      [25, 'PLAYOFFS', 1],
+    ],
+  );
+
+  const semiFinal = groups[1].slots[0];
+  assert.equal(semiFinal.teamA, 'Winner of 1.1');
+  assert.equal(semiFinal.scoreA, null);
+  assert.equal(semiFinal.status, 'scheduled');
+  // The edge is what makes the round drawable, and it is read off the sheet.
+  assert.deepEqual(semiFinal.sourceA, { outcome: 'winner', slot: '1.1' });
+  assert.deepEqual(semiFinal.sourceB, { outcome: 'winner', slot: '1.2' });
+
+  // "Winner of 1.1" carries a slot number but names a competitor, so it must not be mistaken
+  // for the label of the round it feeds.
+  assert.equal(groups[1].slots[0].label, '2.1 (loser out)');
+
+  // A drawn round beside them is unaffected: 0-0 is still an unplayed slot, not a draw.
+  const quarterFinal = groups[0].slots[0];
+  assert.equal(quarterFinal.teamA, 'G2 Esports');
+  assert.equal(quarterFinal.scoreA, null);
+  assert.equal(quarterFinal.status, 'scheduled');
+});
+
 test('a battle-royale points grid is a table, not a bracket', () => {
   // Sixteen teams and a running total read exactly like a bracket column — two names and a
   // number — which had PUBG Mobile reporting groups of sixteen "slots" and a section
