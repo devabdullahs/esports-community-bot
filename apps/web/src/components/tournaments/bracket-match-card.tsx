@@ -116,13 +116,11 @@ export function BracketMatchCard({
   cell,
   locale,
   text,
-  followed,
   roundTitle,
 }: {
   cell: LayoutCell;
   locale: Locale;
   text: TournamentCopy;
-  followed: string | null;
   roundTitle: string | null;
 }) {
   const slot: DrawSlot = cell.slot;
@@ -142,18 +140,8 @@ export function BracketMatchCard({
   };
   const lifecycle = shouldShowOutcomeLabel(lifecycleView) ? matchOutcomeLabel(lifecycleView, locale) : null;
 
-  const onPath =
-    followed != null &&
-    ((slot.teamA ?? "").trim().toLocaleLowerCase() === followed ||
-      (slot.teamB ?? "").trim().toLocaleLowerCase() === followed);
-  const offPath = followed != null && !onPath;
-
   const className = [
-    "group flex min-h-20 w-full flex-col justify-center gap-1.5 rounded-lg border bg-card px-2.5 py-2 text-sm shadow-xs transition-[opacity,border-color,background-color] motion-reduce:transition-none",
-    // A run is shown by lifting it out of its surroundings rather than by recolouring it, so
-    // the winner emphasis inside the card keeps its meaning.
-    onPath ? "border-primary bg-muted/30" : "",
-    offPath ? "opacity-45" : "",
+    "group flex min-h-20 w-full flex-col justify-center gap-1.5 rounded-lg border bg-card px-2.5 py-2 text-sm shadow-xs transition-[border-color,background-color] motion-reduce:transition-none",
     // Live and finished are marked by a shape change on the leading edge, never by colour
     // alone: the same reading has to survive a monochrome screen.
     live ? "border-s-2 border-s-primary" : "",
@@ -213,7 +201,6 @@ export function BracketMatchCard({
   const shared = {
     "data-bracket-match": slot.matchId ?? undefined,
     "data-bracket-slot": slot.key,
-    "data-bracket-path": onPath ? ("true" as const) : undefined,
     "data-state": live ? "live" : slot.status === "finished" ? "final" : slot.status,
     "data-winner": slot.winner === "a" || slot.winner === "b" ? slot.winner : undefined,
     className,

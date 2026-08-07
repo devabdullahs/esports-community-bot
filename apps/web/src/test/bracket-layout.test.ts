@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { buildBracketLayout, drawCompetitors, trackSpan } from "@/lib/bracket-layout";
+import { buildBracketLayout, trackSpan } from "@/lib/bracket-layout";
 import type { DrawEdge, DrawRound, DrawSlot, TournamentDraw } from "@/lib/tournament-draw";
 
 function slot(key: string, overrides: Partial<DrawSlot> = {}): DrawSlot {
@@ -199,24 +199,5 @@ describe("buildBracketLayout", () => {
     expect(layout.sections[0].bands[0].rounds.flatMap((entry) => entry.cells).some((cell) => cell.connector)).toBe(
       false,
     );
-  });
-});
-
-describe("drawCompetitors", () => {
-  test("lists each competitor once, in the order the draw introduces them", () => {
-    const teams = drawCompetitors(
-      draw([
-        round("r1", 1, [slot("a"), slot("b", { teamA: "Charlie", teamB: "Delta" })]),
-        round("r2", 2, [slot("c", { teamA: "Alpha", teamB: "Charlie" })]),
-      ]),
-    );
-
-    expect(teams.map((team) => team.label)).toEqual(["Alpha", "Bravo", "Charlie", "Delta"]);
-  });
-
-  test("leaves undrawn sides out", () => {
-    const teams = drawCompetitors(draw([round("r1", 1, [slot("a", { teamA: null, teamB: null })])]));
-
-    expect(teams).toEqual([]);
   });
 });

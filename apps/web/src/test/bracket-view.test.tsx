@@ -80,45 +80,6 @@ function renderMatchList(data: TournamentMatchesPayload) {
 }
 
 describe("BracketView", () => {
-  test("offers every team in the draw so a run can be followed", () => {
-    // Double elimination is a story about falling, and a team's run continues in the other
-    // bracket. The control has to list the teams that actually appear, once each.
-    const bracket = projectTournamentBracket([
-      match({ id: 1, round: "Upper Bracket Round 1", team_a: "Alpha", team_b: "Bravo", scheduled_at: 100 }),
-      match({ id: 2, round: "Upper Bracket Final", team_a: "Alpha", team_b: "Charlie", scheduled_at: 200 }),
-      match({ id: 3, round: "Lower Bracket Round 1", team_a: "Bravo", team_b: "Delta", scheduled_at: 300 }),
-    ]);
-    if (!bracket) throw new Error("Bracket fixture should project");
-
-    const html = renderToStaticMarkup(
-      <QueryClientProvider client={new QueryClient()}>
-        <BracketView bracket={bracket} locale="en" />
-      </QueryClientProvider>,
-    );
-
-    expect(html).toContain('data-bracket-follow="true"');
-    // Bravo plays in both brackets and must still be offered once.
-    expect(html.match(/aria-pressed/g)?.length).toBe(4);
-    // Nothing is dimmed until a team is chosen.
-    expect(html).not.toContain('data-bracket-path');
-  });
-
-  test("hides the follow control when there is nobody to choose between", () => {
-    const bracket = projectTournamentBracket([
-      match({ id: 1, round: "Semifinals", team_a: null, team_b: null, scheduled_at: 100 }),
-      match({ id: 2, round: "Grand Final", team_a: null, team_b: null, scheduled_at: 200 }),
-    ]);
-    if (!bracket) throw new Error("Bracket fixture should project");
-
-    const html = renderToStaticMarkup(
-      <QueryClientProvider client={new QueryClient()}>
-        <BracketView bracket={bracket} locale="en" />
-      </QueryClientProvider>,
-    );
-
-    expect(html).not.toContain('data-bracket-follow');
-  });
-
   test("stacks the upper and lower brackets instead of running them in one line", () => {
     // A double-elimination draw is two brackets. Laid out as one row of rounds, "Lower
     // Bracket Round 1" lands after the upper final and a team's fall reads as a jump
