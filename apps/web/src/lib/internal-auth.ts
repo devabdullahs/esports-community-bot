@@ -58,11 +58,14 @@ export function recordInternalOperation({
   capability,
   result,
   requestId,
+  durationMs,
 }: {
   operation: "profile-sync" | "news-revalidate";
   capability: InternalCapability;
   result: "authorized" | "denied" | "rejected" | "succeeded" | "failed";
   requestId: string;
+  /** How long the operation took, so a caller-side timeout can be matched against it. */
+  durationMs?: number;
 }) {
   console.info(JSON.stringify({
     event: "internal-operation",
@@ -70,5 +73,6 @@ export function recordInternalOperation({
     capability,
     result,
     requestId,
+    ...(Number.isFinite(durationMs) ? { durationMs } : {}),
   }));
 }

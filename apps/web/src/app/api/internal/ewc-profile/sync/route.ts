@@ -20,12 +20,16 @@ const BODY_KEYS = new Set(["discordUserId", "guildId", "season"]);
 
 export async function POST(request: Request) {
   const requestId = internalRequestId(request);
+  // The caller aborts after a fixed budget; without the duration here a timeout on its side
+  // and a success on ours cannot be matched up, which is exactly the state the logs were in.
+  const startedAt = Date.now();
   const record = (result: Parameters<typeof recordInternalOperation>[0]["result"]) => {
     recordInternalOperation({
       operation: OPERATION,
       capability: CAPABILITY,
       result,
       requestId,
+      durationMs: Date.now() - startedAt,
     });
   };
 
