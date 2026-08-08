@@ -32,7 +32,7 @@ const server = createServer((request, response) => {
       setTimeout(() => {
         response.writeHead(200, { 'Content-Type': 'application/json' });
         response.end('{"ok":true}');
-      }, 5_500);
+      }, TIMEOUT_BUDGET_MS * 3);
       return;
     }
     if (mode === 'oversized') {
@@ -72,6 +72,9 @@ function configure({
   if (legacy === undefined) delete process.env.EWC_DASHBOARD_INTERNAL_SECRET;
   else process.env.EWC_DASHBOARD_INTERNAL_SECRET = legacy;
 }
+
+// Small enough to keep the test quick; the client clamps at one second.
+const TIMEOUT_BUDGET_MS = 1_000;
 
 async function loadClient(label) {
   return import(`../src/services/dashboardInternalClient.js?test=${encodeURIComponent(label)}-${Date.now()}-${Math.random()}`);
@@ -160,8 +163,10 @@ test('enforces a bounded timeout', async () => {
   configure();
   mode = 'timeout';
   requests = [];
+  process.env.EWC_DASHBOARD_INTERNAL_TIMEOUT_MS = String(TIMEOUT_BUDGET_MS);
   const client = await loadClient('timeout');
   await assert.rejects(client.revalidateDashboardNews(), /timed out/);
+  delete process.env.EWC_DASHBOARD_INTERNAL_TIMEOUT_MS;
   assert.equal(requests.length, 1);
 });
 

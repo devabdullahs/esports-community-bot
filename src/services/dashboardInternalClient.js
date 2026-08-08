@@ -8,7 +8,16 @@ try {
 
 const AUTH_HEADER = 'x-ewc-internal-secret';
 const REQUEST_ID_HEADER = 'x-request-id';
-const REQUEST_TIMEOUT_MS = 5_000;
+// The dashboard shares a container with this process, so an internal call can queue behind
+// whatever the bot is doing — a canvas render, a crest warm-up — and take several seconds
+// that have nothing to do with the operation itself. At five seconds the caller was giving up
+// on work the dashboard then completed successfully two seconds later, so a profile sync
+// failed on a timer while the sync itself had worked. These callers are background jobs with
+// nothing waiting on them; waiting longer costs nothing and reporting a false failure does.
+const REQUEST_TIMEOUT_MS = Math.max(
+  1_000,
+  Number(process.env.EWC_DASHBOARD_INTERNAL_TIMEOUT_MS) || 20_000,
+);
 const RESPONSE_MAX_BYTES = 32 * 1024;
 const MIN_SECRET_LENGTH = 32;
 

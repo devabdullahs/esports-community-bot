@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getTournamentMatchesCached } from "@/lib/tournaments";
+import { timed } from "@/lib/request-timing";
 import { clampInt } from "@/lib/validate";
 
 export const runtime = "nodejs";
@@ -27,11 +28,13 @@ export async function GET(
   // Cached (10s revalidate); official Overwatch pages poll every ~15s and other
   // match lists poll every ~90s. unstable_cache keys
   // by (id, limit, offset), so paginated and per-tournament reads stay distinct.
-  const data = await getTournamentMatchesCached(tournamentId, {
-    limit,
-    offset,
-    includeBracket: false,
-  });
+  const data = await timed(`api/tournaments/${tournamentId}/matches`, () =>
+    getTournamentMatchesCached(tournamentId, {
+      limit,
+      offset,
+      includeBracket: false,
+    }),
+  );
   if (!data) {
     return NextResponse.json({ error: "Tournament not found." }, { status: 404 });
   }
