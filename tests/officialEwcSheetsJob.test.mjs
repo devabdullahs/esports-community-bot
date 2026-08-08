@@ -623,3 +623,31 @@ test('nothing is retired when the sheet published no timed fixtures', () => {
   assert.deepEqual(supersededScheduleMatchIds(matches, []), []);
   assert.deepEqual(supersededScheduleMatchIds(matches, [{ teamA: 'A', teamB: 'B' }]), []);
 });
+
+test('a battle royale keeps its lobby games', () => {
+  // A battle royale has no opponent to name, so every row reads "<something> vs Lobby". Two
+  // lobby rows therefore share a side without being the same fixture at all — which retired
+  // thirty-six real PUBG Mobile games in a single pass. A word that stands in for the field
+  // is not a competitor.
+  const updates = [
+    { teamA: 'Group Stage - Group B - Match 7', teamB: 'Lobby', scheduledAt: 1_000_000 },
+    { teamA: 'Group Stage - Group B - Match 8', teamB: 'Lobby', scheduledAt: 1_003_000 },
+  ];
+  const matches = [
+    { id: 1, team_a: 'Rondo', team_b: 'Lobby', scheduled_at: 1_000_100, status: 'scheduled' },
+    { id: 2, team_a: 'Group Stage - Group B - Match 9', team_b: 'Lobby', scheduled_at: 1_000_200, status: 'scheduled' },
+  ];
+
+  assert.deepEqual(supersededScheduleMatchIds(matches, updates), []);
+});
+
+test('an undecided side is not the competitor two fixtures share', () => {
+  // "TBD" against "TBD" is not one fixture reassigned to another; it is two slots nobody has
+  // reached. Sharing a placeholder says nothing about identity.
+  const updates = [{ teamA: 'Movistar KOI', teamB: 'TBD', scheduledAt: 1_000_000 }];
+  const matches = [
+    { id: 1, team_a: 'The Pit', team_b: 'TBD', scheduled_at: 1_000_100, status: 'scheduled' },
+  ];
+
+  assert.deepEqual(supersededScheduleMatchIds(matches, updates), []);
+});
