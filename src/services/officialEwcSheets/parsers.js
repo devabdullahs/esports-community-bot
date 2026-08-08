@@ -445,6 +445,13 @@ function isUndrawnSide(value) {
   return Boolean(bracketSource(label)) || /^(?:tbd|t\.b\.d\.?)$/i.test(label);
 }
 
+// A cell that can name a competitor. "(bo7)" annotates the round rather than playing in it,
+// and a cell of pure punctuation or digits is drawing furniture.
+function isCompetitorCell(value) {
+  const label = text(value);
+  return /[a-z]/i.test(label) && !/^\(\s*bo\s*\d+\s*\)$/i.test(label);
+}
+
 // A position in the draw rather than a round that opens one: "UB 1.1", "LB 2.2 (loser
 // out)", "Semi-Final 1", "Grand Final", "3rd place match".
 function isBracketSlotLabel(value) {
@@ -460,13 +467,17 @@ export function parseBracketStructure(rows) {
   const width = Math.max(...grid.map((row) => (row || []).length), 0);
   const groups = [];
   // A column of the draw usually reads as a name beside a score. A round nobody has reached
-  // has no scores at all, so it is recognised instead by the edges it carries: only a slot
-  // column ever says "Winner of 2.1".
+  // has no scores at all, so it is recognised instead by what only a draw column ever
+  // contains: an edge ("Winner of 2.1") or the label of a position in the draw ("2.1 (loser
+  // out)"). The label matters on its own — a semi-final whose sides are both filled in but
+  // unplayed has neither scores nor edges left, and without it the entire round vanishes the
+  // moment the last "Winner of" is replaced by a name.
   const isNameColumn = (column) =>
     grid.some(
       (row) =>
         (text(row?.[column]) && Number.isFinite(number(row?.[column + 1]))) ||
-        Boolean(bracketSource(text(row?.[column]))),
+        Boolean(bracketSource(text(row?.[column]))) ||
+        isBracketSlotLabel(text(row?.[column])),
     );
 
   // "GROUPSTAGE", "Group A", "PLAYOFFS" — a heading that stands on its own away from the
@@ -540,6 +551,13 @@ export function parseBracketStructure(rows) {
           else pendingSlot = name;
           pair = [];
           continue;
+        } else if ((pendingSlot || pair.length) && isCompetitorCell(name)) {
+          // A slot label is an explicit marker that the next two names are the sides of that
+          // slot, so they are competitors whether or not a score exists yet. Without this, a
+          // round drawn but not played — the semi-finals once the quarters name their
+          // winners — read as two headings and lost both its slot and its title: Black Ops 7
+          // titled a column "100 Thieves" and showed no semi-final at all.
+          pair.push({ name, score: null });
         } else {
           startGroup(name);
           pair = [];

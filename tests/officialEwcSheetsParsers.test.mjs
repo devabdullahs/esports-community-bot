@@ -479,8 +479,17 @@ test('bracket structure keeps the draw as a graph, not a list of results', () =>
       // Two groups draw the same round in the same column, so only the section tells them
       // apart — without it both read "UB Ro8 (Quarter-finals)".
       [3, 'upper', 'Group B', 'UB Ro8 (Quarter-finals)', 1],
+      // Drawn but unplayed: both sides are named and there is no score column at all, which
+      // is what a semi-final looks like between the quarter-finals and its own start.
+      [7, 'upper', 'Group A', 'UB Ro4 (Semi-finals)', 1],
     ],
   );
+
+  const semiFinal = groups[3].slots[0];
+  assert.equal(semiFinal.label, 'UB 2.1');
+  assert.deepEqual([semiFinal.teamA, semiFinal.teamB], ['FaZe Clan', 'Movistar KOI']);
+  assert.equal(semiFinal.scoreA, null);
+  assert.equal(semiFinal.status, 'scheduled');
   // Group B's upper bracket must not be filed under Group A's lower-bracket heading.
   assert.equal(groups[2].slots[0].teamA, 'OpTic Gaming');
   assert.equal(groups[2].bracket, 'upper');
@@ -588,6 +597,51 @@ test('a column of qualified players is a list, not a round of matches', () => {
   );
 });
 
+test('a round drawn but not yet played keeps its slots and its title', () => {
+  // Once the quarter-finals name their winners, the semi-final slots hold REAL names with no
+  // score cell at all — the score column is empty until the match is played. Requiring a
+  // score, or only accepting "Winner of X", read those two names as two round headings: Black
+  // Ops 7 titled the column "100 Thieves" and showed no semi-final whatsoever.
+  //
+  // Columns and blanks as the live workbook publishes them.
+  // The semi-final column carries NO score cell and, once both sides are filled in, no edge
+  // either — only the slot label says it is part of the draw at all.
+  const grid = [
+    [],
+    [],
+    ['', '', '', '', '', '', '', '', '', '', '', '', '', '', '', 'Ro8 (Quarter-finals)', '', '', '', 'Ro4 (Semi-finals)'],
+    ['', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '1.1 (loser out)'],
+    ['', '', '', '', '', '', '', '', '', '', '', '', '', '', '', 'G2 Esports', 3],
+    ['', '', '', '', '', '', '', '', '', '', '', '', '', '', '', 'Team Heretics', 4, '', '', '2.1 (loser out)'],
+    ['', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', 'Team Heretics'],
+    ['', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '1.2 (loser out)', '', '', '', 'Team Falcons'],
+    ['', '', '', '', '', '', '', '', '', '', '', '', '', '', '', 'Team Falcons', 4],
+    ['', '', '', '', '', '', '', '', '', '', '', '', '', '', '', 'Gentle Mates', 3, '', '', '', '', '', '', '', ''],
+  ];
+
+  const groups = parseBracketStructure(grid);
+
+  assert.deepEqual(
+    groups.map((g) => [g.column, g.title, g.slots.length]),
+    [
+      [15, 'Ro8 (Quarter-finals)', 2],
+      [19, 'Ro4 (Semi-finals)', 1],
+    ],
+  );
+
+  const semiFinal = groups[1].slots[0];
+  assert.equal(semiFinal.label, '2.1 (loser out)');
+  assert.equal(semiFinal.teamA, 'Team Heretics');
+  assert.equal(semiFinal.teamB, 'Team Falcons');
+  // Drawn is not played: no score, and nothing that reads as a result.
+  assert.equal(semiFinal.scoreA, null);
+  assert.equal(semiFinal.status, 'scheduled');
+
+  // The played round beside it is unaffected.
+  assert.equal(groups[0].slots[0].scoreB, 4);
+  assert.equal(groups[0].slots[0].status, 'finished');
+});
+
 test('a battle-royale points grid is a table, not a bracket', () => {
   // Sixteen teams and a running total read exactly like a bracket column — two names and a
   // number — which had PUBG Mobile reporting groups of sixteen "slots" and a section
@@ -602,7 +656,7 @@ test('a battle-royale points grid is a table, not a bracket', () => {
 
   assert.deepEqual(parseBracketStructure(pointsGrid), []);
   // The real bracket still reads, so the guard is not simply refusing everything.
-  assert.equal(parseBracketStructure(COD_BRACKET).length, 3);
+  assert.equal(parseBracketStructure(COD_BRACKET).length, 4);
 });
 
 test('schedule timestamps treat sheet dates as Riyadh local time', () => {
