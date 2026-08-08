@@ -398,6 +398,13 @@ async function applyMatchUpdate(tournament, matches, update, observedAt, ttlSeco
  * not mention is left to the existing sweeps — not listing a match is not the same as
  * replacing it, and the workbook does not always cover every stream.
  */
+// "Lobby" is how a battle royale names the absence of an opponent, and a bracket names an
+// undecided side rather than a competitor. Neither identifies anyone, so neither can be the
+// shared side that says two rows are the same fixture.
+function isRealCompetitor(normalizedSide) {
+  return Boolean(normalizedSide) && !/^(?:lobby|tbd|bye|q|qualifier)$/i.test(normalizedSide);
+}
+
 export function supersededScheduleMatchIds(matches, updates) {
   const fixtures = (updates || [])
     .filter((update) => Number.isFinite(Number(update?.scheduledAt)))
@@ -406,7 +413,7 @@ export function supersededScheduleMatchIds(matches, updates) {
       sides: [normalizeTeamName(update.teamA), normalizeTeamName(update.teamB)],
       scheduledAt: Number(update.scheduledAt),
     }))
-    .filter((fixture) => fixture.pair && fixture.pair !== '|');
+    .filter((fixture) => fixture.pair && fixture.pair !== '|' && fixture.sides.every(isRealCompetitor));
   if (!fixtures.length) return [];
 
   const published = new Set(fixtures.map((fixture) => fixture.pair));
@@ -418,7 +425,11 @@ export function supersededScheduleMatchIds(matches, updates) {
     const pair = normalizedOfficialPair(match.team_a, match.team_b);
     if (!pair || pair === '|' || published.has(pair)) continue;
     const sides = [normalizeTeamName(match.team_a), normalizeTeamName(match.team_b)];
-    if (!sides[0] || !sides[1]) continue;
+    // Both sides have to be actual competitors. A battle royale has no opponent to name, so
+    // every one of its rows reads "<something> vs Lobby" — which made every lobby row look
+    // like it shared a competitor with every other, and the sweep retired thirty-six real
+    // PUBG Mobile games in one pass. A word that stands in for the field is not a team.
+    if (!sides.every(isRealCompetitor)) continue;
     const scheduledAt = Number(match.scheduled_at);
     if (!Number.isFinite(scheduledAt)) continue;
 
