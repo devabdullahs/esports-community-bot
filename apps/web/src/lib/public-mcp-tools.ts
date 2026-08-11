@@ -1,7 +1,7 @@
 import "server-only";
 
 import { all } from "@bot/db/client.js";
-import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { McpServer } from "@modelcontextprotocol/server";
 import { z } from "zod";
 import { getAllCoStreamsCached, type CoStream } from "@/lib/co-streams";
 import {
@@ -259,10 +259,26 @@ async function getDefaultLeaderboardGuildId(guildId?: string) {
   return resolveDefaultGuildId();
 }
 
+// Both protocol eras report the same identity: legacy `initialize` echoes it in
+// InitializeResult.serverInfo, 2026-07-28 in each result's `_meta`.
+export const PUBLIC_MCP_SERVER_INFO = {
+  name: "esports-community-public",
+  version: "0.1.0",
+};
+
 export function createPublicMcpServer() {
-  const server = new McpServer({
-    name: "esports-community-public",
-    version: "0.1.0",
+  const server = new McpServer(PUBLIC_MCP_SERVER_INFO, {
+    instructions:
+      "Read-only public esports community data: the game directory, tournaments and " +
+      "matches, published news, team and player profiles, live co-streams, and Esports " +
+      "World Cup club standings and prediction leaderboards. No authentication required.",
+    // 2026-07-28 cache hints. Every caller gets the same tools here, so a shared
+    // intermediary may cache them; the SDK's default is the conservative
+    // `ttlMs: 0` / `cacheScope: 'private'`. The set only changes on deploy.
+    cacheHints: {
+      "tools/list": { ttlMs: 300_000, cacheScope: "public" },
+      "server/discover": { ttlMs: 3_600_000, cacheScope: "public" },
+    },
   });
 
   registerPublicMcpTools(server);
@@ -307,7 +323,7 @@ export function registerPublicMcpTools(
     {
       title: "List Games",
       description: "List the localized public game directory.",
-      inputSchema: { locale: LocaleSchema },
+      inputSchema: z.object({ locale: LocaleSchema }),
     },
     async ({ locale = "en" }) => {
       const games = (await listGamesCached()).map((game) => publicGame(game, locale));
@@ -320,7 +336,7 @@ export function registerPublicMcpTools(
     {
       title: "Search Published News",
       description: "Search published public news only. Drafts are never returned.",
-      inputSchema: {
+      inputSchema: z.object({
         query: z.string().max(120).optional(),
         locale: LocaleSchema,
         gameSlug: z.string().max(40).optional(),
@@ -328,7 +344,7 @@ export function registerPublicMcpTools(
         ewcOnly: z.boolean().optional(),
         limit: z.number().int().min(1).max(25).optional(),
         offset: z.number().int().min(0).max(100_000).optional(),
-      },
+      }),
     },
     async ({
       query = "",
@@ -368,11 +384,11 @@ export function registerPublicMcpTools(
     {
       title: "Get Tournament Status",
       description: "Return the public tournament matches and standings projection.",
-      inputSchema: {
+      inputSchema: z.object({
         tournamentId: z.number().int().positive(),
         limit: z.number().int().min(1).max(100).optional(),
         offset: z.number().int().min(0).max(100_000).optional(),
-      },
+      }),
     },
     async ({ tournamentId, limit = 50, offset = 0 }) => {
       const data = await getTournamentMatchesCached(tournamentId, { limit, offset });
@@ -389,12 +405,12 @@ export function registerPublicMcpTools(
     {
       title: "List Tournaments",
       description: "List public active tournament summaries.",
-      inputSchema: {
+      inputSchema: z.object({
         gameSlug: z.string().max(40).optional(),
         ewcOnly: z.boolean().optional(),
         status: z.enum(["any", "live", "upcoming", "finished"]).optional(),
         limit: z.number().int().min(1).max(100).optional(),
-      },
+      }),
     },
     async ({ gameSlug = "", ewcOnly = false, status = "any", limit = 25 }) => {
       const cleanGame = cleanGameSlug(gameSlug);
@@ -428,12 +444,12 @@ export function registerPublicMcpTools(
     {
       title: "Get EWC Club Summary",
       description: "Return public EWC club points, qualified games, wins, and region metadata.",
-      inputSchema: {
+      inputSchema: z.object({
         query: z.string().max(120).optional(),
         region: z.enum(CLUB_REGION_IDS).optional(),
         scope: z.enum(["featured", "all"]).optional(),
         limit: z.number().int().min(1).max(60).optional(),
-      },
+      }),
     },
     async ({ query = "", region = "all", scope = "featured", limit = 20 }) => {
       const tracker = await getStoredEwcClubTrackerCached();
@@ -465,13 +481,13 @@ export function registerPublicMcpTools(
     {
       title: "Get EWC Club Championship Standings",
       description: "Return official rank-ordered EWC Club Championship standings from stored data.",
-      inputSchema: {
+      inputSchema: z.object({
         query: z.string().max(120).optional(),
         region: z.enum(CLUB_REGION_IDS).optional(),
         season: z.string().optional(),
         limit: z.number().int().min(1).max(60).optional(),
         offset: z.number().int().min(0).max(100_000).optional(),
-      },
+      }),
     },
     async ({ query = "", region = "all", season = "", limit = 25, offset = 0 }) => {
       if (season && !isSeason(season)) return errorResult("Season must be a four-digit year.");
@@ -500,11 +516,11 @@ export function registerPublicMcpTools(
     {
       title: "List Co-streams",
       description: "List public co-stream groups, live-first.",
-      inputSchema: {
+      inputSchema: z.object({
         liveOnly: z.boolean().optional(),
         gameSlug: z.string().max(40).optional(),
         limit: z.number().int().min(1).max(100).optional(),
-      },
+      }),
     },
     async ({ liveOnly = false, gameSlug = "", limit = 50 }) => {
       const cleanGame = cleanGameSlug(gameSlug);
@@ -522,12 +538,12 @@ export function registerPublicMcpTools(
     {
       title: "Search Teams",
       description: "Search the public team directory with safe public fields.",
-      inputSchema: {
+      inputSchema: z.object({
         query: z.string().max(80).optional(),
         gameSlug: z.string().max(40).optional(),
         limit: z.number().int().min(1).max(50).optional(),
         offset: z.number().int().min(0).max(100_000).optional(),
-      },
+      }),
     },
     async ({ query = "", gameSlug = "", limit = 20, offset = 0 }) => {
       const safeLimit = clampInt(limit, 1, 50, 20);
@@ -552,12 +568,12 @@ export function registerPublicMcpTools(
     {
       title: "Search Players",
       description: "Search the public player directory with safe public fields.",
-      inputSchema: {
+      inputSchema: z.object({
         query: z.string().max(80).optional(),
         gameSlug: z.string().max(40).optional(),
         limit: z.number().int().min(1).max(50).optional(),
         offset: z.number().int().min(0).max(100_000).optional(),
-      },
+      }),
     },
     async ({ query = "", gameSlug = "", limit = 20, offset = 0 }) => {
       const safeLimit = clampInt(limit, 1, 50, 20);
@@ -582,12 +598,12 @@ export function registerPublicMcpTools(
     {
       title: "Get Public EWC Leaderboard",
       description: "Return the existing public EWC leaderboard projection.",
-      inputSchema: {
+      inputSchema: z.object({
         guildId: z.string().optional(),
         season: z.string().optional(),
         limit: z.number().int().min(1).max(100).optional(),
         offset: z.number().int().min(0).optional(),
-      },
+      }),
     },
     async ({ guildId = "", season = currentSeason(), limit = 50, offset = 0 }) => {
       const resolvedGuildId = await getDefaultLeaderboardGuildId(guildId.trim() || undefined);

@@ -3,7 +3,7 @@ import "server-only";
 import { all } from "@bot/db/client.js";
 import { listStandingsForTournament } from "@bot/db/tournamentStandings.js";
 import { getTournamentById } from "@bot/db/tournaments.js";
-import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { McpServer } from "@modelcontextprotocol/server";
 import { z } from "zod";
 import { listReportedModerationComments } from "@/lib/comments";
 import { filterEwcClubTracker, getEwcClubTrackerForMcp } from "@/lib/ewc-clubs";
@@ -137,10 +137,27 @@ function effectiveTools(access: McpAccess) {
     }));
 }
 
+// Both protocol eras report the same identity: legacy `initialize` echoes it in
+// InitializeResult.serverInfo, 2026-07-28 in each result's `_meta`.
+export const ADMIN_MCP_SERVER_INFO = {
+  name: "esports-community-admin",
+  version: "0.1.0",
+};
+
 export function createAdminMcpServer(access: McpAccess) {
-  const server = new McpServer({
-    name: "esports-community-admin",
-    version: "0.1.0",
+  const server = new McpServer(ADMIN_MCP_SERVER_INFO, {
+    instructions:
+      "Scoped administrative access to the esports community dashboard: game, media " +
+      "channel, and news management alongside the public read tools. The tools returned " +
+      "vary with the grants on the presented bearer key.",
+    // The tool list is a projection of the calling key's grants, so it MUST stay
+    // out of shared intermediary caches. The 2026-07-28 tools spec allows the set
+    // to vary by authorization precisely because credentials are per-request
+    // input rather than connection state — but only a private cache may hold it.
+    cacheHints: {
+      "tools/list": { ttlMs: 60_000, cacheScope: "private" },
+      "server/discover": { ttlMs: 3_600_000, cacheScope: "private" },
+    },
   });
 
   server.registerTool(
@@ -148,11 +165,11 @@ export function createAdminMcpServer(access: McpAccess) {
     {
       title: "Get Admin Capabilities",
       description: "Discover this MCP key's usable tools, allowed game/media slugs, and writable stream channel IDs.",
-      inputSchema: {
+      inputSchema: z.object({
         locale: z.enum(["en", "ar"]).optional(),
         limit: z.number().int().min(1).max(100).optional(),
         offset: z.number().int().min(0).optional(),
-      },
+      }),
     },
     async ({ locale = "en", limit = 50, offset = 0 }) => {
       const cleanLimit = clampInt(limit, 1, 100, 50);
@@ -236,7 +253,7 @@ export function createAdminMcpServer(access: McpAccess) {
     {
       title: "Search News",
       description: "Search admin-visible news posts for the MCP key owner.",
-      inputSchema: {
+      inputSchema: z.object({
         query: z.string().max(120).optional(),
         status: z.enum(["draft", "published"]).optional(),
         locale: z.enum(["en", "ar"]).optional(),
@@ -244,7 +261,7 @@ export function createAdminMcpServer(access: McpAccess) {
         mediaSlug: z.string().max(80).optional(),
         ewcOnly: z.boolean().optional(),
         limit: z.number().int().min(1).max(25).optional(),
-      },
+      }),
     },
     async ({
       query = "",
@@ -289,11 +306,11 @@ export function createAdminMcpServer(access: McpAccess) {
     {
       title: "Get Tournament Status",
       description: "Return matches and standings for one tracked tournament.",
-      inputSchema: {
+      inputSchema: z.object({
         tournamentId: z.number().int().positive(),
         limit: z.number().int().min(1).max(100).optional(),
         offset: z.number().int().min(0).optional(),
-      },
+      }),
     },
     async ({ tournamentId, limit = 100, offset = 0 }) => {
       assertTool(access, "get_tournament_status");
@@ -325,12 +342,12 @@ export function createAdminMcpServer(access: McpAccess) {
     {
       title: "Get EWC Club Summary",
       description: "Return EWC club points, qualified games, wins, and region metadata.",
-      inputSchema: {
+      inputSchema: z.object({
         query: z.string().max(120).optional(),
         region: z.enum(CLUB_REGION_IDS).optional(),
         scope: z.enum(["featured", "all"]).optional(),
         limit: z.number().int().min(1).max(60).optional(),
-      },
+      }),
     },
     async ({ query = "", region = "all", scope = "featured", limit = 20 }) => {
       assertTool(access, "get_ewc_club_summary");
@@ -384,9 +401,9 @@ export function createAdminMcpServer(access: McpAccess) {
     {
       title: "List Admin Queue",
       description: "List comments currently needing moderation attention.",
-      inputSchema: {
+      inputSchema: z.object({
         limit: z.number().int().min(1).max(25).optional(),
-      },
+      }),
     },
     async ({ limit = 10 }) => {
       assertTool(access, "list_admin_queue");
@@ -410,7 +427,7 @@ export function createAdminMcpServer(access: McpAccess) {
     {
       title: "Create News Draft",
       description: "Create a draft news post in an allowed game or media channel. Requires idempotencyKey for safe retries. Call get_admin_capabilities for valid slugs.",
-      inputSchema: {
+      inputSchema: z.object({
         idempotencyKey: idempotencyKeySchema,
         title: z.string().min(1).max(NEWS_TITLE_MAX_LENGTH),
         summary: z.string().max(NEWS_SUMMARY_MAX_LENGTH).optional(),
@@ -419,7 +436,7 @@ export function createAdminMcpServer(access: McpAccess) {
         gameSlug: z.string().optional(),
         mediaSlug: z.string().optional(),
         ewc: z.boolean().optional(),
-      },
+      }),
     },
     async ({
       idempotencyKey,
@@ -510,7 +527,7 @@ export function createAdminMcpServer(access: McpAccess) {
     {
       title: "Update Stream Channel",
       description: "Update a stream channel. Requires idempotencyKey for safe retries. Call get_admin_capabilities for valid channel IDs. Non-super keys may only update game-scoped channels they manage.",
-      inputSchema: {
+      inputSchema: z.object({
         idempotencyKey: idempotencyKeySchema,
         id: z.number().int().positive(),
         label: z.string().max(100).optional(),
@@ -519,7 +536,7 @@ export function createAdminMcpServer(access: McpAccess) {
         isDefault: z.boolean().optional(),
         gameSlugs: z.array(z.string()).max(12).optional(),
         creatorKey: z.string().max(80).optional(),
-      },
+      }),
     },
     async ({ idempotencyKey, id, ...patch }) => {
       assertTool(access, "update_stream_channel");
