@@ -13,6 +13,7 @@ const META_CLIENT_CAPABILITIES = "io.modelcontextprotocol/clientCapabilities";
 const META_SERVER_INFO = "io.modelcontextprotocol/serverInfo";
 
 const SUPER_ID = "123456789012345678";
+const DEFAULT_GUILD = "123456789012345678";
 
 let publicMcpPOST: (request: Request) => Promise<Response>;
 let adminMcpPOST: (request: Request) => Promise<Response>;
@@ -195,11 +196,14 @@ describe("MCP 2026-07-28 — tools", () => {
     expect(body.result.resultType).toBe("complete");
   });
 
+  // A tool that rejects its input reports it in-band with isError, not as a
+  // JSON-RPC error — the model can correct an argument, it cannot correct a
+  // protocol fault. The envelope is still a complete result.
   test("tool execution errors stay in-band as isError results", async () => {
     const response = await callPublic(
       modernBody("tools/call", {
         name: "get_public_ewc_leaderboard",
-        arguments: { guildId: "910000000000000777", season: "2077" },
+        arguments: { guildId: DEFAULT_GUILD, season: "not-a-year" },
       }),
     );
     expect(response.status).toBe(200);
