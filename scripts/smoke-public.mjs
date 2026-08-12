@@ -1,6 +1,8 @@
 import process from "node:process";
 import { pathToFileURL } from "node:url";
 
+import { MCP_PROBE_USER_AGENT } from "../src/lib/mcpProbeAgent.js";
+
 const DEFAULT_TIMEOUT_MS = 10_000;
 const MIN_TIMEOUT_MS = 1_000;
 const MAX_TIMEOUT_MS = 60_000;
@@ -162,6 +164,12 @@ function modernHeaders(method) {
   return { "MCP-Protocol-Version": MODERN_PROTOCOL_VERSION, "Mcp-Method": method };
 }
 
+// Every MCP probe identifies itself, so the era counter behind the 2025-era
+// removal is not reading our own monitoring as a client that refuses to move.
+function probeHeaders(extra = {}) {
+  return { "User-Agent": MCP_PROBE_USER_AGENT, ...extra };
+}
+
 function mcpTargets(baseUrl) {
   const url = endpoint(baseUrl, "/api/public-mcp");
   const contentTypes = ["application/json", "text/event-stream"];
@@ -171,7 +179,7 @@ function mcpTargets(baseUrl) {
       url,
       contentTypes,
       label: "2026-07-28 server/discover",
-      headers: modernHeaders("server/discover"),
+      headers: probeHeaders(modernHeaders("server/discover")),
       body: { jsonrpc: "2.0", id: "smoke-discover", method: "server/discover", params: modernParams() },
       assertResult: (result, target) => {
         if (!result.supportedVersions?.includes(MODERN_PROTOCOL_VERSION)) {
@@ -187,7 +195,7 @@ function mcpTargets(baseUrl) {
       url,
       contentTypes,
       label: "2026-07-28 tools/list",
-      headers: modernHeaders("tools/list"),
+      headers: probeHeaders(modernHeaders("tools/list")),
       body: { jsonrpc: "2.0", id: "smoke-modern-list", method: "tools/list", params: modernParams() },
       assertResult: (result, target) => {
         if (!Array.isArray(result.tools) || result.tools.length === 0) {
@@ -211,6 +219,7 @@ function mcpTargets(baseUrl) {
       // 2026-11-23, and until then breaking it is a regression. Drop this target
       // on that date, not before.
       label: "handshake-era tools/list",
+      headers: probeHeaders(),
       body: { jsonrpc: "2.0", id: "smoke-legacy-list", method: "tools/list", params: {} },
       assertResult: (result, target) => {
         if (!Array.isArray(result.tools) || result.tools.length === 0) {
