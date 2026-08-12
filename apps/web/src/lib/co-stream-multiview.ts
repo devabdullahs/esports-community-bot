@@ -1,4 +1,4 @@
-import type { CoStream } from "@/lib/stream-types";
+import type { PublicCoStream as CoStream } from "@/lib/public-co-stream-types";
 
 export const MAX_MULTI_STREAMS = 6;
 

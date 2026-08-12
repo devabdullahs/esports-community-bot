@@ -1,6 +1,11 @@
 import "server-only";
 
 import { NextResponse } from "next/server";
+import {
+  createRoleVerifier,
+  type RoleVerification,
+  type RoleVerifier,
+} from "@/lib/discord-role-verification";
 import { isUserBlocked } from "@bot/db/communityUserBlocks.js";
 import type { Session } from "@/lib/auth";
 import { getDiscordAccountForAuthUser } from "@/lib/auth-database";
@@ -30,43 +35,41 @@ function verifiedRoleIds(): Set<string> {
   );
 }
 
-// Short in-process cache of guild-member roles to avoid hitting Discord on every
-// mutation (mutations are also DB-rate-limited, so this stays well under limits).
-const ROLE_CACHE_TTL_MS = 60_000;
-const roleCache = new Map<string, { roles: string[] | null; at: number }>();
+// Guild-member roles come from a verifier that attaches an age and a provenance to the
+// answer, so an upstream failure can no longer be mistaken for "still authorized". See
+// discord-role-verification.ts for the decision table.
+let verifier: RoleVerifier | null = null;
+let verifierKey = "";
 
-async function fetchMemberRoles(discordUserId: string): Promise<string[] | null> {
+function roleVerifier(): RoleVerifier | null {
   const guildId = process.env.DISCORD_GUILD_ID;
   const token = process.env.DISCORD_TOKEN;
   if (!guildId || !token) return null;
-
-  const cached = roleCache.get(discordUserId);
-  if (cached && Date.now() - cached.at < ROLE_CACHE_TTL_MS) return cached.roles;
-
-  let roles: string[] | null;
-  try {
-    const res = await fetch(
-      `https://discord.com/api/v10/guilds/${guildId}/members/${discordUserId}`,
-      { headers: { Authorization: `Bot ${token}` } },
-    );
-    if (res.status === 404) roles = null; // not a member of the guild
-    else if (!res.ok) throw new Error(`Discord member fetch failed (${res.status})`);
-    else {
-      const member = (await res.json()) as { roles?: string[] };
-      roles = Array.isArray(member.roles) ? member.roles : [];
-    }
-  } catch {
-    // On a transient Discord error, fall back to the last cached value if any,
-    // else treat as not-verifiable (fail closed for the gate).
-    return cached?.roles ?? null;
+  // Rebuild if the configuration changed (tests set these per case).
+  const key = `${guildId}:${token}`;
+  if (!verifier || verifierKey !== key) {
+    verifierKey = key;
+    verifier = createRoleVerifier({
+      guildId,
+      token,
+      onEvent: (event, statusClass) =>
+        console.warn(JSON.stringify({ event, statusClass })),
+    });
   }
-  roleCache.set(discordUserId, { roles, at: Date.now() });
-  return roles;
+  return verifier;
+}
+
+async function verifyMemberRoles(discordUserId: string): Promise<RoleVerification> {
+  const instance = roleVerifier();
+  // No bot credentials configured: verification is impossible, not "not a member".
+  if (!instance) return { status: "unavailable" };
+  return instance.verify(discordUserId);
 }
 
 export async function getCommunityMember(): Promise<{
   session: Session | null;
   member: CommunityMember | null;
+  verification?: RoleVerification;
 }> {
   const session = await getOptionalSession();
   if (!session) return { session: null, member: null };
@@ -90,13 +93,17 @@ export async function getCommunityMember(): Promise<{
   const discordUserId = account?.accountId ?? null;
   if (!discordUserId) return { session, member: null };
 
-  const roles = await fetchMemberRoles(discordUserId);
-  const inGuild = roles !== null;
+  const verification = await verifyMemberRoles(discordUserId);
+  // Unavailable is NOT "not in the guild". Read-only surfaces render the conservative
+  // signed-in-but-unverified state; the mutation gate below turns it into a 503.
+  const inGuild = verification.status === "verified";
   const verified = verifiedRoleIds();
-  const isVerified = inGuild && roles!.some((r) => verified.has(r));
+  const isVerified =
+    verification.status === "verified" && verification.roles.some((role) => verified.has(role));
 
   return {
     session,
+    verification,
     member: {
       authUserId: session.user.id,
       discordUserId,
@@ -115,9 +122,19 @@ export type RequireMemberResult =
 // Gate for mutation routes: 401 anonymous, 403 signed-in-but-unverified.
 // The `code` lets the client show sign-in vs join/verify CTAs.
 export async function requireVerifiedMember(): Promise<RequireMemberResult> {
-  const { session, member } = await getCommunityMember();
+  const { session, member, verification } = await getCommunityMember();
   if (!session) {
     return { response: NextResponse.json({ error: "Sign in to continue.", code: "unauthenticated" }, { status: 401 }) };
+  }
+  // Fail closed, and say so accurately: a 403 here would tell a member in good standing that
+  // their membership was rejected, when in fact it could not be checked.
+  if (verification?.status === "unavailable") {
+    return {
+      response: NextResponse.json(
+        { error: "Membership could not be verified right now. Please try again shortly.", code: "verification-unavailable" },
+        { status: 503 },
+      ),
+    };
   }
   if (!member || !member.isVerified) {
     const code = member?.inGuild ? "not-verified" : "not-member";

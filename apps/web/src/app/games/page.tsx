@@ -19,7 +19,7 @@ import {
 } from "@/components/ui/card";
 import { localizeText } from "@/lib/community-content";
 import { gameTitleForSlug, listGamesCached } from "@/lib/games";
-import { listLatestPublishedNewsPostsCached } from "@/lib/news";
+import { listHomepageNewsPostsCached } from "@/lib/news";
 import { newsPublicPath } from "@/lib/news-url";
 import {
   copy,
@@ -46,7 +46,7 @@ export default async function GamesPage() {
   const text = copy[locale].games;
   const common = copy[locale].common;
   const games = await listGamesCached();
-  const latestPosts = await listLatestPublishedNewsPostsCached(locale, 2);
+  const latestPosts = await listHomepageNewsPostsCached(locale, 2);
   const gameTitle = (slug: string) => gameTitleForSlug(slug, games, locale);
   const numberFormatter = new Intl.NumberFormat(locale === "ar" ? "ar-SA" : "en-US");
   const formatNumber = (value: number) => numberFormatter.format(value);

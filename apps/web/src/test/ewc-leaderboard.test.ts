@@ -14,6 +14,7 @@ const USERS = {
 };
 
 import { GET } from "@/app/api/ewc/[guildId]/[season]/leaderboard/route";
+import { readPublicEwcLeaderboard, type PublicLeaderboard } from "@/lib/public-ewc-leaderboard";
 
 function req(query = ""): Request {
   return new Request(`http://localhost/api/ewc/${GUILD_ID}/${SEASON}/leaderboard${query}`);
@@ -151,5 +152,113 @@ describe("leaderboard namespace admission", () => {
   test("the known configured namespace still serves", async () => {
     const response = await GET(new Request("http://localhost/x"), ctx());
     expect(response.status).toBe(200);
+  });
+});
+
+// The finding: admission lived in the REST caller, so the public MCP tool reached the cache
+// without it. These assert the OWNED boundary — that an unknown namespace cannot invoke the
+// private loader at all — rather than only that a 404 comes back.
+describe("leaderboard cache admission", () => {
+  const UNKNOWN_GUILD = "910000000000000777";
+  const UNKNOWN_SEASON = "2077";
+
+  /** Stand-in for the private cached page loader; records every persistent key it would mint. */
+  function fakePages(total: number) {
+    const seen: Array<[string, string, number]> = [];
+    const load = async (guildId: string, season: string, pageIndex: number) => {
+      seen.push([guildId, season, pageIndex]);
+      const start = pageIndex * 100;
+      const rows = Array.from({ length: Math.max(0, Math.min(100, total - start)) }, (_, i) => ({
+        rank: start + i + 1,
+        displayName: `player-${start + i + 1}`,
+      }));
+      return { guildId, season, total, topScore: 999, rows } as unknown as PublicLeaderboard;
+    };
+    return { seen, load };
+  }
+
+  test("an unknown namespace never invokes the cached loader", async () => {
+    let calls = 0;
+    const result = await readPublicEwcLeaderboard(
+      { guildId: UNKNOWN_GUILD, season: UNKNOWN_SEASON },
+      {
+        isKnownNamespace: async () => false,
+        loadPage: async () => {
+          calls += 1;
+          throw new Error("the private cache must not be reachable for an unknown namespace");
+        },
+      },
+    );
+
+    expect(result.status).toBe("unknown-namespace");
+    expect(calls).toBe(0);
+  });
+
+  test("request-controlled limit and offset never become cache arguments", async () => {
+    // The namespace is admitted, so this is the second half of the finding: with 250 rows of
+    // real data, every accepted limit/offset combination may only ever address 3 pages. Keyed
+    // by limit/offset instead, these same requests would be distinct persistent entries.
+    const { seen, load } = fakePages(250);
+    const deps = { isKnownNamespace: async () => true, loadPage: load };
+
+    for (const [limit, offset] of [
+      [50, 0],
+      [10_000, -5],
+      [Number.NaN, 0.7],
+      [1, 7],
+      [100, 90],
+      [37, 213],
+      [50, 99_999],
+    ] as Array<[number, number]>) {
+      await readPublicEwcLeaderboard({ guildId: GUILD_ID, season: SEASON, limit, offset }, deps);
+    }
+
+    const distinct = new Set(seen.map((key) => key.join("|")));
+    expect([...distinct].sort()).toEqual([
+      `${GUILD_ID}|${SEASON}|0`,
+      `${GUILD_ID}|${SEASON}|1`,
+      `${GUILD_ID}|${SEASON}|2`,
+    ]);
+    // Bounded by the data, not by the accepted input range: ceil(250 / 100).
+    expect(distinct.size).toBe(3);
+  });
+
+  test("an offset past the end of the data mints no entry for a page that does not exist", async () => {
+    const { seen, load } = fakePages(120);
+
+    const result = await readPublicEwcLeaderboard(
+      { guildId: GUILD_ID, season: SEASON, limit: 50, offset: 100_000 },
+      { isKnownNamespace: async () => true, loadPage: load },
+    );
+
+    expect(result.status).toBe("ok");
+    if (result.status !== "ok") throw new Error("expected an admitted result");
+    expect(result.leaderboard.rows).toEqual([]);
+    // Totals still answer truthfully, from the one page that legitimately exists.
+    expect(result.leaderboard.total).toBe(120);
+    expect(seen.map((key) => key[2])).toEqual([0]);
+  });
+
+  test("sliced windows return exactly the rows a direct limit/offset query would have", async () => {
+    const { load } = fakePages(250);
+    const deps = { isKnownNamespace: async () => true, loadPage: load };
+
+    for (const [limit, offset] of [
+      [50, 0],
+      [20, 90],
+      [37, 213],
+      [1, 249],
+    ] as Array<[number, number]>) {
+      const result = await readPublicEwcLeaderboard(
+        { guildId: GUILD_ID, season: SEASON, limit, offset },
+        deps,
+      );
+      if (result.status !== "ok") throw new Error("expected an admitted result");
+      const expected = Array.from(
+        { length: Math.min(limit, 250 - offset) },
+        (_, i) => offset + i + 1,
+      );
+      expect(result.leaderboard.rows.map((row: { rank: number }) => row.rank)).toEqual(expected);
+    }
   });
 });

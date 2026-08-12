@@ -599,14 +599,15 @@ export async function listArchivedTournamentFacets(): Promise<ArchivedTournament
  * applies only to the finished list; running + scheduled are returned in full.
  * Returns null when the tournament is missing or belongs to another guild.
  */
-export async function getTournamentMatches(
-  id: number,
-  options: TournamentMatchOptions = {},
-): Promise<TournamentMatches | null> {
-  const requestedLimit = Number.isFinite(options.limit) ? Math.trunc(options.limit as number) : 50;
-  const requestedOffset = Number.isFinite(options.offset) ? Math.trunc(options.offset as number) : 0;
-  const limit = Math.min(200, Math.max(1, requestedLimit));
-  const offset = Math.min(100_000, Math.max(0, requestedOffset));
+/**
+ * Resolves a requested ID to the canonical public tournament, or null.
+ *
+ * This runs BEFORE any persistent cache: `unstable_cache` mints an entry per distinct
+ * argument tuple, so admitting a nonexistent ID afterwards means every anonymous miss has
+ * already created a cache namespace that a later `notFound()` cannot retract. Aliases resolve
+ * here too, so two URLs for the same tournament converge on one cache identity.
+ */
+async function admitPublicTournamentId(id: number): Promise<number | null> {
   const guildId = await resolveDefaultGuildId();
   if (!guildId) return null;
   const canonicalId = await _resolveCanonicalTournamentId(id);
@@ -618,6 +619,18 @@ export async function getTournamentMatches(
   ) {
     return null;
   }
+  return tournament.id;
+}
+
+/** Everything a public tournament read needs, before any visitor-selected shaping. */
+type TournamentSnapshot = Omit<TournamentMatches, "matches" | "finishedPage" | "bracketMatches"> & {
+  matches: { running: MatchRow[]; scheduled: MatchRow[]; postponed: MatchRow[]; cancelled: MatchRow[] };
+  finishedAll: MatchRow[];
+};
+
+async function buildTournamentSnapshot(canonicalId: number): Promise<TournamentSnapshot | null> {
+  const tournament = await getById(canonicalId);
+  if (!tournament) return null;
 
   const rows = await dedupedTournamentMatches(tournament);
   const [resolveProfile, rawStandings, health, rawOverview] = await Promise.all([
@@ -656,7 +669,6 @@ export async function getTournamentMatches(
   const cancelled = rows
     .filter((m) => m.status === "cancelled")
     .map((m) => withProfileReferences(publicMatch(m), resolveProfile));
-  const finished = finishedAll.slice(offset, offset + limit);
   const ewc = isEwcTournamentReference(tournament);
   const standingsHaveResults = rawStandings.some(
     (row) => /[1-9]/.test(String(row.points ?? "")) || /[1-9]/.test(String(row.extra ?? "")),
@@ -704,23 +716,74 @@ export async function getTournamentMatches(
       final_standings_section: finalStandingsSection,
       syncHealth: syncHealthForTournament(tournament, health, rawRunning.length > 0),
     },
-    matches: { running, scheduled, finished, postponed, cancelled },
-    ...(options.includeBracket
-      ? { bracketMatches: [...running, ...scheduled, ...postponed, ...finishedAll, ...cancelled] }
-      : {}),
+    matches: { running, scheduled, postponed, cancelled },
+    finishedAll,
     // The workbook's own draw, which unlike a round label survives ingest with its feeder
     // edges intact. Read off the overview row already fetched above, so no extra query.
     ...(drawnBracket ? { draw: drawnBracket } : {}),
     standings,
     overview: publicTournamentOverview(rawOverview),
     totals,
+    total: totals.all,
+  };
+}
+
+/**
+ * Applies the visitor's page and bracket request to an already-cached snapshot.
+ *
+ * Pagination and options are deliberately NOT cache arguments: they are unbounded per
+ * request and would mint a near-duplicate persistent payload each time, while the snapshot
+ * they slice is identical.
+ */
+function shapeTournamentMatches(
+  snapshot: TournamentSnapshot,
+  options: TournamentMatchOptions = {},
+): TournamentMatches {
+  const requestedLimit = Number.isFinite(options.limit) ? Math.trunc(options.limit as number) : 50;
+  const requestedOffset = Number.isFinite(options.offset) ? Math.trunc(options.offset as number) : 0;
+  const limit = Math.min(200, Math.max(1, requestedLimit));
+  const offset = Math.min(100_000, Math.max(0, requestedOffset));
+  const { finishedAll, matches, ...rest } = snapshot;
+  const finished = finishedAll.slice(offset, offset + limit);
+  const everyMatch = [
+    ...matches.running,
+    ...matches.scheduled,
+    ...matches.postponed,
+    ...finishedAll,
+    ...matches.cancelled,
+  ];
+
+  return {
+    ...rest,
+    matches: {
+      running: matches.running,
+      scheduled: matches.scheduled,
+      finished,
+      postponed: matches.postponed,
+      cancelled: matches.cancelled,
+    },
+    ...(options.includeBracket ? { bracketMatches: everyMatch } : {}),
     finishedPage: {
       offset,
       limit,
       hasMore: offset + finished.length < finishedAll.length,
     },
-    total: totals.all,
   };
+}
+
+/**
+ * Matches for one tournament grouped by status. Pagination (limit/offset)
+ * applies only to the finished list; running + scheduled are returned in full.
+ * Returns null when the tournament is missing or belongs to another guild.
+ */
+export async function getTournamentMatches(
+  id: number,
+  options: TournamentMatchOptions = {},
+): Promise<TournamentMatches | null> {
+  const canonicalId = await admitPublicTournamentId(id);
+  if (canonicalId == null) return null;
+  const snapshot = await buildTournamentSnapshot(canonicalId);
+  return snapshot ? shapeTournamentMatches(snapshot, options) : null;
 }
 
 // ---------------------------------------------------------------------------
@@ -736,8 +799,21 @@ export const listTournamentSummariesCached = unstable_cache(
   { tags: ["cms-tournaments"], revalidate: 60 },
 );
 
-export const getTournamentMatchesCached = unstable_cache(
-  async (id: number, opts?: TournamentMatchOptions) => getTournamentMatches(id, opts),
-  ["tournament-matches"],
+// PRIVATE. Keyed by canonical tournament ID alone — a closed, existing-object namespace.
+// Options and pagination are applied to the returned snapshot instead of being folded into
+// the key, so alias URLs and every result page share one entry.
+const cachedTournamentSnapshot = unstable_cache(
+  async (canonicalId: number) => buildTournamentSnapshot(canonicalId),
+  ["tournament-snapshot"],
   { tags: ["cms-tournaments"], revalidate: 10 },
 );
+
+export async function getTournamentMatchesCached(
+  id: number,
+  opts?: TournamentMatchOptions,
+): Promise<TournamentMatches | null> {
+  const canonicalId = await admitPublicTournamentId(id);
+  if (canonicalId == null) return null;
+  const snapshot = await cachedTournamentSnapshot(canonicalId);
+  return snapshot ? shapeTournamentMatches(snapshot, opts) : null;
+}

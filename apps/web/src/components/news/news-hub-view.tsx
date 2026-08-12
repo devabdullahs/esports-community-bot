@@ -24,7 +24,7 @@ import { Separator } from "@/components/ui/separator";
 import { gameTitleForSlug, listGamesCached } from "@/lib/games";
 import { copy, localizedPath, type Locale } from "@/lib/i18n";
 import {
-  listLatestPublishedNewsPostsCached,
+  listLatestPublishedNewsPosts_uncachedPage,
   type NewsPost,
 } from "@/lib/news";
 import { newsPublicPath } from "@/lib/news-url";
@@ -138,7 +138,7 @@ export async function NewsHubView({
   const pageSize = ewcOnly ? EWC_PAGE_SIZE : PAGE_SIZE;
   const current = Math.max(1, page);
   const offset = (current - 1) * pageSize;
-  const fetched = await listLatestPublishedNewsPostsCached(
+  const fetched = await listLatestPublishedNewsPosts_uncachedPage(
     locale,
     pageSize + 1,
     ewcOnly,

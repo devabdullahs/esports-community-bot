@@ -24,7 +24,7 @@ import {
   getLeaderboardPageRequest,
 } from "@/lib/leaderboard-page-model";
 import { getRequestLocale } from "@/lib/request-locale";
-import { getPublicEwcLeaderboardCached, isKnownEwcLeaderboardNamespace } from "@/lib/public-ewc-leaderboard";
+import { readPublicEwcLeaderboard } from "@/lib/public-ewc-leaderboard";
 import { buildPageMetadata } from "@/lib/metadata";
 import { hasNonTrackingQuery, paginatedPath, parsePublicPage } from "@/lib/seo-query";
 
@@ -70,13 +70,14 @@ export default async function LeaderboardPage({
   const text = copy[locale];
 
   const initialRequest = getLeaderboardPageRequest(requestedPage);
-  if (!(await isKnownEwcLeaderboardNamespace(guildId, season))) notFound();
-  let leaderboard = await getPublicEwcLeaderboardCached({
+  const admitted = await readPublicEwcLeaderboard({
     guildId,
     season,
     limit: initialRequest.limit,
     offset: initialRequest.offset,
   });
+  if (admitted.status === "unknown-namespace") notFound();
+  let leaderboard = admitted.leaderboard;
   let pageModel = getLeaderboardPageModel({
     requestedPage,
     total: leaderboard.total,
@@ -85,12 +86,16 @@ export default async function LeaderboardPage({
 
   // Once the total is known, only an over-range URL needs a corrected fetch.
   if (pageModel.offset !== initialRequest.offset) {
-    leaderboard = await getPublicEwcLeaderboardCached({
+    // The corrected fetch repeats the cheap indexed admission query. A namespace that
+    // vanishes between the two reads is treated as absent rather than served uncorrected.
+    const corrected = await readPublicEwcLeaderboard({
       guildId,
       season,
       limit: pageModel.limit,
       offset: pageModel.offset,
     });
+    if (corrected.status === "unknown-namespace") notFound();
+    leaderboard = corrected.leaderboard;
     pageModel = getLeaderboardPageModel({
       requestedPage,
       total: leaderboard.total,

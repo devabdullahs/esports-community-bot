@@ -28,7 +28,7 @@ import { PartnerPlacement } from "@/components/partners/partner-placement";
 import { LiveCoStreamsStrip } from "@/components/streams/live-co-streams-strip";
 import { localizeText } from "@/lib/community-content";
 import { gameTitleForSlug, listGamesCached } from "@/lib/games";
-import { listLatestPublishedNewsPostsCached, type NewsPost } from "@/lib/news";
+import { listHomepageNewsPostsCached, type NewsPost } from "@/lib/news";
 import { newsPublicPath } from "@/lib/news-url";
 import { listTournamentSummariesCached, type TournamentSummary } from "@/lib/tournaments";
 import {
@@ -68,7 +68,7 @@ export default async function Home() {
 
   const [games, latestPosts, summaries, latestMvp] = await Promise.all([
     listGamesCached(),
-    listLatestPublishedNewsPostsCached(locale, 4),
+    listHomepageNewsPostsCached(locale, 4),
     listTournamentSummariesCached(),
     getLatestMvpResult(),
   ]);

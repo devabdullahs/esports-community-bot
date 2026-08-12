@@ -1,6 +1,6 @@
 import { SiteHeaderClient } from "@/components/site-header-client";
 import { getAdminAccess } from "@/lib/admin";
-import { countLiveCoStreams } from "@/lib/co-streams";
+import { countLiveCoStreams } from "@/lib/public-co-streams";
 import { getRequestLocale } from "@/lib/request-locale";
 
 export async function SiteHeader() {

@@ -91,11 +91,13 @@ export function reorderMediaChannels(slugs: string[]): Promise<MediaChannelRecor
 export const listMediaChannelsCached = unstable_cache(
   async () => listMediaChannels(),
   ["media-list"],
-  { tags: ["cms-media"] },
+  { tags: ["cms-media"], revalidate: 300 },
 );
 
-export const getMediaChannelCached = unstable_cache(
-  async (slug: string) => getMediaChannel(slug),
-  ["media-get"],
-  { tags: ["cms-media"] },
-);
+/** Admitted lookup over the fixed-key list; see `getGameCached` for why this is not a cache. */
+export async function getMediaChannelCached(slug: string): Promise<MediaChannelRecord | null> {
+  const wanted = String(slug ?? "").trim().toLowerCase();
+  if (!wanted) return null;
+  const channels = await listMediaChannelsCached();
+  return channels.find((channel) => channel.slug.toLowerCase() === wanted) ?? null;
+}

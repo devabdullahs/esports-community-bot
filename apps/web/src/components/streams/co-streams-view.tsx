@@ -44,7 +44,8 @@ import {
   selectedCoStreamIdAfterFiltering,
 } from "@/lib/co-stream-filtering";
 import { trackProductEvent } from "@/lib/product-analytics";
-import type { CoStream, CoStreamChannel, StreamPlatform } from "@/lib/stream-types";
+import type { StreamPlatform } from "@/lib/stream-types";
+import type { PublicCoStream as CoStream, PublicCoStreamChannel as CoStreamChannel } from "@/lib/public-co-stream-types";
 
 const PLATFORM_LABELS: Record<StreamPlatform, string> = {
   twitch: "Twitch",

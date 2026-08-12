@@ -1,7 +1,8 @@
 import Link from "next/link";
 import { ArrowRightIcon, EyeIcon, RadioIcon } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
-import { getAllCoStreamsCached, type CoStream } from "@/lib/co-streams";
+import { getAllPublicCoStreamsCached } from "@/lib/public-co-streams";
+import type { PublicCoStream as CoStream } from "@/lib/public-co-stream-types";
 import { copy, localizedPath, type Locale } from "@/lib/i18n";
 
 // Site-wide "live right now" surface: a compact strip shown on the homepage
@@ -12,7 +13,7 @@ export async function LiveCoStreamsStrip({ locale }: { locale: Locale }) {
   const text = copy[locale];
   let streams: CoStream[] = [];
   try {
-    streams = (await getAllCoStreamsCached()).filter((s) => s.isLive);
+    streams = (await getAllPublicCoStreamsCached()).filter((s) => s.isLive);
   } catch {
     return null; // a status hiccup must never break the homepage
   }

@@ -1,6 +1,6 @@
 import "server-only";
 
-import { getAllCoStreamsCached } from "@/lib/co-streams";
+import { getAllPublicCoStreamsCached } from "@/lib/public-co-streams";
 import { dashboardPublicUrl } from "@/lib/env";
 import { actionableRoundsForViewer } from "@/lib/ewc-profile-sync";
 import {
@@ -12,7 +12,7 @@ import {
   type NotificationRow,
   type PersonalizedMatchRow,
 } from "@/lib/follows";
-import type { CoStream } from "@/lib/stream-types";
+import type { PublicCoStream as CoStream } from "@/lib/public-co-stream-types";
 
 export type TodayMatch = PersonalizedMatchRow & { href: string };
 
@@ -71,7 +71,7 @@ export type TodayForYouLoaders = {
   unreadCount: typeof countUnread;
   follows: typeof listFollows;
   actionableRounds: typeof actionableRoundsForViewer;
-  coStreams: typeof getAllCoStreamsCached;
+  coStreams: typeof getAllPublicCoStreamsCached;
 };
 
 const defaultLoaders: TodayForYouLoaders = {
@@ -80,7 +80,7 @@ const defaultLoaders: TodayForYouLoaders = {
   unreadCount: countUnread,
   follows: listFollows,
   actionableRounds: actionableRoundsForViewer,
-  coStreams: getAllCoStreamsCached,
+  coStreams: getAllPublicCoStreamsCached,
 };
 
 function matchProjection(match: PersonalizedMatchRow): TodayMatch {
