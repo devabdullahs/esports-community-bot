@@ -9,13 +9,20 @@ const SLOW_REQUEST_MS = Number(process.env.WEB_SLOW_REQUEST_MS || 1_000);
  * the duration of anything past the threshold, and only that, so a healthy request costs one
  * subtraction and no output.
  */
-export async function timed<T>(label: string, run: () => Promise<T>): Promise<T> {
+export async function timed<T>(
+  label: string,
+  run: () => Promise<T>,
+  // Callers that split one request into phases need a lower bar than the
+  // whole-request default, or a request that is slow overall logs nothing
+  // because no single phase crossed it on its own.
+  thresholdMs: number = SLOW_REQUEST_MS,
+): Promise<T> {
   const startedAt = Date.now();
   try {
     return await run();
   } finally {
     const durationMs = Date.now() - startedAt;
-    if (durationMs >= SLOW_REQUEST_MS) {
+    if (durationMs >= thresholdMs) {
       console.warn(JSON.stringify({ event: "slow-request", label, durationMs }));
     }
   }

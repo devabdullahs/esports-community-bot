@@ -5,6 +5,7 @@ import { resolveMcpAccess } from "@/lib/mcp-auth";
 import { logMcpProtocolEra } from "@/lib/mcp-era-log";
 import { createAdminMcpServer } from "@/lib/mcp-tools";
 import { readBoundedJson } from "@/lib/request-body";
+import { timed } from "@/lib/request-timing";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -31,8 +32,17 @@ const mcpHandler = createMcpHandler((ctx) => createAdminMcpServer(accessFromCont
   legacy: "stateless",
 });
 
+// Same split as the public route: measured from outside, an MCP POST cannot be
+// attributed to admission (key verification plus the rate-limit write) or to
+// the MCP work itself.
+const MCP_PHASE_SLOW_MS = Number(process.env.EWC_MCP_SLOW_PHASE_MS || 400);
+
 export async function POST(request: Request) {
-  const resolved = await resolveMcpAccess(request);
+  const resolved = await timed(
+    "mcp.admin.admission",
+    () => resolveMcpAccess(request),
+    MCP_PHASE_SLOW_MS,
+  );
   if ("response" in resolved) return resolved.response;
 
   // One bounded read; the parsed value is handed to the handler so the body is
@@ -52,13 +62,18 @@ export async function POST(request: Request) {
   // be decided from traffic rather than assumed.
   await logMcpProtocolEra("admin", request, body.value);
 
-  return mcpHandler.fetch(request, {
-    parsedBody: body.value,
-    authInfo: {
-      token: String(resolved.access.key.id),
-      clientId: resolved.access.discordUserId,
-      scopes: [...resolved.access.tools],
-      extra: { access: resolved.access },
-    },
-  });
+  return timed(
+    "mcp.admin.dispatch",
+    () =>
+      mcpHandler.fetch(request, {
+        parsedBody: body.value,
+        authInfo: {
+          token: String(resolved.access.key.id),
+          clientId: resolved.access.discordUserId,
+          scopes: [...resolved.access.tools],
+          extra: { access: resolved.access },
+        },
+      }),
+    MCP_PHASE_SLOW_MS,
+  );
 }
