@@ -58,6 +58,27 @@ export { PUBLIC_MCP_TOOL_NAMES, PUBLIC_ONLY_MCP_TOOL_NAMES };
 
 const LocaleSchema = z.enum(["en", "ar"]).optional();
 
+// Declaring an outputSchema is a promise the SDK enforces: if structuredContent
+// fails to validate it throws ProtocolError(InvalidParams) and the call fails,
+// rather than warning. So a schema is only worth adding where the shape is
+// stable and every field is accounted for — this one mirrors publicGame()
+// exactly, and the existing per-tool call tests exercise it against real rows.
+const PublicGameSchema = z.object({
+  slug: z.string(),
+  webUrl: z.string(),
+  title: z.string(),
+  description: z.string(),
+  status: z.string(),
+  owner: z.string(),
+  focus: z.array(z.string()),
+  sortOrder: z.number(),
+});
+
+const ListGamesOutputSchema = z.object({
+  webUrl: z.string(),
+  games: z.array(PublicGameSchema),
+});
+
 function jsonResult(data: Record<string, unknown>): ToolResult {
   return {
     content: [{ type: "text", text: JSON.stringify(data, null, 2) }],
@@ -294,6 +315,7 @@ export function registerPublicMcpTools(
       title: "List Games",
       description: "List the localized public game directory.",
       inputSchema: z.object({ locale: LocaleSchema }),
+      outputSchema: ListGamesOutputSchema,
     },
     async ({ locale = "en" }) => {
       const games = (await listGamesCached()).map((game) => publicGame(game, locale));
