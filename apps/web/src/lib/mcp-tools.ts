@@ -16,7 +16,11 @@ import {
   type McpAccess,
 } from "@/lib/mcp-auth";
 import { canonicalRequestDigest, runIdempotentMcpWrite } from "@/lib/mcp-write";
-import { ADMIN_PUBLIC_OVERLAP_TOOL_NAMES, MCP_TOOL_MANIFEST } from "@/lib/mcp-tool-manifest";
+import {
+  ADMIN_PUBLIC_OVERLAP_TOOL_NAMES,
+  MCP_TOOL_MANIFEST,
+  mcpToolAnnotations,
+} from "@/lib/mcp-tool-manifest";
 import { createNewsPostInTx, getNewsPost, listAdminNewsPosts } from "@/lib/news";
 import { getMediaChannel, listMediaChannels, type MediaChannelRecord } from "@/lib/media";
 import {
@@ -163,6 +167,7 @@ export function createAdminMcpServer(access: McpAccess) {
   server.registerTool(
     "get_admin_capabilities",
     {
+      annotations: mcpToolAnnotations("get_admin_capabilities"),
       title: "Get Admin Capabilities",
       description: "Discover this MCP key's usable tools, allowed game/media slugs, and writable stream channel IDs.",
       inputSchema: z.object({
@@ -206,6 +211,7 @@ export function createAdminMcpServer(access: McpAccess) {
   server.registerTool(
     "get_site_overview",
     {
+      annotations: mcpToolAnnotations("get_site_overview"),
       title: "Get Site Overview",
       description: "Summarize current dashboard/bot state for admins.",
     },
@@ -251,6 +257,7 @@ export function createAdminMcpServer(access: McpAccess) {
   server.registerTool(
     "search_news",
     {
+      annotations: mcpToolAnnotations("search_news"),
       title: "Search News",
       description: "Search admin-visible news posts for the MCP key owner.",
       inputSchema: z.object({
@@ -304,6 +311,7 @@ export function createAdminMcpServer(access: McpAccess) {
   server.registerTool(
     "get_tournament_status",
     {
+      annotations: mcpToolAnnotations("get_tournament_status"),
       title: "Get Tournament Status",
       description: "Return matches and standings for one tracked tournament.",
       inputSchema: z.object({
@@ -340,6 +348,7 @@ export function createAdminMcpServer(access: McpAccess) {
   server.registerTool(
     "get_ewc_club_summary",
     {
+      annotations: mcpToolAnnotations("get_ewc_club_summary"),
       title: "Get EWC Club Summary",
       description: "Return EWC club points, qualified games, wins, and region metadata.",
       inputSchema: z.object({
@@ -399,6 +408,7 @@ export function createAdminMcpServer(access: McpAccess) {
   server.registerTool(
     "list_admin_queue",
     {
+      annotations: mcpToolAnnotations("list_admin_queue"),
       title: "List Admin Queue",
       description: "List comments currently needing moderation attention.",
       inputSchema: z.object({
@@ -425,6 +435,7 @@ export function createAdminMcpServer(access: McpAccess) {
   server.registerTool(
     "create_news_draft",
     {
+      annotations: mcpToolAnnotations("create_news_draft"),
       title: "Create News Draft",
       description: "Create a draft news post in an allowed game or media channel. Requires idempotencyKey for safe retries. Call get_admin_capabilities for valid slugs.",
       inputSchema: z.object({
@@ -525,6 +536,7 @@ export function createAdminMcpServer(access: McpAccess) {
   server.registerTool(
     "update_stream_channel",
     {
+      annotations: mcpToolAnnotations("update_stream_channel"),
       title: "Update Stream Channel",
       description: "Update a stream channel. Requires idempotencyKey for safe retries. Call get_admin_capabilities for valid channel IDs. Non-super keys may only update game-scoped channels they manage.",
       inputSchema: z.object({

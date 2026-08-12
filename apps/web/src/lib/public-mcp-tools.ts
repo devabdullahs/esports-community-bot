@@ -42,6 +42,7 @@ import {
   type TournamentSummary,
 } from "@/lib/tournaments";
 import {
+  mcpToolAnnotations,
   PUBLIC_MCP_TOOL_NAMES,
   PUBLIC_ONLY_MCP_TOOL_NAMES,
 } from "@/lib/mcp-tool-manifest";
@@ -261,6 +262,7 @@ export function registerPublicMcpTools(
   if (!excluded.has("get_site_overview")) server.registerTool(
     "get_site_overview",
     {
+      annotations: mcpToolAnnotations("get_site_overview"),
       title: "Get Public Site Overview",
       description: "Return public counts for games, tournaments, matches, news, and co-streams.",
     },
@@ -288,6 +290,7 @@ export function registerPublicMcpTools(
   if (!excluded.has("list_games")) server.registerTool(
     "list_games",
     {
+      annotations: mcpToolAnnotations("list_games"),
       title: "List Games",
       description: "List the localized public game directory.",
       inputSchema: z.object({ locale: LocaleSchema }),
@@ -301,6 +304,7 @@ export function registerPublicMcpTools(
   if (!excluded.has("search_news")) server.registerTool(
     "search_news",
     {
+      annotations: mcpToolAnnotations("search_news"),
       title: "Search Published News",
       description: "Search published public news only. Drafts are never returned.",
       inputSchema: z.object({
@@ -349,6 +353,7 @@ export function registerPublicMcpTools(
   if (!excluded.has("get_tournament_status")) server.registerTool(
     "get_tournament_status",
     {
+      annotations: mcpToolAnnotations("get_tournament_status"),
       title: "Get Tournament Status",
       description: "Return the public tournament matches and standings projection.",
       inputSchema: z.object({
@@ -370,6 +375,7 @@ export function registerPublicMcpTools(
   if (!excluded.has("list_tournaments")) server.registerTool(
     "list_tournaments",
     {
+      annotations: mcpToolAnnotations("list_tournaments"),
       title: "List Tournaments",
       description: "List public active tournament summaries.",
       inputSchema: z.object({
@@ -409,8 +415,12 @@ export function registerPublicMcpTools(
   if (!excluded.has("get_ewc_club_summary")) server.registerTool(
     "get_ewc_club_summary",
     {
+      annotations: mcpToolAnnotations("get_ewc_club_summary"),
       title: "Get EWC Club Summary",
-      description: "Return public EWC club points, qualified games, wins, and region metadata.",
+      description:
+        "Per-club Esports World Cup profile: a club's points, which games it has qualified " +
+        "in, its wins, region and support-programme status. Searchable by club name. Use this " +
+        "to answer questions ABOUT a club; use get_ewc_club_standings for the ranked table.",
       inputSchema: z.object({
         query: z.string().max(120).optional(),
         region: z.enum(CLUB_REGION_IDS).optional(),
@@ -446,8 +456,14 @@ export function registerPublicMcpTools(
   if (!excluded.has("get_ewc_club_standings")) server.registerTool(
     "get_ewc_club_standings",
     {
+      annotations: mcpToolAnnotations("get_ewc_club_standings"),
       title: "Get EWC Club Championship Standings",
-      description: "Return official rank-ordered EWC Club Championship standings from stored data.",
+      description:
+        "Official Esports World Cup Club Championship standings: the rank-ordered table of " +
+        "CLUBS (esports organisations such as Team Falcons) by championship points across the " +
+        "whole event. This is the official competition result. It is NOT the community's " +
+        "prediction game — for how community members score in that, use " +
+        "get_public_ewc_leaderboard instead.",
       inputSchema: z.object({
         query: z.string().max(120).optional(),
         region: z.enum(CLUB_REGION_IDS).optional(),
@@ -481,6 +497,7 @@ export function registerPublicMcpTools(
   if (!excluded.has("list_co_streams")) server.registerTool(
     "list_co_streams",
     {
+      annotations: mcpToolAnnotations("list_co_streams"),
       title: "List Co-streams",
       description: "List public co-stream groups, live-first.",
       inputSchema: z.object({
@@ -503,6 +520,7 @@ export function registerPublicMcpTools(
   if (!excluded.has("search_teams")) server.registerTool(
     "search_teams",
     {
+      annotations: mcpToolAnnotations("search_teams"),
       title: "Search Teams",
       description: "Search the public team directory with safe public fields.",
       inputSchema: z.object({
@@ -533,6 +551,7 @@ export function registerPublicMcpTools(
   if (!excluded.has("search_players")) server.registerTool(
     "search_players",
     {
+      annotations: mcpToolAnnotations("search_players"),
       title: "Search Players",
       description: "Search the public player directory with safe public fields.",
       inputSchema: z.object({
@@ -563,8 +582,13 @@ export function registerPublicMcpTools(
   if (!excluded.has("get_public_ewc_leaderboard")) server.registerTool(
     "get_public_ewc_leaderboard",
     {
+      annotations: mcpToolAnnotations("get_public_ewc_leaderboard"),
       title: "Get Public EWC Leaderboard",
-      description: "Return the existing public EWC leaderboard projection.",
+      description:
+        "Community prediction leaderboard: how well individual Discord MEMBERS scored " +
+        "predicting Esports World Cup match results. Ranks people, not teams. This is a " +
+        "community game and has no bearing on the official competition — for the official " +
+        "club standings, use get_ewc_club_standings instead.",
       inputSchema: z.object({
         guildId: z.string().optional(),
         season: z.string().optional(),

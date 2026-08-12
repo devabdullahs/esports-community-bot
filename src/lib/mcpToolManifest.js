@@ -172,6 +172,8 @@ export const MCP_TOOL_MANIFEST = Object.freeze([
     name: 'create_news_draft',
     surfaces: ['admin'],
     kind: 'write',
+    // Additive: it adds a row and overwrites nothing.
+    destructive: false,
     adminGrant: 'selectable',
     scope: 'game-or-media',
     title: { en: 'Create news draft', ar: 'إنشاء مسودة خبر' },
@@ -184,6 +186,9 @@ export const MCP_TOOL_MANIFEST = Object.freeze([
     name: 'update_stream_channel',
     surfaces: ['admin'],
     kind: 'write',
+    // Replaces fields on an existing row, so a repeat with different values
+    // overwrites what was there. Not additive.
+    destructive: true,
     adminGrant: 'selectable',
     scope: 'stream-game',
     title: { en: 'Update stream channel', ar: 'تحديث قناة بث' },
