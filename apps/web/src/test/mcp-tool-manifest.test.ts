@@ -131,6 +131,53 @@ describe("MCP tool manifest", () => {
     expect([...publicNames].sort()).toEqual([...PUBLIC_MCP_TOOL_NAMES].sort());
   });
 
+  // Annotations decide whether an agent host asks a human before calling. A hint
+  // that disagrees with what the tool does is worse than no hint at all, so this
+  // checks the wire, not the helper.
+  test("every advertised tool carries annotations that match the manifest", async () => {
+    const { createMcpKey } = await import("@bot/db/mcpKeys.js");
+    const key = await createMcpKey({ ownerDiscordId: SUPER_ID, tools: ADMIN_SELECTABLE_MCP_TOOL_NAMES.slice() });
+    const [adminResponse, publicResponse] = await Promise.all([
+      mcpPOST(mcpRequest(key.secret, toolsList)),
+      publicMcpPOST(publicMcpRequest(toolsList)),
+    ]);
+
+    const admin = await parseMcpResponse(adminResponse);
+    const publicBody = await parseMcpResponse(publicResponse);
+    const advertised = [...admin.result.tools, ...publicBody.result.tools];
+    expect(advertised.length).toBeGreaterThan(0);
+
+    for (const tool of advertised) {
+      const entry = MCP_TOOL_MANIFEST.find((candidate) => candidate.name === tool.name);
+      expect(entry, `${tool.name} is advertised but absent from the manifest`).toBeTruthy();
+      expect(tool.annotations, `${tool.name} is missing annotations`).toBeTruthy();
+
+      const readOnly = entry!.kind === "read";
+      expect(tool.annotations.readOnlyHint, `${tool.name} readOnlyHint`).toBe(readOnly);
+      // A read that claimed to be destructive would push a host into prompting
+      // for every lookup; a write that claimed otherwise is the dangerous one.
+      expect(tool.annotations.destructiveHint, `${tool.name} destructiveHint`).toBe(
+        readOnly ? false : entry!.destructive !== false,
+      );
+      expect(tool.annotations.openWorldHint, `${tool.name} openWorldHint`).toBe(false);
+    }
+  });
+
+  test("no write tool is ever advertised as read-only", async () => {
+    const { createMcpKey } = await import("@bot/db/mcpKeys.js");
+    const key = await createMcpKey({ ownerDiscordId: SUPER_ID, tools: MCP_WRITE_TOOL_NAMES.slice() });
+    const response = await mcpPOST(mcpRequest(key.secret, toolsList));
+    const body = await parseMcpResponse(response);
+
+    const writes = body.result.tools.filter((tool: { name: string }) =>
+      MCP_WRITE_TOOL_NAMES.includes(tool.name),
+    );
+    expect(writes.length).toBe(MCP_WRITE_TOOL_NAMES.length);
+    for (const tool of writes) {
+      expect(tool.annotations.readOnlyHint, `${tool.name} must not claim to be read-only`).toBe(false);
+    }
+  });
+
   test("returns only selectable grants from the key admin API", async () => {
     const response = await keysGET();
 
