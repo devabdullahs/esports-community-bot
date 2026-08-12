@@ -739,6 +739,16 @@ test('least-recently-enriched game wins the budget over a freshly-enriched one',
   const parseCalls = [];
   // Try both extreme shuffle outcomes: ordering must not depend on them.
   for (const randomValue of [0, 0.99]) {
+    // Re-stamp before each run. A run PARSES both teams, which writes
+    // liquipedia_parsed_at = now to each — and nowText() has second precision,
+    // so on a fast machine both land in the same second and the second
+    // iteration starts from an exact tie rather than the stale/fresh split this
+    // test is about. The shuffle then decides it, and random=0.99 reverses it.
+    // Without this the test passes only when the two writes straddle a second
+    // boundary.
+    await runDb("UPDATE teams SET liquipedia_parsed_at = '2026-01-01 00:00:00' WHERE id = $1", [staleTeam.id]);
+    await runDb("UPDATE teams SET liquipedia_parsed_at = '2026-06-01 00:00:00' WHERE id = $1", [freshTeam.id]);
+
     parseCalls.length = 0;
     await runLiquipediaEnrichment({
       liquipedia: mockLiquipedia({ parseCalls, supportedGames: ['lrustale', 'lrufresh'] }),
