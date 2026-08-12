@@ -1,5 +1,6 @@
 import { createMcpHandler } from "@modelcontextprotocol/server";
 import { NextResponse } from "next/server";
+import { logMcpProtocolEra } from "@/lib/mcp-era-log";
 import { resolvePublicMcpAccess } from "@/lib/public-mcp-auth";
 import { createPublicMcpServer } from "@/lib/public-mcp-tools";
 import { readBoundedJson } from "@/lib/request-body";
@@ -36,6 +37,10 @@ export async function POST(request: Request) {
   if (Array.isArray(body.value)) {
     return NextResponse.json({ error: "MCP JSON-RPC batching is not supported." }, { status: 400 });
   }
+
+  // Records which era answered, so the dated removal of the 2025 handshake can
+  // be decided from traffic rather than assumed.
+  await logMcpProtocolEra("public", request, body.value);
 
   return mcpHandler.fetch(request, { parsedBody: body.value });
 }
