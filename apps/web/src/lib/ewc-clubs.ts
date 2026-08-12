@@ -18,7 +18,6 @@ import { gameTitleForSlug, listGames } from "@/lib/games";
 
 export const DEFAULT_EWC_CLUB_SEASON = String(new Date().getUTCFullYear());
 export const EWC_CLUB_SNAPSHOT_STALE_AFTER_MS = 6 * 60 * 60 * 1000;
-const LIVE_FALLBACK_TIMEOUT_MS = 8_000;
 
 function clubsSourceUrl(season: string) {
   return `https://liquipedia.net/esports/Esports_World_Cup/${season}/Clubs`;
@@ -129,18 +128,6 @@ export type EwcClubTracker = {
     pointsLeader: { name: string; points: number; rank: number | null } | null;
   };
 };
-
-type FetchEwcClubStandings = (year?: number) => Promise<{
-  sourceUrl?: string;
-  standings?: RawStanding[];
-}>;
-
-async function liquipediaFetchers() {
-  const mod = (await import("@bot/services/liquipedia.js")) as {
-    fetchEwcClubStandings: FetchEwcClubStandings;
-  };
-  return mod;
-}
 
 function parseFacts(value: string | null | undefined): Record<string, unknown> | null {
   if (!value) return null;
@@ -679,38 +666,23 @@ function sourceForRegion(name: string, profile: (TeamProfileRow & { facts: Recor
   return "unknown" as const;
 }
 
-async function getEwcClubTrackerFromLiveFallback(season: string) {
-  const { fetchEwcClubStandings } = await liquipediaFetchers();
-  const payload = await fetchEwcClubStandings(Number(season));
-  const standings = (payload.standings ?? []).filter((row) => stringValue(row.team));
-  if (!standings.length) throw new Error("Live Club Championship standings were empty.");
-  return buildEwcClubTracker({
-    season,
-    standings,
-    directoryClubs: [],
-    standingsSource: payload.sourceUrl ?? standingsSourceUrl(season),
-    updatedAt: new Date().toISOString(),
-    dataSource: "liquipedia-fallback",
-    stale: false,
-    warning: "No stored snapshot is available yet; showing a timeout-bounded live fallback.",
-  });
-}
-
+// The dashboard does not talk to Liquipedia. It used to: with no stored
+// snapshot this read fell back to a live fetch, and because the surrounding
+// cache revalidates every 60s that turned a missing snapshot into a parse
+// attempt every minute — from the web process, whose request pacing is a
+// separate clock from the bot's.
+//
+// Liquipedia's limits are global to us, not per process, and the penalty for
+// crossing them is a ban rather than a retry. One process owns the wire: the
+// bot, whose Club Championship job refreshes every 15 minutes and writes the
+// snapshot this reads. A missing snapshot is now reported as missing and waits
+// for that job, which is both honest and one fewer way to get blocked.
 export const getEwcClubTrackerCached = unstable_cache(
   async (): Promise<EwcClubTracker> => {
     const stored = await getEwcClubTrackerFromDatabase();
     if (stored.dataSource === "stored-snapshot") return stored;
-    try {
-      return await timeout(
-        getEwcClubTrackerFromLiveFallback(stored.season),
-        LIVE_FALLBACK_TIMEOUT_MS,
-        "Timed out while waiting for the Club Championship fallback.",
-      );
-    } catch (error) {
-      const detail = error instanceof Error ? error.message : String(error);
-      stored.warning = `${stored.warning ?? ""} ${detail}`.trim();
-      return stored;
-    }
+    stored.warning = `${stored.warning ?? ""} No stored Club Championship snapshot is available yet; the next scheduled refresh will populate it.`.trim();
+    return stored;
   },
   ["ewc-club-tracker-stored-v2"],
   { revalidate: 60 },
