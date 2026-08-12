@@ -22,7 +22,8 @@ import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { MAX_MULTI_STREAMS, multiviewGridClass, multiviewTileClass } from "@/lib/co-stream-multiview";
 import { cn } from "@/lib/utils";
-import type { CoStream, StreamPlatform } from "@/lib/stream-types";
+import type { StreamPlatform } from "@/lib/stream-types";
+import type { PublicCoStream as CoStream } from "@/lib/public-co-stream-types";
 
 const PLATFORM_LABELS: Record<StreamPlatform, string> = {
   twitch: "Twitch",

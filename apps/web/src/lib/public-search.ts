@@ -3,7 +3,7 @@ import "server-only";
 import { listPlayersDirectory, listTeamsDirectory } from "@/lib/entity-directory";
 import { listGamesCached, type GameRecord } from "@/lib/games";
 import { localizedPath, type Locale } from "@/lib/i18n";
-import { searchPublishedNewsPostsCached, type NewsPost } from "@/lib/news";
+import { searchPublishedNewsPostsUncached, type NewsPost } from "@/lib/news";
 import {
   publicDirectoryPlayer,
   publicDirectoryTeam,
@@ -138,7 +138,7 @@ export async function getPublicSearchResults(
     listTournamentSummariesCached(),
     listTeamsDirectory({ q: query.value, limit: 100, offset: 0 }),
     listPlayersDirectory({ q: query.value, limit: 100, offset: 0 }),
-    searchPublishedNewsPostsCached(query.value, locale, "", "", false, 24, 0),
+    searchPublishedNewsPostsUncached(query.value, locale, "", "", false, 24, 0),
   ]);
 
   const gameResults = rankResults(

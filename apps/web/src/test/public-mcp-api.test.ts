@@ -132,6 +132,18 @@ beforeAll(async () => {
     at: Math.floor(Date.now() / 1000),
   });
 
+  // The leaderboard tool now admits the guild/season namespace before reading, so this
+  // fixture has to actually own one. It previously passed only because the tool reached the
+  // cache without admission — the bypass this change closes.
+  const { upsertEwcWeek } = await import("@bot/db/ewcPredictions.js");
+  await upsertEwcWeek({
+    guildId: DEFAULT_GUILD,
+    season: "2026",
+    weekKey: "week-1",
+    label: "Week 1",
+    createdBy: "web-test",
+  });
+
   ({ POST: publicMcpPOST } = await import("@/app/api/public-mcp/route"));
 });
 
@@ -285,6 +297,27 @@ describe("/api/public-mcp access", () => {
 });
 
 describe("/api/public-mcp tools", () => {
+  test("get_public_ewc_leaderboard rejects a format-valid unknown namespace", async () => {
+    // The bypass: this tool called the cached loader directly, so any well-formed
+    // guild/season pair was accepted and became its own persistent cache namespace. It must
+    // now be an error, not a successful empty leaderboard for a guild that never existed.
+    const response = await publicMcpPOST(
+      publicMcpRequest(
+        toolCall("get_public_ewc_leaderboard", {
+          guildId: "910000000000000777",
+          season: "2077",
+          limit: 5,
+        }),
+        { ip: "203.0.113.201" },
+      ),
+    );
+
+    expect(response.status).toBe(200);
+    const body = await parseMcpResponse(response);
+    expect(body.result.isError).toBe(true);
+    expect(JSON.stringify(body.result)).not.toContain("\"rows\"");
+  });
+
   test.each([
     ["get_site_overview", () => ({})],
     ["list_games", () => ({ locale: "en" })],

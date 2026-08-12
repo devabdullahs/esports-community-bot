@@ -109,14 +109,24 @@ export function gameTitleForSlug(
 // drafts / edits instantly without waiting for tag invalidation.
 // ---------------------------------------------------------------------------
 
+// Fixed key, so the namespace is exactly one entry. Tag invalidation still busts it on an
+// admin write; the finite window bounds how long a stale list can persist if a tag is missed.
 export const listGamesCached = unstable_cache(
   async () => listGames(),
   ["games-list"],
-  { tags: ["cms-games"] },
+  { tags: ["cms-games"], revalidate: 300 },
 );
 
-export const getGameCached = unstable_cache(
-  async (slug: string) => getGame(slug),
-  ["games-get"],
-  { tags: ["cms-games"] },
-);
+/**
+ * Admitted lookup over the fixed-key list — NOT a per-slug cache.
+ *
+ * A per-slug `unstable_cache` created one persistent entry per requested slug, so anonymous
+ * misses minted a namespace an attacker chose, and the `notFound()` that followed could not
+ * retract it. The list already contains the complete records, so a miss now costs nothing.
+ */
+export async function getGameCached(slug: string): Promise<GameRecord | null> {
+  const wanted = String(slug ?? "").trim().toLowerCase();
+  if (!wanted) return null;
+  const games = await listGamesCached();
+  return games.find((game) => game.slug.toLowerCase() === wanted) ?? null;
+}

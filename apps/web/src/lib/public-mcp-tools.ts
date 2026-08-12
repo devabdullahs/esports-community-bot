@@ -3,7 +3,8 @@ import "server-only";
 import { all } from "@bot/db/client.js";
 import { McpServer } from "@modelcontextprotocol/server";
 import { z } from "zod";
-import { getAllCoStreamsCached, type CoStream } from "@/lib/co-streams";
+import { getAllPublicCoStreamsCached } from "@/lib/public-co-streams";
+import type { PublicCoStream } from "@/lib/public-co-stream-types";
 import {
   publicDirectoryPlayer,
   publicDirectoryTeam,
@@ -28,12 +29,12 @@ import { currentSeason } from "@/lib/env";
 import { listGamesCached, type GameRecord } from "@/lib/games";
 import type { Locale } from "@/lib/i18n";
 import {
-  searchPublishedNewsPostsCached,
+  searchPublishedNewsPostsUncached,
   type NewsPost,
 } from "@/lib/news";
 import { absoluteUrl } from "@/lib/metadata";
 import type { PlayerProfile, TeamProfile } from "@/lib/pandascore-profiles";
-import { getPublicEwcLeaderboardCached } from "@/lib/public-ewc-leaderboard";
+import { readPublicEwcLeaderboard } from "@/lib/public-ewc-leaderboard";
 import { resolveDefaultGuildId } from "@/lib/guild";
 import {
   getTournamentMatchesCached,
@@ -200,44 +201,10 @@ function publicClub(club: EwcClubTrackerClub) {
   };
 }
 
-function publicCoStream(stream: CoStream) {
-  return {
-    id: stream.id,
-    webUrl: absoluteUrl("/co-streams"),
-    label: stream.label,
-    creatorKey: stream.creatorKey,
-    gameSlugs: stream.gameSlugs,
-    language: stream.language,
-    isLive: stream.isLive,
-    liveTitle: stream.liveTitle,
-    liveGame: stream.liveGame,
-    viewerCount: stream.viewerCount,
-    startedAt: stream.startedAt,
-    embedChannel: stream.embedChannel
-      ? {
-          platform: stream.embedChannel.platform,
-          handle: stream.embedChannel.handle,
-          url: stream.embedChannel.url,
-          videoId: stream.embedChannel.videoId,
-        }
-      : null,
-    channels: stream.channels.map((channel) => ({
-      platform: channel.platform,
-      handle: channel.handle,
-      label: channel.label,
-      scope: channel.scope,
-      gameSlugs: channel.gameSlugs,
-      language: channel.language,
-      isDefault: channel.isDefault,
-      isLive: channel.isLive,
-      liveTitle: channel.liveTitle,
-      liveGame: channel.liveGame,
-      viewerCount: channel.viewerCount,
-      startedAt: channel.startedAt,
-      url: channel.url,
-      videoId: channel.videoId,
-    })),
-  };
+// One allowlist, not two. This used to be a second hand-maintained projection of the same
+// record; the copies drift, and only one of them gets updated when a field is added.
+function publicCoStream(stream: PublicCoStream) {
+  return { ...stream, webUrl: absoluteUrl("/co-streams") };
 }
 
 function tournamentStatus(summary: TournamentSummary) {
@@ -301,7 +268,7 @@ export function registerPublicMcpTools(
       const [games, tournaments, streams, newsCount] = await Promise.all([
         listGamesCached(),
         listTournamentSummariesCached(),
-        getAllCoStreamsCached(),
+        getAllPublicCoStreamsCached(),
         publishedNewsCount(),
       ]);
 
@@ -359,7 +326,7 @@ export function registerPublicMcpTools(
       const cleanMedia = String(mediaSlug || "").trim().toLowerCase().slice(0, 80);
       const fetchLimit = clampInt(limit, 1, 25, 10);
       const safeOffset = clampInt(offset, 0, 100_000, 0);
-      const rows = await searchPublishedNewsPostsCached(
+      const rows = await searchPublishedNewsPostsUncached(
         query.trim(),
         locale,
         cleanGame,
@@ -524,7 +491,7 @@ export function registerPublicMcpTools(
     },
     async ({ liveOnly = false, gameSlug = "", limit = 50 }) => {
       const cleanGame = cleanGameSlug(gameSlug);
-      const streams = (await getAllCoStreamsCached())
+      const streams = (await getAllPublicCoStreamsCached())
         .filter((stream) => !liveOnly || stream.isLive)
         .filter((stream) => !cleanGame || stream.gameSlugs.includes(cleanGame))
         .slice(0, clampInt(limit, 1, 100, 50))
@@ -612,14 +579,21 @@ export function registerPublicMcpTools(
       }
       if (!isSeason(season)) return errorResult("Season must be a four-digit year.");
 
-      const leaderboard = await getPublicEwcLeaderboardCached({
+      // Admission is inside this operation, so an anonymous tool call can no longer mint a
+      // persistent cache entry for a format-valid namespace that does not exist. An unknown
+      // namespace is an error rather than a successful empty board: reporting "no rows" for
+      // a guild that was never configured is both misleading and the bypass itself.
+      const result = await readPublicEwcLeaderboard({
         guildId: resolvedGuildId,
         season,
         limit,
         offset,
       });
+      if (result.status === "unknown-namespace") {
+        return errorResult("No public leaderboard exists for that guild and season.");
+      }
       return jsonResult({
-        ...(leaderboard as unknown as Record<string, unknown>),
+        ...(result.leaderboard as unknown as Record<string, unknown>),
         webUrl: absoluteUrl(`/leaderboard/${resolvedGuildId}/${season}`),
       });
     },

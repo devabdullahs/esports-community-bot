@@ -1,6 +1,5 @@
 import "server-only";
 
-import { unstable_cache } from "next/cache";
 import { listEwcStreamChannels, listStreamChannels } from "@bot/db/streamChannels.js";
 import { getStreamStatuses } from "@bot/db/streamChannelStatus.js";
 import { categoryToGameSlug, gameName } from "@bot/lib/games.js";
@@ -146,23 +145,7 @@ export async function getAllCoStreams(): Promise<CoStream[]> {
   return mergeWithStatus(await listAll({ activeOnly: true }));
 }
 
-// The /co-streams page and the /api/co-streams poll both read this. Live status is
-// written by the bot poller (~60s), so cache with a short time-based revalidate
-// (not a tag) — one DB read per 30s regardless of viewer/poll count.
-export const getEwcCoStreamsCached = unstable_cache(
-  async () => getEwcCoStreams(),
-  ["ewc-co-streams"],
-  { revalidate: 30 },
-);
-
-export const getAllCoStreamsCached = unstable_cache(
-  async () => getAllCoStreams(),
-  ["all-co-streams"],
-  { revalidate: 30 },
-);
-
-// Cheap header signal: how many co-stream groups are live right now.
-export async function countLiveCoStreams(): Promise<number> {
-  const streams = await getAllCoStreamsCached();
-  return streams.filter((s) => s.isLive).length;
-}
+// The cached READ path lives in `public-co-streams.ts`, which projects before storing the
+// cache value. There is deliberately no exported cached loader here: a raw group carries the
+// administrator ID and team/match linkage this module joins together, so anything a viewer
+// can reach must go through the public projector rather than remembering to strip fields.

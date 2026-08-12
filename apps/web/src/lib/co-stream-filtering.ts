@@ -1,4 +1,5 @@
-import type { CoStream, StreamPlatform } from "@/lib/stream-types";
+import type { StreamPlatform } from "@/lib/stream-types";
+import type { PublicCoStream as CoStream } from "@/lib/public-co-stream-types";
 
 export const ALL_CO_STREAM_FILTER = "all";
 

@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { headers } from "next/headers";
 import { CoStreamsView } from "@/components/streams/co-streams-view";
 import { sanitizeRequestedStreamIds } from "@/lib/co-stream-multiview";
-import { getAllCoStreamsCached } from "@/lib/co-streams";
+import { getAllPublicCoStreamsCached, resolvePublicCoStreamIds } from "@/lib/public-co-streams";
 import { dashboardPublicUrl } from "@/lib/env";
 import { localizedPath, type Locale } from "@/lib/i18n";
 import { buildPageMetadata } from "@/lib/metadata";
@@ -67,10 +67,13 @@ export default async function CoStreamsPage({
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const locale = await getRequestLocale();
-  const streams = await getAllCoStreamsCached();
+  const streams = await getAllPublicCoStreamsCached();
   const params = await searchParams;
   const hasExplicitSelection = Object.prototype.hasOwnProperty.call(params, "stream");
-  const requestedStreamIds = sanitizeRequestedStreamIds(params.stream);
+  // Keep only tokens this server issued. A `?stream=` value is anonymous attacker-controlled
+  // input, so it is filtered, never translated: deriving a token from it would let a visitor
+  // have the server confirm a guessed internal group key for them.
+  const requestedStreamIds = resolvePublicCoStreamIds(sanitizeRequestedStreamIds(params.stream));
   return (
     <CoStreamsView
       streams={streams}
