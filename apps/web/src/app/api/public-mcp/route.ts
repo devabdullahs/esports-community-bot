@@ -4,6 +4,7 @@ import { logMcpProtocolEra } from "@/lib/mcp-era-log";
 import { resolvePublicMcpAccess } from "@/lib/public-mcp-auth";
 import { createPublicMcpServer } from "@/lib/public-mcp-tools";
 import { readBoundedJson } from "@/lib/request-body";
+import { timed } from "@/lib/request-timing";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -21,8 +22,18 @@ const mcpHandler = createMcpHandler(() => createPublicMcpServer(), {
   legacy: "stateless",
 });
 
+// A phase has to be well under the whole-request bar to be visible: an MCP POST
+// costs well over a second end to end, and measuring from outside cannot say
+// whether that is admission (origin check plus the rate-limit write) or the MCP
+// work itself. Both phases are timed so the answer comes from the server.
+const MCP_PHASE_SLOW_MS = Number(process.env.EWC_MCP_SLOW_PHASE_MS || 400);
+
 export async function POST(request: Request) {
-  const blocked = await resolvePublicMcpAccess(request);
+  const blocked = await timed(
+    "mcp.public.admission",
+    () => resolvePublicMcpAccess(request),
+    MCP_PHASE_SLOW_MS,
+  );
   if (blocked) return blocked;
 
   // One bounded read; the parsed value is handed to the handler so the body is
@@ -42,5 +53,9 @@ export async function POST(request: Request) {
   // be decided from traffic rather than assumed.
   await logMcpProtocolEra("public", request, body.value);
 
-  return mcpHandler.fetch(request, { parsedBody: body.value });
+  return timed(
+    "mcp.public.dispatch",
+    () => mcpHandler.fetch(request, { parsedBody: body.value }),
+    MCP_PHASE_SLOW_MS,
+  );
 }
