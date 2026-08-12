@@ -1,4 +1,5 @@
 import process from "node:process";
+import { pathToFileURL } from "node:url";
 
 const DEFAULT_TIMEOUT_MS = 10_000;
 const MIN_TIMEOUT_MS = 1_000;
@@ -69,8 +70,36 @@ function assertStatus(response, target) {
 }
 
 function assertContentType(response, target) {
-  if (!contentType(response).includes(target.contentType)) {
-    throw new Error(`${target.method} ${redactedUrl(target.url)} returned an unexpected content type.`);
+  const accepted = target.contentTypes ?? [target.contentType];
+  if (!accepted.some((type) => contentType(response).includes(type))) {
+    throw new Error(`${describe(target)} returned an unexpected content type.`);
+  }
+}
+
+// Several targets share the /api/public-mcp path, so the path alone no longer
+// identifies which probe failed.
+function describe(target) {
+  const where = `${target.method} ${redactedUrl(target.url)}`;
+  return target.label ? `${where} (${target.label})` : where;
+}
+
+// The MCP endpoint answers a 2026-07-28 request with a JSON object and a
+// handshake-era request with an SSE stream, so the payload is pulled out of
+// whichever form arrived.
+function parseMcpPayload(body, target) {
+  try {
+    return JSON.parse(body);
+  } catch {
+    const data = body
+      .split(/\r?\n/)
+      .find((line) => line.startsWith("data: "))
+      ?.slice(6);
+    if (!data) throw new Error(`${describe(target)} did not return a JSON-RPC payload.`);
+    try {
+      return JSON.parse(data);
+    } catch {
+      throw new Error(`${describe(target)} returned an unreadable SSE payload.`);
+    }
   }
 }
 
@@ -99,6 +128,7 @@ async function fetchTarget(target, timeoutMs) {
         ? {
             Accept: "application/json, text/event-stream",
             "Content-Type": "application/json",
+            ...target.headers,
           }
         : undefined,
       body: target.body ? JSON.stringify(target.body) : undefined,
@@ -107,12 +137,91 @@ async function fetchTarget(target, timeoutMs) {
     });
   } catch (error) {
     const reason = error instanceof Error && error.name === "TimeoutError" ? "timed out" : "could not be reached";
-    throw new Error(`${target.method} ${redactedUrl(target.url)} ${reason}.`);
+    throw new Error(`${describe(target)} ${reason}.`);
   }
 
   assertStatus(response, target);
   assertContentType(response, target);
   return response;
+}
+
+const MODERN_PROTOCOL_VERSION = "2026-07-28";
+
+function modernParams(extra = {}) {
+  return {
+    ...extra,
+    _meta: {
+      "io.modelcontextprotocol/protocolVersion": MODERN_PROTOCOL_VERSION,
+      "io.modelcontextprotocol/clientInfo": { name: "public-smoke", version: "1.0.0" },
+      "io.modelcontextprotocol/clientCapabilities": {},
+    },
+  };
+}
+
+function modernHeaders(method) {
+  return { "MCP-Protocol-Version": MODERN_PROTOCOL_VERSION, "Mcp-Method": method };
+}
+
+function mcpTargets(baseUrl) {
+  const url = endpoint(baseUrl, "/api/public-mcp");
+  const contentTypes = ["application/json", "text/event-stream"];
+  return [
+    {
+      method: "POST",
+      url,
+      contentTypes,
+      label: "2026-07-28 server/discover",
+      headers: modernHeaders("server/discover"),
+      body: { jsonrpc: "2.0", id: "smoke-discover", method: "server/discover", params: modernParams() },
+      assertResult: (result, target) => {
+        if (!result.supportedVersions?.includes(MODERN_PROTOCOL_VERSION)) {
+          throw new Error(`${describe(target)} does not advertise ${MODERN_PROTOCOL_VERSION}.`);
+        }
+        if (!result.capabilities?.tools) {
+          throw new Error(`${describe(target)} does not advertise the tools capability.`);
+        }
+      },
+    },
+    {
+      method: "POST",
+      url,
+      contentTypes,
+      label: "2026-07-28 tools/list",
+      headers: modernHeaders("tools/list"),
+      body: { jsonrpc: "2.0", id: "smoke-modern-list", method: "tools/list", params: modernParams() },
+      assertResult: (result, target) => {
+        if (!Array.isArray(result.tools) || result.tools.length === 0) {
+          throw new Error(`${describe(target)} did not return any tools.`);
+        }
+        if (result.resultType !== "complete") {
+          throw new Error(`${describe(target)} is missing resultType "complete".`);
+        }
+        // The public tool set is identical for every caller; anything else here
+        // would mean a shared cache is being told it may not hold it.
+        if (result.cacheScope !== "public" || !Number.isInteger(result.ttlMs)) {
+          throw new Error(`${describe(target)} returned unusable cache hints.`);
+        }
+      },
+    },
+    {
+      method: "POST",
+      url,
+      contentTypes,
+      // Dual-era coverage: the handshake era is deprecated for removal on
+      // 2026-11-23, and until then breaking it is a regression. Drop this target
+      // on that date, not before.
+      label: "handshake-era tools/list",
+      body: { jsonrpc: "2.0", id: "smoke-legacy-list", method: "tools/list", params: {} },
+      assertResult: (result, target) => {
+        if (!Array.isArray(result.tools) || result.tools.length === 0) {
+          throw new Error(`${describe(target)} did not return any tools.`);
+        }
+        if (result.resultType !== undefined) {
+          throw new Error(`${describe(target)} leaked 2026-07-28 fields into a handshake-era answer.`);
+        }
+      },
+    },
+  ];
 }
 
 async function runSmokeCheck({ baseUrl, timeoutMs }) {
@@ -124,33 +233,27 @@ async function runSmokeCheck({ baseUrl, timeoutMs }) {
     { method: "GET", url: endpoint(baseUrl, "/docs/mcp"), contentType: "text/html" },
     { method: "GET", url: endpoint(baseUrl, "/robots.txt"), contentType: "text/plain" },
     { method: "GET", url: endpoint(baseUrl, "/sitemap.xml"), contentType: "xml" },
-    {
-      method: "POST",
-      url: endpoint(baseUrl, "/api/public-mcp"),
-      contentType: "application/json",
-      body: { jsonrpc: "2.0", id: "public-smoke-tools-list", method: "tools/list", params: {} },
-    },
+    ...mcpTargets(baseUrl),
   ];
 
   for (const target of targets) {
     const response = await fetchTarget(target, timeoutMs);
     if (baseUrl.protocol === "https:" && !response.headers.get("strict-transport-security")) {
-      throw new Error(`${target.method} ${redactedUrl(target.url)} is missing Strict-Transport-Security.`);
+      throw new Error(`${describe(target)} is missing Strict-Transport-Security.`);
     }
     const body = await response.text();
     if (target.contentType === "text/html") assertPublicHtml(body, target);
-    if (target.url.endsWith("/api/public-mcp")) {
-      let payload;
-      try {
-        payload = JSON.parse(body);
-      } catch {
-        throw new Error(`POST ${redactedUrl(target.url)} did not return JSON.`);
+    if (target.assertResult) {
+      const payload = parseMcpPayload(body, target);
+      if (payload?.error) {
+        throw new Error(`${describe(target)} returned JSON-RPC error ${payload.error.code}.`);
       }
-      if (!Array.isArray(payload?.result?.tools)) {
-        throw new Error(`POST ${redactedUrl(target.url)} did not return a tools/list result.`);
+      if (!payload?.result) {
+        throw new Error(`${describe(target)} did not return a JSON-RPC result.`);
       }
+      target.assertResult(payload.result, target);
     }
-    console.log(`OK ${target.method} ${new URL(target.url).pathname}`);
+    console.log(`OK ${target.method} ${new URL(target.url).pathname}${target.label ? ` — ${target.label}` : ""}`);
   }
 }
 
@@ -162,7 +265,15 @@ async function main() {
   });
 }
 
-main().catch((error) => {
-  console.error(error instanceof Error ? error.message : error);
-  process.exitCode = 1;
-});
+export { runSmokeCheck, resolveBaseUrl, resolveTimeout };
+
+// Exported for tests, so only run the probe when this file is the entry point.
+const invokedDirectly =
+  process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href;
+
+if (invokedDirectly) {
+  main().catch((error) => {
+    console.error(error instanceof Error ? error.message : error);
+    process.exitCode = 1;
+  });
+}
