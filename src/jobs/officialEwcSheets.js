@@ -885,6 +885,17 @@ function safeFeedFailure(error, workbook) {
   else if (typeof error?.code === 'string' && /^[A-Z0-9_]{1,32}$/.test(error.code)) parts.push(error.code);
   else if (typeof error?.name === 'string' && /^[A-Za-z]{1,32}$/.test(error.name)) parts.push(error.name);
 
+  // A Postgres error names the write it rejected in structured fields. `routine`
+  // is the C function that refused the value, which identifies the target TYPE
+  // even when the column is not reported — pg_strtoint32 for an integer,
+  // numeric_in, json_in, timestamp_in. Together with table and column that is
+  // enough to find the offending write without printing the value, which is the
+  // part that could carry a spreadsheet id or a signed URL.
+  for (const field of ['table', 'column', 'dataType', 'routine']) {
+    const value = error?.[field];
+    if (typeof value === 'string' && /^[A-Za-z0-9_]{1,48}$/.test(value)) parts.push(`${field}=${value}`);
+  }
+
   return parts.length ? ` (${parts.join(', ')})` : '';
 }
 
