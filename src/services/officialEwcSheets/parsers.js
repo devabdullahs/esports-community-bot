@@ -197,6 +197,12 @@ function number(value) {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
+// Penalties share the same INTEGER destination as the scores beside them.
+function integerOrNull(value) {
+  const parsed = number(value);
+  return Number.isInteger(parsed) ? parsed : null;
+}
+
 function googleDateParts(value) {
   if (typeof value === 'number' && Number.isFinite(value)) {
     const whole = Math.floor(value);
@@ -654,12 +660,23 @@ export function parseIndividualResults(rows, { game }) {
   const penaltyBIndex = headerIndex(found.row, ['pk score away', 'away penalties']);
   const roundIndex = headerIndex(found.row, ['round and match', 'round', 'match']);
   const results = [];
+  const fractionalScores = [];
   for (const row of rows.slice(found.index + 1)) {
     const teamA = text(row[homeIndex]);
     const teamB = text(row[awayIndex]);
     const scoreA = number(row[scoreAIndex]);
     const scoreB = number(row[scoreBIndex]);
     if (!teamA || !teamB || scoreA === null || scoreB === null) continue;
+    // These land in score_a/score_b, which are INTEGER. Chess is scored in half
+    // points, so a drawn game reads 1.5 — Postgres rejects that with 22P02
+    // (routine=pg_strtoint32_safe) and the throw took the whole chess workbook
+    // with it, once a minute. Unlike the schedule, an individual result IS the
+    // score: with nothing to store there is no row worth writing, so it is
+    // skipped and reported rather than written half-formed.
+    if (!Number.isInteger(scoreA) || !Number.isInteger(scoreB)) {
+      fractionalScores.push(`${teamA} ${scoreA}-${scoreB} ${teamB}`);
+      continue;
+    }
     const round = roundIndex >= 0 ? text(row[roundIndex]) : '';
     results.push({
       game,
@@ -668,11 +685,11 @@ export function parseIndividualResults(rows, { game }) {
       teamB,
       scoreA,
       scoreB,
-      penaltyA: penaltyAIndex >= 0 ? number(row[penaltyAIndex]) : null,
-      penaltyB: penaltyBIndex >= 0 ? number(row[penaltyBIndex]) : null,
+      penaltyA: penaltyAIndex >= 0 ? integerOrNull(row[penaltyAIndex]) : null,
+      penaltyB: penaltyBIndex >= 0 ? integerOrNull(row[penaltyBIndex]) : null,
     });
   }
-  return results.slice(0, 500);
+  return Object.assign(results.slice(0, 500), { fractionalScores });
 }
 
 export function parseStandings(rows) {
