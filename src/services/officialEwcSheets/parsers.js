@@ -284,6 +284,7 @@ export function parseSchedule(rows, { game }) {
   const scoreBIndex = headerIndex(found.row, ['score b', 'away score', 'team b score', 'player b score']);
   const statusIndex = headerIndex(found.row, ['status', 'match status']);
   const result = [];
+  const fractionalScores = [];
   let activeDate = null;
   const timezoneOffsetMinutes = scheduleTimezoneOffsetMinutes(rows, found, timeIndex);
 
@@ -296,8 +297,22 @@ export function parseSchedule(rows, { game }) {
     if (googleDateParts(row[dateIndex])) activeDate = row[dateIndex];
     const scheduledAt = scheduleTimestamp(activeDate, row[timeIndex], timezoneOffsetMinutes);
     const round = roundIndex >= 0 ? text(row[roundIndex]) : '';
-    const scoreA = scoreAIndex >= 0 ? number(row[scoreAIndex]) : null;
-    const scoreB = scoreBIndex >= 0 ? number(row[scoreBIndex]) : null;
+    // score_a/score_b are INTEGER columns. A fractional score reaches Postgres as
+    // "1.5" and is rejected with 22P02, which throws out of the whole workbook
+    // refresh — so one half-point row stopped every other row of that game from
+    // updating. SQLite stores it happily, which is why no test caught it.
+    //
+    // Chess is the game that produces them: a drawn game is worth half a point,
+    // so a match legitimately reads 1.5-0.5. Dropping the score keeps the fixture,
+    // its teams and its schedule flowing rather than losing the workbook, and the
+    // count is reported so the real values stay visible.
+    const rawScoreA = scoreAIndex >= 0 ? number(row[scoreAIndex]) : null;
+    const rawScoreB = scoreBIndex >= 0 ? number(row[scoreBIndex]) : null;
+    const scoreA = Number.isInteger(rawScoreA) ? rawScoreA : null;
+    const scoreB = Number.isInteger(rawScoreB) ? rawScoreB : null;
+    if ((rawScoreA !== null && scoreA === null) || (rawScoreB !== null && scoreB === null)) {
+      fractionalScores.push(`${rawScoreA ?? '-'}-${rawScoreB ?? '-'}`);
+    }
     const rawStatus = statusIndex >= 0 ? text(row[statusIndex]).toLowerCase() : '';
     if (!matchLabel && !teamA && !teamB) continue;
     if (!teamA || !teamB) {
@@ -318,13 +333,19 @@ export function parseSchedule(rows, { game }) {
       teamB,
       scoreA,
       scoreB,
-      status: scheduleStatus(rawStatus, scoreA, scoreB, bestOfIndex >= 0 ? number(row[bestOfIndex]) : null),
+      // Derive status from the values the sheet published, not the ones the
+      // column can hold. Whether a series is finished is a comparison, and
+      // 1.5 against 0.5 compares perfectly well — so a half-point result keeps
+      // its correct status even though the score itself cannot be stored.
+      status: scheduleStatus(rawStatus, rawScoreA, rawScoreB, bestOfIndex >= 0 ? number(row[bestOfIndex]) : null),
       scheduledAt,
       round,
       bestOf: bestOfIndex >= 0 ? number(row[bestOfIndex]) : null,
     });
   }
-  return result.slice(0, 500);
+  // Carried on the array so existing callers, which only iterate it, are
+  // unaffected; the job reports it rather than the parser logging from inside.
+  return Object.assign(result.slice(0, 500), { fractionalScores });
 }
 
 function scheduleStatus(rawStatus, scoreA, scoreB, bestOf) {
