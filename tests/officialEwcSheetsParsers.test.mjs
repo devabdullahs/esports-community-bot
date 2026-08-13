@@ -788,7 +788,7 @@ test('individual results parse player scores without carrying workbook metadata'
     { game: 'easportsfc' },
   );
 
-  assert.deepEqual(parsed, [{
+  assert.deepEqual([...parsed], [{
     game: 'easportsfc',
     round: 'Round 1',
     teamA: 'Alpha',
@@ -798,6 +798,27 @@ test('individual results parse player scores without carrying workbook metadata'
     penaltyA: null,
     penaltyB: null,
   }]);
+  assert.deepEqual(parsed.fractionalScores, []);
+});
+
+// The chess workbook failed every refresh with Postgres 22P02
+// (routine=pg_strtoint32_safe): score_a/score_b are INTEGER and chess is scored
+// in half points, so a drawn game reads 1.5. The throw escaped the per-workbook
+// try, so one drawn game stopped the entire workbook from updating.
+test('a half-point individual result is skipped rather than thrown at an integer column', () => {
+  const parsed = parseIndividualResults(
+    [
+      ['Round and Match', 'Home Player', 'Away Player', 'Home Goals', 'Away Goals'],
+      ['Round 1', 'Carlsen', 'Nakamura', 1.5, 0.5],
+      ['Round 1', 'Ding', 'Nepo', 2, 0],
+    ],
+    { game: 'chess' },
+  );
+
+  // An individual result IS its score, so a value the column cannot hold leaves
+  // no row worth writing — unlike a schedule row, which still has a fixture.
+  assert.deepEqual([...parsed].map((row) => row.teamA), ['Ding']);
+  assert.deepEqual(parsed.fractionalScores, ['Carlsen 1.5-0.5 Nakamura']);
 });
 
 test('standings parser removes repeated team rows and repeated tables', () => {

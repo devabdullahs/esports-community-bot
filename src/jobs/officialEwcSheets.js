@@ -767,8 +767,11 @@ async function refreshWorkbook(
   // rather than allowed to throw the whole workbook away. Report it: the fixture
   // is still worth having, but a chess result carrying half points is a real
   // score we are not showing, and silence would hide that.
-  const fractional = parsed.schedule?.fractionalScores;
-  if (fractional?.length) {
+  const fractional = [
+    ...(parsed.schedule?.fractionalScores ?? []),
+    ...(parsed.individualResults?.fractionalScores ?? []),
+  ];
+  if (fractional.length) {
     logger.warn(
       `[tournament-feed] ${descriptor?.game || 'workbook'}: dropped ${fractional.length} fractional score(s) ` +
         `(${fractional.slice(0, 3).join(', ')}) — score columns are integers`,
