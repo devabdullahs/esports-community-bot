@@ -859,7 +859,25 @@ export function parseEwcClubs($) {
         .get();
       return headers.includes('Team Name') && headers.includes('Q#') && headers.includes('T#');
     });
-  if (!table) return { games: [], clubs: [] };
+  // Report the headings that WERE found when none matched. A wiki page can be
+  // re-laid-out at any time, and without this the caller can only say the
+  // directory came back empty — which reads identically whether the page moved,
+  // the table was renamed, or a column heading changed. Naming the headings we
+  // saw turns a silent standstill into something fixable.
+  if (!table) {
+    const headingsSeen = $('table.wikitable.sortable')
+      .toArray()
+      .slice(0, 4)
+      .map((el) => $(el)
+        .find('tr')
+        .first()
+        .children('th,td')
+        .map((_i, c) => $(c).text().replace(/\s+/g, ' ').trim())
+        .get()
+        .slice(0, 8)
+        .join(' | '));
+    return { games: [], clubs: [], headingsSeen };
+  }
 
   const headerCells = $(table).find('tr').first().children('th,td').toArray();
   const games = headerCells.slice(4).map((cell) => ewcClubHeader($, cell));

@@ -856,9 +856,25 @@ export function liveRotationWorkbooks(workbooks) {
   return live.length ? live : workbooks || [];
 }
 
-function safeFeedFailure(error) {
-  const status = Number(error?.status);
-  return Number.isInteger(status) ? ` (${status})` : '';
+// A failure is only useful if it says what failed. This used to report an HTTP
+// status and nothing else, so every non-HTTP failure — a DNS blip, a timeout, a
+// credential problem, a parser throw — logged the identical bare sentence, once
+// a minute, for as long as it kept happening.
+//
+// Messages stay out of it: a Sheets error message can carry the spreadsheet id
+// or a signed URL, and this log is shipped off the box. Names and codes are
+// symbolic and bounded, which is enough to tell those cases apart.
+function safeFeedFailure(error, workbook) {
+  const parts = [];
+  const descriptor = workbook ? workbookDescriptor(workbook.name) : null;
+  if (descriptor?.game) parts.push(descriptor.game);
+
+  const status = Number(error?.status ?? error?.code);
+  if (Number.isInteger(status)) parts.push(String(status));
+  else if (typeof error?.code === 'string' && /^[A-Z0-9_]{1,32}$/.test(error.code)) parts.push(error.code);
+  else if (typeof error?.name === 'string' && /^[A-Za-z]{1,32}$/.test(error.name)) parts.push(error.name);
+
+  return parts.length ? ` (${parts.join(', ')})` : '';
 }
 
 export async function refreshOfficialEwcSheets() {
@@ -889,7 +905,7 @@ export async function refreshOfficialEwcSheets() {
         }
       } catch (error) {
         reasons.set('failed', (reasons.get('failed') || 0) + 1);
-        logger.warn(`[tournament-feed] workbook refresh failed${safeFeedFailure(error)}`);
+        logger.warn(`[tournament-feed] workbook refresh failed${safeFeedFailure(error, workbook)}`);
       }
     }
     if (changed) logger.info(`[tournament-feed] refresh completed for ${changed} tournament(s)`);
@@ -943,7 +959,7 @@ export async function refreshLiveOfficialEwcSheets() {
         );
       }
     } catch (error) {
-      logger.warn(`[tournament-feed] live workbook refresh failed${safeFeedFailure(error)}`);
+      logger.warn(`[tournament-feed] live workbook refresh failed${safeFeedFailure(error, workbook)}`);
     }
   } catch {
     logger.warn('[tournament-feed] live refresh failed');

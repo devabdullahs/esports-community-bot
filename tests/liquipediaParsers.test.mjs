@@ -520,7 +520,11 @@ test('parseEwcClubs: missing required columns returns empty result', () => {
   `;
   const $ = load(html);
   const result = parseEwcClubs($);
-  assert.deepEqual(result, { games: [], clubs: [] });
+  assert.deepEqual(result.games, []);
+  assert.deepEqual(result.clubs, []);
+  // The caller cannot tell a re-laid-out page from a page with no clubs unless
+  // the parser says what it did find, so the headings come back with the miss.
+  assert.deepEqual(result.headingsSeen, ['Team Name | EWC Support']);
 });
 
 // ---------------------------------------------------------------------------
