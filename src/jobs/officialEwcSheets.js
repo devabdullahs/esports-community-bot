@@ -763,6 +763,17 @@ async function refreshWorkbook(
         status: 'finished',
         scheduledAt: null,
       }));
+  // A fractional score cannot be stored in an INTEGER column, so it is dropped
+  // rather than allowed to throw the whole workbook away. Report it: the fixture
+  // is still worth having, but a chess result carrying half points is a real
+  // score we are not showing, and silence would hide that.
+  const fractional = parsed.schedule?.fractionalScores;
+  if (fractional?.length) {
+    logger.warn(
+      `[tournament-feed] ${descriptor?.game || 'workbook'}: dropped ${fractional.length} fractional score(s) ` +
+        `(${fractional.slice(0, 3).join(', ')}) — score columns are integers`,
+    );
+  }
   const updates = [...parsed.schedule, ...individualUpdates];
   const { terminalMatchIds, updatedMatchIds } = await applyScheduleUpdates(
     tournament,

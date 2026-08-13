@@ -959,3 +959,32 @@ test('full workbook parser combines public schedule, standings, overview, and de
   assert.equal(parsed.standings.length, 1);
   assert.deepEqual(parsed.overview.facts, [{ label: 'Tournament Format', value: 'Battle royale' }]);
 });
+
+// score_a/score_b are INTEGER columns. A chess draw is worth half a point, so a
+// match legitimately reads 1.5-0.5 — which Postgres rejects with 22P02 and which
+// threw the entire chess workbook refresh away, once a minute, while SQLite
+// accepted it and no test noticed.
+test('a fractional score is dropped rather than thrown, and still decides the status', () => {
+  const rows = [
+    ['Date', 'Start Time', 'Match', 'Team A', 'Score A', 'Score B', 'Team B'],
+    ['46240', '13:00', 'Carlsen vs Nakamura', 'Carlsen', '1.5', '0.5', 'Nakamura'],
+    ['46240', '14:00', 'Ding vs Nepo', 'Ding', '2', '0', 'Nepo'],
+  ];
+
+  const parsed = parseSchedule(rows, { game: 'chess' });
+
+  const draw = parsed.find((row) => row.teamA === 'Carlsen');
+  assert.equal(draw.scoreA, null, 'a value the column cannot hold is not sent to it');
+  assert.equal(draw.scoreB, null);
+  // The fixture survives: losing one score must not cost the match, its teams or
+  // its schedule, which is what the throw used to do to every row in the workbook.
+  assert.equal(draw.teamB, 'Nakamura');
+  // Status is a comparison, and 1.5 beats 0.5 regardless of the column type.
+  assert.equal(draw.status, 'finished');
+
+  const whole = parsed.find((row) => row.teamA === 'Ding');
+  assert.equal(whole.scoreA, 2, 'an integer score is untouched');
+  assert.equal(whole.scoreB, 0);
+
+  assert.deepEqual(parsed.fractionalScores, ['1.5-0.5'], 'the dropped value stays visible');
+});
