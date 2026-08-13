@@ -15,7 +15,7 @@ const { getEwcClubChampionshipSnapshot, upsertEwcClubChampionshipSnapshot } = aw
   '../src/db/ewcClubChampionshipSnapshots.js'
 );
 const { setClubChampionship } = await import('../src/db/settings.js');
-const { updateClubChampionship } = await import('../src/jobs/clubChampionship.js');
+const { updateClubChampionship, resetClubDirectoryAttemptsForTests } = await import('../src/jobs/clubChampionship.js');
 
 function payload(team, points) {
   return {
@@ -178,4 +178,44 @@ test('a failed stale directory refresh preserves the last good copy and still up
   assert.equal(directoryFetches, 1);
   assert.equal(stored.standings[0].points, 350);
   assert.equal(stored.clubs[0].qualifiedCount, 22);
+});
+
+test('a rejected clubs directory is not re-fetched on the next tick', async () => {
+  // A rejected directory used to leave clubsFetchedAt stale, so the age check
+  // passed again on the following run and Liquipedia was asked once per tick,
+  // indefinitely, for a page that was going to be rejected each time. Liquipedia
+  // bans rather than throttles, so a fetch we always discard is the expensive
+  // kind of harmless.
+  const guildId = 'guild-clubs-rejected-backoff';
+  await configure(guildId);
+  resetClubDirectoryAttemptsForTests();
+  await upsertEwcClubChampionshipSnapshot({
+    season: '2026',
+    ...payload('Last Good Club', 140),
+    clubs: [{ name: 'Last Good Club', qualifiedCount: 1 }],
+    clubsSourceUrl: 'https://liquipedia.net/esports/Esports_World_Cup/2026/Clubs',
+    clubsFetchedAt: '2026-01-01T00:00:00.000Z',
+    fetchedAt: '2026-07-10T10:00:00.000Z',
+  });
+
+  let clubFetches = 0;
+  const liquipedia = {
+    fetchClubChampionship: async () => payload('Last Good Club', 140),
+    // A page whose table no longer matches: parsed, but nothing usable.
+    fetchEwcClubs: async () => {
+      clubFetches += 1;
+      return { sourceUrl: 'https://liquipedia.net/x', games: [], clubs: [], headingsSeen: ['Team | Support'] };
+    },
+  };
+  const client = { channels: { fetch: async () => null } };
+
+  await updateClubChampionship(client, guildId, { liquipedia });
+  assert.equal(clubFetches, 1, 'the stale directory is attempted once');
+
+  await updateClubChampionship(client, guildId, { liquipedia });
+  await updateClubChampionship(client, guildId, { liquipedia });
+  assert.equal(clubFetches, 1, 'a rejected directory is held, not retried every tick');
+
+  // The standings snapshot still updates; only the directory fetch is paced.
+  assert.equal((await getEwcClubChampionshipSnapshot('2026')).clubs[0].name, 'Last Good Club');
 });

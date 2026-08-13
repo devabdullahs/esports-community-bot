@@ -9,6 +9,17 @@ import { LIQUIPEDIA_ATTRIBUTION } from '../lib/render.js';
 const nowSec = () => Math.floor(Date.now() / 1000);
 export const EWC_CLUB_DIRECTORY_REFRESH_MS = 6 * 60 * 60 * 1000;
 
+// Season -> last directory fetch attempt, successful or not. Only failures are
+// recorded here; a success updates clubsFetchedAt on the snapshot and is paced
+// by that instead. See the rejection branch for why an attempt has to count.
+const directoryAttemptedAt = new Map();
+
+// Test seam: a rejected fetch is held for six hours, which no test wants to wait
+// out and none should silently inherit from another.
+export function resetClubDirectoryAttemptsForTests() {
+  directoryAttemptedAt.clear();
+}
+
 function rankLabel(rank) {
   return rank === 1 ? '🥇' : rank === 2 ? '🥈' : rank === 3 ? '🥉' : `**${rank}.**`;
 }
@@ -90,8 +101,15 @@ export async function updateClubChampionship(
       ? await snapshots.getEwcClubChampionshipSnapshot(season).catch(() => null)
       : null;
     const directoryAge = existing?.clubsFetchedAt ? Date.now() - new Date(existing.clubsFetchedAt).getTime() : Infinity;
+    // In-process only: a restart may cost one extra attempt, which is the right
+    // trade against persisting a failure that a page fix should clear.
+    const lastAttemptAt = directoryAttemptedAt.get(season) ?? 0;
+    const attemptAge = Date.now() - lastAttemptAt;
     let directory = null;
-    if (!existing?.clubs?.length || !Number.isFinite(directoryAge) || directoryAge >= EWC_CLUB_DIRECTORY_REFRESH_MS) {
+    if (
+      attemptAge >= EWC_CLUB_DIRECTORY_REFRESH_MS
+      && (!existing?.clubs?.length || !Number.isFinite(directoryAge) || directoryAge >= EWC_CLUB_DIRECTORY_REFRESH_MS)
+    ) {
       try {
         const fetchedDirectory = await liquipedia.fetchEwcClubs(Number(season));
         const validClubs = fetchedDirectory?.clubs?.length
@@ -107,7 +125,22 @@ export async function updateClubChampionship(
             clubsFetchedAt: new Date(),
           };
         } else {
-          logger.warn(`[cc] EWC ${season} clubs directory was empty or invalid; preserving the last good copy`);
+          // A rejected directory used to log the same sentence whatever went
+          // wrong, so a page that had been re-laid-out looked exactly like one
+          // whose rows failed validation.
+          const headings = Array.isArray(fetchedDirectory?.headingsSeen) ? fetchedDirectory.headingsSeen : null;
+          const detail = !fetchedDirectory?.clubs?.length
+            ? (headings?.length
+              ? `no club table matched; tables on the page start with: ${headings.join(' // ')}`
+              : 'no club table matched and the page carried no sortable tables')
+            : `${fetchedDirectory.clubs.length} row(s) parsed but at least one lacked a name or a qualified count`;
+          logger.warn(`[cc] EWC ${season} clubs directory rejected (${detail}); preserving the last good copy`);
+          // A rejected fetch still cost a Liquipedia parse. Without recording the
+          // attempt the age check stays stale, so the next run re-fetches and
+          // re-rejects — once every job tick, indefinitely. Hold the failure to
+          // the same cadence as a success so a broken page costs the same budget
+          // as a working one rather than a request every few minutes.
+          directoryAttemptedAt.set(season, Date.now());
         }
       } catch (error) {
         const level = /backing off after a rate limit/i.test(error.message) ? 'debug' : 'warn';
