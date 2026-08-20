@@ -419,6 +419,43 @@ test('trackedEwcGamePlacements resolves a player whose wiki id spaces differentl
   assert.ok(liquid.participants.includes('Nihal Sarin'));
 });
 
+test('a named event never scores against a different tournament of the same game', async () => {
+  // Week 2 graded MLBB Women's International picks against the Mid Season Cup, because the
+  // Women's event was archived and the only listed mobilelegends tournament was the other one.
+  // Team Falcons took 4th and 300 points it never won there, and the real winner matched
+  // nothing. A wrong tournament must produce no result at all, not a confident wrong one.
+  const other = await addTournament({
+    source: 'liquipedia',
+    external_id: 'apexlegends/ALGS/2026/Split_1',
+    game: 'apexlegends',
+    name: 'ALGS Split 1 Playoffs 2026',
+    url: 'https://liquipedia.net/apexlegends/ALGS/2026/Split_1',
+    guild_id: 'g-ewc',
+    added_by: 'admin',
+  });
+  await updateTournamentEwc(other.id, true);
+  await replaceTournamentStandings(other.id, [{
+    title: 'Final standings',
+    entries: [
+      { rank: 1, team: 'Alliance' },
+      { rank: 2, team: 'DarkZero' },
+      { rank: 3, team: 'Fnatic' },
+      { rank: 4, team: 'Team Falcons' },
+    ],
+  }]);
+
+  // The week names a different Apex event. The only tracked one is the Split 1 Playoffs, and
+  // scoring against it would hand Team Falcons a 4th place from a tournament nobody picked.
+  assert.deepEqual(
+    await trackedEwcGamePlacements('Apex Legends', {
+      guildId: 'g-ewc',
+      eventUrl: 'https://liquipedia.net/apexlegends/ALGS/2026/Open',
+      eventName: 'ALGS Open Bracket 2026',
+    }),
+    [],
+  );
+});
+
 test('a duo entrant resolves to the club that fielded it, unless the sides disagree', async () => {
   const reload = await addTournament({
     source: 'liquipedia',

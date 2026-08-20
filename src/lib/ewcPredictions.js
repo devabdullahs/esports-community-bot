@@ -224,9 +224,15 @@ export function evaluateEwcGameResultCompleteness(result = {}) {
   }
 
   if (champions.size !== 1) return completenessResult(false, 'multiple_champions', placementCoverage);
-  const missing = EWC_AWARDED_RANKS.filter((rank) => !evidenceCoverage.has(rank) || !placementCoverage.has(rank));
-  if (missing.length) return completenessResult(false, 'missing_rank', placementCoverage);
-  return completenessResult(true, 'ready', placementCoverage);
+  // The evidence states which ranks the EVENT awarded. The placements are the club-level view
+  // of that, and a club keeps only its best finish — so a rank held by a club that also placed
+  // higher is legitimately absent from them. Requiring both meant one club holding two paying
+  // positions made the result permanently incomplete: week 6 reported a missing rank 4 forever
+  // because chess's fourth-placed player shares a club with a top-three finisher.
+  const coverage = evidenceCoverage.size ? evidenceCoverage : placementCoverage;
+  const missing = EWC_AWARDED_RANKS.filter((rank) => !coverage.has(rank));
+  if (missing.length) return completenessResult(false, 'missing_rank', coverage);
+  return completenessResult(true, 'ready', coverage);
 }
 
 export function ewcGameResultPending(result) {
