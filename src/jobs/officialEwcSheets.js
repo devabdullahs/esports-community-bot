@@ -199,6 +199,19 @@ export function officialTeamLogo(matches, existing, team) {
   return null;
 }
 
+// score_a/score_b are INTEGER, and a value they cannot hold does not fail politely: Postgres
+// raises 22P02 and the throw escapes the per-workbook try, so one unstorable score stops every
+// other row of that workbook from updating, once a minute, indefinitely.
+//
+// Three separate parser paths reached these columns and each was guarded only after it was
+// caught in production. This is the single point they all pass through, so it is where the
+// guarantee belongs: a parser that starts emitting a fractional score is a reporting gap, not
+// an outage. The parsers still drop and report their own, which is what keeps it visible.
+function storableScore(value, fallback) {
+  if (value === null || value === undefined) return fallback ?? null;
+  return Number.isInteger(value) ? value : (fallback ?? null);
+}
+
 function rowFromUpdate(tournament, existing, update, matches) {
   const teamA = update.teamA || existing?.team_a || 'TBD';
   const teamB = update.teamB || existing?.team_b || 'TBD';
@@ -211,8 +224,8 @@ function rowFromUpdate(tournament, existing, update, matches) {
     team_b: teamB,
     logo_a: officialTeamLogo(matches, existing, teamA),
     logo_b: officialTeamLogo(matches, existing, teamB),
-    score_a: update.scoreA ?? existing?.score_a ?? null,
-    score_b: update.scoreB ?? existing?.score_b ?? null,
+    score_a: storableScore(update.scoreA, existing?.score_a),
+    score_b: storableScore(update.scoreB, existing?.score_b),
     status: update.status || existing?.status || 'scheduled',
     scheduled_at: update.scheduledAt ?? existing?.scheduled_at ?? null,
     stream_platform: existing?.stream_platform || null,
@@ -225,8 +238,10 @@ function authorityFields(update) {
   if (update.name) fields.push('name');
   if (update.teamA) fields.push('team_a');
   if (update.teamB) fields.push('team_b');
-  if (update.scoreA !== null && update.scoreA !== undefined) fields.push('score_a');
-  if (update.scoreB !== null && update.scoreB !== undefined) fields.push('score_b');
+  // Only claim authority over a score actually written; a dropped fractional one leaves the
+  // column to whatever else can legitimately fill it.
+  if (Number.isInteger(update.scoreA)) fields.push('score_a');
+  if (Number.isInteger(update.scoreB)) fields.push('score_b');
   if (update.status) fields.push('status');
   if (update.scheduledAt !== null && update.scheduledAt !== undefined) fields.push('scheduled_at');
   return fields;
@@ -770,6 +785,7 @@ async function refreshWorkbook(
   const fractional = [
     ...(parsed.schedule?.fractionalScores ?? []),
     ...(parsed.individualResults?.fractionalScores ?? []),
+    ...(parsed.bracketResults?.fractionalScores ?? []),
   ];
   if (fractional.length) {
     logger.warn(

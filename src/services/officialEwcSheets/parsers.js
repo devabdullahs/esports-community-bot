@@ -386,6 +386,7 @@ export function parseBracketResults(rows) {
   const grid = rows || [];
   const width = Math.max(...grid.map((row) => (row || []).length), 0);
   const results = [];
+  const fractionalScores = [];
 
   for (let column = 0; column + 1 < width; column += 1) {
     const scored = grid.some(
@@ -425,18 +426,30 @@ export function parseBracketResults(rows) {
       // name beside a number. A competitor's name always has a letter in it; "11 4-0 12" is
       // a row of a standings grid, not a series.
       if (!/[a-z]/i.test(a.name) || !/[a-z]/i.test(b.name)) continue;
+      // The third and last path into score_a/score_b, which are INTEGER. The schedule and
+      // the individual-results parsers were each guarded in turn while this one kept
+      // sending "1.5" to Postgres, so the chess workbook went on failing 22P02 through two
+      // fixes that both looked right. It reports nothing to the fractional-score warning
+      // either, which is why that line never appeared and the theory looked disproven.
+      //
+      // Unlike an individual result, a bracket result is an update to a fixture that
+      // already exists, so dropping the whole entry would leave a played match sitting at
+      // "scheduled" forever. Keep the status — whether a series is finished is a
+      // comparison, and 1.5 against 0.5 compares correctly — and send no score.
+      const storable = Number.isInteger(a.score) && Number.isInteger(b.score);
+      if (!storable) fractionalScores.push(`${a.name} ${a.score}-${b.score} ${b.name}`);
       results.push({
         round,
         teamA: a.name,
         teamB: b.name,
-        scoreA: a.score,
-        scoreB: b.score,
+        scoreA: storable ? a.score : null,
+        scoreB: storable ? b.score : null,
         bestOf,
         status: scheduleStatus('', a.score, b.score, bestOf),
       });
     }
   }
-  return results.slice(0, 500);
+  return Object.assign(results.slice(0, 500), { fractionalScores });
 }
 
 // The same drawn bracket, kept as a GRAPH rather than a list of results, so it can be

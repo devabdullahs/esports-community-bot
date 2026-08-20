@@ -355,6 +355,41 @@ test('bracket parser reads drawn series scores and leaves the undecided alone', 
   );
 });
 
+// Chess is scored in half points, so a drawn game legitimately reads 1.5-0.5. score_a and
+// score_b are INTEGER, and this was the third parser path reaching them: the chess workbook
+// went on failing 22P02 once a minute through two fixes that guarded the other two.
+const CHESS_VISUALIZATION = [
+  ['', '', '', 'Ro4', ''],
+  ['', '', '', 'SF 1.1', ''],
+  ['', '', '', 'Magnus Halvorsen', 1.5],
+  ['', '', '', 'Ivan Petrov', 0.5],
+  ['', '', '', '', ''],
+  ['', '', '', 'SF 1.2', ''],
+  ['', '', '', 'Wei Zhang', 2],
+  ['', '', '', 'Diego Alvarez', 0],
+];
+
+test('bracket parser drops a half-point score the column cannot hold but keeps the result', () => {
+  const results = parseBracketResults(CHESS_VISUALIZATION);
+
+  const drawn = results.find((r) => r.teamA === 'Magnus Halvorsen');
+  // No fractional value may reach score_a/score_b; Postgres rejects "1.5" with 22P02 and the
+  // throw takes the entire workbook refresh with it.
+  assert.equal(drawn.scoreA, null);
+  assert.equal(drawn.scoreB, null);
+  // The status is still derived from what the sheet published: 1.5 beats 0.5 perfectly well
+  // as a comparison. Deciding it from the dropped scores instead would read "scheduled" and
+  // leave a played match looking unplayed forever.
+  assert.equal(drawn.status, 'finished');
+  // Reported rather than silently discarded: a real result we cannot show must stay visible.
+  assert.deepEqual(results.fractionalScores, ['Magnus Halvorsen 1.5-0.5 Ivan Petrov']);
+
+  // An integral series on the same bracket is untouched.
+  const clean = results.find((r) => r.teamA === 'Wei Zhang');
+  assert.equal(clean.scoreA, 2);
+  assert.equal(clean.scoreB, 0);
+});
+
 test('bracket parser keeps a match label from being read as a best-of', () => {
   const results = parseBracketResults(COD_VISUALIZATION);
   // "UB 1.1" parses loosely as the number 1.1; taking that as the best-of would make a
