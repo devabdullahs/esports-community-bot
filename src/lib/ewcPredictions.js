@@ -98,13 +98,23 @@ export function normalizeClubName(name) {
 // Liquipedia prize tables occasionally use a current division abbreviation
 // while the prediction picker stores the club's public name. Keep these
 // verified identities explicit so scoring never relies on fuzzy matching.
+// A club fields a differently-named roster per game, and the picker offers the name the
+// MATCH rows use while scoring reads the name the STANDINGS use. When those disagree the
+// pick silently scores zero as "no matching result", so every identity we confirm belongs
+// here rather than being rediscovered from a member's screenshot.
 const EWC_CLUB_ALIAS_GROUPS = [
-  ['ag.al', 'all gamers', 'all gamers global'],
+  // All Gamers' Honor of Kings roster is "AG Super Play"; the picker offered
+  // "AG.AL International". A second place worth 750 points scored nothing.
+  ['ag.al', 'ag.al international', 'ag super play', 'all gamers', 'all gamers global'],
   ['los', 'mibr.los', 'mibr los'],
   // The PUBG Mobile standings print the sponsor name in full while the picker stores the
   // short one, and neither normalizer bridges "ns" to "nongshim". A second-place finish
   // scored zero as "no matching result" because of it.
   ['ns redforce', 'nongshim redforce'],
+  // A sub-brand shares no words with its club, so no rule can derive it. MLBB Women's
+  // International prints Team Falcons' roster as "Falcons Vega" (and "Falcons Vega MENA",
+  // which the roster-tag rule reduces to the same thing).
+  ['team falcons', 'falcons vega'],
 ];
 
 const EWC_CLUB_ALIASES = new Map();
@@ -116,11 +126,34 @@ for (const group of EWC_CLUB_ALIAS_GROUPS) {
   for (const key of keys) EWC_CLUB_ALIASES.set(key, keys);
 }
 
+// A club enters a regional or women's roster under its own name plus a tag — "Natus Vincere
+// PH", "Twisted Minds VN", "Virtus.pro MENA", "LOS FE". The picker offers the club, the
+// standings print the roster, and the pick scores nothing. These are a naming CONVENTION
+// rather than separate identities, so strip them by rule; curating an alias per roster would
+// never keep pace with the events.
+//
+// Only a trailing tag is removed, and only while something substantial remains, so a club
+// whose actual name is short or ends in one of these words cannot be dissolved into another.
+const ROSTER_TAGS = new Set([
+  'fe', 'w', 'women', 'academy', 'juniors', 'youth',
+  'mena', 'sea', 'apac', 'latam', 'oce', 'eu', 'na', 'br',
+  'ph', 'vn', 'id', 'my', 'th', 'kr', 'jp', 'cn', 'tw', 'hk', 'in',
+]);
+
+function withoutRosterTag(base) {
+  const parts = base.split(' ').filter(Boolean);
+  while (parts.length > 1 && ROSTER_TAGS.has(parts[parts.length - 1])) parts.pop();
+  const stripped = parts.join(' ');
+  return stripped.length >= 3 && stripped !== base ? stripped : '';
+}
+
 export function clubNameKeys(name) {
   const base = normalizeClubName(name);
   const noTeamPrefix = base.replace(/^team\s+/, '');
   const compact = normalizeTeamName(name);
-  const direct = [base, noTeamPrefix, compact].filter(Boolean);
+  const untagged = [withoutRosterTag(base), withoutRosterTag(noTeamPrefix)].filter(Boolean);
+  const direct = [base, noTeamPrefix, compact, ...untagged, ...untagged.map((key) => normalizeTeamName(key))]
+    .filter(Boolean);
   const aliases = direct.flatMap((key) => EWC_CLUB_ALIASES.get(key) || []);
   return [...new Set([...direct, ...aliases])];
 }

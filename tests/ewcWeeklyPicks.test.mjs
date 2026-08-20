@@ -321,6 +321,11 @@ test('trackedEwcGamePlacements uses only an exact final standings section', asyn
       { club: 'Team Vitality', place: '1', points: 1000, participant: null },
       { club: 'Natus Vincere PH', place: '2', points: 750, participant: null },
       { club: 'Falcons Vega', place: '5', points: 200, participant: null },
+      // Kept, at zero. A pick that finished outside the paying ranks used to be dropped here,
+      // which made the member's card read "No matching result" — indistinguishable from a
+      // result the system could not resolve. It scores the same either way; only the wording
+      // changes, from a failure to a real finish.
+      { club: 'Outside points', place: '9', points: 0, participant: null },
     ],
   );
   assert.equal(

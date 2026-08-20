@@ -50,6 +50,59 @@ test('clubNameKeys includes normalized form and form without leading "team "', (
   assert.ok(keys.includes('falcons'), 'should include "falcons" (sans team prefix)');
 });
 
+test('a club is recognised under the roster name each game prints for it', () => {
+  // The picker offers the name the MATCH rows use; scoring reads the name the STANDINGS
+  // print. Where a club fields a differently-branded roster per game these disagree, and the
+  // pick silently scores zero as "no matching result". Each pair below is a real one that did.
+  const sameClub = [
+    ['AG.AL International', 'AG Super Play'],
+    ['NS RedForce', 'Nongshim RedForce'],
+  ];
+  for (const [picked, printed] of sameClub) {
+    const pickedKeys = clubNameKeys(picked);
+    assert.ok(
+      clubNameKeys(printed).some((key) => pickedKeys.includes(key)),
+      `"${picked}" must resolve to "${printed}"`,
+    );
+  }
+
+  // Distinct clubs must not collapse into each other just because they share a prefix.
+  const geekay = clubNameKeys('Geekay Esports');
+  assert.equal(clubNameKeys('Team Falcons').some((key) => geekay.includes(key)), false);
+});
+
+test('a regional or women roster tag does not hide the club that entered it', () => {
+  // MLBB Women's International prints every entrant as club + roster tag. These are a naming
+  // convention, not separate identities, so the rule strips the tag instead of needing an
+  // alias per roster — there would be one per event forever otherwise.
+  const sameClub = [
+    ['Natus Vincere', 'Natus Vincere PH'],
+    ['Twisted Minds', 'Twisted Minds VN'],
+    ['Virtus.pro', 'Virtus.pro MENA'],
+    ['FUT Esports', 'FUT Esports FE'],
+    ['Geekay Esports', 'Geekay Esports FE'],
+    ['LOS', 'LOS FE'],
+    // Falcons Vega shares no word with "Team Falcons", so it needs the explicit alias, and
+    // the tag rule must still reduce its MENA roster onto the same identity.
+    ['Team Falcons', 'Falcons Vega MENA'],
+  ];
+  for (const [club, roster] of sameClub) {
+    const clubKeys = clubNameKeys(club);
+    assert.ok(
+      clubNameKeys(roster).some((key) => clubKeys.includes(key)),
+      `"${roster}" must resolve to "${club}"`,
+    );
+  }
+
+  // Stripping must never dissolve one club into another, and never empty a short name.
+  const distinct = [['Team Vitality', 'Virtus.pro MENA'], ['SAETA', 'Team Rey Young'], ['Gen.G Esports', 'Galaxy Phoenix']];
+  for (const [left, right] of distinct) {
+    const leftKeys = clubNameKeys(left);
+    assert.equal(clubNameKeys(right).some((key) => leftKeys.includes(key)), false, `${left} != ${right}`);
+  }
+  assert.ok(clubNameKeys('NA').length > 0);
+});
+
 test('uniqueClubPicks dedupes by club name keys — "team falcons" is dropped, "FALCONS x" survives', () => {
   // "team falcons" dedupes against "Team Falcons" (same normalized key).
   // "FALCONS x" normalizes to "falcons x" which does NOT share a key with "team falcons",
