@@ -28,6 +28,7 @@ import {
   setEwcWeekResults,
   weeklyLeaderboard,
 } from '../db/ewcPredictions.js';
+import { getEwcClubChampionshipSnapshot } from '../db/ewcClubChampionshipSnapshots.js';
 import { listEwcProfileLinks, upsertPublicEwcPredictorIdentity } from '../db/ewcProfileLinks.js';
 import { recordEwcPredictionAutomationHealth } from '../db/ewcPredictionOperations.js';
 import {
@@ -64,10 +65,28 @@ function scoreAfter(round) {
   return ewcPredictionScoreAfter(round, config.ewcPredictions.scoreDelayHours);
 }
 
+// The season result rests on ONE live parse of a wiki page at the moment scoring runs. The
+// clubs directory on the same wiki has been rejecting all week because its layout changed, so
+// this is not a hypothetical: a re-laid-out table, a throttled request or a timeout at that
+// moment leaves the season unable to score, and the season closes once.
+//
+// A snapshot of these standings is already stored and refreshed on a schedule, and it is the
+// same data the public standings page renders. Prefer the live read, fall back to the stored
+// one, and say which was used so a silent downgrade is not mistaken for a clean run.
 async function standingsFor(season) {
-  const data = await fetchEwcClubStandings(season);
-  if (!data.exists || !data.standings.length) return null;
-  return data.standings;
+  const live = await fetchEwcClubStandings(season).catch((error) => {
+    logger.warn(`[ewc-predictions] club standings fetch failed for ${season}: ${error.message}`);
+    return null;
+  });
+  if (live?.exists && live.standings?.length) return live.standings;
+
+  const stored = await getEwcClubChampionshipSnapshot(season).catch(() => null);
+  if (!stored?.standings?.length) return null;
+  logger.warn(
+    `[ewc-predictions] club standings unavailable live for ${season}; using the stored snapshot ` +
+      `(${stored.standings.length} club(s), fetched ${stored.fetchedAt || 'unknown'})`,
+  );
+  return stored.standings;
 }
 
 function topPredictionLines(rows) {
