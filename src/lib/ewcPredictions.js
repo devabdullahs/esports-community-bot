@@ -98,8 +98,14 @@ export function normalizeClubName(name) {
 // Liquipedia prize tables occasionally use a current division abbreviation
 // while the prediction picker stores the club's public name. Keep these
 // verified identities explicit so scoring never relies on fuzzy matching.
+// A club fields a differently-named roster per game, and the picker offers the name the
+// MATCH rows use while scoring reads the name the STANDINGS use. When those disagree the
+// pick silently scores zero as "no matching result", so every identity we confirm belongs
+// here rather than being rediscovered from a member's screenshot.
 const EWC_CLUB_ALIAS_GROUPS = [
-  ['ag.al', 'all gamers', 'all gamers global'],
+  // All Gamers' Honor of Kings roster is "AG Super Play"; the picker offered
+  // "AG.AL International". A second place worth 750 points scored nothing.
+  ['ag.al', 'ag.al international', 'ag super play', 'all gamers', 'all gamers global'],
   ['los', 'mibr.los', 'mibr los'],
   // The PUBG Mobile standings print the sponsor name in full while the picker stores the
   // short one, and neither normalizer bridges "ns" to "nongshim". A second-place finish

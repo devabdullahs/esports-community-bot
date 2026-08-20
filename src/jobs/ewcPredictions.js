@@ -708,11 +708,23 @@ async function processWeek(client, round, hooks = {}) {
       return { kind, finalReadiness, round: lockedRound };
     }
 
+    // A pick that matches no club in the result scores zero and says so only on that one
+    // member's card. The cause is almost always a naming difference between the roster the
+    // picker offered and the roster the standings printed — "AG.AL International" against
+    // "AG Super Play" — which is fixable the moment anyone knows it happened. Collect them
+    // so a mismatch reports itself instead of waiting to be spotted in a screenshot.
+    const unmatchedPicks = new Map();
     for (const prediction of predictions) {
       try {
         const score = perGame
           ? scorePerGameWeeklyPrediction(prediction.picks, lockedRound.games, lockedResults)
           : scoreWeeklyPrediction(prediction.picks, lockedRound.baseline, lockedFinal);
+        for (const detail of perGame ? score.details?.picks || [] : []) {
+          if (!detail?.pick || detail.matchedClub || detail.late || !detail.resultAvailable) continue;
+          const key = detail.game || detail.gameKey || 'game';
+          if (!unmatchedPicks.has(key)) unmatchedPicks.set(key, new Set());
+          unmatchedPicks.get(key).add(detail.pick);
+        }
         await saveWeeklyPredictionScore(lockedRound.guild_id, lockedRound.id, prediction.user_id, score.score, score.details, tx);
       } catch (error) {
         logger.warn(`[ewc-predictions] skipped malformed weekly pick ${prediction.user_id}/${lockedRound.week_key}: ${error.message}`);
@@ -721,6 +733,12 @@ async function processWeek(client, round, hooks = {}) {
           picks: prediction.picks,
         }, tx);
       }
+    }
+    for (const [game, picks] of unmatchedPicks) {
+      logger.warn(
+        `[ewc-predictions] ${lockedRound.week_key}/${game}: ${picks.size} pick(s) matched no club in the result ` +
+          `(${[...picks].slice(0, 5).join(', ')}) — likely a roster naming difference, they scored zero`,
+      );
     }
     const marked = perGame
       ? await markEwcWeekScoredWithResults(lockedRound.id, lockedFinal || [], lockedResults, tx)
