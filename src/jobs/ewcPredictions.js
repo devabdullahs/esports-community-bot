@@ -697,7 +697,7 @@ async function processWeek(client, round, hooks = {}) {
         }
       }
       await setEwcWeekResults(lockedRound.id, lockedResults, tx);
-      return { kind: 'provisional', round: lockedRound, predictions };
+      return { kind: 'provisional', round: lockedRound, predictions, finalReadiness };
     }
 
     if (missingResults.length) return { kind: 'pending', missingResults, finalReadiness, round: lockedRound };
@@ -729,6 +729,12 @@ async function processWeek(client, round, hooks = {}) {
   });
 
   if (outcome.kind === 'provisional') {
+    // Provisional scoring pays out but leaves the week unfinished, and it said nothing at all,
+    // so a round stuck short of final was indistinguishable from one that had completed.
+    logger.info(
+      `[ewc-predictions] ${outcome.round.week_key} scored provisionally (${outcome.finalReadiness?.reason || 'not final'}` +
+        `${outcome.finalReadiness?.gameKey ? ` on ${outcome.finalReadiness.gameKey}` : ''}) — it will re-score when the result is final`,
+    );
     await updateEwcPredictionLeaderboard(client, outcome.round.guild_id);
     await syncLinkedProfileShowcases(outcome.round.guild_id, outcome.round.season);
   }
@@ -741,8 +747,14 @@ async function processWeek(client, round, hooks = {}) {
     return;
   }
   if (outcome.kind === 'not_ready') {
-    logger.debug(
-      `[ewc-predictions] final placement snapshots are not ready for ${outcome.round.guild_id}/${outcome.round.season}/${outcome.round.week_key}: ${outcome.finalReadiness.reason}${outcome.finalReadiness.gameKey ? `/${outcome.finalReadiness.gameKey}` : ''}`,
+    // A week that will not finalise looks identical to a healthy one from outside: it just
+    // never pays out. Debug level hid the single line that names WHICH game blocked it and
+    // why, so the only way to find out was to re-derive the rule by hand. Say it out loud —
+    // the reason is a symbolic identity and a game key, not data.
+    logger.warn(
+      `[ewc-predictions] ${outcome.round.week_key} not final: ${outcome.finalReadiness.reason}` +
+        `${outcome.finalReadiness.gameKey ? ` on ${outcome.finalReadiness.gameKey}` : ''}` +
+        `${outcome.finalReadiness.coveredRanks ? ` (covered ranks ${outcome.finalReadiness.coveredRanks.join(',') || 'none'})` : ''}`,
     );
     return;
   }
