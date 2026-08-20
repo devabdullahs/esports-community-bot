@@ -1,5 +1,5 @@
 import { categoryToGameSlug, fightersTag, gameSlugFromName, isLobbyGame, isKnownGameSlug, normalizeGameSlug } from './games.js';
-import { EWC_POINTS_BY_RANK, normalizeClubName } from './ewcPredictions.js';
+import { EWC_POINTS_BY_RANK, ewcPlacementCoveredRanks, normalizeClubName } from './ewcPredictions.js';
 import { normalizeTeamName } from './render.js';
 import { logger } from './logger.js';
 import { listStandingsForTournament, listStandingsTeamRowsForGame } from '../db/tournamentStandings.js';
@@ -66,9 +66,23 @@ function trackedTournamentForEvent(rows, { slug, gameName, eventUrl, eventName }
     const ranked = liquipediaRows
       .map((row) => ({ row, score: [...eventNameTokens(row.name)].filter((token) => wantedTokens.has(token)).length }))
       .sort((a, b) => b.score - a.score);
-    if (ranked[0]?.score > 0) return ranked[0].row;
+    // A single shared word is not the same event. "MLBB Women's International" and "MLBB Mid
+    // Season Cup" overlap on "mlbb" alone, and taking that as a match is how week 2 came to be
+    // graded against the wrong tournament. Require most of the requested name to agree.
+    if (ranked[0] && ranked[0].score * 2 >= wantedTokens.size) return ranked[0].row;
   }
-  return liquipediaRows[0];
+
+  // Falling through to "any tournament for this game" scores a week against the wrong event.
+  // MLBB Women's International is archived, so only the Mid Season Cup was listed, and week 2
+  // graded its picks on that: Team Falcons took 4th place and 300 points it never won there,
+  // while the actual winner matched nothing. Nothing said so.
+  //
+  // A request that NAMES an event and matches none of them has to come back empty; the caller
+  // then falls back to the event's own URL, which at least addresses the right tournament. A
+  // request with no name to go on — a generic calendar link, say — may still take the single
+  // candidate, since there is nothing to contradict it.
+  if (wantedTokens.size) return null;
+  return liquipediaRows.length === 1 ? liquipediaRows[0] : null;
 }
 
 function eventNameTokens(value) {
@@ -244,9 +258,22 @@ export async function trackedEwcGamePlacements(gameName, { guildId, eventUrl = n
         `(${unmappedEntrants.slice(0, 5).join(', ')}) — club picks for them cannot score correctly`,
     );
   }
-  return placements.some((row) => row.points === EWC_POINTS_BY_RANK.get(1))
-    ? placements.sort((a, b) => b.points - a.points || a.club.localeCompare(b.club))
-    : [];
+  if (!placements.some((row) => row.points === EWC_POINTS_BY_RANK.get(1))) return [];
+  placements.sort((a, b) => b.points - a.points || a.club.localeCompare(b.club));
+
+  // Which ranks the EVENT awarded, taken from the standings themselves rather than from the
+  // club-deduplicated placements. A club keeps only its best finish, so when one club holds
+  // two positions the lower row is dropped — chess's 4th-placed player shares a club with a
+  // top-three finisher, and rank 4 vanished from the coverage even though the event plainly
+  // awarded it. The week then reported missing_rank forever and never paid out.
+  // Non-enumerable: this rides along with the placements without becoming one of them, so
+  // callers that compare or serialize the list see exactly the rows they expect.
+  return Object.defineProperty(placements, 'coveredRanks', {
+    value: [
+      ...new Set(sectionRows.flatMap((row) => ewcPlacementCoveredRanks(placeLabel(Number(row.rank))))),
+    ].sort((a, b) => a - b),
+    enumerable: false,
+  });
 }
 
 // Narrow EWC team rows to the week game's OWN event. Fallback chain, most to

@@ -638,7 +638,11 @@ async function processWeek(client, round, hooks = {}) {
           evidence: {
             kind: 'tracked-final-standings',
             authoritative: true,
-            coveredRanks: [...new Set(placements.flatMap((placement) => ewcPlacementCoveredRanks(placement.place)))].sort((a, b) => a - b),
+            // What the EVENT awarded, which the placements alone cannot show: a club keeps
+            // only its best finish, so a rank held by a club that also placed higher is not
+            // in this list at all.
+            coveredRanks: placements.coveredRanks
+              ?? [...new Set(placements.flatMap((placement) => ewcPlacementCoveredRanks(placement.place)))].sort((a, b) => a - b),
           },
           resultSource: 'tracked-final-standings',
           fetchedAt,
