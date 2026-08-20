@@ -101,6 +101,10 @@ export function normalizeClubName(name) {
 const EWC_CLUB_ALIAS_GROUPS = [
   ['ag.al', 'all gamers', 'all gamers global'],
   ['los', 'mibr.los', 'mibr los'],
+  // The PUBG Mobile standings print the sponsor name in full while the picker stores the
+  // short one, and neither normalizer bridges "ns" to "nongshim". A second-place finish
+  // scored zero as "no matching result" because of it.
+  ['ns redforce', 'nongshim redforce'],
 ];
 
 const EWC_CLUB_ALIASES = new Map();

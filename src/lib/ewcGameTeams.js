@@ -1,5 +1,7 @@
 import { categoryToGameSlug, fightersTag, gameSlugFromName, isLobbyGame, isKnownGameSlug, normalizeGameSlug } from './games.js';
 import { EWC_POINTS_BY_RANK, normalizeClubName } from './ewcPredictions.js';
+import { normalizeTeamName } from './render.js';
+import { logger } from './logger.js';
 import { listStandingsForTournament, listStandingsTeamRowsForGame } from '../db/tournamentStandings.js';
 import { listTrackedTeamRowsForGame } from '../db/matches.js';
 import { listEwcTournamentsForGame } from '../db/tournaments.js';
@@ -104,16 +106,41 @@ export async function resolveEwcGameEventUrl(gameName, { guildId, eventUrl = nul
 // Player id -> EWC club, from the official EWC player list. Solo-game standings rows carry
 // a player name where team games carry a club, so without this the fallback would score
 // club picks as misses. Mirrors the prize-table mapping in the Liquipedia parsers.
+// A standings row names a player the way the event prints it ("Magnus Carlsen"); the player
+// list carries the wiki id, which is often the same name without the space. normalizeClubName
+// only lowercases and collapses whitespace, so those two never met and the player went
+// unmapped — the club then took whichever of its OTHER players did map, silently scoring a
+// worse placement than the one it actually earned. Index both forms.
+function playerNameKeys(name) {
+  return [...new Set([normalizeClubName(name), normalizeTeamName(name)].filter(Boolean))];
+}
+
 function playerClubLookup(players) {
   const byPlayer = new Map();
   for (const player of players || []) {
     if (!player?.id || !player.team || player.team === 'TBD') continue;
-    const idKey = normalizeClubName(player.id);
-    if (!idKey) continue;
-    byPlayer.set(`${normalizeClubName(player.game)}:${idKey}`, player.team);
-    if (!byPlayer.has(idKey)) byPlayer.set(idKey, player.team);
+    const gameKey = normalizeClubName(player.game);
+    for (const key of playerNameKeys(player.id)) {
+      // Game-scoped keys win outright; the bare key keeps the first claim so two games
+      // fielding the same handle cannot overwrite each other.
+      byPlayer.set(`${gameKey}:${key}`, player.team);
+      if (!byPlayer.has(key)) byPlayer.set(key, player.team);
+    }
   }
   return byPlayer;
+}
+
+function clubForEntrant(lookup, gameName, entrant) {
+  const gameKey = normalizeClubName(gameName);
+  for (const key of playerNameKeys(entrant)) {
+    const scoped = lookup.get(`${gameKey}:${key}`);
+    if (scoped) return scoped;
+  }
+  for (const key of playerNameKeys(entrant)) {
+    const bare = lookup.get(key);
+    if (bare) return bare;
+  }
+  return null;
 }
 
 export async function trackedEwcGamePlacements(gameName, { guildId, eventUrl = null, eventName = null, players = [] } = {}) {
@@ -134,6 +161,7 @@ export async function trackedEwcGamePlacements(gameName, { guildId, eventUrl = n
   const lookup = playerClubLookup(players);
   const placements = [];
   const byKey = new Map();
+  const unmappedEntrants = [];
   for (const row of rows) {
     if (row.section !== selected) continue;
     const rank = Number(row.rank);
@@ -142,7 +170,8 @@ export async function trackedEwcGamePlacements(gameName, { guildId, eventUrl = n
     if (!entrant || !points) continue;
     // Solo games: the standings row names a player, so score it as their club — the same
     // unit weekly picks are graded on. Team games fall through unchanged.
-    const mapped = lookup.get(`${normalizeClubName(gameName)}:${normalizeClubName(entrant)}`) || lookup.get(normalizeClubName(entrant)) || null;
+    const mapped = clubForEntrant(lookup, gameName, entrant);
+    if (!mapped && lookup.size) unmappedEntrants.push(`${rank}. ${entrant}`);
     const club = mapped || entrant;
     const participant = mapped ? entrant : null;
     const key = normalizeClubName(club);
@@ -157,6 +186,15 @@ export async function trackedEwcGamePlacements(gameName, { guildId, eventUrl = n
     if (participant) placement.participants = [participant];
     byKey.set(key, placement);
     placements.push(placement);
+  }
+  // A solo entrant we could not resolve to a club is scored as if the player WERE the club,
+  // so a club pick silently misses it and lands on a worse-placed team-mate instead. That is
+  // a wrong score, not a missing one, so say it out loud rather than letting it pass.
+  if (unmappedEntrants.length) {
+    logger.warn(
+      `[ewc] ${gameName}: ${unmappedEntrants.length} scoring entrant(s) not resolved to a club ` +
+        `(${unmappedEntrants.slice(0, 5).join(', ')}) — club picks for them cannot score correctly`,
+    );
   }
   return placements.some((row) => row.points === EWC_POINTS_BY_RANK.get(1))
     ? placements.sort((a, b) => b.points - a.points || a.club.localeCompare(b.club))
