@@ -419,6 +419,49 @@ test('trackedEwcGamePlacements resolves a player whose wiki id spaces differentl
   assert.ok(liquid.participants.includes('Nihal Sarin'));
 });
 
+test('a duo entrant resolves to the club that fielded it, unless the sides disagree', async () => {
+  const reload = await addTournament({
+    source: 'liquipedia',
+    external_id: 'fortnite/Reload_Elite_Series/2026',
+    game: 'fortnite',
+    name: 'Reload Elite Series 2026',
+    url: 'https://liquipedia.net/fortnite/Reload_Elite_Series/2026',
+    guild_id: 'g-ewc',
+    added_by: 'admin',
+  });
+  await updateTournamentEwc(reload.id, true);
+  // The shape Reload Elite actually publishes: one row per duo.
+  await replaceTournamentStandings(reload.id, [{
+    title: 'Grand Final',
+    entries: [
+      { rank: 1, team: 'Goofy / ZDog' },
+      { rank: 2, team: '916Gon / Night' },
+      { rank: 3, team: 'Braydz / Bugha' },
+    ],
+  }]);
+
+  const placements = await trackedEwcGamePlacements('Fortnite', {
+    guildId: 'g-ewc',
+    eventUrl: 'https://liquipedia.net/fortnite/Reload_Elite_Series/2026',
+    players: [
+      { id: 'Goofy', game: 'Fortnite', team: 'Team Falcons' },
+      { id: 'ZDog', game: 'Fortnite', team: 'Team Falcons' },
+      // A duo split across two clubs cannot be attributed to either.
+      { id: '916Gon', game: 'Fortnite', team: 'Team Vitality' },
+      { id: 'Night', game: 'Fortnite', team: 'Gen.G Esports' },
+    ],
+  });
+
+  const winner = placements.find((row) => row.place === '1');
+  assert.equal(winner.club, 'Team Falcons');
+  assert.equal(winner.points, 1000);
+
+  // The mixed duo keeps its own name rather than handing 750 points to whichever half
+  // happened to resolve first.
+  const second = placements.find((row) => row.place === '2');
+  assert.equal(second.club, '916Gon / Night');
+});
+
 test('tied final placements cover every paying rank so the week can finalise', async () => {
   const chess = await addTournament({
     source: 'liquipedia',

@@ -81,7 +81,10 @@ export const EWC_2026_OFFICIAL_EVENT_DATES = [
   { test: /fortnite|reload elite/i, start: '2026-08-19', end: '2026-08-22' },
 ];
 
-const EWC_PLAYER_ENTRY_GAME = /(?:\bea\s+sports\s+fc\b|\bfc\s+pro\b|\bstreet\s+fighter\b|\btekken\b|\bfatal\s+fury\b|\bfighter\s+games?\b|\b2xko\b|\bchess\b|\bteamfight\s+tactics\b|\btft\b|\btrackmania\b)/i;
+// Games whose standings name PEOPLE rather than clubs, so a result has to be mapped back to
+// the club that fielded them before a club pick can score. Fortnite belongs here too: its
+// Reload Elite standings name a duo ("Goofy / ZDog"), which is two people, not a team.
+const EWC_PLAYER_ENTRY_GAME = /(?:\bea\s+sports\s+fc\b|\bfc\s+pro\b|\bstreet\s+fighter\b|\btekken\b|\bfatal\s+fury\b|\bfighter\s+games?\b|\b2xko\b|\bchess\b|\bteamfight\s+tactics\b|\btft\b|\btrackmania\b|\bfortnite\b|\breload\s+elite\b)/i;
 
 export function ewcGameResultUsesPlayerEntrants(gameName) {
   return EWC_PLAYER_ENTRY_GAME.test(String(gameName || ''));
