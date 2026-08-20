@@ -130,6 +130,30 @@ function playerClubLookup(players) {
   return byPlayer;
 }
 
+// A knockout prints tied finishers as one repeated rank — chess ends 1, 2, 3, 4, 5, 5, 5, 5 —
+// but four players sharing 5th occupy 5th through 8th, and EWC pays all eight positions.
+// Storing the bare rank made those rows cover only rank 5, so the result could never satisfy
+// the "every awarded rank is covered" completeness rule and the week never finalised: the
+// games were re-fetched every pass forever while their points went undistributed. A battle
+// royale ranks 1..16 with no ties, which is why only the bracket games stalled.
+//
+// The span is clamped to the last paying rank: a five-way tie for 5th reaches 9th, and a rank
+// nobody is paid for must not appear in a coverage range that only describes paid positions.
+function tiedPlaceLabels(sectionRows) {
+  const lastPaidRank = Math.max(...EWC_POINTS_BY_RANK.keys());
+  const sharedAtRank = new Map();
+  for (const row of sectionRows) {
+    const rank = Number(row?.rank);
+    if (!Number.isFinite(rank)) continue;
+    if (!String(row?.team || '').trim()) continue;
+    sharedAtRank.set(rank, (sharedAtRank.get(rank) || 0) + 1);
+  }
+  return (rank) => {
+    const end = Math.min(rank + (sharedAtRank.get(rank) || 1) - 1, lastPaidRank);
+    return end > rank ? `${rank}-${end}` : String(rank);
+  };
+}
+
 function clubForEntrant(lookup, gameName, entrant) {
   const gameKey = normalizeClubName(gameName);
   for (const key of playerNameKeys(entrant)) {
@@ -162,8 +186,9 @@ export async function trackedEwcGamePlacements(gameName, { guildId, eventUrl = n
   const placements = [];
   const byKey = new Map();
   const unmappedEntrants = [];
-  for (const row of rows) {
-    if (row.section !== selected) continue;
+  const sectionRows = rows.filter((row) => row.section === selected);
+  const placeLabel = tiedPlaceLabels(sectionRows);
+  for (const row of sectionRows) {
     const rank = Number(row.rank);
     const points = EWC_POINTS_BY_RANK.get(rank) || 0;
     const entrant = String(row.team || '').replace(/\s+/g, ' ').trim();
@@ -182,7 +207,7 @@ export async function trackedEwcGamePlacements(gameName, { guildId, eventUrl = n
       if (participant && !existing.participants?.includes(participant)) existing.participants.push(participant);
       continue;
     }
-    const placement = { club, place: String(rank), points, participant };
+    const placement = { club, place: placeLabel(rank), points, participant };
     if (participant) placement.participants = [participant];
     byKey.set(key, placement);
     placements.push(placement);
