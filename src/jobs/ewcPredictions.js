@@ -751,6 +751,7 @@ async function processWeek(client, round, hooks = {}) {
     // so a round stuck short of final was indistinguishable from one that had completed.
     logger.info(
       `[ewc-predictions] ${outcome.round.week_key} scored provisionally (${outcome.finalReadiness?.reason || 'not final'}` +
+        `${outcome.finalReadiness?.detail ? `/${outcome.finalReadiness.detail}` : ''}` +
         `${outcome.finalReadiness?.gameKey ? ` on ${outcome.finalReadiness.gameKey}` : ''}` +
         // Which paying ranks the result actually proves is the difference between "the source
         // is wrong" and "our own club de-duplication ate the row that covered them".
