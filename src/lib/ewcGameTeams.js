@@ -154,17 +154,35 @@ function tiedPlaceLabels(sectionRows) {
   };
 }
 
-function clubForEntrant(lookup, gameName, entrant) {
-  const gameKey = normalizeClubName(gameName);
-  for (const key of playerNameKeys(entrant)) {
+function lookupOne(lookup, gameKey, name) {
+  for (const key of playerNameKeys(name)) {
     const scoped = lookup.get(`${gameKey}:${key}`);
     if (scoped) return scoped;
   }
-  for (const key of playerNameKeys(entrant)) {
+  for (const key of playerNameKeys(name)) {
     const bare = lookup.get(key);
     if (bare) return bare;
   }
   return null;
+}
+
+function clubForEntrant(lookup, gameName, entrant) {
+  const gameKey = normalizeClubName(gameName);
+  const whole = lookupOne(lookup, gameKey, entrant);
+  if (whole) return whole;
+
+  // A duo enters as one row — Fortnite's Reload Elite standings read "Goofy / ZDog" — so the
+  // entrant is two people and matches no single player id. Resolve each side instead.
+  const parts = entrant.split(/\s*[/&+]\s*|\s+,\s*/).map((part) => part.trim()).filter(Boolean);
+  if (parts.length < 2) return null;
+  const clubs = new Set();
+  for (const part of parts) {
+    const club = lookupOne(lookup, gameKey, part);
+    if (club) clubs.add(club);
+  }
+  // Both sides must agree. A duo drawn from two different clubs has no single owner, and
+  // guessing one would hand another club's placement to whichever half resolved first.
+  return clubs.size === 1 ? [...clubs][0] : null;
 }
 
 export async function trackedEwcGamePlacements(gameName, { guildId, eventUrl = null, eventName = null, players = [] } = {}) {
