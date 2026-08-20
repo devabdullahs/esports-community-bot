@@ -370,6 +370,49 @@ test('trackedEwcGamePlacements maps solo standings rows to the club that fielded
   );
 });
 
+test('trackedEwcGamePlacements resolves a player whose wiki id spaces differently', async () => {
+  const chess = await addTournament({
+    source: 'liquipedia',
+    external_id: 'chess/Esports_World_Cup/2026',
+    game: 'chess',
+    name: 'Chess at Esports World Cup 2026',
+    url: 'https://liquipedia.net/chess/Esports_World_Cup/2026',
+    guild_id: 'g-ewc',
+    added_by: 'admin',
+  });
+  await updateTournamentEwc(chess.id, true);
+  // The shape the chess event actually published: standings name players, ranked, with the
+  // winner's club also fielding a lower-placed team-mate.
+  await replaceTournamentStandings(chess.id, [{
+    title: 'Final standings',
+    entries: [
+      { rank: 1, team: 'Magnus Carlsen' },
+      { rank: 2, team: 'Denis Lazavik' },
+      { rank: 5, team: 'Nihal Sarin' },
+    ],
+  }]);
+
+  // The player list carries wiki ids without the space. Matching only on the spaced form left
+  // the winner unmapped, so the club took its OTHER player's rank 5 — 200 points instead of
+  // 1000, which is exactly what week 6 recorded for Team Liquid.
+  const placements = await trackedEwcGamePlacements('Chess', {
+    guildId: 'g-ewc',
+    eventUrl: 'https://liquipedia.net/chess/Esports_World_Cup/2026',
+    players: [
+      { id: 'MagnusCarlsen', game: 'Chess', team: 'Team Liquid' },
+      { id: 'DenisLazavik', game: 'Chess', team: 'AG.AL' },
+      { id: 'NihalSarin', game: 'Chess', team: 'Team Liquid' },
+    ],
+  });
+
+  const liquid = placements.find((row) => row.club === 'Team Liquid');
+  assert.equal(liquid.place, '1');
+  assert.equal(liquid.points, 1000);
+  assert.equal(liquid.participant, 'Magnus Carlsen');
+  // The team-mate still aliases to the club so a pick naming either player resolves.
+  assert.ok(liquid.participants.includes('Nihal Sarin'));
+});
+
 test('trackedEwcGamePlacements rejects non-final standings', async () => {
   const event = await addTournament({
     source: 'liquipedia',
