@@ -29,6 +29,7 @@ const {
   trackedEwcGamePlacements,
 } = await import('../src/lib/ewcGameTeams.js');
 const { formatWeeklyPickLabel } = await import('../src/lib/ewcProfileStats.js');
+const { evaluateEwcGameResultCompleteness, ewcPlacementCoveredRanks } = await import('../src/lib/ewcPredictions.js');
 
 test.after(() => {
   closeDb();
@@ -411,6 +412,55 @@ test('trackedEwcGamePlacements resolves a player whose wiki id spaces differentl
   assert.equal(liquid.participant, 'Magnus Carlsen');
   // The team-mate still aliases to the club so a pick naming either player resolves.
   assert.ok(liquid.participants.includes('Nihal Sarin'));
+});
+
+test('tied final placements cover every paying rank so the week can finalise', async () => {
+  const chess = await addTournament({
+    source: 'liquipedia',
+    external_id: 'chess/Esports_World_Cup/2026/ties',
+    game: 'chess',
+    name: 'Chess ties at Esports World Cup 2026',
+    url: 'https://liquipedia.net/chess/Esports_World_Cup/2026/ties',
+    guild_id: 'g-ewc',
+    added_by: 'admin',
+  });
+  await updateTournamentEwc(chess.id, true);
+  // Exactly how a knockout ends: four players share 5th, and 6th/7th/8th are never printed.
+  await replaceTournamentStandings(chess.id, [{
+    title: 'Final standings',
+    entries: [
+      { rank: 1, team: 'Magnus Carlsen' },
+      { rank: 2, team: 'Denis Lazavik' },
+      { rank: 3, team: 'Hikaru Nakamura' },
+      { rank: 4, team: 'Alireza Firouzja' },
+      { rank: 5, team: 'Nihal Sarin' },
+      { rank: 5, team: 'Hans Moke Niemann' },
+      { rank: 5, team: 'Nodirbek Abdusattorov' },
+      { rank: 5, team: 'Arjun Erigaisi' },
+      { rank: 9, team: 'Jan-Krzysztof Duda' },
+    ],
+  }]);
+
+  const placements = await trackedEwcGamePlacements('Chess', {
+    guildId: 'g-ewc',
+    eventUrl: 'https://liquipedia.net/chess/Esports_World_Cup/2026/ties',
+  });
+
+  // The shared rank must describe the span it actually occupies, or the completeness rule
+  // below can never see ranks 6-8 and the round is re-fetched forever without paying out.
+  assert.equal(placements.find((row) => row.club === 'Nihal Sarin').place, '5-8');
+  assert.equal(placements.find((row) => row.club === 'Magnus Carlsen').place, '1');
+
+  const completeness = evaluateEwcGameResultCompleteness({
+    evidence: {
+      authoritative: true,
+      kind: 'tracked-final-standings',
+      coveredRanks: [...new Set(placements.flatMap((row) => ewcPlacementCoveredRanks(row.place)))].sort((a, b) => a - b),
+    },
+    placements,
+  });
+  assert.equal(completeness.reason, 'ready');
+  assert.equal(completeness.ready, true);
 });
 
 test('trackedEwcGamePlacements rejects non-final standings', async () => {
