@@ -277,7 +277,14 @@ function resultReadiness(result, gameKey) {
   if (completeness.reason === 'untrusted_source') {
     return readiness(false, EWC_PREDICTION_READINESS.UNTRUSTED_RESULT, { gameKey });
   }
-  return readiness(false, EWC_PREDICTION_READINESS.INCOMPLETE_RESULT, { gameKey });
+  // Carry the completeness detail. Without it the caller only learns THAT the result is
+  // incomplete, not whether a rank is missing, two clubs claim first, or a row has no club —
+  // three different faults that need three different fixes.
+  return readiness(false, EWC_PREDICTION_READINESS.INCOMPLETE_RESULT, {
+    gameKey,
+    detail: completeness.reason,
+    coveredRanks: completeness.coveredRanks,
+  });
 }
 
 export function evaluateEwcWeekScoringReadiness(
