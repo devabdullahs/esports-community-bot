@@ -192,7 +192,12 @@ export async function trackedEwcGamePlacements(gameName, { guildId, eventUrl = n
     const rank = Number(row.rank);
     const points = EWC_POINTS_BY_RANK.get(rank) || 0;
     const entrant = String(row.team || '').replace(/\s+/g, ' ').trim();
-    if (!entrant || !points) continue;
+    // Keep entrants who finished outside the paying ranks. Dropping them made a pick that
+    // simply placed 17th indistinguishable from one the system could not resolve: the card
+    // read "No matching result", which looks like a failure rather than a real, if
+    // unrewarded, finish. They carry 0 points and no awarded rank, so they add nothing to
+    // coverage and cannot change a score — only what the member is told.
+    if (!entrant) continue;
     // Solo games: the standings row names a player, so score it as their club — the same
     // unit weekly picks are graded on. Team games fall through unchanged.
     const mapped = clubForEntrant(lookup, gameName, entrant);

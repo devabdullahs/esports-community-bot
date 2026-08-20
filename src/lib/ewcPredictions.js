@@ -111,6 +111,10 @@ const EWC_CLUB_ALIAS_GROUPS = [
   // short one, and neither normalizer bridges "ns" to "nongshim". A second-place finish
   // scored zero as "no matching result" because of it.
   ['ns redforce', 'nongshim redforce'],
+  // A sub-brand shares no words with its club, so no rule can derive it. MLBB Women's
+  // International prints Team Falcons' roster as "Falcons Vega" (and "Falcons Vega MENA",
+  // which the roster-tag rule reduces to the same thing).
+  ['team falcons', 'falcons vega'],
 ];
 
 const EWC_CLUB_ALIASES = new Map();
@@ -122,11 +126,34 @@ for (const group of EWC_CLUB_ALIAS_GROUPS) {
   for (const key of keys) EWC_CLUB_ALIASES.set(key, keys);
 }
 
+// A club enters a regional or women's roster under its own name plus a tag — "Natus Vincere
+// PH", "Twisted Minds VN", "Virtus.pro MENA", "LOS FE". The picker offers the club, the
+// standings print the roster, and the pick scores nothing. These are a naming CONVENTION
+// rather than separate identities, so strip them by rule; curating an alias per roster would
+// never keep pace with the events.
+//
+// Only a trailing tag is removed, and only while something substantial remains, so a club
+// whose actual name is short or ends in one of these words cannot be dissolved into another.
+const ROSTER_TAGS = new Set([
+  'fe', 'w', 'women', 'academy', 'juniors', 'youth',
+  'mena', 'sea', 'apac', 'latam', 'oce', 'eu', 'na', 'br',
+  'ph', 'vn', 'id', 'my', 'th', 'kr', 'jp', 'cn', 'tw', 'hk', 'in',
+]);
+
+function withoutRosterTag(base) {
+  const parts = base.split(' ').filter(Boolean);
+  while (parts.length > 1 && ROSTER_TAGS.has(parts[parts.length - 1])) parts.pop();
+  const stripped = parts.join(' ');
+  return stripped.length >= 3 && stripped !== base ? stripped : '';
+}
+
 export function clubNameKeys(name) {
   const base = normalizeClubName(name);
   const noTeamPrefix = base.replace(/^team\s+/, '');
   const compact = normalizeTeamName(name);
-  const direct = [base, noTeamPrefix, compact].filter(Boolean);
+  const untagged = [withoutRosterTag(base), withoutRosterTag(noTeamPrefix)].filter(Boolean);
+  const direct = [base, noTeamPrefix, compact, ...untagged, ...untagged.map((key) => normalizeTeamName(key))]
+    .filter(Boolean);
   const aliases = direct.flatMap((key) => EWC_CLUB_ALIASES.get(key) || []);
   return [...new Set([...direct, ...aliases])];
 }
