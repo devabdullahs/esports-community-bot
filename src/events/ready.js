@@ -19,6 +19,7 @@ import { startLiquipediaEnrichment } from '../jobs/liquipediaEnrichment.js';
 import { refreshLiveBattleRoyaleStandings, startStandingsSync } from '../jobs/standingsSync.js';
 import { startOfficialEwcSheets } from '../jobs/officialEwcSheets.js';
 import { primeEwcClubCache } from '../lib/ewcClubCache.js';
+import { logSurveyConfigWarnings } from '../lib/thgSurveyNotifications.js';
 
 // NOTE: in discord.js 14.26 this event's string is "clientReady" — always use the enum.
 export const name = Events.ClientReady;
@@ -76,4 +77,5 @@ export async function execute(client) {
   startOfficialEwcSheets(); // Read-only authoritative tournament operations feed.
   startStandingsSync(); // BR/TFT event standings tracking (no matches to poll).
   primeEwcClubCache(); // Warm autocomplete after user-facing Liquipedia boards get first queue slots.
+  logSurveyConfigWarnings(); // Surface a missing survey secret / notification destination before the survey is posted.
 }

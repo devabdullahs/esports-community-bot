@@ -888,6 +888,31 @@ db.exec(`
     amount        INTEGER NOT NULL
   );
 
+  -- The Hacking Games gamer survey. Research answers only: no Discord user id,
+  -- name, or avatar is stored. respondent_hash is HMAC(secret, guild:user) and
+  -- exists solely for the one-response-per-member unique index, which is scoped
+  -- to survey_version so re-worded surveys collect a fresh set of answers.
+  -- The notification columns are delivery receipts, not a source of truth —
+  -- the response stands even when both sends fail.
+  CREATE TABLE IF NOT EXISTS thg_survey_responses (
+    id                INTEGER PRIMARY KEY AUTOINCREMENT,
+    guild_id          TEXT    NOT NULL,
+    survey_version    TEXT    NOT NULL,
+    respondent_hash   TEXT    NOT NULL,
+    response_number   INTEGER NOT NULL,
+    answers_json      TEXT    NOT NULL,
+    submitted_at      INTEGER NOT NULL,
+    updated_at        INTEGER NOT NULL,
+    log_message_id    TEXT,
+    log_sent_at       INTEGER,
+    thg_dm_message_id TEXT,
+    thg_dm_sent_at    INTEGER,
+    UNIQUE (guild_id, survey_version, respondent_hash)
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_thg_survey_responses_survey
+    ON thg_survey_responses(guild_id, survey_version, submitted_at);
+
   -- Community comments on durable targets. One-level threads: a reply's parent/root
   -- both point at the ROOT comment (replies to replies are re-targeted to the
   -- root in createComment). Soft delete (status='deleted') keeps reply threads

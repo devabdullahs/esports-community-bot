@@ -50,6 +50,12 @@ add multi-tenant complexity.
   `tests/ewcPredictionScoring.test.mjs`). This is the money path.
 - `src/lib/markdownTools.js` — shared markdown helpers (also tested in
   `tests/markdownTools.test.mjs`).
+- `src/lib/thgSurvey.js` — THG gamer survey: the ONE bilingual (ar member /
+  en staff+THG) question definition plus pure parse/aggregate/CSV/hash helpers.
+  `thgSurveyComponents.js` builds the Components V2 card and the modern
+  Label->RadioGroup/CheckboxGroup modal; `thgSurveyNotifications.js` delivers the
+  log-channel + THG DM embeds. Re-wording ANY question requires a new
+  `version` — duplicate detection and stored answers are keyed by it.
 - `src/jobs/` — node-cron jobs: polling, morning sync, EWC automation,
   leaderboards, voice status.
 - `apps/web/` — Next.js App Router dashboard; imports bot DB via `@bot/*`

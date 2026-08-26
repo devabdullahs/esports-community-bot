@@ -166,6 +166,16 @@ export const config = {
   dashboard: {
     publicUrl: get('EWC_DASHBOARD_PUBLIC_URL'),
   },
+  thgSurvey: {
+    // Pseudonymous de-duplication key. Without it the survey refuses to accept
+    // answers rather than fall back to storing raw Discord user ids.
+    hashSecret: get('SURVEY_HASH_SECRET'),
+    // Internal English notification channel and the THG account that receives a
+    // DM per response. Both optional: a missing destination degrades to a logged
+    // warning, never to a failed submission.
+    logChannelId: get('THG_SURVEY_LOG_CHANNEL_ID'),
+    recipientUserId: get('THG_SURVEY_RECIPIENT_USER_ID'),
+  },
   webPush: {
     enabled: get('WEB_PUSH_ENABLED', 'false') === 'true',
     publicKey: get('WEB_PUSH_VAPID_PUBLIC_KEY'),
