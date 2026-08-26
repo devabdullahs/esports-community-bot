@@ -23,6 +23,10 @@ import { DISCORD_LIMITS, renderAnswer, THG_SURVEY } from './thgSurvey.js';
 // a Radio Group / Checkbox Group / Text Input — not the deprecated
 // ActionRow -> TextInput shape. discord.js 14.26 exposes builders for all of
 // these, so no raw API payloads are needed.
+//
+// IDENTITY BOUNDARY: the internal log embed may name the respondent so staff can
+// moderate; the THG embed may not. That is why the two have separate builders
+// and only buildLogEmbed accepts a `respondent`.
 
 // Royal Azure, matching the dashboard palette. The test embed stays grey so a
 // configuration probe can never be mistaken for a real response.
@@ -36,6 +40,7 @@ export const SURVEY_MODAL_CUSTOM_ID = 'thg_survey:submit';
 // overflow, so it is truncated for DISPLAY while the database keeps the original.
 const EMBED_FIELD_VALUE_CAP = 1024;
 const EMBED_FIELD_NAME_CAP = 256;
+const BLANK_ANSWER = 'Not provided';
 
 function cap(text, max) {
   const value = String(text ?? '');
@@ -50,7 +55,7 @@ export function buildSurveyAnnouncement(survey = THG_SURVEY) {
     .addSeparatorComponents((separator) => separator.setSpacing(SeparatorSpacingSize.Small))
     .addTextDisplayComponents((display) => display.setContent(survey.announcement.ar))
     .addSeparatorComponents((separator) => separator.setSpacing(SeparatorSpacingSize.Small))
-    .addTextDisplayComponents((display) => display.setContent(`-# ${survey.privacyNotice.ar}`))
+    .addTextDisplayComponents((display) => display.setContent(`-# ${survey.privacyNotice.announcement.ar}`))
     .addActionRowComponents((row) =>
       row.addComponents(
         new ButtonBuilder()
@@ -117,9 +122,11 @@ export function buildSurveyModal(survey = THG_SURVEY) {
     .setCustomId(SURVEY_MODAL_CUSTOM_ID)
     .setTitle(cap(survey.modalTitle.ar, DISCORD_LIMITS.modalTitle));
 
-  // Intro + privacy notice occupy the first of the modal's five top-level slots.
+  // Intro + privacy notice occupy the first of the modal's five top-level slots,
+  // and the four questions take the rest. There is no sixth slot, which is why
+  // the 18+ note lives in question 3's description rather than its own display.
   modal.addTextDisplayComponents(
-    new TextDisplayBuilder().setContent(`${survey.intro.ar}\n${survey.privacyNotice.ar}`),
+    new TextDisplayBuilder().setContent(`${survey.intro.ar}\n${survey.privacyNotice.modal.ar}`),
   );
   modal.addLabelComponents(survey.questions.map((question) => buildQuestionLabel(question)));
   return modal;
@@ -128,24 +135,19 @@ export function buildSurveyModal(survey = THG_SURVEY) {
 function answerFields(response, survey) {
   return survey.questions.map((question, index) => {
     const rendered = renderAnswer(question, response.answers?.[question.id], 'en');
-    const isFreeText = question.type === 'text';
-    const value = rendered.trim()
-      ? isFreeText
-        ? `Original response (not translated):\n${rendered}`
-        : rendered
-      : '—';
-    return {
-      name: cap(`Question ${index + 1} — ${question.label.en}`, EMBED_FIELD_NAME_CAP),
-      value: cap(value, EMBED_FIELD_VALUE_CAP),
-      inline: false,
-    };
+    const filled = rendered.trim().length > 0;
+    // The contact field is already named for what it is, so it needs no
+    // "untranslated" caveat; any other free-text answer keeps one.
+    let value = BLANK_ANSWER;
+    if (filled) {
+      const needsCaveat = question.type === 'text' && !question.sensitive;
+      value = needsCaveat ? `Original response (not translated):\n${rendered}` : rendered;
+    }
+    const name = question.notificationLabel?.en || `Question ${index + 1} — ${question.label.en}`;
+    return { name: cap(name, EMBED_FIELD_NAME_CAP), value: cap(value, EMBED_FIELD_VALUE_CAP), inline: false };
   });
 }
 
-/**
- * English embed for a stored response. Used for BOTH the internal log channel
- * and the THG DM — neither carries any Discord identity, only the answers.
- */
 function buildResponseEmbed(response, { title, description, survey = THG_SURVEY } = {}) {
   return new EmbedBuilder()
     .setColor(SURVEY_ACCENT)
@@ -155,23 +157,41 @@ function buildResponseEmbed(response, { title, description, survey = THG_SURVEY 
     .addFields(
       { name: 'Survey Version', value: response.surveyVersion || survey.version, inline: true },
       { name: 'Response Number', value: `#${response.responseNumber}`, inline: true },
-      {
-        name: 'Submitted',
-        value: `<t:${response.submittedAt}:f>`,
-        inline: true,
-      },
+      { name: 'Submitted', value: `<t:${response.submittedAt}:f>`, inline: true },
     );
 }
 
-export function buildLogEmbed(response, survey = THG_SURVEY) {
-  return buildResponseEmbed(response, {
+/**
+ * English embed for the INTERNAL log channel.
+ *
+ * This is the only survey surface allowed to name the respondent, so staff can
+ * moderate a submission. The identity is passed in per call and never read from
+ * the stored row — the database still holds no Discord identifier. The client's
+ * default allowedMentions ({ parse: [] }, set in src/index.js) keeps the mention
+ * ping-free.
+ */
+export function buildLogEmbed(response, { respondent = null, survey = THG_SURVEY } = {}) {
+  const embed = buildResponseEmbed(response, {
     title: 'New THG Gamer Survey Response',
     description: `A new response has been submitted to the ${survey.title.en}.`,
     survey,
   });
+  if (respondent?.userId) {
+    embed.addFields(
+      { name: 'Submitted By', value: `<@${respondent.userId}>`, inline: true },
+      { name: 'Discord User ID', value: String(respondent.userId), inline: true },
+    );
+  }
+  return embed;
 }
 
-export function buildThgEmbed(response, survey = THG_SURVEY) {
+/**
+ * English embed for the THG DM.
+ *
+ * Takes no respondent and has no branch that could add one: THG receive the
+ * answers and any contact detail the member chose to give, and nothing else.
+ */
+export function buildThgEmbed(response, { survey = THG_SURVEY } = {}) {
   return buildResponseEmbed(response, {
     title: 'New Saudi Gamer Survey Response',
     description: `A new gamer has completed the ${survey.title.en}.`,
@@ -179,8 +199,12 @@ export function buildThgEmbed(response, survey = THG_SURVEY) {
   });
 }
 
-/** Clearly-marked configuration test embed — never shaped like a real response. */
-export function buildNotificationTestEmbed({ requestedBy, survey = THG_SURVEY } = {}) {
+/**
+ * Clearly-marked configuration test embed — never shaped like a real response.
+ * `requestedBy` names the admin who ran the test and is therefore log-only, the
+ * same boundary the real notifications keep.
+ */
+export function buildNotificationTestEmbed({ requestedBy = null, survey = THG_SURVEY } = {}) {
   const embed = new EmbedBuilder()
     .setColor(TEST_ACCENT)
     .setTitle('THG Survey Notification Test')
