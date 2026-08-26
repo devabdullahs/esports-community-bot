@@ -10,6 +10,9 @@ import { buildLogEmbed, buildNotificationTestEmbed, buildThgEmbed } from './thgS
 // Both are strictly secondary. The response is already committed before either
 // is attempted, and every failure here is logged and swallowed — a member must
 // never be told their answer failed because THG has DMs closed.
+//
+// The respondent's Discord id is threaded through in memory for the LOG embed
+// only. It is never persisted and never reaches the THG DM.
 
 const SNOWFLAKE = /^\d{17,20}$/;
 
@@ -65,15 +68,17 @@ async function resolveThgUser(client, userId) {
   return client.users.fetch(userId);
 }
 
-async function sendSurveyLog(client, response, settings = config.thgSurvey) {
+async function sendSurveyLog(client, response, { respondent, settings }) {
   const channel = await resolveLogChannel(client, settings?.logChannelId);
-  const message = await channel.send({ embeds: [buildLogEmbed(response)] });
+  const message = await channel.send({ embeds: [buildLogEmbed(response, { respondent })] });
   await markSurveyNotificationSent({ id: response.id, channel: 'logChannel', messageId: message.id });
   return message.id;
 }
 
-async function sendThgNotification(client, response, settings = config.thgSurvey) {
+async function sendThgNotification(client, response, { settings }) {
   const user = await resolveThgUser(client, settings?.recipientUserId);
+  // buildThgEmbed takes no respondent, so there is no path by which a Discord
+  // identity can reach THG.
   const message = await user.send({ embeds: [buildThgEmbed(response)] });
   await markSurveyNotificationSent({ id: response.id, channel: 'thgDm', messageId: message.id });
   return message.id;
@@ -86,14 +91,20 @@ async function sendThgNotification(client, response, settings = config.thgSurvey
  * a rejected duplicate never gets here, which is what stops a replayed
  * interaction from producing a second THG DM. Already-delivered notifications
  * are skipped via the stored receipt.
+ *
+ * @param {object} [options.respondent] `{ userId }` — log channel only.
  */
-export async function deliverSurveyNotifications(client, response, settings = config.thgSurvey) {
+export async function deliverSurveyNotifications(
+  client,
+  response,
+  { respondent = null, settings = config.thgSurvey } = {},
+) {
   const jobs = [];
   if (!response.notifications?.logChannel?.sentAt) {
-    jobs.push(['logChannel', () => sendSurveyLog(client, response, settings)]);
+    jobs.push(['logChannel', () => sendSurveyLog(client, response, { respondent, settings })]);
   }
   if (!response.notifications?.thgDm?.sentAt) {
-    jobs.push(['thgDm', () => sendThgNotification(client, response, settings)]);
+    jobs.push(['thgDm', () => sendThgNotification(client, response, { settings })]);
   }
 
   const outcomes = await Promise.allSettled(jobs.map(([, run]) => run()));
@@ -113,7 +124,6 @@ export async function deliverSurveyNotifications(client, response, settings = co
 
 /** /thg_survey test_notifications — probe both destinations without faking data. */
 export async function testSurveyNotifications(client, { requestedBy = null, settings = config.thgSurvey } = {}) {
-  const embed = buildNotificationTestEmbed({ requestedBy });
   const probe = async (send) => {
     try {
       await send();
@@ -127,11 +137,13 @@ export async function testSurveyNotifications(client, { requestedBy = null, sett
   return {
     logChannel: await probe(async () => {
       const channel = await resolveLogChannel(client, settings?.logChannelId);
-      await channel.send({ embeds: [embed] });
+      await channel.send({ embeds: [buildNotificationTestEmbed({ requestedBy })] });
     }),
+    // The admin who ran the test is a Discord identity too, so the THG copy
+    // omits it for the same reason a real response does.
     thgDm: await probe(async () => {
       const user = await resolveThgUser(client, settings?.recipientUserId);
-      await user.send({ embeds: [embed] });
+      await user.send({ embeds: [buildNotificationTestEmbed()] });
     }),
   };
 }

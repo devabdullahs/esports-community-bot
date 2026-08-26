@@ -21,12 +21,14 @@ import {
 } from '../db/thgSurveyResponses.js';
 import {
   aggregateResponses,
+  isExclusiveConflict,
   parseSurveySubmission,
   respondentHash,
   responsesToCsv,
   THG_SURVEY,
   THG_SURVEY_DUPLICATE_AR,
   THG_SURVEY_ERROR_AR,
+  THG_SURVEY_EXCLUSIVE_AR,
   THG_SURVEY_REQUIRED_AR,
   THG_SURVEY_SUCCESS_AR,
   THG_SURVEY_UNAVAILABLE_AR,
@@ -316,7 +318,11 @@ export async function handleModal(interaction) {
   const parsed = parseSurveySubmission(interaction.components);
   if (!parsed.ok) {
     logger.warn(`[thg-survey] rejected a submission: ${parsed.errors.join(', ')}`);
-    await interaction.editReply({ content: THG_SURVEY_REQUIRED_AR });
+    // A "none of these" clash is a specific, fixable mistake, so say which one
+    // it is rather than falling back to the generic "answer everything" line.
+    await interaction.editReply({
+      content: isExclusiveConflict(parsed.errors) ? THG_SURVEY_EXCLUSIVE_AR : THG_SURVEY_REQUIRED_AR,
+    });
     return;
   }
 
@@ -342,7 +348,11 @@ export async function handleModal(interaction) {
   // The member is answered first: the two staff notifications are secondary and
   // must never hold up — or fail — a submission that is already committed.
   await interaction.editReply({ content: THG_SURVEY_SUCCESS_AR });
-  await deliverSurveyNotifications(interaction.client, saved.response).catch((error) =>
+  // The respondent id travels in memory to the LOG embed only; it is never
+  // stored and buildThgEmbed has no parameter that could carry it to THG.
+  await deliverSurveyNotifications(interaction.client, saved.response, {
+    respondent: { userId: interaction.user.id },
+  }).catch((error) =>
     logger.error(
       `[thg-survey] notification delivery failed for response #${saved.response.responseNumber}: ${error.message}`,
     ),

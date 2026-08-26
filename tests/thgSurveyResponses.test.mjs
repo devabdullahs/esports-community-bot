@@ -18,7 +18,9 @@ const {
   recordSurveyResponse,
 } = await import('../src/db/thgSurveyResponses.js');
 const { THG_SURVEY, respondentHash } = await import('../src/lib/thgSurvey.js');
-const { deliverSurveyNotifications, surveyConfigStatus } = await import('../src/lib/thgSurveyNotifications.js');
+const { deliverSurveyNotifications, surveyConfigStatus, testSurveyNotifications } = await import(
+  '../src/lib/thgSurveyNotifications.js'
+);
 const surveyCommand = await import('../src/commands/thg_survey.js');
 const { execute: routeInteraction } = await import('../src/events/interactionCreate.js');
 
@@ -80,7 +82,7 @@ test('another member can still answer', async () => {
 test('a new survey version lets a previous respondent answer again', async () => {
   const saved = await recordSurveyResponse({
     guildId: GUILD,
-    surveyVersion: 'thg-saudi-cyber-2026-v2',
+    surveyVersion: 'thg-saudi-cyber-2026-v3',
     respondentHash: hashFor('member-a'),
     answers: ANSWERS,
     submittedAt: 1_760_001_000,
@@ -88,7 +90,7 @@ test('a new survey version lets a previous respondent answer again', async () =>
   assert.equal(saved.created, true);
   assert.equal(saved.response.responseNumber, 1, 'numbering restarts per version');
   assert.equal(await countFor(THG_SURVEY.version), 2);
-  assert.equal(await countFor('thg-saudi-cyber-2026-v2'), 1);
+  assert.equal(await countFor('thg-saudi-cyber-2026-v3'), 1);
 });
 
 test('concurrent submissions from one member still yield exactly one response', async () => {
@@ -143,7 +145,7 @@ test('a successful delivery records both receipts', async () => {
     answers: ANSWERS,
     submittedAt: 1_760_003_000,
   });
-  const result = await deliverSurveyNotifications(fakeClient(), saved.response, SETTINGS);
+  const result = await deliverSurveyNotifications(fakeClient(), saved.response, { settings: SETTINGS });
   assert.deepEqual(result, {
     logChannel: { ok: true, error: null },
     thgDm: { ok: true, error: null },
@@ -176,7 +178,7 @@ test('an already-delivered response is not notified twice', async () => {
       return { id: 'second-dm' };
     },
   });
-  assert.deepEqual(await deliverSurveyNotifications(client, stored, SETTINGS), {});
+  assert.deepEqual(await deliverSurveyNotifications(client, stored, { settings: SETTINGS }), {});
   assert.equal(sends, 0);
 
   const unchanged = await getSurveyResponse({
@@ -222,7 +224,7 @@ test('a failing THG DM does not fail the log, the response, or the caller', asyn
       throw new Error('Cannot send messages to this user');
     },
   });
-  const result = await deliverSurveyNotifications(client, saved.response, SETTINGS);
+  const result = await deliverSurveyNotifications(client, saved.response, { settings: SETTINGS });
   assert.equal(result.logChannel.ok, true);
   assert.equal(result.thgDm.ok, false);
   assert.match(result.thgDm.error, /Cannot send messages/);
@@ -253,7 +255,7 @@ test('a deleted log channel does not stop the THG DM', async () => {
     },
     users: { fetch: async () => ({ send: async () => ({ id: 'dm-only' }) }) },
   };
-  const result = await deliverSurveyNotifications(client, saved.response, SETTINGS);
+  const result = await deliverSurveyNotifications(client, saved.response, { settings: SETTINGS });
   assert.equal(result.logChannel.ok, false);
   assert.equal(result.thgDm.ok, true);
 });
@@ -266,11 +268,96 @@ test('unconfigured destinations are reported, not thrown', async () => {
     answers: ANSWERS,
     submittedAt: 1_760_006_000,
   });
-  const result = await deliverSurveyNotifications(fakeClient(), saved.response, { hashSecret: SECRET });
+  const result = await deliverSurveyNotifications(fakeClient(), saved.response, { settings: { hashSecret: SECRET } });
   assert.equal(result.logChannel.ok, false);
   assert.match(result.logChannel.error, /not configured/);
   assert.equal(result.thgDm.ok, false);
   assert.match(result.thgDm.error, /not configured/);
+});
+
+// --- Identity boundary through the real delivery path ------------------------
+test('delivery puts the respondent in the log embed and never in the THG DM', async () => {
+  const saved = await recordSurveyResponse({
+    guildId: GUILD,
+    surveyVersion: THG_SURVEY.version,
+    respondentHash: hashFor('member-identity'),
+    answers: ANSWERS,
+    submittedAt: 1_760_007_000,
+  });
+
+  const sent = {};
+  const client = {
+    channels: {
+      fetch: async () => ({
+        isTextBased: () => true,
+        send: async (payload) => {
+          sent.log = JSON.stringify(payload.embeds[0].toJSON());
+          return { id: 'log-message' };
+        },
+      }),
+    },
+    users: {
+      fetch: async () => ({
+        send: async (payload) => {
+          sent.dm = JSON.stringify(payload.embeds[0].toJSON());
+          return { id: 'dm-message' };
+        },
+      }),
+    },
+  };
+
+  const userId = '1524368113259380766';
+  const result = await deliverSurveyNotifications(client, saved.response, {
+    respondent: { userId },
+    settings: SETTINGS,
+  });
+  assert.equal(result.logChannel.ok, true);
+  assert.equal(result.thgDm.ok, true);
+
+  assert.ok(sent.log.includes('Submitted By'), 'the log embed names the respondent');
+  assert.ok(sent.log.includes(`<@${userId}>`), 'the log embed carries the mention');
+  assert.ok(sent.log.includes('Discord User ID'), 'the log embed carries the id field');
+  assert.ok(sent.log.includes(userId));
+
+  assert.ok(!sent.dm.includes('Submitted By'), 'the THG DM must not name the respondent');
+  assert.ok(!sent.dm.includes('Discord User ID'));
+  assert.ok(!sent.dm.includes(userId), 'the THG DM must not carry the Discord id');
+  assert.ok(!/<@/.test(sent.dm), 'the THG DM must not carry a mention');
+  assert.ok(!sent.dm.includes(hashFor('member-identity')), 'the THG DM must not carry the respondent hash');
+});
+
+test('the notification test sends the admin identity to the log channel only', async () => {
+  const sent = {};
+  const client = {
+    channels: {
+      fetch: async () => ({
+        isTextBased: () => true,
+        send: async (payload) => {
+          sent.log = JSON.stringify(payload.embeds[0].toJSON());
+          return { id: 'log-test' };
+        },
+      }),
+    },
+    users: {
+      fetch: async () => ({
+        send: async (payload) => {
+          sent.dm = JSON.stringify(payload.embeds[0].toJSON());
+          return { id: 'dm-test' };
+        },
+      }),
+    },
+  };
+
+  const result = await testSurveyNotifications(client, {
+    requestedBy: 'admin (1234567890123456789)',
+    settings: SETTINGS,
+  });
+  assert.equal(result.logChannel.ok, true);
+  assert.equal(result.thgDm.ok, true);
+  assert.ok(sent.log.includes('Requested By'));
+  assert.ok(sent.log.includes('1234567890123456789'));
+  assert.ok(!sent.dm.includes('Requested By'), 'the THG copy omits who ran the test');
+  assert.ok(!sent.dm.includes('1234567890123456789'));
 });
 
 // --- Configuration validation ------------------------------------------------

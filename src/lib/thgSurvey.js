@@ -8,13 +8,17 @@ import { createHmac } from 'node:crypto';
 //   en -> what staff and THG see (log embed, THG DM, /thg_survey results, CSV)
 // Only the canonical `value` is persisted; both languages are rendered from it.
 //
-// Question wording and options are transcribed from THG's own Google Form
-// (https://kcufkl.s.gy/SaudiGamers). Changing any question, option, or value
-// REQUIRES a new `version` below — duplicate detection and every stored answer
-// set is keyed by it.
+// Q1, Q2 and Q4 keep THG's own Google Form wording in `label.en`
+// (https://kcufkl.s.gy/SaudiGamers). Q3 deliberately diverges — see the note on
+// that question. Changing any question, option, or value REQUIRES a new
+// `version` below: duplicate detection and every stored answer set is keyed by
+// it.
 
 export const THG_SURVEY = {
-  version: 'thg-saudi-cyber-2026-v1',
+  // v2 separates workshop interest from age eligibility, so a v1 answer of
+  // `yes_18_plus` is not comparable with a v2 `yes` and must not be pooled
+  // with it. Bumping also lets anyone who answered v1 answer again.
+  version: 'thg-saudi-cyber-2026-v2',
   title: {
     ar: 'استبيان قصير للاعبين',
     en: 'Saudi Gaming & Cybersecurity Interest Survey',
@@ -24,23 +28,34 @@ export const THG_SURVEY = {
     ar: 'اهتمام اللاعبين بالأمن السيبراني',
     en: 'Gamer Cybersecurity Interest',
   },
+  // "The Hacking Games (THG)" is spelled out once here and shortened to THG
+  // everywhere after, so Arabic paragraphs carry as little embedded Latin text
+  // as possible and stay clean under RTL rendering.
   announcement: {
     ar:
-      'نعمل بالتعاون مع The Hacking Games لفهم مدى اهتمام اللاعبين في السعودية بمجال الأمن السيبراني، ' +
-      'وكيف يمكن للمهارات التي يكتسبونها من الألعاب أن ترتبط بفرص مهنية في المجال.\n\n' +
-      'الاستبيان عبارة عن 4 أسئلة فقط ولن يستغرق أكثر من دقيقة.\n\n' +
+      'نعمل بالتعاون مع The Hacking Games (THG) لفهم مدى اهتمام اللاعبين في السعودية بمجال الأمن السيبراني، ' +
+      'وكيف يمكن للمهارات التي يكتسبونها من الألعاب أن ترتبط بفرص ومسارات مهنية في هذا المجال.\n\n' +
+      'الاستبيان يتكوّن من 4 أسئلة فقط، ولن يستغرق أكثر من دقيقة.\n\n' +
       'هدفنا حاليًا هو معرفة آرائكم واهتماماتكم فقط، وليس التسجيل في ورشة أو برنامج.',
   },
   cta: { ar: 'شارك في الاستبيان' },
   intro: {
-    ar: 'نبي نعرف رأيك كلاعب عن مجال الأمن السيبراني. 4 أسئلة سريعة، والإجابة تستغرق أقل من دقيقة.',
+    ar: 'نود معرفة رأيك كلاعب حول مجال الأمن السيبراني. الاستبيان يتكوّن من 4 أسئلة سريعة ولن يستغرق أكثر من دقيقة.',
   },
-  // Shown before submitting, in the announcement AND inside the modal: answers
-  // do leave the server, so claiming full anonymity would be inaccurate.
+  // Shown before submitting, on the card AND inside the modal: answers do leave
+  // the server, so claiming full anonymity would be inaccurate. The two wordings
+  // differ only because the modal has already named the field just above.
   privacyNotice: {
-    ar:
-      'سيتم مشاركة إجابات الاستبيان مع The Hacking Games لأغراض دراسة اهتمام مجتمع الألعاب بالمجال، ' +
-      'بدون مشاركة اسم حسابك في ديسكورد.',
+    announcement: {
+      ar:
+        'سيتم مشاركة إجابات الاستبيان مع فريق THG بهدف دراسة اهتمام مجتمع الألعاب بمجال الأمن السيبراني، ' +
+        'دون مشاركة اسم حسابك في ديسكورد.',
+    },
+    modal: {
+      ar:
+        'سيتم مشاركة إجابات الاستبيان مع فريق THG بهدف دراسة اهتمام مجتمع الألعاب بهذا المجال، ' +
+        'دون مشاركة اسم حسابك في ديسكورد.',
+    },
   },
   questions: [
     {
@@ -50,35 +65,50 @@ export const THG_SURVEY = {
       required: true,
       minValues: 1,
       maxValues: 8,
-      label: { ar: 'أي نوع ألعاب تلعب غالبًا؟', en: 'Which types of games do you mainly play?' },
+      label: { ar: 'ما أنواع الألعاب التي تلعبها عادة؟', en: 'Which types of games do you mainly play?' },
       description: { ar: 'يمكنك اختيار أكثر من إجابة', en: 'Select all that apply' },
       options: [
         {
           value: 'fps',
-          label: { ar: 'تصويب FPS (فالورانت، CS، رينبو سكس)', en: 'FPS (e.g., Valorant, CSGO, Rainbow Six)' },
+          label: {
+            ar: 'ألعاب التصويب (FPS) — فالورانت، CS، رينبو سكس',
+            en: 'FPS (e.g., Valorant, CSGO, Rainbow Six)',
+          },
         },
-        { value: 'moba', label: { ar: 'MOBA (ليق أوف ليجندز، دوتا 2)', en: 'MOBA (e.g., League of Legends, Dota 2)' } },
+        {
+          value: 'moba',
+          label: { ar: 'ألعاب MOBA — ليق أوف ليجندز، دوتا 2', en: 'MOBA (e.g., League of Legends, Dota 2)' },
+        },
         {
           value: 'battle_royale',
-          label: { ar: 'باتل رويال (ببجي، فورتنايت، أيبكس)', en: 'Battle Royale (e.g., PUBG, Fortnite, Apex Legends)' },
+          label: {
+            ar: 'باتل رويال — ببجي، فورتنايت، أبيكس ليجندز',
+            en: 'Battle Royale (e.g., PUBG, Fortnite, Apex Legends)',
+          },
         },
         {
           value: 'strategy',
-          label: { ar: 'استراتيجية (ستاركرافت، ايج أوف إمبايرز)', en: 'Strategy (e.g., StarCraft, Age of Empires)' },
+          label: {
+            ar: 'ألعاب استراتيجية — ستاركرافت، إيج أوف إمبايرز',
+            en: 'Strategy (e.g., StarCraft, Age of Empires)',
+          },
         },
         {
           value: 'rpg',
-          label: { ar: 'RPG (وورلد أوف ووركرافت، فاينل فانتسي)', en: 'RPG (e.g., World of Warcraft, Final Fantasy)' },
+          label: {
+            ar: 'ألعاب تقمص الأدوار (RPG) — وورلد أوف ووركرافت، فاينل فانتسي',
+            en: 'RPG (e.g., World of Warcraft, Final Fantasy)',
+          },
         },
         {
           value: 'fighting',
           label: {
-            ar: 'قتال (ستريت فايتر، تيكن، مورتال كومبات)',
+            ar: 'ألعاب القتال — ستريت فايتر، تيكن، مورتال كومبات',
             en: 'Fighting (e.g., Street Fighter, Tekken, Mortal Kombat)',
           },
         },
-        { value: 'sports_racing', label: { ar: 'رياضة وسباقات', en: 'Sports / Racing' } },
-        { value: 'mobile_casual', label: { ar: 'ألعاب جوال وكاجوال', en: 'Mobile / casual games' } },
+        { value: 'sports_racing', label: { ar: 'ألعاب رياضية وسباقات', en: 'Sports / Racing' } },
+        { value: 'mobile_casual', label: { ar: 'ألعاب الجوال والألعاب الخفيفة', en: 'Mobile / casual games' } },
       ],
     },
     {
@@ -88,38 +118,41 @@ export const THG_SURVEY = {
       required: true,
       minValues: 1,
       maxValues: 8,
-      label: { ar: 'هل سبق وسويت أي من هذي الأمور؟', en: 'Have you ever done any of the following?' },
+      // Discord's checkbox group cannot mark an option as exclusive, so "none of
+      // these" is enforced on submit instead (see parseSurveySubmission).
+      exclusiveValue: 'none_yet',
+      label: { ar: 'هل سبق لك أن جرّبت أيًا من الأمور التالية؟', en: 'Have you ever done any of the following?' },
       description: { ar: 'يمكنك اختيار أكثر من إجابة', en: 'Select all that apply' },
       options: [
-        { value: 'custom_maps', label: { ar: 'سويت خرائط أو مراحل خاصة', en: 'Created custom maps or levels' } },
+        { value: 'custom_maps', label: { ar: 'صممت خرائط أو مراحل داخل لعبة', en: 'Created custom maps or levels' } },
         {
           value: 'code_scripts',
-          label: { ar: 'كتبت كود أو سكربتات للألعاب', en: 'Written code or scripts for games' },
+          label: { ar: 'كتبت أكواد أو سكربتات مرتبطة بالألعاب', en: 'Written code or scripts for games' },
         },
-        { value: 'mods', label: { ar: 'سويت مودات أو محتوى مخصص', en: 'Made mods or custom content' } },
+        { value: 'mods', label: { ar: 'أنشأت مودات أو محتوى مخصصًا', en: 'Made mods or custom content' } },
         {
           value: 'server_admin',
           label: {
-            ar: 'أدرت سيرفر لعبة أو مجتمع أونلاين',
+            ar: 'أدرت سيرفر لعبة أو مجتمعًا أونلاين',
             en: 'Run or helped admin a game server or online community',
           },
         },
         {
           value: 'glitch_speedrun',
-          label: { ar: 'دورت على قلتشات أو سويت سبيدرن', en: 'Hunted glitches or done speedrunning' },
+          label: { ar: 'بحثت عن قلتشات أو جرّبت الـ Speedrun', en: 'Hunted glitches or done speedrunning' },
         },
         {
           value: 'hardware_mods',
           label: {
-            ar: 'ركبت أو عدلت أجهزة أو يدات أو ملحقات',
+            ar: 'ركّبت أو عدّلت أجهزة أو قطعًا وملحقات',
             en: 'Built or modified PCs, controllers or peripherals',
           },
         },
         {
           value: 'reverse_engineering',
-          label: { ar: 'حللت ملفات أو كود لعبة (هندسة عكسية)', en: 'Reverse engineered game files or code' },
+          label: { ar: 'حللت ملفات أو أكواد لعبة (هندسة عكسية)', en: 'Reverse engineered game files or code' },
         },
-        { value: 'none_yet', label: { ar: 'ولا وحدة منها (لين الآن)', en: 'None of these (yet)' } },
+        { value: 'none_yet', label: { ar: 'لم أجرّب أيًا منها حتى الآن', en: 'None of these (yet)' } },
       ],
     },
     {
@@ -127,20 +160,22 @@ export const THG_SURVEY = {
       customId: 'thg_survey:q3',
       type: 'radio_group',
       required: true,
-      // `label.en` is THG's question verbatim — it is never rendered in a
-      // Discord Label, only in staff surfaces. `label.ar` IS rendered, so it
-      // must fit the 45-character cap; the rest of the question moves into the
-      // Arabic description.
+      // THG's form asked this as "Yes, and I confirm I am 18 or over", which
+      // measured interest and age eligibility in one answer. They now want
+      // interest alone, so the age requirement is informational only and lives
+      // in the description — never in an option, and never in a stored value.
+      // `label.ar` is rendered by Discord and caps at 45 characters, so the
+      // second half of the question moves into the description with it.
       label: {
-        ar: 'ورشة مجانية عن الألعاب والأمن السيبراني',
-        en: 'If you were invited to a free workshop on Gaming and Cybersecurity in October, would you be interested?',
+        ar: 'ورشة مجانية تجمع الألعاب والأمن السيبراني',
+        en: 'If a free workshop combining gaming and cybersecurity were held, would you be interested in attending?',
       },
-      description: { ar: 'لو اندعيت لها في أكتوبر، بتكون مهتم؟ اختر إجابة واحدة', en: 'Select one' },
+      description: {
+        ar: 'اختر إجابة واحدة · هل ستكون مهتمًا بحضورها؟ · الورشة لمن أعمارهم 18 سنة فأكثر',
+        en: 'Select one. The current workshop is for ages 18 and over.',
+      },
       options: [
-        {
-          value: 'yes_18_plus',
-          label: { ar: 'نعم، وأأكد أن عمري 18 سنة أو أكثر', en: 'Yes, and I confirm I am 18 or over' },
-        },
+        { value: 'yes', label: { ar: 'نعم', en: 'Yes' } },
         { value: 'maybe', label: { ar: 'ممكن', en: 'Maybe' } },
         { value: 'no', label: { ar: 'لا', en: 'No' } },
       ],
@@ -153,14 +188,21 @@ export const THG_SURVEY = {
       maxLength: 200,
       // THG's own optional contact question. Flagged sensitive so notification
       // and export paths treat it deliberately rather than as ordinary answer
-      // text — it is the ONLY field in this survey that can carry PII.
+      // text — it is the ONLY field in this survey that can carry PII, and the
+      // only reason a THG-facing message may contain contact details at all.
       sensitive: true,
       label: {
-        ar: 'وين نقدر نتواصل معك؟',
-        en: "Where can we reach you if you're shortlisted for the workshop?",
+        ar: 'هل ترغب أن نتواصل معك بخصوص هذه الفرصة؟',
+        en: 'Would you like us to contact you about this opportunity?',
       },
-      description: { ar: 'لو ترشحت للورشة. اختياري — اتركه فاضي إذا ما تبي', en: 'Optional' },
-      placeholder: { ar: 'إيميل أو حساب تواصل' },
+      // Named separately in staff/THG embeds: "Optional Contact Information"
+      // reads better on a notification than the question does.
+      notificationLabel: { en: 'Optional Contact Information' },
+      description: {
+        ar: 'اختياري — إذا كنت مهتمًا، يمكنك إضافة بريدك الإلكتروني أو حساب تواصل مناسب.',
+        en: 'Optional',
+      },
+      placeholder: { ar: 'البريد الإلكتروني أو حساب التواصل' },
     },
   ],
 };
@@ -171,6 +213,8 @@ export const THG_SURVEY_DUPLICATE_AR = 'سبق وشاركت في هذا الاس
 export const THG_SURVEY_ERROR_AR = 'صار خطأ أثناء حفظ إجابتك. حاول مرة أخرى بعد قليل.';
 export const THG_SURVEY_UNAVAILABLE_AR = 'الاستبيان غير متاح حاليًا. تواصل مع الإدارة.';
 export const THG_SURVEY_REQUIRED_AR = 'لازم تجاوب على كل الأسئلة المطلوبة قبل الإرسال.';
+export const THG_SURVEY_EXCLUSIVE_AR =
+  'لا يمكن اختيار "لم أجرّب أيًا منها حتى الآن" مع خيارات أخرى. اختر إما هذا الخيار وحده أو الأمور التي جرّبتها.';
 
 // Discord component limits (docs.discord.com/developers/components/reference).
 // Enforced here so a wording change fails a unit test instead of a live modal.
@@ -201,7 +245,8 @@ export function validateSurveyDefinition(survey = THG_SURVEY) {
   if ((survey.modalTitle?.ar || '').length > DISCORD_LIMITS.modalTitle) {
     push(`modal title exceeds ${DISCORD_LIMITS.modalTitle} characters`);
   }
-  // The intro Text Display occupies one of the modal's five top-level slots.
+  // The intro Text Display occupies one of the modal's five top-level slots,
+  // which is also why an informational note cannot be its own component.
   if (survey.questions.length + 1 > DISCORD_LIMITS.modalComponents) {
     push(
       `modal would need ${survey.questions.length + 1} top-level components (max ${DISCORD_LIMITS.modalComponents})`,
@@ -233,6 +278,9 @@ export function validateSurveyDefinition(survey = THG_SURVEY) {
       if ((question.maxLength || 0) > DISCORD_LIMITS.textInputMaxLength) {
         push(`${at}: max length above Discord's limit`);
       }
+      if ((question.placeholder?.ar || '').length > DISCORD_LIMITS.optionLabel) {
+        push(`${at}: Arabic placeholder exceeds ${DISCORD_LIMITS.optionLabel} characters`);
+      }
       continue;
     }
 
@@ -256,6 +304,9 @@ export function validateSurveyDefinition(survey = THG_SURVEY) {
           push(`${at}: option ${option.value} ${lang} label exceeds ${DISCORD_LIMITS.optionLabel} characters`);
         }
       }
+    }
+    if (question.exclusiveValue && !seenValues.has(question.exclusiveValue)) {
+      push(`${at}: exclusive value ${question.exclusiveValue} is not one of the options`);
     }
     if (question.type === 'checkbox_group') {
       if (question.required && (question.minValues || 0) < 1) {
@@ -342,10 +393,23 @@ export function parseSurveySubmission(components, survey = THG_SURVEY) {
     const values = (question.options || []).map((option) => option.value).filter((value) => selected.has(value));
     if (submitted.some((value) => !allowed.has(value))) errors.push(`${question.id}: unknown option`);
     if (question.required && values.length < (question.minValues || 1)) errors.push(`${question.id}: required`);
+    // "None of these" contradicts every other answer. Discord cannot express
+    // that in the component, and picking a winner here would silently discard
+    // something the member deliberately ticked, so the submission is refused
+    // and they are told which pair conflicts.
+    if (question.exclusiveValue && values.includes(question.exclusiveValue) && values.length > 1) {
+      errors.push(`${question.id}: exclusive`);
+    }
     answers[question.id] = values;
   }
 
   return { ok: errors.length === 0, answers, errors };
+}
+
+/** True when the only thing wrong with a submission is an exclusive-option clash. */
+export function isExclusiveConflict(errors) {
+  const list = Array.isArray(errors) ? errors : [];
+  return list.length > 0 && list.every((error) => error.endsWith(': exclusive'));
 }
 
 // --- Rendering ---------------------------------------------------------------
