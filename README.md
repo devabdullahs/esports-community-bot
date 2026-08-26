@@ -142,6 +142,7 @@ public commands are for members to inspect matches and submit predictions.
 | `/set_cs_rankings` | Configure Counter-Strike Valve rankings |
 | `/ewc_predict` | Member prediction commands and guide |
 | `/ewc_admin` | Prediction setup, scoring, leaderboard, and season controls |
+| `/thg_survey` | Post the The Hacking Games gamer survey, read results, export CSV, test notifications |
 
 ## Web Dashboard
 
@@ -215,6 +216,9 @@ supports it.
 | `LIQUIPEDIA_CACHE_TTL_MS` | Liquipedia response cache TTL |
 | `LIQUIPEDIA_RATE_STATE_PATH` | Persistent Liquipedia backoff state |
 | `THMANYAH_FONT_BASE_URL` | Public base URL for hosted Thmanyah font files |
+| `SURVEY_HASH_SECRET` | HMAC key for pseudonymous survey de-duplication (required by `/thg_survey`) |
+| `THG_SURVEY_LOG_CHANNEL_ID` | Channel that receives an English embed per survey response |
+| `THG_SURVEY_RECIPIENT_USER_ID` | THG Discord account that receives an English DM per survey response |
 
 See `.env.example` for the full list.
 
