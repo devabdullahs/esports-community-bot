@@ -102,6 +102,103 @@ export default async function AdminPage() {
         ) : null
       }
     >
+      {access.allowed ? (
+        <section className="grid min-w-0 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <StatCard
+            icon={NewspaperIcon}
+            label={t.dashboard.stats.posts}
+            value={posts.length}
+            description={t.dashboard.stats.postsDescription}
+          />
+          <StatCard
+            icon={FileTextIcon}
+            label={t.dashboard.stats.published}
+            value={publishedPosts}
+            description={t.dashboard.stats.publishedDescription}
+          />
+          <StatCard
+            icon={PenLineIcon}
+            label={t.dashboard.stats.drafts}
+            value={draftPosts}
+            description={t.dashboard.stats.draftsDescription}
+          />
+          <StatCard
+            icon={Gamepad2Icon}
+            label={t.dashboard.stats.games}
+            value={managedGames}
+            description={t.dashboard.stats.gamesDescription}
+          />
+        </section>
+      ) : null}
+
+      {access.allowed ? (
+        <details className="min-w-0 rounded-lg border border-border p-4">
+          <summary className="cursor-pointer text-sm font-semibold">{t.dashboard.workflowTitle}</summary>
+          <div className="mt-4 grid gap-4 lg:grid-cols-[minmax(0,1fr)_22rem]">
+          <Card className="min-w-0 border-border/70 bg-card/70 shadow-sm">
+            <CardHeader className="gap-3 p-4 sm:p-6">
+              <Badge variant="secondary" className="w-fit">
+                <ListChecksIcon data-icon="inline-start" />
+                {t.dashboard.workflowEyebrow}
+              </Badge>
+              <div>
+                <CardTitle>{t.dashboard.workflowTitle}</CardTitle>
+                <CardDescription className="mt-2 leading-6">
+                  {t.dashboard.workflowDescription}
+                </CardDescription>
+              </div>
+            </CardHeader>
+            <CardContent className="grid gap-3 px-4 pb-4 pt-0 sm:px-6 sm:pb-6">
+              {t.dashboard.workflowItems.map((item, index) => (
+                <WorkflowStep
+                  key={item.title}
+                  index={index + 1}
+                  title={item.title}
+                  description={item.description}
+                />
+              ))}
+            </CardContent>
+          </Card>
+
+          <Card className="min-w-0 border-border/70 bg-card/70 shadow-sm">
+            <CardHeader className="gap-3 p-4 sm:p-6">
+              <div className="flex items-start gap-3">
+                <span className="rounded-lg border border-primary/20 bg-primary/10 p-2 text-primary">
+                  <ActivityIcon data-icon="inline-start" />
+                </span>
+                <div className="min-w-0">
+                  <CardTitle>{t.dashboard.scopeTitle}</CardTitle>
+                  <CardDescription className="mt-2 leading-6">
+                    {t.dashboard.scopeDescription}
+                  </CardDescription>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent className="grid gap-3 px-4 pb-4 pt-0 sm:px-6 sm:pb-6">
+              <ScopeMetric label={t.dashboard.scope.posts} value={posts.length} />
+              <Separator />
+              <ScopeMetric label={t.dashboard.scope.drafts} value={draftPosts} />
+              <Separator />
+              <ScopeMetric label={t.dashboard.scope.games} value={managedGames} />
+            </CardContent>
+          </Card>
+          </div>
+        </details>
+      ) : null}
+
+      {access.allowed ? (
+        <section className="flex min-w-0 flex-col gap-4 overflow-hidden rounded-xl border border-border/70 bg-card/40 p-4 shadow-sm sm:p-6">
+          <div>
+            <h2 className="text-xl font-semibold">{t.dashboard.newsTitle}</h2>
+            <p className="text-sm text-muted-foreground">
+              {t.dashboard.newsDescription}
+            </p>
+          </div>
+          <NewsList posts={posts} games={games} locale={locale} />
+        </section>
+      ) : null}
+      <details open={!access.allowed} className="rounded-lg border border-border p-4">
+        <summary className="cursor-pointer text-sm font-medium">{t.dashboard.accessTitle}</summary>
       <section className="flex min-w-0 justify-end">
         <Card className="w-full min-w-0 border-border/70 bg-card/70 shadow-sm lg:max-w-md">
           <CardHeader className="p-5 sm:p-7">
@@ -151,98 +248,7 @@ export default async function AdminPage() {
         </Card>
       </section>
 
-      {access.allowed ? (
-        <section className="grid min-w-0 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <StatCard
-            icon={NewspaperIcon}
-            label={t.dashboard.stats.posts}
-            value={posts.length}
-            description={t.dashboard.stats.postsDescription}
-          />
-          <StatCard
-            icon={FileTextIcon}
-            label={t.dashboard.stats.published}
-            value={publishedPosts}
-            description={t.dashboard.stats.publishedDescription}
-          />
-          <StatCard
-            icon={PenLineIcon}
-            label={t.dashboard.stats.drafts}
-            value={draftPosts}
-            description={t.dashboard.stats.draftsDescription}
-          />
-          <StatCard
-            icon={Gamepad2Icon}
-            label={t.dashboard.stats.games}
-            value={managedGames}
-            description={t.dashboard.stats.gamesDescription}
-          />
-        </section>
-      ) : null}
-
-      {access.allowed ? (
-        <section className="grid min-w-0 gap-4 lg:grid-cols-[minmax(0,1fr)_22rem]">
-          <Card className="min-w-0 border-border/70 bg-card/70 shadow-sm">
-            <CardHeader className="gap-3 p-4 sm:p-6">
-              <Badge variant="secondary" className="w-fit">
-                <ListChecksIcon data-icon="inline-start" />
-                {t.dashboard.workflowEyebrow}
-              </Badge>
-              <div>
-                <CardTitle>{t.dashboard.workflowTitle}</CardTitle>
-                <CardDescription className="mt-2 leading-6">
-                  {t.dashboard.workflowDescription}
-                </CardDescription>
-              </div>
-            </CardHeader>
-            <CardContent className="grid gap-3 px-4 pb-4 pt-0 sm:px-6 sm:pb-6">
-              {t.dashboard.workflowItems.map((item, index) => (
-                <WorkflowStep
-                  key={item.title}
-                  index={index + 1}
-                  title={item.title}
-                  description={item.description}
-                />
-              ))}
-            </CardContent>
-          </Card>
-
-          <Card className="min-w-0 border-border/70 bg-card/70 shadow-sm">
-            <CardHeader className="gap-3 p-4 sm:p-6">
-              <div className="flex items-start gap-3">
-                <span className="rounded-lg border border-primary/20 bg-primary/10 p-2 text-primary">
-                  <ActivityIcon data-icon="inline-start" />
-                </span>
-                <div className="min-w-0">
-                  <CardTitle>{t.dashboard.scopeTitle}</CardTitle>
-                  <CardDescription className="mt-2 leading-6">
-                    {t.dashboard.scopeDescription}
-                  </CardDescription>
-                </div>
-              </div>
-            </CardHeader>
-            <CardContent className="grid gap-3 px-4 pb-4 pt-0 sm:px-6 sm:pb-6">
-              <ScopeMetric label={t.dashboard.scope.posts} value={posts.length} />
-              <Separator />
-              <ScopeMetric label={t.dashboard.scope.drafts} value={draftPosts} />
-              <Separator />
-              <ScopeMetric label={t.dashboard.scope.games} value={managedGames} />
-            </CardContent>
-          </Card>
-        </section>
-      ) : null}
-
-      {access.allowed ? (
-        <section className="flex min-w-0 flex-col gap-4 overflow-hidden rounded-xl border border-border/70 bg-card/40 p-4 shadow-sm sm:p-6">
-          <div>
-            <h2 className="text-xl font-semibold">{t.dashboard.newsTitle}</h2>
-            <p className="text-sm text-muted-foreground">
-              {t.dashboard.newsDescription}
-            </p>
-          </div>
-          <NewsList posts={posts} games={games} locale={locale} />
-        </section>
-      ) : null}
+      </details>
     </AdminPageShell>
   );
 }

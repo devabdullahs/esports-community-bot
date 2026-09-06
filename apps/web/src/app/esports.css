@@ -141,13 +141,21 @@
 .ec-secondary-inner a[aria-current] {
   color: var(--primary);
 }
+.ec-more-trigger,
 .ec-ewc-trigger {
   display: flex;
   align-items: center;
   gap: 7px;
-  margin-inline-start: auto;
   font-size: 12px;
   min-height: 38px;
+}
+.ec-ewc-trigger {
+  border-inline-start: 1px solid var(--border);
+  padding-inline-start: 22px;
+  font-weight: 600;
+}
+.ec-more-trigger:hover, .ec-ewc-trigger:hover {
+  color: var(--primary);
 }
 .ec-live-count {
   display: inline-flex;

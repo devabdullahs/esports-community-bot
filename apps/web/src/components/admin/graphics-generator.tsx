@@ -124,6 +124,11 @@ export function GraphicsGenerator({ data }: { data: GraphicsGeneratorData }) {
   const [resourceId, setResourceId] = useState<number | null>(() => initialGraphicsSelection(data, "match-result"));
   const [customValues, setCustomValues] = useState<CustomGraphicsInputMap>(() => structuredClone(DEFAULT_CUSTOM_GRAPHICS_INPUTS));
   const [query, setQuery] = useState("");
+  const [ownerFilter, setOwnerFilter] = useState("all");
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [autoPreview, setAutoPreview] = useState(true);
+  const [exportType, setExportType] = useState("png");
+  const [exporting, setExporting] = useState(false);
   const [format, setFormat] = useState<GraphicsFormatId>(DEFAULT_GRAPHICS_RENDER_OPTIONS.format);
   const [language, setLanguage] = useState<GraphicsLanguageId>(DEFAULT_GRAPHICS_RENDER_OPTIONS.language);
   const [alignment, setAlignment] = useState<GraphicsAlignmentId>(DEFAULT_GRAPHICS_RENDER_OPTIONS.alignment);
@@ -158,9 +163,12 @@ export function GraphicsGenerator({ data }: { data: GraphicsGeneratorData }) {
   const selectedOption = useMemo(() => options.find((option) => option.id === resourceId) ?? null, [options, resourceId]);
   const filteredOptions = useMemo(() => {
     const needle = query.trim().toLocaleLowerCase();
-    if (!needle) return options;
-    return options.filter((option) => `${option.label} ${option.detail}`.toLocaleLowerCase().includes(needle));
-  }, [options, query]);
+    return options.filter((option) =>
+      (ownerFilter === "all" || `${option.owner.kind}:${option.owner.slug}` === ownerFilter) &&
+      (statusFilter === "all" || option.status === statusFilter) &&
+      `${option.label} ${option.detail}`.toLocaleLowerCase().includes(needle));
+  }, [options, query, ownerFilter, statusFilter]);
+  const sourceOwners = [...new Set(options.map((option) => `${option.owner.kind}:${option.owner.slug}`))].sort();
   const dimensions = graphicsFormatDimensions(format);
   const channelBrand = useMemo(
     () => data.brands.find((brand) => brand.slug === brandMediaSlug) ?? null,
@@ -220,6 +228,8 @@ export function GraphicsGenerator({ data }: { data: GraphicsGeneratorData }) {
       ? nextOption.owner.slug
       : null);
     setQuery("");
+    setOwnerFilter("all");
+    setStatusFilter("all");
     setError(null);
   }
 
@@ -231,6 +241,9 @@ export function GraphicsGenerator({ data }: { data: GraphicsGeneratorData }) {
   }
 
   function applyRecent(item: RecentGeneration) {
+    abortRef.current?.abort();
+    setRendering(false);
+    setError(null);
     setTemplate(item.template);
     setSourceMode(item.sourceMode);
     setResourceId(item.resourceId);
@@ -276,6 +289,7 @@ export function GraphicsGenerator({ data }: { data: GraphicsGeneratorData }) {
         throw new Error(body?.error || "Unable to generate graphic");
       }
       const image = await response.blob();
+      if (controller.signal.aborted) return;
       const url = URL.createObjectURL(image);
       objectUrls.current.add(url);
       const createdAt = Date.now();
@@ -314,17 +328,50 @@ export function GraphicsGenerator({ data }: { data: GraphicsGeneratorData }) {
   // updates instantly"): any change re-renders after a short debounce.
   // Failures (e.g. rate limit) do not retry until the controls change again.
   useEffect(() => {
-    if (!canGenerate || !currentSignature || currentSignature === generatedSignature) return;
+    if (!autoPreview || !canGenerate || !currentSignature || currentSignature === generatedSignature) return;
     const timer = window.setTimeout(() => void generatePreview(true), 700);
     return () => window.clearTimeout(timer);
-  }, [canGenerate, currentSignature, generatedSignature, generatePreview]);
+  }, [autoPreview, canGenerate, currentSignature, generatedSignature, generatePreview]);
 
-  function download(url = previewUrl) {
-    if (!url) return;
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = `graphics-${template}-${format.replace(":", "x")}-${scale}x.png`;
-    link.click();
+  async function download(item?: RecentGeneration) {
+    const url = item?.url ?? previewUrl;
+    if (!url || (!item && (previewStale || rendering))) return;
+    setExporting(true);
+    let temporaryUrl: string | null = null;
+    try {
+      const snapshot = item ?? JSON.parse(generatedSignature) as { template: string; format: string; scale: number };
+      let outputUrl = url;
+      if (exportType !== "png") {
+        const bitmap = await createImageBitmap(await (await fetch(url)).blob());
+        try {
+          const canvas = document.createElement("canvas");
+          canvas.width = bitmap.width;
+          canvas.height = bitmap.height;
+          const context = canvas.getContext("2d");
+          if (!context) throw new Error("Image export is unavailable in this browser.");
+          context.fillStyle = "#ffffff";
+          context.fillRect(0, 0, canvas.width, canvas.height);
+          context.drawImage(bitmap, 0, 0);
+          const blob = await new Promise<Blob>((resolve, reject) => canvas.toBlob(
+            (value) => value ? resolve(value) : reject(new Error("Unable to export image")),
+            `image/${exportType === "jpg" ? "jpeg" : exportType}`, 0.92,
+          ));
+          if (blob.type !== `image/${exportType === "jpg" ? "jpeg" : exportType}`) throw new Error("This browser does not support the selected image format. Choose PNG.");
+          temporaryUrl = URL.createObjectURL(blob);
+          outputUrl = temporaryUrl;
+        } finally { bitmap.close(); }
+      }
+      const settings = item?.options ?? snapshot as { format: string; scale: number };
+      const link = document.createElement("a");
+      link.href = outputUrl;
+      link.download = `graphics-${snapshot.template}-${settings.format.replace(":", "x")}-${settings.scale}x.${exportType}`;
+      link.click();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Unable to export image");
+    } finally {
+      if (temporaryUrl) { const disposableUrl = temporaryUrl; window.setTimeout(() => URL.revokeObjectURL(disposableUrl), 30_000); }
+      setExporting(false);
+    }
   }
 
   async function toggleFullscreen() {
@@ -383,7 +430,7 @@ export function GraphicsGenerator({ data }: { data: GraphicsGeneratorData }) {
         <aside className="order-2 flex min-h-0 flex-col border-t border-border bg-card/45 xl:order-1 xl:border-t-0 xl:border-e">
           <div className="grid gap-6 p-4 xl:max-h-[calc(100vh-15rem)] xl:overflow-y-auto xl:p-5">
             <div>
-              <h2 className="text-lg font-semibold">Graphics generator</h2>
+              <h2 className="text-lg font-semibold">Design settings</h2>
               <p className="mt-1 text-sm leading-5 text-muted-foreground">Create broadcast-ready graphics from stored match and editorial data.</p>
             </div>
 
@@ -417,11 +464,11 @@ export function GraphicsGenerator({ data }: { data: GraphicsGeneratorData }) {
             {sourceMode === "stored" ? <section className="grid gap-2" aria-labelledby="graphics-source-label">
               <div className="flex items-center justify-between gap-3">
                 <FieldLabel id="graphics-source-label">Source</FieldLabel>
-                <span className="font-mono text-[11px] text-muted-foreground">{options.length} available</span>
+                <span className="font-mono text-[11px] text-muted-foreground">{filteredOptions.length} of {options.length}</span>
               </div>
               <div className="relative">
                 <SearchIcon className="pointer-events-none absolute start-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-                <Input ref={searchRef} value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search sources" className="pe-11 ps-9" />
+                <Input aria-label="Search sources" ref={searchRef} value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search sources" className="pe-11 ps-9" />
                 <KbdGroup className="pointer-events-none absolute end-2.5 top-1/2 -translate-y-1/2 max-sm:hidden" aria-label={isMac ? "Command Shift K" : "Control Shift K"}>
                   <Kbd>{isMac ? "⌘" : "Ctrl"}</Kbd>
                   <span className="text-[10px] text-muted-foreground">+</span>
@@ -429,6 +476,16 @@ export function GraphicsGenerator({ data }: { data: GraphicsGeneratorData }) {
                   <span className="text-[10px] text-muted-foreground">+</span>
                   <Kbd>K</Kbd>
                 </KbdGroup>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <Select value={ownerFilter} onValueChange={(value) => value && setOwnerFilter(value)}>
+                  <SelectTrigger className="w-full" aria-label="Filter sources by game or channel"><SelectValue>{ownerFilter === "all" ? "All sources" : ownerFilter.split(":")[1].replaceAll("-", " ")}</SelectValue></SelectTrigger>
+                  <SelectContent><SelectItem value="all">All sources</SelectItem>{sourceOwners.map((owner) => <SelectItem key={owner} value={owner}>{owner.split(":")[1].replaceAll("-", " ")}</SelectItem>)}</SelectContent>
+                </Select>
+                <Select value={statusFilter} onValueChange={(value) => value && setStatusFilter(value)}>
+                  <SelectTrigger className="w-full" aria-label="Filter source status"><SelectValue>{({ all: "All statuses", live: "Live", final: "Finished", soon: "Upcoming" } as Record<string, string>)[statusFilter]}</SelectValue></SelectTrigger>
+                  <SelectContent><SelectItem value="all">All statuses</SelectItem><SelectItem value="live">Live</SelectItem><SelectItem value="final">Finished</SelectItem><SelectItem value="soon">Upcoming</SelectItem></SelectContent>
+                </Select>
               </div>
               <div className="max-h-60 overflow-y-auto rounded-lg border border-border bg-background/50 p-1" role="listbox" aria-label="Graphics sources">
                 {filteredOptions.map((option) => {
@@ -443,17 +500,17 @@ export function GraphicsGenerator({ data }: { data: GraphicsGeneratorData }) {
                       className={cn("flex min-h-10 w-full items-center gap-2 rounded-md border border-transparent px-2 text-start text-sm transition-colors hover:bg-muted/70 max-sm:min-h-12", resourceId === option.id && "border-primary/35 bg-primary/10")}
                     >
                       <span className={cn("size-2 shrink-0 rounded-full", status.dot)} />
-                      <span className="w-7 shrink-0 font-mono text-[11px] text-muted-foreground">{option.id}</span>
                       <span className="min-w-0 flex-1">
                         <span className="block truncate font-medium">{option.label}</span>
                         <span className="block truncate text-[11px] text-muted-foreground">{option.detail}</span>
                       </span>
-                      <Badge variant="outline" className={cn("h-5 px-1.5 font-mono text-[9px]", status.className)}>{status.label}</Badge>
+                      {option.status ? <Badge variant="outline" className={cn("h-5 px-1.5 font-mono text-[9px]", status.className)}>{status.label}</Badge> : null}
                     </button>
                   );
                 })}
-                {filteredOptions.length === 0 ? <p className="px-3 py-8 text-center text-sm text-muted-foreground">No matching sources.</p> : null}
+                {filteredOptions.length === 0 ? <p className="px-3 py-8 text-center text-sm text-muted-foreground">No matching sources. <button type="button" className="underline" onClick={() => { setQuery(""); setOwnerFilter("all"); setStatusFilter("all"); }}>Clear filters</button></p> : null}
               </div>
+              {selectedOption ? <p className="text-xs leading-5 text-muted-foreground"><span className="font-medium text-foreground">Selected:</span> {selectedOption.label} · {selectedOption.detail}</p> : null}
             </section> : (
               <section className="grid gap-3" aria-labelledby="graphics-custom-label">
                 <div className="flex items-center justify-between gap-3">
@@ -480,6 +537,7 @@ export function GraphicsGenerator({ data }: { data: GraphicsGeneratorData }) {
                   </Tooltip>
                 ))}
               </ToggleGroup>
+              <p className="text-xs text-muted-foreground">{GRAPHICS_FORMATS.find((item) => item.id === format)?.hint}</p>
             </Field>
 
             <div className="grid grid-cols-2 gap-3 max-sm:grid-cols-1">
@@ -489,7 +547,7 @@ export function GraphicsGenerator({ data }: { data: GraphicsGeneratorData }) {
                   {GRAPHICS_LANGUAGES.map((item) => <ToggleGroupItem key={item} value={item} className="w-full px-2 text-xs">{item === "ar" ? "عربي" : item === "both" ? "Both" : "EN"}</ToggleGroupItem>)}
                 </ToggleGroup>
               </Field>
-              <Field className="max-sm:hidden">
+              <Field>
                 <FieldLabel>Alignment</FieldLabel>
                 <Select value={alignment} onValueChange={(value) => value && setAlignment(value as GraphicsAlignmentId)}>
                   <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
@@ -594,7 +652,6 @@ export function GraphicsGenerator({ data }: { data: GraphicsGeneratorData }) {
               </section>
             ) : null}
 
-            {error ? <p className="text-sm text-destructive" role="alert">{error}</p> : null}
           </div>
 
           <div className="sticky bottom-0 z-20 mt-auto grid gap-2 border-t border-border bg-background/90 p-4 backdrop-blur xl:static xl:bg-transparent xl:p-5 xl:backdrop-blur-none">
@@ -603,7 +660,7 @@ export function GraphicsGenerator({ data }: { data: GraphicsGeneratorData }) {
               {rendering ? "Generating..." : "Generate preview"}
             </Button>
             <div className="grid grid-cols-[1fr_auto] gap-2">
-              <Button variant="outline" disabled={!previewUrl} onClick={() => download()} className="max-sm:h-12"><DownloadIcon data-icon="inline-start" />Download PNG</Button>
+              <Button variant="outline" disabled={!previewUrl || previewStale || rendering || exporting} onClick={() => void download()} className="max-sm:h-12"><DownloadIcon data-icon="inline-start" />Download {exportType.toUpperCase()}</Button>
               <Select value={String(scale)} onValueChange={(value) => value && setScale(Number(value) as GraphicsExportScale)}>
                 <SelectTrigger className="w-full font-mono text-xs" aria-label="Export size">
                   <span>{scale}× · {dimensions.width * scale}×{dimensions.height * scale}</span>
@@ -617,12 +674,23 @@ export function GraphicsGenerator({ data }: { data: GraphicsGeneratorData }) {
                 </SelectContent>
               </Select>
             </div>
-            <p className="text-[11px] leading-4 text-muted-foreground">Export size: the PNG is saved at the format resolution times the multiplier.</p>
+            <p className="text-[11px] leading-4 text-muted-foreground">Export resolution is the format size times the multiplier. Generate preview to save a version in this session.</p>
           </div>
         </aside>
 
-        <section className="order-1 flex min-w-0 flex-col bg-background xl:order-2 xl:min-h-[620px]">
-          <div className="order-2 flex min-h-13 items-center gap-2 overflow-x-auto border-b border-border px-3 py-2 max-xl:border-t xl:order-1">
+        <section aria-label="Graphic preview and export" aria-busy={rendering} className="order-1 flex min-w-0 flex-col bg-background xl:order-2 xl:min-h-[620px]">
+          <div className="order-first flex flex-wrap items-center gap-3 border-b border-border bg-card p-3">
+            <label className="flex items-center gap-2 text-sm"><Switch checked={autoPreview} onCheckedChange={setAutoPreview} />Auto preview</label>
+            <div className="ms-auto flex items-center gap-2">
+              <Select value={exportType} onValueChange={(value) => value && setExportType(value)}>
+                <SelectTrigger aria-label="Image file format" className="w-24"><SelectValue>{exportType === "jpg" ? "JPEG" : exportType.toUpperCase()}</SelectValue></SelectTrigger>
+                <SelectContent><SelectItem value="png">PNG</SelectItem><SelectItem value="jpg">JPEG</SelectItem><SelectItem value="webp">WebP</SelectItem></SelectContent>
+              </Select>
+              <Button disabled={!previewUrl || previewStale || rendering || exporting} onClick={() => void download()}><DownloadIcon />{exporting ? "Exporting…" : "Download"}</Button>
+            </div>
+            {error ? <p role="alert" className="w-full text-sm text-destructive">{error}</p> : null}
+          </div>
+          <div className="order-2 flex min-h-13 flex-wrap items-center gap-2 border-b border-border px-3 py-2 max-xl:border-t xl:order-1">
             <div className="flex shrink-0 items-center rounded-lg border border-border bg-card max-sm:hidden">
               <Button variant="ghost" size="icon-sm" onClick={() => setZoom((value) => Math.max(30, value - 10))} aria-label="Zoom out"><MinusIcon /></Button>
               <span className="w-14 text-center font-mono text-xs">{zoom}%</span>
@@ -641,8 +709,8 @@ export function GraphicsGenerator({ data }: { data: GraphicsGeneratorData }) {
 
           <div className="relative order-1 flex min-h-[320px] flex-1 items-center justify-center overflow-auto bg-[radial-gradient(ellipse_at_50%_0%,color-mix(in_oklab,var(--muted)_25%,transparent),transparent_62%)] p-4 sm:min-h-[470px] sm:p-8 xl:order-2">
             <div data-graphics-preview-frame className={cn("relative max-h-[68vh] w-full max-w-[940px] overflow-hidden rounded-lg border border-border bg-card shadow-2xl transition-[aspect-ratio,transform]", formatAspectClass(format), (format === "9:16" || format === "4:5") && "w-auto max-w-none")} style={{ transform: `scale(${zoom / 100})`, height: format === "9:16" ? "min(68vh,760px)" : format === "4:5" ? "min(68vh,700px)" : undefined }}>
-              {previewUrl ? <Image src={previewUrl} alt="Generated social graphic" fill unoptimized className="object-contain" /> : <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 text-muted-foreground"><ImageIcon className="size-8" /><p className="text-sm">{canGenerate ? "Rendering preview…" : "Select a source to render a preview."}</p></div>}
-              {previewStale && !rendering ? <div className="absolute inset-x-3 top-3 z-40 rounded-md border border-amber-400/25 bg-background/90 px-3 py-2 text-center text-xs text-amber-300 backdrop-blur">Preview out of date — updating…</div> : null}
+              {previewUrl ? <Image src={previewUrl} alt="Generated social graphic" fill unoptimized className="object-contain" /> : <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 text-muted-foreground"><ImageIcon className="size-8" /><p className="text-sm">{rendering ? "Rendering preview…" : canGenerate ? "Choose Generate preview to create your graphic." : "Select a source to render a preview."}</p></div>}
+              {previewStale && !rendering ? <div className="absolute inset-x-3 top-3 z-40 rounded-md border border-amber-400/25 bg-background/90 px-3 py-2 text-center text-xs text-amber-300 backdrop-blur">Preview out of date. {autoPreview && !error ? "Updating…" : "Choose Refresh to apply your changes."}</div> : null}
               {safeArea ? <div className="pointer-events-none absolute inset-[4%] z-10 border border-dashed" style={{ borderColor: `${selectedStyle.accent}73` }}><span className="absolute -bottom-px start-0 px-1.5 py-0.5 font-mono text-[8px]" style={{ background: selectedStyle.dark ? "rgba(0,0,0,.8)" : "rgba(255,255,255,.85)", color: selectedStyle.accent }}>SAFE AREA</span></div> : null}
               {showGrid ? <div className="pointer-events-none absolute inset-0 z-10 opacity-40" style={{ backgroundImage: `linear-gradient(to right, ${selectedStyle.accent}38 1px, transparent 1px), linear-gradient(to bottom, ${selectedStyle.accent}38 1px, transparent 1px)`, backgroundSize: "8.333% 16.666%" }} /> : null}
               {selectedBrand && brandPlacement === "custom" ? (
@@ -685,17 +753,17 @@ export function GraphicsGenerator({ data }: { data: GraphicsGeneratorData }) {
           <div className="order-3 flex min-h-8 flex-wrap items-center gap-x-4 gap-y-1 border-t border-border px-4 py-2 font-mono text-[11px] text-muted-foreground">
             <span className="flex items-center gap-2"><span className={cn("size-1.5 rounded-full", rendering ? "animate-pulse bg-amber-400" : "bg-teal-400")} />{rendering ? "Rendering..." : renderedAt ? `Rendered ${new Date(renderedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}` : "Ready"}</span>
             <span>{dimensions.width * scale}x{dimensions.height * scale} @ {scale}x export</span>
-            <span className="ms-auto">{sourceMode === "custom" ? "Custom input" : selectedOption ? `source #${selectedOption.id} - ${selectedOption.detail}` : "No source selected"}</span>
+            <span className="ms-auto">{sourceMode === "custom" ? "Custom input" : selectedOption ? `${selectedOption.label} · ${selectedOption.detail}` : "No source selected"}</span>
           </div>
 
           <div className="order-4 border-t border-border bg-card/35 p-4">
             <div className="mb-3 flex items-center justify-between"><h3 className="text-sm font-semibold">Recent generations</h3><span className="text-xs text-muted-foreground">This session</span></div>
             {recent.length ? <div className="grid gap-2 sm:grid-cols-2 2xl:grid-cols-4">{recent.map((item) => (
-              <button key={item.id} type="button" onClick={() => applyRecent(item)} className="group flex min-w-0 items-center gap-3 rounded-lg border border-border bg-background/65 p-2 text-start transition-colors hover:border-muted-foreground">
-                <span className="relative block aspect-video w-24 shrink-0 overflow-hidden rounded-md border border-border"><Image src={item.url} alt="" fill unoptimized className="object-cover" /></span>
+              <div key={item.id} className="group flex min-w-0 items-center gap-3 rounded-lg border border-border bg-background/65 p-2 text-start transition-colors hover:border-muted-foreground">
+                <button type="button" onClick={() => applyRecent(item)} className="flex min-w-0 flex-1 items-center gap-3 text-start" aria-label={`Restore ${item.title}`}><span className="relative block aspect-video w-24 shrink-0 overflow-hidden rounded-md border border-border"><Image src={item.url} alt="" fill unoptimized className="object-cover" /></span>
                 <span className="min-w-0 flex-1"><span className="block truncate text-xs font-semibold">{item.title}</span><span className="block truncate text-[11px] text-muted-foreground">{item.meta}</span><span className="font-mono text-[10px] text-muted-foreground">{new Date(item.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</span></span>
-                <Button render={<span />} nativeButton={false} variant="ghost" size="icon-xs" onClick={(event) => { event.stopPropagation(); download(item.url); }} aria-label="Download recent graphic"><DownloadIcon /></Button>
-              </button>
+                </button><Button variant="ghost" size="icon-xs" disabled={exporting} onClick={() => void download(item)} aria-label={`Download ${item.title}`}><DownloadIcon /></Button>
+              </div>
             ))}</div> : <div className="flex items-center justify-center gap-2 rounded-lg border border-dashed border-border py-6 text-sm text-muted-foreground"><ImageIcon className="size-4" />Generated previews will appear here.</div>}
           </div>
         </section>

@@ -15,7 +15,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { DiscordIcon } from "@/components/discord-icon";
 import {
   NotificationUnreadBadge,
@@ -65,6 +65,16 @@ export function SiteHeaderClient({
   locale: Locale;
   liveCoStreams?: number;
 }) {
+  const headerRef = useRef<HTMLElement>(null);
+  useEffect(() => {
+    const header = headerRef.current;
+    if (!header) return;
+    const update = () => document.documentElement.style.setProperty("--site-header-height", `${header.getBoundingClientRect().height}px`);
+    const observer = new ResizeObserver(update);
+    observer.observe(header);
+    update();
+    return () => observer.disconnect();
+  }, []);
   const router = useRouter();
   const pathname = usePathname();
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -132,7 +142,7 @@ export function SiteHeaderClient({
   }
 
   return (
-    <header className="ec-site-header">
+    <header ref={headerRef} className="ec-site-header">
       <div className="ec-container ec-masthead">
         <Link
           href={localizedPath("/", locale)}
@@ -374,9 +384,8 @@ export function SiteHeaderClient({
                 {streamBadge(link.href)}
               </Link>
             ))}
-          </nav>
           <DropdownMenu>
-            <DropdownMenuTrigger className="ec-ewc-trigger">
+            <DropdownMenuTrigger className="ec-more-trigger">
               {locale === "ar" ? "المزيد" : "More"}
               <ChevronDownIcon className="size-3" />
             </DropdownMenuTrigger>
@@ -411,6 +420,7 @@ export function SiteHeaderClient({
               </DropdownMenuGroup>
             </DropdownMenuContent>
           </DropdownMenu>
+          </nav>
         </div>
       </div>
     </header>

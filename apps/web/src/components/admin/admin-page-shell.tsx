@@ -64,7 +64,7 @@ export async function AdminPageShell({
       : null;
 
   return (
-    <main
+    <section
       className={cn(
         "mx-auto flex w-full flex-1 flex-col gap-5 px-4 py-5 sm:gap-6 sm:px-6 sm:py-6",
         maxWidthClasses[maxWidth],
@@ -79,14 +79,14 @@ export async function AdminPageShell({
                 nativeButton={false}
                 variant="ghost"
                 size="sm"
-                className="-ms-2 w-fit text-muted-foreground hover:text-foreground"
+                className={cn("-ms-2 w-fit text-muted-foreground hover:text-foreground", breadcrumbs?.length && "sm:hidden")}
               >
                 <ArrowLeftIcon data-icon="inline-start" className="rtl:rotate-180" />
                 {back.label}
               </Button>
             ) : null}
             {breadcrumbs?.length ? (
-              <Breadcrumb>
+              <Breadcrumb className={back ? "max-sm:hidden" : undefined}>
                 <BreadcrumbList>
                   {breadcrumbs.map((crumb, index) => {
                     const isLast = index === breadcrumbs.length - 1;
@@ -137,6 +137,6 @@ export async function AdminPageShell({
       </header>
 
       {children}
-    </main>
+    </section>
   );
 }
