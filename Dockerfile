@@ -43,6 +43,7 @@ COPY --from=build --chown=node:node /app/node_modules ./node_modules
 COPY --from=build --chown=node:node /app/package*.json ./
 COPY --from=build --chown=node:node /app/apps/web ./apps/web
 COPY --from=build --chown=node:node /app/src ./src
+COPY --from=build --chown=node:node /app/assets/game-emojis/128-discord-dark ./assets/game-emojis/128-discord-dark
 # Postgres startup runs versioned migrations; the generated schema snapshot is
 # kept for inspection and parity checks.
 COPY --from=build --chown=node:node /app/scripts/postgres ./scripts/postgres

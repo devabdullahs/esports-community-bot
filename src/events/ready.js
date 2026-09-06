@@ -2,7 +2,7 @@ import { Events, OAuth2Scopes, PermissionFlagsBits } from 'discord.js';
 import { logger } from '../lib/logger.js';
 import { startMorningSync } from '../jobs/morningSync.js';
 import { resumePolling, setUpdateHandler } from '../jobs/pollingManager.js';
-import { onMatchUpdate, refreshAllGuilds } from '../jobs/refresh.js';
+import { onMatchUpdate, refreshAllGuilds, startRefreshLoop } from '../jobs/refresh.js';
 import { startClubChampionship } from '../jobs/clubChampionship.js';
 import { startCsRankings } from '../jobs/csRankings.js';
 import { startEwcPredictions } from '../jobs/ewcPredictions.js';
@@ -57,6 +57,7 @@ export async function execute(client) {
     notifyMatchEvent(client, type, match).catch((e) => logger.error(`[notify] match event failed: ${e.message}`));
   });
 
+  startRefreshLoop(client);
   await startMorningSync(client);
   refreshLiveBattleRoyaleStandings().catch((e) => logger.warn(`[standings] live boot refresh failed: ${e.message}`));
   resumePolling().catch((e) => logger.error(`[poll] resume failed: ${e.message}`)); // re-arm matches still pending/running from before a restart

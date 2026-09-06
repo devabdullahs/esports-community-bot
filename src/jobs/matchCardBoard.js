@@ -34,33 +34,51 @@ function allMatchesForBoard(matches, game, dedicatedGames = new Set()) {
 }
 
 async function fetchMessage(client, channelId, messageId) {
-  const channel = await client.channels.fetch(channelId).catch(() => null);
-  if (!channel?.isTextBased?.()) return null;
-  const message = await channel.messages.fetch(messageId).catch(() => null);
+  let channel;
+  try {
+    channel = await client.channels.fetch(channelId);
+  } catch (error) {
+    if (Number(error.code) === 10003) return null; // Discord confirms the channel was deleted.
+    throw error;
+  }
+  if (!channel) throw new Error(`Could not resolve match-card channel ${channelId}`);
+  if (!channel.isTextBased?.()) throw new Error(`Match-card channel ${channelId} is not text based`);
+  const message = await fetchStoredMessage(channel, messageId);
   return { channel, message };
+}
+
+async function fetchStoredMessage(channel, messageId) {
+  return channel.messages.fetch(messageId).catch((error) => {
+    if (Number(error.code) === 10008) return null; // Unknown Message, not a transient failure.
+    throw error;
+  });
 }
 
 async function deleteStoredMessage(client, row, guildId, game) {
   const found = await fetchMessage(client, row.channel_id, row.message_id);
-  await found?.message?.delete().catch(() => {});
+  await found?.message?.delete().catch((error) => {
+    if (Number(error.code) !== 10008) throw error;
+  });
+  // Forget the ID only after deletion succeeds or Discord confirms it is already gone.
   await deleteMatchCardMessage(guildId, game, row.match_id);
 }
 
 async function upsertLiveCard(client, channel, board, match, scoped, existing) {
+  let message = null;
+  if (existing) {
+    if (existing.channel_id === board.channel_id) {
+      message = await fetchStoredMessage(channel, existing.message_id);
+    } else {
+      await deleteStoredMessage(client, existing, board.guild_id, board.game);
+    }
+  }
   const payload = await buildMatchCardPayload(match, {
     matches: scoped,
     showNextGameTag: board.game === ALL_GAMES,
   });
-  if (existing) {
-    if (existing.channel_id === board.channel_id) {
-      const message = await channel.messages.fetch(existing.message_id).catch(() => null);
-      if (message) {
-        await message.edit({ ...payload, attachments: [] });
-        return existing.message_id;
-      }
-    } else {
-      await deleteStoredMessage(client, existing, board.guild_id, board.game);
-    }
+  if (message) {
+    await message.edit({ ...payload, attachments: [] });
+    return existing.message_id;
   }
 
   const sent = await channel.send(payload);
@@ -71,7 +89,7 @@ async function upsertLiveCard(client, channel, board, match, scoped, existing) {
 async function upsertIdleCard(channel, board, matches, existing) {
   const payload = await buildIdleMatchCardPayload(board.game, matches);
   if (existing && existing.channel_id === board.channel_id) {
-    const message = await channel.messages.fetch(existing.message_id).catch(() => null);
+    const message = await fetchStoredMessage(channel, existing.message_id);
     if (message) {
       await message.edit({ ...payload, attachments: [] });
       return existing.message_id;
@@ -86,7 +104,7 @@ async function upsertIdleCard(channel, board, matches, existing) {
 async function upsertAllGamesStatusCard(channel, board, matches, existing) {
   const payload = await buildAllGamesStatusPayload(matches);
   if (existing && existing.channel_id === board.channel_id) {
-    const message = await channel.messages.fetch(existing.message_id).catch(() => null);
+    const message = await fetchStoredMessage(channel, existing.message_id);
     if (message) {
       await message.edit({ ...payload, attachments: [] });
       return existing.message_id;
@@ -123,57 +141,61 @@ async function updateMatchCardsImpl(client, guildId) {
   const matches = await getMatchesForGuild(guildId);
   const dedicatedGames = new Set(boards.filter((b) => b.game !== ALL_GAMES).map((b) => normalizeGameSlug(b.game)));
   for (const board of boards) {
-    const channel = await client.channels.fetch(board.channel_id).catch(() => null);
-    if (!channel?.isTextBased?.()) continue;
+    try {
+      const channel = await client.channels.fetch(board.channel_id);
+      if (!channel?.isTextBased?.()) continue;
 
-    const scoped = allMatchesForBoard(matches, board.game, dedicatedGames);
-    const live = matchesForBoard(matches, board.game, dedicatedGames);
-    const liveIds = new Set(live.map((m) => m.id));
-    const stored = await getMatchCardMessages(guildId, board.game);
-    const byMatchId = new Map(stored.map((row) => [row.match_id, row]));
+      const scoped = allMatchesForBoard(matches, board.game, dedicatedGames);
+      const live = matchesForBoard(matches, board.game, dedicatedGames);
+      const liveIds = new Set(live.map((m) => m.id));
+      const stored = await getMatchCardMessages(guildId, board.game);
+      const byMatchId = new Map(stored.map((row) => [row.match_id, row]));
 
-    if (board.game === ALL_GAMES) {
+      if (board.game === ALL_GAMES) {
+        for (const row of stored) {
+          if (row.match_id !== IDLE_MATCH_ID) await deleteStoredMessage(client, row, guildId, board.game);
+        }
+        const existing = byMatchId.get(IDLE_MATCH_ID);
+        if (existing && existing.channel_id !== board.channel_id) {
+          await deleteStoredMessage(client, existing, guildId, board.game);
+        }
+        const messageId = await upsertAllGamesStatusCard(channel, { ...board, guild_id: guildId }, matches, existing);
+        await setMatchCardMessage(guildId, board.game, IDLE_MATCH_ID, board.channel_id, messageId);
+        continue;
+      }
+
+      if (!live.length) {
+        for (const row of stored) {
+          if (row.match_id !== IDLE_MATCH_ID) await deleteStoredMessage(client, row, guildId, board.game);
+        }
+        const existing = byMatchId.get(IDLE_MATCH_ID);
+        if (existing && existing.channel_id !== board.channel_id) {
+          await deleteStoredMessage(client, existing, guildId, board.game);
+        }
+        const messageId = await upsertIdleCard(channel, { ...board, guild_id: guildId }, scoped, existing);
+        await setMatchCardMessage(guildId, board.game, IDLE_MATCH_ID, board.channel_id, messageId);
+        continue;
+      }
+
       for (const row of stored) {
-        if (row.match_id !== IDLE_MATCH_ID) await deleteStoredMessage(client, row, guildId, board.game);
+        if (!liveIds.has(row.match_id)) {
+          await deleteStoredMessage(client, row, guildId, board.game);
+        }
       }
-      const existing = byMatchId.get(IDLE_MATCH_ID);
-      if (existing && existing.channel_id !== board.channel_id) {
-        await deleteStoredMessage(client, existing, guildId, board.game);
-      }
-      const messageId = await upsertAllGamesStatusCard(channel, { ...board, guild_id: guildId }, matches, existing);
-      await setMatchCardMessage(guildId, board.game, IDLE_MATCH_ID, board.channel_id, messageId);
-      continue;
-    }
 
-    if (!live.length) {
-      for (const row of stored) {
-        if (row.match_id !== IDLE_MATCH_ID) await deleteStoredMessage(client, row, guildId, board.game);
+      for (const match of live) {
+        const messageId = await upsertLiveCard(
+          client,
+          channel,
+          { ...board, guild_id: guildId },
+          match,
+          scoped,
+          byMatchId.get(match.id),
+        );
+        await setMatchCardMessage(guildId, board.game, match.id, board.channel_id, messageId);
       }
-      const existing = byMatchId.get(IDLE_MATCH_ID);
-      if (existing && existing.channel_id !== board.channel_id) {
-        await deleteStoredMessage(client, existing, guildId, board.game);
-      }
-      const messageId = await upsertIdleCard(channel, { ...board, guild_id: guildId }, scoped, existing);
-      await setMatchCardMessage(guildId, board.game, IDLE_MATCH_ID, board.channel_id, messageId);
-      continue;
-    }
-
-    for (const row of stored) {
-      if (!liveIds.has(row.match_id)) {
-        await deleteStoredMessage(client, row, guildId, board.game);
-      }
-    }
-
-    for (const match of live) {
-      const messageId = await upsertLiveCard(
-        client,
-        channel,
-        { ...board, guild_id: guildId },
-        match,
-        scoped,
-        byMatchId.get(match.id),
-      );
-      await setMatchCardMessage(guildId, board.game, match.id, board.channel_id, messageId);
+    } catch (error) {
+      logger.warn(`[match-card] ${board.game} board in guild ${guildId} will retry: ${error.message}`);
     }
   }
 }

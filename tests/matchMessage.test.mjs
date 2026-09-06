@@ -122,3 +122,10 @@ test('an SF6 bracket cannot grow the all-games status past Discord limits', asyn
     `description must fit Discord's embed limit, got ${description.length}`,
   );
 });
+
+test('live scores remain explicitly pending and links prefer the match page', () => {
+  const embed = buildMatchEmbed(matchRow({ status: 'running', external_id: 'Match:Example' }), 'match.png').toJSON();
+  assert.match(embed.description, /Score: \*\*Awaiting update\*\*/);
+  assert.equal(embed.url, 'https://liquipedia.net/dota2/Match:Example');
+  assert.ok(embed.description.includes(`[Full match details](${embed.url})`));
+});

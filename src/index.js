@@ -1,3 +1,4 @@
+import { stopRefreshLoop } from './jobs/refresh.js';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Client, Collection, GatewayIntentBits } from 'discord.js';
@@ -82,6 +83,7 @@ process.on('uncaughtException', (err) => logger.error('Uncaught exception:', err
 
 async function shutdown(signal) {
   logger.info(`Received ${signal} — shutting down.`);
+  stopRefreshLoop();
   stopAll();
   stopClubChampionship();
   stopCsRankings();
