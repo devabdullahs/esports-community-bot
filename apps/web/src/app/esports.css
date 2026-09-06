@@ -951,6 +951,7 @@
     outline: 2px solid var(--primary);
     outline-offset: 4px;
   }
+  #main-content,
   :where(h2, h3, section)[id] {
     scroll-margin-top: 145px;
   }
