@@ -6,7 +6,6 @@ import { FollowButton } from "@/components/follows/follow-button";
 import { TournamentMark } from "@/components/tournaments/tournament-directory";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
 import { LiquipediaAttribution } from "@/components/tournaments/liquipedia-attribution";
 import { PartnerPlacement } from "@/components/partners/partner-placement";
 import { TournamentMatchList } from "@/components/tournaments/tournament-match-list";
@@ -89,7 +88,11 @@ export async function generateMetadata({
   const gameTitle = gameTitleForSlug(data.tournament.game, games, locale);
   return buildPageMetadata({
     title: name,
-    description: localizedTournamentDescription({ locale, name, game: gameTitle }),
+    description: localizedTournamentDescription({
+      locale,
+      name,
+      game: gameTitle,
+    }),
     path: localizedPath(`/tournaments/${data.tournament.id}`, locale),
   });
 }
@@ -125,14 +128,19 @@ export default async function TournamentDetailPage({
   if (tournament.id !== tournamentId) {
     permanentRedirect(localizedPath(`/tournaments/${tournament.id}`, locale));
   }
-  const lastResultsPage = Math.max(1, Math.ceil(data.totals.finished / RESULTS_PAGE_SIZE));
+  const lastResultsPage = Math.max(
+    1,
+    Math.ceil(data.totals.finished / RESULTS_PAGE_SIZE),
+  );
   if (resultsPage > lastResultsPage) {
-    redirect(resultsPageHref({
-      tournamentId: tournament.id,
-      locale,
-      searchParams: resolvedSearchParams,
-      page: lastResultsPage,
-    }));
+    redirect(
+      resultsPageHref({
+        tournamentId: tournament.id,
+        locale,
+        searchParams: resolvedSearchParams,
+        page: lastResultsPage,
+      }),
+    );
   }
   const currentResultsHref = resultsPageHref({
     tournamentId: tournament.id,
@@ -150,34 +158,39 @@ export default async function TournamentDetailPage({
   // Standings-format events (battle royale, TFT groups) have no head-to-head
   // matches; a 0/0/0 metric card would read like empty data. Before any results
   // land the rows are a seeded participants list rather than real standings.
-  const standingsOnly = data.standings.length > 0 && data.totals.all === 0;
-  const standingsHaveResults = data.standings.some(
-    (s) => /[1-9]/.test(String(s.points ?? "")) || /[1-9]/.test(String(s.extra ?? "")),
-  );
   const gameTitle = tournament.game
     ? gameTitleForSlug(tournament.game, games, locale)
     : text.allGames;
   const sourceName = sourceLabel(tournament.source);
-  const tournamentName = tournament.name || `#${formatNumber(tournament.id, locale)}`;
+  const tournamentName =
+    tournament.name || `#${formatNumber(tournament.id, locale)}`;
   const pagePath = localizedPath(`/tournaments/${tournament.id}`, locale);
   const pageUrl = absoluteUrl(pagePath);
   const breadcrumbLabels = localizedBreadcrumbLabels(locale);
   const pageStructuredData = structuredDataGraph([
-    breadcrumbList([
-      { name: breadcrumbLabels.home, url: absoluteUrl(localizedPath("/", locale)) },
-      {
-        name: breadcrumbLabels.tournaments,
-        url: absoluteUrl(localizedPath("/tournaments", locale)),
-      },
-      { name: tournamentName, url: pageUrl },
-    ], pageUrl),
+    breadcrumbList(
+      [
+        {
+          name: breadcrumbLabels.home,
+          url: absoluteUrl(localizedPath("/", locale)),
+        },
+        {
+          name: breadcrumbLabels.tournaments,
+          url: absoluteUrl(localizedPath("/tournaments", locale)),
+        },
+        { name: tournamentName, url: pageUrl },
+      ],
+      pageUrl,
+    ),
   ]);
 
   return (
-    <main className="mx-auto flex w-full max-w-5xl flex-1 flex-col gap-8 px-4 py-8 sm:px-8 sm:py-10">
+    <main className="ec-public-page ec-container flex flex-1 flex-col gap-6 py-7">
       <script
         type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: serializeStructuredData(pageStructuredData) }}
+        dangerouslySetInnerHTML={{
+          __html: serializeStructuredData(pageStructuredData),
+        }}
       />
       <Button
         render={<Link href={localizedPath("/tournaments", locale)} />}
@@ -189,8 +202,7 @@ export default async function TournamentDetailPage({
         {text.back}
       </Button>
 
-      <header className="relative overflow-hidden rounded-2xl border bg-card/40 p-5 sm:p-6">
-        <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-primary/60 to-transparent" />
+      <header className="ec-tournament-header">
         <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
           <div className="flex min-w-0 flex-col gap-4 sm:flex-row sm:items-start">
             <TournamentMark slug={tournament.game ?? "other"} />
@@ -205,10 +217,17 @@ export default async function TournamentDetailPage({
                   </Badge>
                 ) : null}
               </div>
-              <h1 className="text-3xl font-semibold leading-tight sm:text-4xl" dir="auto">
+              <h1
+                className="text-3xl font-semibold leading-tight sm:text-4xl"
+                dir="auto"
+              >
                 {tournamentName}
               </h1>
-              <TournamentSyncHealthStatus tournamentId={tournament.id} locale={locale} initialData={data} />
+              <TournamentSyncHealthStatus
+                tournamentId={tournament.id}
+                locale={locale}
+                initialData={data}
+              />
               <div className="flex flex-wrap items-center gap-2">
                 <FollowButton
                   entityType="tournament"
@@ -218,11 +237,20 @@ export default async function TournamentDetailPage({
                   signedIn={followState.signedIn}
                   initialFollowing={followState.following}
                   locale={locale}
-                  callbackPath={localizedPath(`/tournaments/${tournament.id}`, locale)}
+                  callbackPath={localizedPath(
+                    `/tournaments/${tournament.id}`,
+                    locale,
+                  )}
                 />
                 {sourceUrl ? (
                   <Button
-                    render={<a href={sourceUrl} target="_blank" rel="noopener noreferrer nofollow" />}
+                    render={
+                      <a
+                        href={sourceUrl}
+                        target="_blank"
+                        rel="noopener noreferrer nofollow"
+                      />
+                    }
                     nativeButton={false}
                     variant="outline"
                     size="sm"
@@ -235,74 +263,17 @@ export default async function TournamentDetailPage({
               </div>
             </div>
           </div>
-          <Card className="min-w-0 bg-background/35 py-0 lg:w-72 lg:shrink-0 xl:w-80">
-            {standingsOnly ? (
-              <CardContent className="grid grid-cols-1 gap-2 p-3">
-                <DetailMetric
-                  label={standingsHaveResults ? text.standings : text.participants}
-                  value={data.standings.length}
-                  locale={locale}
-                />
-              </CardContent>
-            ) : (
-              <CardContent className="grid grid-cols-3 gap-2 p-3">
-                <DetailMetric label={text.live} value={data.matches.running.length} locale={locale} live />
-                <DetailMetric label={text.upcoming} value={data.matches.scheduled.length} locale={locale} />
-                <DetailMetric label={text.results} value={data.totals.finished} locale={locale} />
-              </CardContent>
-            )}
-          </Card>
         </div>
       </header>
 
-      {data.overview ? (
-        <section className="flex flex-col gap-4" aria-labelledby="tournament-overview-heading">
-          <h2 id="tournament-overview-heading" className="text-xl font-semibold">
-            {locale === "ar" ? "معلومات البطولة" : "Tournament information"}
-          </h2>
-          {data.overview.facts.length ? (
-            <dl className="grid gap-px overflow-hidden rounded-xl border bg-border sm:grid-cols-2">
-              {data.overview.facts.map((fact) => (
-                <div key={`${fact.label}-${fact.value}`} className="grid gap-1 bg-card p-4">
-                  <dt className="text-xs font-medium text-muted-foreground" dir="auto">{fact.label}</dt>
-                  <dd className="font-medium" dir="auto">{fact.value}</dd>
-                </div>
-              ))}
-            </dl>
-          ) : null}
-          {data.overview.sections.map((section) => (
-            <details key={section.title} className="overflow-hidden rounded-xl border">
-              <summary className="cursor-pointer px-4 py-3 font-semibold" dir="auto">
-                {section.title}
-              </summary>
-              <div className="overflow-x-auto border-t">
-                <table className="w-full min-w-[42rem] text-sm">
-                  <thead className="bg-muted/40">
-                    <tr>
-                      {section.columns.map((column) => (
-                        <th key={column} className="px-4 py-3 text-start" dir="auto">{column}</th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {section.entries.map((entry, index) => (
-                      <tr key={`${section.title}-${index}`} className="border-t">
-                        {section.columns.map((column) => (
-                          <td key={column} className="px-4 py-3" dir="auto">{entry[column] ?? "-"}</td>
-                        ))}
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </details>
-          ))}
-        </section>
-      ) : null}
-
-      <PartnerPlacement kind="tournament" target={`tournament:${tournament.id}`} locale={locale} />
+      <PartnerPlacement
+        kind="tournament"
+        target={`tournament:${tournament.id}`}
+        locale={locale}
+      />
 
       <TournamentMatchList
+        hasOverview={Boolean(data.overview)}
         tournamentId={tournament.id}
         locale={locale}
         initialData={data}
@@ -315,14 +286,15 @@ export default async function TournamentDetailPage({
             searchParams: resolvedSearchParams,
             page: 1,
           }),
-          previousHref: resultsPage > 1
-            ? resultsPageHref({
-                tournamentId: tournament.id,
-                locale,
-                searchParams: resolvedSearchParams,
-                page: resultsPage - 1,
-              })
-            : null,
+          previousHref:
+            resultsPage > 1
+              ? resultsPageHref({
+                  tournamentId: tournament.id,
+                  locale,
+                  searchParams: resolvedSearchParams,
+                  page: resultsPage - 1,
+                })
+              : null,
           nextHref: data.finishedPage.hasMore
             ? resultsPageHref({
                 tournamentId: tournament.id,
@@ -334,35 +306,86 @@ export default async function TournamentDetailPage({
         }}
       />
 
+      {data.overview ? (
+        <section
+          className="flex flex-col gap-4"
+          aria-labelledby="tournament-overview-heading"
+        >
+          <h2
+            id="tournament-overview-heading"
+            className="text-xl font-semibold"
+          >
+            {locale === "ar" ? "معلومات البطولة" : "Tournament information"}
+          </h2>
+          {data.overview.facts.length ? (
+            <dl className="grid gap-px overflow-hidden rounded-xl border bg-border sm:grid-cols-2">
+              {data.overview.facts.map((fact) => (
+                <div
+                  key={`${fact.label}-${fact.value}`}
+                  className="grid gap-1 bg-card p-4"
+                >
+                  <dt
+                    className="text-xs font-medium text-muted-foreground"
+                    dir="auto"
+                  >
+                    {fact.label}
+                  </dt>
+                  <dd className="font-medium" dir="auto">
+                    {fact.value}
+                  </dd>
+                </div>
+              ))}
+            </dl>
+          ) : null}
+          {data.overview.sections.map((section) => (
+            <details
+              key={section.title}
+              className="overflow-hidden rounded-xl border"
+            >
+              <summary
+                className="cursor-pointer px-4 py-3 font-semibold"
+                dir="auto"
+              >
+                {section.title}
+              </summary>
+              <div className="overflow-x-auto border-t">
+                <table className="w-full min-w-[42rem] text-sm">
+                  <thead className="bg-muted/40">
+                    <tr>
+                      {section.columns.map((column) => (
+                        <th
+                          key={column}
+                          className="px-4 py-3 text-start"
+                          dir="auto"
+                        >
+                          {column}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {section.entries.map((entry, index) => (
+                      <tr
+                        key={`${section.title}-${index}`}
+                        className="border-t"
+                      >
+                        {section.columns.map((column) => (
+                          <td key={column} className="px-4 py-3" dir="auto">
+                            {entry[column] ?? "-"}
+                          </td>
+                        ))}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </details>
+          ))}
+        </section>
+      ) : null}
+
       <OfficialTournamentAttribution value={data.overview?.attribution} />
       <LiquipediaAttribution locale={locale} />
     </main>
-  );
-}
-
-function DetailMetric({
-  label,
-  value,
-  locale,
-  live,
-}: {
-  label: string;
-  value: number;
-  locale: "en" | "ar";
-  live?: boolean;
-}) {
-  return (
-    <div className="rounded-lg bg-muted/35 px-2 py-2 text-center">
-      <div
-        className={
-          live && value > 0
-            ? "text-lg font-semibold tabular-nums text-destructive"
-            : "text-lg font-semibold tabular-nums"
-        }
-      >
-        {formatNumber(value, locale)}
-      </div>
-      <div className="mt-0.5 text-[0.68rem] leading-tight text-muted-foreground">{label}</div>
-    </div>
   );
 }

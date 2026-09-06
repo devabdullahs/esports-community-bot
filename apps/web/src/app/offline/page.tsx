@@ -31,7 +31,7 @@ export default async function OfflinePage() {
   const text = OFFLINE_COPY[locale];
 
   return (
-    <main className="mx-auto flex w-full max-w-xl flex-1 items-center px-5 py-16">
+    <main className="ec-public-page mx-auto flex w-full max-w-xl flex-1 items-center px-5 py-16">
       <Card className="w-full">
         <CardHeader>
           <span className="mb-2 flex size-10 items-center justify-center rounded-lg bg-primary/10 text-primary">

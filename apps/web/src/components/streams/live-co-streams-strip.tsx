@@ -40,7 +40,7 @@ export async function LiveCoStreamsStrip({ locale }: { locale: Locale }) {
               href={href}
               className="flex min-w-0 items-center gap-2 rounded-full border bg-card/60 px-3 py-1.5 text-sm transition-colors hover:border-red-500/40 hover:bg-card"
             >
-              <RadioIcon className="size-3.5 shrink-0 text-red-500" />
+              <RadioIcon className="size-3.5 shrink-0 text-live" />
               <span className="truncate font-medium">{stream.label}</span>
               {stream.liveGame ? (
                 <span className="hidden truncate text-muted-foreground sm:inline">· {stream.liveGame}</span>
@@ -61,7 +61,7 @@ export async function LiveCoStreamsStrip({ locale }: { locale: Locale }) {
         </div>
         <Link
           href={href}
-          className="inline-flex shrink-0 items-center gap-1.5 text-sm font-medium text-red-500 hover:text-red-400"
+          className="inline-flex shrink-0 items-center gap-1.5 text-sm font-medium text-live hover:underline"
         >
           {text.common.watchCoStreams}
           <ArrowRightIcon className="size-3.5 shrink-0 rtl:rotate-180" aria-hidden="true" />

@@ -310,8 +310,8 @@ function Logo({ url, alt }: { url: string | null; alt: string }) {
 function ScoreText({ a, b }: { a: number | null; b: number | null }) {
   if (a == null || b == null) return <span className="text-muted-foreground">-</span>;
   return (
-    <span className="tabular-nums font-semibold">
-      {a} <span className="text-muted-foreground">-</span> {b}
+    <span className="inline-flex items-center gap-2 tabular-nums font-semibold">
+      <span>{a}</span><span className="text-muted-foreground">-</span><span>{b}</span>
     </span>
   );
 }
@@ -553,6 +553,7 @@ export function TournamentMatchList({
   reminderState = { signedIn: false, reminderMatchIds: [] },
   callbackPath,
   resultsNavigation,
+  hasOverview = false,
 }: {
   tournamentId: number;
   locale: Locale;
@@ -560,6 +561,7 @@ export function TournamentMatchList({
   reminderState?: { signedIn: boolean; reminderMatchIds: number[] };
   callbackPath?: string;
   resultsNavigation?: TournamentResultsNavigation;
+  hasOverview?: boolean;
 }) {
   const hasHydrated = useHasHydrated();
   const text = copy[locale].tournaments;
@@ -638,7 +640,13 @@ export function TournamentMatchList({
     : null;
 
   return (
-    <div className="flex flex-col gap-8">
+    <div id="competition-board" className="ec-competition-board flex flex-col gap-6">
+      <nav className="ec-context-nav" aria-label={locale === "ar" ? "أقسام البطولة" : "Tournament sections"}>
+        {!standingsOnly ? <><a href="#tournament-live">{text.liveNow}</a><a href="#tournament-schedule">{text.upcoming}</a><a href="#results">{text.results}</a></> : null}
+        {draw || bracket ? <a href="#tournament-bracket-heading">{text.bracket}</a> : null}
+        {standings.length ? <a href="#tournament-standings">{text.standings}</a> : null}
+        {hasOverview ? <a href="#tournament-overview-heading">{locale === "ar" ? "معلومات البطولة" : "Tournament information"}</a> : null}
+      </nav>
       {retainedRefreshError ? (
         <TournamentRefreshFailureAlert
           locale={locale}
@@ -667,9 +675,9 @@ export function TournamentMatchList({
           <Separator />
         </>
       ) : null}
-      <section className="flex flex-col gap-3">
+      <section id="tournament-live" className="flex flex-col gap-3">
         <h2 className="flex items-center gap-2 text-lg font-semibold">
-          <RadioIcon className="size-4 text-primary" />
+          <RadioIcon className="size-4 text-live" />
           {text.liveNow}
         </h2>
         {running.length ? (
@@ -815,7 +823,7 @@ export function TournamentMatchList({
 
       <Separator />
 
-      <section className="flex flex-col gap-3">
+      <section id="tournament-schedule" className="flex flex-col gap-3">
         <h2 className="text-lg font-semibold">{text.upcoming}</h2>
         {scheduled.length ? (
           <Table>
@@ -1076,7 +1084,7 @@ function StandingsSection({
     .map(({ value }) => value);
 
   return (
-    <section className="flex flex-col gap-4" dir={directionForLocale(locale)}>
+    <section id="tournament-standings" className="flex flex-col gap-4" dir={directionForLocale(locale)}>
       <h2 className="text-lg font-semibold">{hasResults ? text.standings : text.participants}</h2>
       <Accordion
         key={activeValues.join("|")}

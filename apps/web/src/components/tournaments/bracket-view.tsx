@@ -171,8 +171,10 @@ function BracketSection({
 }) {
   // With one branch there is nothing to separate, so the band heading would only repeat the
   // section title above it.
+  const BandHeading = showSectionHeading && section.title ? "h4" : "h3";
   const showBandHeadings = section.bands.filter((band) => band.branch).length > 1;
 
+  const RoundHeading = showBandHeadings ? (BandHeading === "h4" ? "h5" : "h4") : (showSectionHeading && section.title ? "h4" : "h3");
   return (
     <div
       data-bracket-section={section.key}
@@ -191,9 +193,9 @@ function BracketSection({
           className="flex flex-col gap-2"
         >
           {showBandHeadings && band.branch ? (
-            <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+            <BandHeading className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
               {band.branch === "upper" ? text.bracketUpper : text.bracketLower}
-            </h4>
+            </BandHeading>
           ) : null}
           {/*
             One grid per band, with the round headings occupying its first row and every slot
@@ -215,7 +217,7 @@ function BracketSection({
             }}
           >
             {band.rounds.map((round) => (
-              <h5
+              <RoundHeading
                 key={`${round.key}-heading`}
                 data-bracket-round={round.key}
                 className="snap-start self-end truncate border-b px-1.5 pb-2 text-sm font-semibold"
@@ -225,7 +227,7 @@ function BracketSection({
                 {round.bestOf ? (
                   <span className="ms-1.5 font-normal text-muted-foreground">{text.bracketBestOf(round.bestOf)}</span>
                 ) : null}
-              </h5>
+              </RoundHeading>
             ))}
             {band.rounds.flatMap((round) =>
               round.cells.map((cell) => (

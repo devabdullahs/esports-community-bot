@@ -115,7 +115,7 @@ export default async function PublicPredictorPage({
   return (
     <main
       dir={locale === "ar" ? "rtl" : "ltr"}
-      className="mx-auto flex w-full max-w-5xl flex-1 flex-col gap-8 px-4 py-8 sm:px-8 sm:py-10"
+      className="ec-public-page mx-auto flex w-full max-w-5xl flex-1 flex-col gap-8 px-4 py-8 sm:px-8 sm:py-10"
     >
       <Button
         render={<Link href={localizedPath("/leaderboard", locale)} />}

@@ -175,7 +175,7 @@ export function GlobalSearch({
         ref={triggerRef}
         variant={mobile ? "outline" : "ghost"}
         size="sm"
-        className={mobile ? "w-full justify-start" : "hidden size-9 px-0 lg:inline-flex"}
+        className={mobile ? "w-full justify-start" : "size-9 px-0"}
         aria-label={strings.trigger}
         title={strings.trigger}
         onClick={() => setDialogOpen(true)}

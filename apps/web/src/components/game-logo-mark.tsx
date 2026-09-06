@@ -96,7 +96,7 @@ export function GameLogoMark({
   return (
     <span
       className={cn(
-        "inline-flex shrink-0 items-center justify-center rounded-2xl border border-border/80 bg-card/80 text-primary shadow-sm shadow-black/20",
+        "inline-flex shrink-0 items-center justify-center text-primary",
         className,
       )}
       aria-label={label}

@@ -2,24 +2,16 @@
 
 import {
   BellIcon,
-  ArrowLeftRightIcon,
   ChevronDownIcon,
-  CrownIcon,
   Gamepad2Icon,
   LanguagesIcon,
-  ListOrderedIcon,
   LogOutIcon,
-  type LucideIcon,
-  MedalIcon,
   MenuIcon,
   NewspaperIcon,
   RadioIcon,
   ShieldCheckIcon,
-  TargetIcon,
   TrophyIcon,
-  Tv2Icon,
   UserRoundIcon,
-  UsersIcon,
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
@@ -37,19 +29,11 @@ import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuGroup,
   DropdownMenuItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import {
-  NavigationMenu,
-  NavigationMenuContent,
-  NavigationMenuItem,
-  NavigationMenuLink,
-  NavigationMenuList,
-  NavigationMenuTrigger,
-  navigationMenuTriggerStyle,
-} from "@/components/ui/navigation-menu";
 import {
   Sheet,
   SheetClose,
@@ -59,7 +43,6 @@ import {
   SheetTitle,
   SheetTrigger,
 } from "@/components/ui/sheet";
-import { Separator } from "@/components/ui/separator";
 import { DISCORD_INVITE_URL } from "@/lib/community-links";
 import { isActivePath } from "@/lib/nav";
 import { trackProductEvent } from "@/lib/product-analytics";
@@ -68,40 +51,9 @@ import {
   LOCALE_COOKIE_NAME,
   copy,
   localizedPath,
+  stripLocalePrefix,
   type Locale,
 } from "@/lib/i18n";
-
-type Destination = { href: string; label: string; icon: LucideIcon };
-
-function MobileNavLink({
-  destination,
-  locale,
-  active,
-  badge = null,
-}: {
-  destination: Destination;
-  locale: Locale;
-  active: boolean;
-  badge?: React.ReactNode;
-}) {
-  const { href, label, icon: Icon } = destination;
-
-  return (
-    <SheetClose
-      render={
-        <Link
-          href={localizedPath(href, locale)}
-          aria-current={active ? "page" : undefined}
-        />
-      }
-      className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium outline-none transition-colors hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring aria-[current=page]:bg-muted aria-[current=page]:text-foreground"
-    >
-      <Icon className="size-4 text-muted-foreground" />
-      <span className="min-w-0 truncate">{label}</span>
-      {badge}
-    </SheetClose>
-  );
-}
 
 export function SiteHeaderClient({
   hasSession,
@@ -119,9 +71,57 @@ export function SiteHeaderClient({
   const [mobileOpen, setMobileOpen] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
   const text = copy[locale];
-  const nextLocale = locale === "ar" ? "en" : "ar";
   const unreadNotifications = useUnreadNotifications(hasSession);
+  const primary = [
+    {
+      href: "/live",
+      label: locale === "ar" ? "المباريات" : "Matches",
+      icon: RadioIcon,
+    },
+    { href: "/tournaments", label: text.common.tournaments, icon: TrophyIcon },
+    { href: "/games", label: text.common.games, icon: Gamepad2Icon },
+    { href: "/news", label: text.common.news, icon: NewspaperIcon },
+  ];
+  const community = [
+    { href: "/co-streams", label: text.common.coStreams },
+    { href: "/predictions", label: text.common.predictions },
+    { href: "/leaderboard", label: text.common.publicLeaderboard },
+    { href: "/teams", label: text.common.teams },
+    { href: "/players", label: text.common.players },
+    {
+      href: "/mvp",
+      label: locale === "ar" ? "أفضل لاعب اليوم" : "MVP of the day",
+    },
+    { href: "/compare", label: text.profiles.compare },
+    { href: "/media", label: text.common.media },
+  ];
+  const ewc = [
+    { href: "/tournaments/ewc", label: text.common.ewcTournaments },
+    { href: "/news/ewc", label: text.common.ewcNews },
+    { href: "/clubs", label: text.common.ewcClubs },
+    { href: "/clubs/standings", label: text.common.ewcClubStandings },
+  ];
+  const active = (href: string) =>
+    isActivePath(stripLocalePrefix(pathname), href);
+  const streamBadge = (href: string) =>
+    href === "/co-streams" && liveCoStreams > 0 ? (
+      <span className="ec-live-count">
+        <RadioIcon className="size-3" aria-hidden="true" />
+        {liveCoStreams}
+      </span>
+    ) : null;
 
+  function switchLanguage() {
+    const nextLocale = locale === "ar" ? "en" : "ar";
+    document.cookie = `${LOCALE_COOKIE_NAME}=${nextLocale}; Path=/; Max-Age=${LOCALE_COOKIE_MAX_AGE}; SameSite=Lax`;
+    // Full navigation updates root lang/dir and preserves query/hash context.
+    window.location.assign(
+      localizedPath(
+        `${window.location.pathname}${window.location.search}${window.location.hash}`,
+        nextLocale,
+      ),
+    );
+  }
   async function handleSignOut() {
     setSigningOut(true);
     try {
@@ -132,280 +132,136 @@ export function SiteHeaderClient({
     }
   }
 
-  const contentLinks: Destination[] = [
-    { href: "/games", label: text.common.games, icon: Gamepad2Icon },
-    { href: "/news", label: text.common.news, icon: NewspaperIcon },
-    { href: "/media", label: text.common.media, icon: Tv2Icon },
-  ];
-  const competitionLinks: Destination[] = [
-    { href: "/tournaments", label: text.common.tournaments, icon: TrophyIcon },
-    { href: "/live", label: text.common.liveMatches, icon: RadioIcon },
-    { href: "/teams", label: text.common.teams, icon: UsersIcon },
-    { href: "/players", label: text.common.players, icon: UserRoundIcon },
-    { href: "/mvp", label: locale === "ar" ? "أفضل لاعب اليوم" : "MVP of the day", icon: MedalIcon },
-    { href: "/compare", label: text.profiles.compare, icon: ArrowLeftRightIcon },
-  ];
-  // Co-streams stays top-level because it spans every tracked event and carries
-  // a live indicator when any co-streamer is on air.
-  const coStreamsLink: Destination = { href: "/co-streams", label: text.common.coStreams, icon: RadioIcon };
-  const notificationsLink: Destination = {
-    href: "/me?tab=notifications",
-    label: text.follows.notificationsTitle,
-    icon: BellIcon,
-  };
-  const desktopGroups = [
-    { label: text.common.content, icon: NewspaperIcon, links: contentLinks },
-    { label: text.common.competition, icon: TrophyIcon, links: competitionLinks },
-  ];
-  const ewcLinks: Destination[] = [
-    { href: "/news/ewc", label: text.common.ewcNews, icon: NewspaperIcon },
-    { href: "/tournaments/ewc", label: text.common.ewcTournaments, icon: TrophyIcon },
-    { href: "/clubs", label: text.common.ewcClubs, icon: UsersIcon },
-    { href: "/clubs/standings", label: text.common.ewcClubStandings, icon: ListOrderedIcon },
-    { href: "/predictions", label: text.common.predictions, icon: TargetIcon },
-    { href: "/leaderboard", label: text.common.publicLeaderboard, icon: CrownIcon },
-  ];
-  const liveBadge = (href: string) =>
-    href === "/co-streams" && liveCoStreams > 0 ? (
-      <span className="ms-0.5 inline-flex items-center gap-1 rounded-full bg-red-500/15 px-1.5 py-0.5 text-[0.65rem] font-semibold leading-none text-red-500">
-        <span className="relative flex size-1.5">
-          <span className="absolute inline-flex size-full animate-ping rounded-full bg-red-500 opacity-60" />
-          <span className="relative inline-flex size-1.5 rounded-full bg-red-500" />
-        </span>
-        {liveCoStreams}
-      </span>
-    ) : null;
-  const ewcActive = ewcLinks.some((d) =>
-    isActivePath(pathname, localizedPath(d.href, locale)),
-  );
-  // Top-level "News"/"Tournaments" shouldn't light up while on their EWC sub-lists.
-  const linkActive = (href: string) => {
-    const full = localizedPath(href, locale);
-    if (href === "/news" || href === "/tournaments") {
-      return (
-        isActivePath(pathname, full) &&
-        !isActivePath(pathname, localizedPath(`${href}/ewc`, locale))
-      );
-    }
-    if (href === "/clubs") {
-      return (
-        isActivePath(pathname, full) &&
-        !isActivePath(pathname, localizedPath("/clubs/standings", locale))
-      );
-    }
-    return isActivePath(pathname, full);
-  };
-
-  function switchLanguage() {
-    document.cookie = `${LOCALE_COOKIE_NAME}=${nextLocale}; Path=/; Max-Age=${LOCALE_COOKIE_MAX_AGE}; SameSite=Lax`;
-    const currentPath =
-      `${window.location.pathname}${window.location.search}${window.location.hash}` || "/";
-    // Locale changes update the root document's lang/dir as well as route data.
-    // A full navigation also prevents a refresh of the old /ar route from
-    // racing and writing the previous locale cookie back after the switch.
-    window.location.assign(localizedPath(currentPath, nextLocale));
-  }
-
-  // In RTL the inline-end edge is the physical left, so flip the sheet side so
-  // it always slides in from the same edge the hamburger sits on.
-  const sheetSide = locale === "ar" ? "left" : "right";
-
   return (
-    <header className="sticky top-0 z-40 w-full border-b bg-background/95 supports-[backdrop-filter]:bg-background/80">
-      <div className="mx-auto flex h-16 w-full max-w-6xl items-center gap-3 px-4 sm:gap-4 sm:px-8">
+    <header className="ec-site-header">
+      <div className="ec-container ec-masthead">
         <Link
           href={localizedPath("/", locale)}
-          className="flex min-w-0 items-center gap-2.5 rounded-md outline-none transition-opacity hover:opacity-80 focus-visible:ring-2 focus-visible:ring-ring"
+          className="ec-brand"
+          aria-label={text.common.brand}
         >
-          <span className="flex size-8 shrink-0 items-center justify-center rounded-md border bg-muted text-foreground">
-            <TrophyIcon />
+          <span className="ec-brand-mark">
+            <TrophyIcon aria-hidden="true" className="size-6" />
           </span>
-          <span className="hidden min-w-0 flex-col leading-none sm:flex">
-            <span className="truncate text-sm font-semibold">
-              {text.common.brand}
-            </span>
-            <span className="truncate text-[0.7rem] text-muted-foreground">
-              {text.common.community}
-            </span>
+          <span className="ec-brand-name">
+            <strong>ESPORTS</strong>
+            <span>{locale === "ar" ? "المجتمع" : "COMMUNITY"}</span>
           </span>
         </Link>
-
-        {/* Desktop (lg+): grouped general links + a dedicated EWC dropdown. */}
-        <NavigationMenu className="ms-2 hidden flex-none lg:flex">
-          <NavigationMenuList className="gap-0.5">
-            {desktopGroups.map(({ label, icon: Icon, links }) => {
-              const groupActive = links.some((destination) => linkActive(destination.href));
-              return (
-                <NavigationMenuItem key={label}>
-                  <NavigationMenuTrigger
-                    className={`gap-1.5 ${groupActive ? "bg-muted/50" : ""}`}
-                  >
-                    <Icon />
-                    {label}
-                  </NavigationMenuTrigger>
-                  <NavigationMenuContent>
-                    <ul className="grid w-48 gap-0.5">
-                      {links.map(({ href, label: linkLabel, icon: LinkIcon }) => {
-                        const active = linkActive(href);
-                        return (
-                          <li key={href}>
-                            <NavigationMenuLink
-                              data-active={active || undefined}
-                              aria-current={active ? "page" : undefined}
-                              render={<Link href={localizedPath(href, locale)} />}
-                            >
-                              <LinkIcon />
-                              {linkLabel}
-                            </NavigationMenuLink>
-                          </li>
-                        );
-                      })}
-                    </ul>
-                  </NavigationMenuContent>
-                </NavigationMenuItem>
-              );
-            })}
-            <NavigationMenuItem>
-              <NavigationMenuLink
-                data-active={linkActive(coStreamsLink.href) || undefined}
-                aria-current={linkActive(coStreamsLink.href) ? "page" : undefined}
-                render={<Link href={localizedPath(coStreamsLink.href, locale)} />}
-                className={navigationMenuTriggerStyle()}
-              >
-                <RadioIcon />
-                {coStreamsLink.label}
-                {liveBadge(coStreamsLink.href)}
-              </NavigationMenuLink>
-            </NavigationMenuItem>
-            <NavigationMenuItem>
-              <NavigationMenuTrigger
-                className={`gap-1.5 ${ewcActive ? "bg-muted/50" : ""}`}
-              >
-                <MedalIcon className="size-4" />
-                {text.common.ewc}
-              </NavigationMenuTrigger>
-              <NavigationMenuContent>
-                <ul className="grid w-56 gap-0.5">
-                  {ewcLinks.map(({ href, label, icon: Icon }) => {
-                    const active = linkActive(href);
-                    return (
-                      <li key={href}>
-                        <NavigationMenuLink
-                          data-active={active || undefined}
-                          aria-current={active ? "page" : undefined}
-                          render={<Link href={localizedPath(href, locale)} />}
-                        >
-                          <Icon />
-                          {label}
-                        </NavigationMenuLink>
-                      </li>
-                    );
-                  })}
-                </ul>
-              </NavigationMenuContent>
-            </NavigationMenuItem>
-          </NavigationMenuList>
-        </NavigationMenu>
-
-        <nav className="ms-auto flex shrink-0 items-center gap-1 sm:gap-2">
+        <nav
+          className="ec-primary-nav"
+          aria-label={locale === "ar" ? "التنقل الرئيسي" : "Primary navigation"}
+        >
+          {primary.map(({ href, label, icon: Icon }) => (
+            <Link
+              key={href}
+              href={localizedPath(href, locale)}
+              aria-current={active(href) ? "page" : undefined}
+            >
+              <Icon className="size-4" aria-hidden="true" />
+              {label}
+            </Link>
+          ))}
+        </nav>
+        <div className="ec-header-tools">
           <GlobalSearch locale={locale} />
-          {/* Desktop account menu: Discord, Admin, profile, and sign out under one trigger. */}
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={switchLanguage}
+            aria-label={text.common.languageSwitch}
+          >
+            <LanguagesIcon />
+          </Button>
+          <ModeToggle label={text.common.themeToggle} />
           <DropdownMenu>
             <DropdownMenuTrigger
               render={
                 <Button
                   variant="outline"
-                  size="sm"
-                  className="hidden w-36 gap-1.5 px-2.5 lg:inline-flex"
+                  className="hidden lg:inline-flex"
                   aria-label={text.common.account}
                 />
               }
             >
-              <UserRoundIcon />
-              <span>{text.common.account}</span>
-              <span className="ms-auto flex size-5 shrink-0 items-center justify-center">
-                <NotificationUnreadBadge count={unreadNotifications} locale={locale} />
-              </span>
-              <ChevronDownIcon className="size-3.5 text-muted-foreground" />
+              <UserRoundIcon data-icon="inline-start" />
+              {text.common.account}
+              <NotificationUnreadBadge
+                count={unreadNotifications}
+                locale={locale}
+              />
+              <ChevronDownIcon data-icon="inline-end" />
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-52">
-              <DropdownMenuItem
-                render={<Link href={localizedPath("/me", locale)} />}
-                data-active={isActivePath(pathname, localizedPath("/me", locale)) || undefined}
-              >
-                <UserRoundIcon />
-                {text.common.myProfile}
-              </DropdownMenuItem>
-              {hasSession ? (
+            <DropdownMenuContent align="end" className="w-56">
+              <DropdownMenuGroup>
                 <DropdownMenuItem
-                  render={<Link href={localizedPath(notificationsLink.href, locale)} />}
+                  render={<Link href={localizedPath("/me", locale)} />}
                 >
-                  <BellIcon />
-                  {notificationsLink.label}
-                  <NotificationUnreadBadge
-                    count={unreadNotifications}
-                    locale={locale}
-                    className="ms-auto"
-                  />
+                  <UserRoundIcon />
+                  {text.common.myProfile}
                 </DropdownMenuItem>
-              ) : null}
-              {isAdmin ? (
+                {hasSession ? (
+                  <DropdownMenuItem
+                    render={
+                      <Link
+                        href={localizedPath("/me?tab=notifications", locale)}
+                      />
+                    }
+                  >
+                    <BellIcon />
+                    {text.follows.notificationsTitle}
+                    <NotificationUnreadBadge
+                      count={unreadNotifications}
+                      locale={locale}
+                    />
+                  </DropdownMenuItem>
+                ) : null}
+                {isAdmin ? (
+                  <DropdownMenuItem
+                    render={<Link href={localizedPath("/admin", locale)} />}
+                  >
+                    <ShieldCheckIcon />
+                    {text.common.admin}
+                  </DropdownMenuItem>
+                ) : null}
                 <DropdownMenuItem
-                  render={<Link href={localizedPath("/admin", locale)} />}
-                  data-active={isActivePath(pathname, localizedPath("/admin", locale)) || undefined}
+                  render={
+                    <a
+                      href={DISCORD_INVITE_URL}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      onClick={() => trackProductEvent("discord_join_click")}
+                    />
+                  }
                 >
-                  <ShieldCheckIcon />
-                  {text.common.admin}
+                  <DiscordIcon />
+                  {text.common.discord}
                 </DropdownMenuItem>
-              ) : null}
-              <DropdownMenuItem
-                render={
-                  <a
-                    href={DISCORD_INVITE_URL}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    onClick={() => trackProductEvent("discord_join_click")}
-                  />
-                }
-              >
-                <DiscordIcon />
-                {text.common.discord}
-              </DropdownMenuItem>
+              </DropdownMenuGroup>
               {hasSession ? (
                 <>
                   <DropdownMenuSeparator />
-                  <DropdownMenuItem
-                    variant="destructive"
-                    onClick={handleSignOut}
-                    disabled={signingOut}
-                  >
-                    <LogOutIcon />
-                    {text.common.signOut}
-                  </DropdownMenuItem>
+                  <DropdownMenuGroup>
+                    <DropdownMenuItem
+                      variant="destructive"
+                      onClick={handleSignOut}
+                      disabled={signingOut}
+                    >
+                      <LogOutIcon />
+                      {text.common.signOut}
+                    </DropdownMenuItem>
+                  </DropdownMenuGroup>
                 </>
               ) : null}
             </DropdownMenuContent>
           </DropdownMenu>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={switchLanguage}
-            className="size-9 gap-1.5 px-0 sm:size-auto sm:px-2.5"
-            aria-label={text.common.languageSwitch}
-          >
-            <LanguagesIcon />
-            <span className="hidden sm:inline">{text.common.languageSwitch}</span>
-          </Button>
-          <ModeToggle label={text.common.themeToggle} />
-
-          {/* Mobile/tablet (<lg): hamburger opens a sheet with every destination. */}
           <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
             <SheetTrigger
               render={
                 <Button
                   variant="ghost"
-                  size="sm"
-                  className="size-9 px-0 lg:hidden"
+                  size="icon"
+                  className="lg:hidden"
                   aria-label={text.common.menu}
                 />
               }
@@ -413,138 +269,156 @@ export function SiteHeaderClient({
               <MenuIcon />
             </SheetTrigger>
             <SheetContent
-              side={sheetSide}
+              side={locale === "ar" ? "left" : "right"}
               className="w-80 max-w-[calc(100vw-2rem)] gap-0 overflow-y-auto"
             >
-              <SheetHeader className="border-b">
+              <SheetHeader>
                 <SheetTitle>{text.common.brand}</SheetTitle>
-                <SheetDescription>{text.footer.note}</SheetDescription>
+                <SheetDescription>
+                  {locale === "ar"
+                    ? "المنافسات والمجتمع، في مكان واحد."
+                    : "Competition and community, together."}
+                </SheetDescription>
               </SheetHeader>
-              <Button
-                render={
+              <nav className="ec-mobile-menu" aria-label={text.common.menu}>
+                {[
+                  { label: text.common.competition, links: primary },
+                  { label: text.common.community, links: community },
+                  { label: text.common.ewc, links: ewc },
+                ].map((group) => (
+                  <div key={group.label}>
+                    <h2>{group.label}</h2>
+                    {group.links.map((link) => (
+                      <SheetClose
+                        key={link.href}
+                        render={
+                          <Link
+                            href={localizedPath(link.href, locale)}
+                            aria-current={
+                              active(link.href) ? "page" : undefined
+                            }
+                          />
+                        }
+                        className="ec-mobile-link"
+                      >
+                        {link.label}
+                        {streamBadge(link.href)}
+                      </SheetClose>
+                    ))}
+                  </div>
+                ))}
+                <div>
+                  <h2>{text.common.account}</h2>
+                  <SheetClose
+                    render={<Link href={localizedPath("/me", locale)} />}
+                    className="ec-mobile-link"
+                  >
+                    {text.common.myProfile}
+                  </SheetClose>
+                  {hasSession ? (
+                    <SheetClose
+                      render={
+                        <Link
+                          href={localizedPath("/me?tab=notifications", locale)}
+                        />
+                      }
+                      className="ec-mobile-link"
+                    >
+                      {text.follows.notificationsTitle}
+                      <NotificationUnreadBadge
+                        count={unreadNotifications}
+                        locale={locale}
+                      />
+                    </SheetClose>
+                  ) : null}
+                  {isAdmin ? (
+                    <SheetClose
+                      render={<Link href={localizedPath("/admin", locale)} />}
+                      className="ec-mobile-link"
+                    >
+                      {text.common.admin}
+                    </SheetClose>
+                  ) : null}
                   <a
                     href={DISCORD_INVITE_URL}
                     target="_blank"
                     rel="noopener noreferrer"
+                    className="ec-mobile-link"
                     onClick={() => {
                       trackProductEvent("discord_join_click");
                       setMobileOpen(false);
                     }}
-                  />
-                }
-                nativeButton={false}
-                variant="outline"
-                className="m-3 mb-2 justify-start"
-                aria-label={text.common.joinDiscord}
-              >
-                <DiscordIcon data-icon="inline-start" />
-                {text.common.joinDiscord}
-              </Button>
-              <nav className="flex flex-col gap-1 px-3 pb-3">
-                <GlobalSearch locale={locale} mobile onResultOpen={() => setMobileOpen(false)} />
-                <p className="px-3 pb-1 pt-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                  {text.common.content}
-                </p>
-                {contentLinks.map((destination) => (
-                  <MobileNavLink
-                    key={destination.href}
-                    destination={destination}
-                    locale={locale}
-                    active={linkActive(destination.href)}
-                    badge={liveBadge(destination.href)}
-                  />
-                ))}
-                <p className="px-3 pb-1 pt-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                  {text.common.competition}
-                </p>
-                {competitionLinks.map((destination) => (
-                  <MobileNavLink
-                    key={destination.href}
-                    destination={destination}
-                    locale={locale}
-                    active={linkActive(destination.href)}
-                  />
-                ))}
-                <MobileNavLink
-                  destination={coStreamsLink}
-                  locale={locale}
-                  active={linkActive(coStreamsLink.href)}
-                  badge={liveBadge(coStreamsLink.href)}
-                />
-                <p className="px-3 pb-1 pt-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                  {text.common.ewc}
-                </p>
-                {ewcLinks.map((destination) => (
-                  <MobileNavLink
-                    key={destination.href}
-                    destination={destination}
-                    locale={locale}
-                    active={linkActive(destination.href)}
-                  />
-                ))}
-                <Separator className="my-2" />
-                <p className="px-3 pb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                  {text.common.account}
-                </p>
-                {isAdmin ? (
-                  <SheetClose
-                    render={
-                      <Link
-                        href={localizedPath("/admin", locale)}
-                        aria-current={
-                          isActivePath(pathname, localizedPath("/admin", locale))
-                            ? "page"
-                            : undefined
-                        }
-                      />
-                    }
-                    className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium outline-none transition-colors hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring aria-[current=page]:bg-muted aria-[current=page]:text-foreground"
                   >
-                    <ShieldCheckIcon className="size-4 text-muted-foreground" />
-                    <span className="min-w-0 truncate">{text.common.admin}</span>
-                  </SheetClose>
-                ) : null}
-                {hasSession ? (
-                  <MobileNavLink
-                    destination={notificationsLink}
-                    locale={locale}
-                    active={false}
-                    badge={
-                      <NotificationUnreadBadge
-                        count={unreadNotifications}
-                        locale={locale}
-                        className="ms-auto"
-                      />
-                    }
-                  />
-                ) : null}
-                <SheetClose
-                  render={
-                    <Link
-                      href={localizedPath("/me", locale)}
-                      aria-current={
-                        isActivePath(pathname, localizedPath("/me", locale))
-                          ? "page"
-                          : undefined
-                      }
+                    <DiscordIcon className="size-4" />
+                    {text.common.joinDiscord}
+                  </a>
+                  {hasSession ? (
+                    <SignOutButton
+                      label={text.common.signOut}
+                      redirectTo={localizedPath("/", locale)}
+                      className="w-full justify-start"
                     />
-                  }
-                  className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium outline-none transition-colors hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring aria-[current=page]:bg-muted aria-[current=page]:text-foreground"
-                >
-                  <UserRoundIcon className="size-4 text-muted-foreground" />
-                  <span className="min-w-0 truncate">{text.common.myProfile}</span>
-                </SheetClose>
-                {hasSession ? (
-                  <SignOutButton
-                    label={text.common.signOut}
-                    redirectTo={localizedPath("/", locale)}
-                    className="mt-1 w-full justify-start gap-3 px-3"
-                  />
-                ) : null}
+                  ) : null}
+                </div>
               </nav>
             </SheetContent>
           </Sheet>
-        </nav>
+        </div>
+      </div>
+      <div className="ec-secondary-bar">
+        <div className="ec-container ec-secondary-inner">
+          <span className="ec-rail-label">
+            {locale === "ar" ? "المجتمع" : "COMMUNITY"}
+          </span>
+          <nav aria-label={locale === "ar" ? "المجتمع" : "Community"}>
+            {community.slice(0, 5).map((link) => (
+              <Link
+                key={link.href}
+                href={localizedPath(link.href, locale)}
+                aria-current={active(link.href) ? "page" : undefined}
+              >
+                {link.label}
+                {streamBadge(link.href)}
+              </Link>
+            ))}
+          </nav>
+          <DropdownMenu>
+            <DropdownMenuTrigger className="ec-ewc-trigger">
+              {locale === "ar" ? "المزيد" : "More"}
+              <ChevronDownIcon className="size-3" />
+            </DropdownMenuTrigger>
+            <DropdownMenuContent>
+              <DropdownMenuGroup>
+                {community.slice(5).map((link) => (
+                  <DropdownMenuItem
+                    key={link.href}
+                    render={<Link href={localizedPath(link.href, locale)} />}
+                  >
+                    {link.label}
+                  </DropdownMenuItem>
+                ))}
+              </DropdownMenuGroup>
+            </DropdownMenuContent>
+          </DropdownMenu>
+          <DropdownMenu>
+            <DropdownMenuTrigger className="ec-ewc-trigger">
+              {text.common.ewc}
+              <ChevronDownIcon className="size-3" />
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuGroup>
+                {ewc.map((link) => (
+                  <DropdownMenuItem
+                    key={link.href}
+                    render={<Link href={localizedPath(link.href, locale)} />}
+                  >
+                    {link.label}
+                  </DropdownMenuItem>
+                ))}
+              </DropdownMenuGroup>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
       </div>
     </header>
   );

@@ -67,11 +67,11 @@ export function LeaderboardTable({
           const rank = row.original.rank;
           const medal =
             rank === 1
-              ? "border-amber-500/45 bg-amber-500/15 text-amber-600 dark:text-amber-400"
+              ? "border-amber-500/45 bg-amber-500/15 text-amber-800 dark:text-amber-400"
               : rank === 2
                 ? "border-slate-400/45 bg-slate-400/15 text-slate-600 dark:text-slate-300"
                 : rank === 3
-                  ? "border-orange-600/45 bg-orange-600/15 text-orange-700 dark:text-orange-400"
+                  ? "border-orange-600/45 bg-orange-600/15 text-orange-800 dark:text-orange-400"
                   : undefined;
           return (
             <Badge variant="outline" className={medal}>

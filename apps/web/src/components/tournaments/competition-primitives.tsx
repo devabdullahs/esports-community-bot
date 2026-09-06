@@ -24,7 +24,7 @@ export function CompetitionStatusBadge({
   if (status === "idle") return null;
   const config =
     status === "running" || status === "live"
-      ? { label: text.liveNow, icon: RadioIcon, className: "border-primary/35 bg-primary/10 text-primary" }
+      ? { label: text.liveNow, icon: RadioIcon, className: "border-live/30 bg-live/10 text-live" }
       : status === "scheduled" || status === "upcoming"
         ? { label: text.upcoming, icon: CalendarClockIcon, className: "border-border bg-secondary text-secondary-foreground" }
         : status === "postponed"
@@ -114,8 +114,8 @@ export function SeriesScore({
 }) {
   if (match.score_a !== null && match.score_b !== null) {
     return (
-      <span className="whitespace-nowrap text-center text-sm font-semibold tabular-nums">
-        {formatNumber(match.score_a, locale)} - {formatNumber(match.score_b, locale)}
+      <span className="inline-flex items-center justify-center gap-2 whitespace-nowrap text-sm font-semibold tabular-nums">
+        <span>{formatNumber(match.score_a, locale)}</span><span aria-hidden="true">–</span><span>{formatNumber(match.score_b, locale)}</span>
       </span>
     );
   }

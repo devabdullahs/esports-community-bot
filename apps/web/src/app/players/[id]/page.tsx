@@ -166,7 +166,7 @@ export default async function PlayerProfilePage({
   const mvpWin = await getPlayerMvpWin(player.id);
 
   return (
-    <main className="mx-auto flex w-full max-w-5xl flex-1 flex-col gap-6 px-4 py-8 sm:px-8 sm:py-10">
+    <main className="ec-public-page mx-auto flex w-full max-w-5xl flex-1 flex-col gap-6 px-4 py-8 sm:px-8 sm:py-10">
       <PageBreadcrumb
         items={breadcrumbItems}
       />
@@ -180,8 +180,7 @@ export default async function PlayerProfilePage({
         {backLabel}
       </Button>
 
-      <section className="relative overflow-hidden rounded-2xl border bg-card/40 p-5 shadow-sm sm:p-6">
-        <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-primary/60 to-transparent" />
+      <section className="ec-profile-heading">
         <div className="flex min-h-[15rem] flex-col gap-6">
           <div className="flex min-w-0 items-center gap-4 sm:gap-5">
             <ProfileAvatar

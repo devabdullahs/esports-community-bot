@@ -64,7 +64,7 @@ function PlayerCard({ player, locale }: { player: PlayerProfile; locale: Locale 
   return (
     <Link
       href={localizedPath(`/players/${player.id}`, locale)}
-      className="group flex items-center gap-3 rounded-2xl border bg-card/60 p-3 outline-none transition-colors hover:border-primary/40 hover:bg-card focus-visible:ring-2 focus-visible:ring-ring"
+      className="ec-directory-entry group flex items-center gap-3 border-b bg-card/60 p-3 outline-none transition-colors hover:border-primary/40 hover:bg-card focus-visible:ring-2 focus-visible:ring-ring"
     >
       <ProfileAvatar
         src={player.image_url}
@@ -125,7 +125,7 @@ export default async function PlayersDirectoryPage({
   if (page > 1 && players.length === 0) notFound();
 
   return (
-    <main className="mx-auto flex w-full max-w-6xl flex-1 flex-col gap-6 px-4 py-8 sm:px-8 sm:py-10">
+    <main className="ec-public-page mx-auto flex w-full max-w-6xl flex-1 flex-col gap-6 px-4 py-8 sm:px-8 sm:py-10">
       <PageBreadcrumb
         items={[
           { label: common.home, href: localizedPath("/", locale) },
@@ -133,8 +133,7 @@ export default async function PlayersDirectoryPage({
         ]}
       />
 
-      <section className="relative overflow-hidden rounded-2xl border bg-card/40 p-5 shadow-sm sm:p-6">
-        <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-primary/60 to-transparent" />
+      <section className="ec-profile-heading">
         <div className="flex flex-col gap-4">
           <div className="flex max-w-3xl flex-col gap-2">
             <Badge variant="outline" className="w-fit gap-1.5 border-primary/35 bg-primary/10 text-primary">
@@ -154,10 +153,11 @@ export default async function PlayersDirectoryPage({
             </Link>
           </div>
 
-          <form method="get" action={localizedPath("/players", locale)} className="flex max-w-md gap-2">
+          <form method="get" action={localizedPath("/players", locale)} className="flex max-w-md flex-wrap items-end gap-2">
+            <label htmlFor="directory-search" className="w-full text-sm font-medium">{text.searchPlaceholder}</label>
             <div className="relative flex-1">
               <SearchIcon className="pointer-events-none absolute start-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-              <Input name="q" defaultValue={q} placeholder={text.searchPlaceholder} className="h-10 ps-8" />
+              <Input id="directory-search" name="q" defaultValue={q} placeholder={text.searchPlaceholder} className="h-10 ps-8" />
             </div>
             {game ? <input type="hidden" name="game" value={game} /> : null}
             <Button type="submit" variant="outline">

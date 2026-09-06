@@ -38,6 +38,12 @@ export type GameInput = {
 };
 
 const CANONICAL_GAME_TITLES: Partial<Record<string, LocalizedText>> = {
+  callofduty: { en: "Call of Duty", ar: "كول أوف ديوتي" },
+  valorant: { en: "VALORANT", ar: "فالورانت" },
+  csgo: { en: "Counter-Strike", ar: "كاونتر سترايك" },
+  lol: { en: "League of Legends", ar: "ليغ أوف ليجندز" },
+  rocketleague: { en: "Rocket League", ar: "روكيت ليغ" },
+  dota2: { en: "Dota 2", ar: "دوتا 2" },
   fighters: {
     en: "Fighter Games",
     ar: "\u0627\u0644\u0623\u0644\u0639\u0627\u0628 \u0627\u0644\u0642\u062a\u0627\u0644\u064a\u0629",

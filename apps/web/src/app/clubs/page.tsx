@@ -257,7 +257,7 @@ export default async function EwcClubsPage({
   const qualifiedGamesCount = countUniqueQualifiedGames(clubs);
 
   return (
-    <main className="mx-auto flex w-full max-w-6xl flex-1 flex-col gap-6 px-4 py-8 sm:px-8 sm:py-10">
+    <main className="ec-public-page mx-auto flex w-full max-w-6xl flex-1 flex-col gap-6 px-4 py-8 sm:px-8 sm:py-10">
       <PageBreadcrumb
         items={[
           { label: common.home, href: localizedPath("/", locale) },
@@ -267,8 +267,7 @@ export default async function EwcClubsPage({
 
       <EwcClubViewSwitcher locale={locale} active="directory" />
 
-      <section className="relative overflow-hidden rounded-2xl border bg-card/40 p-5 shadow-sm sm:p-6">
-        <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-primary/60 to-transparent" />
+      <section className="ec-profile-heading">
         <div className="flex flex-col gap-5">
           <div className="flex max-w-3xl flex-col gap-2">
             <Badge variant="outline" className="w-fit">
@@ -293,7 +292,7 @@ export default async function EwcClubsPage({
           <form method="get" action={localizedPath("/clubs", locale)} className="flex max-w-md gap-2">
             <div className="relative flex-1">
               <SearchIcon className="pointer-events-none absolute start-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-              <Input name="q" defaultValue={q} placeholder={text.searchPlaceholder} className="h-10 ps-8" />
+              <Input name="q" defaultValue={q} aria-label={text.searchPlaceholder} placeholder={text.searchPlaceholder} className="h-10 ps-8" />
             </div>
             <input type="hidden" name="region" value={region} />
             {scope === "all" ? <input type="hidden" name="scope" value="all" /> : null}
@@ -341,7 +340,7 @@ export default async function EwcClubsPage({
         </div>
       </section>
 
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      {clubs.length ? <div className="ec-club-summary grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard label={text.stats.clubs} value={text.resultCount(clubs.length)} icon={UsersIcon} />
         <StatCard
           label={text.stats.pointsLeader}
@@ -362,7 +361,7 @@ export default async function EwcClubsPage({
           value={text.winsCount(clubs.reduce((sum, club) => sum + club.winCount, 0))}
           icon={TrophyIcon}
         />
-      </div>
+      </div> : null}
 
       {clubs.length ? (
         <div className="grid gap-4 lg:grid-cols-2">
