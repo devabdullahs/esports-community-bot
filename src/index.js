@@ -1,3 +1,4 @@
+import { stopTournamentDiscovery } from './jobs/tournamentDiscovery.js';
 import { stopRefreshLoop } from './jobs/refresh.js';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -83,6 +84,7 @@ process.on('uncaughtException', (err) => logger.error('Uncaught exception:', err
 
 async function shutdown(signal) {
   logger.info(`Received ${signal} — shutting down.`);
+  stopTournamentDiscovery();
   stopRefreshLoop();
   stopAll();
   stopClubChampionship();

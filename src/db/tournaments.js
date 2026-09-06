@@ -35,7 +35,7 @@ function sourceSupersessionFor(row) {
 }
 
 // Insert (or re-activate) a tracked tournament. Returns the stored row.
-export async function addTournament(row) {
+export async function addTournament(row, { preserveExisting = false } = {}) {
   const merged = {
     game: null,
     name: null,
@@ -54,8 +54,9 @@ export async function addTournament(row) {
        active = 1,
        archived_at = NULL,
        lifecycle_generation = tournaments.lifecycle_generation + 1
+     WHERE $8 = 0
      RETURNING *`,
-    [merged.source, merged.external_id, merged.game, merged.name, merged.url, merged.guild_id, merged.added_by],
+    [merged.source, merged.external_id, merged.game, merged.name, merged.url, merged.guild_id, merged.added_by, preserveExisting ? 1 : 0],
   );
 }
 

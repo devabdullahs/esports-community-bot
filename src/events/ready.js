@@ -1,3 +1,4 @@
+import { startTournamentDiscovery } from '../jobs/tournamentDiscovery.js';
 import { Events, OAuth2Scopes, PermissionFlagsBits } from 'discord.js';
 import { logger } from '../lib/logger.js';
 import { startMorningSync } from '../jobs/morningSync.js';
@@ -66,6 +67,7 @@ export async function execute(client) {
   startCsRankings(client); // Counter-Strike Valve rankings refresh loop
   startEwcPredictions(client); // EWC prediction snapshots/scoring automation
   startEwcPredictionOperations(client); // durable dashboard-requested prediction operations
+  startTournamentDiscovery();
   startTournamentOperations(client); // durable tournament lifecycle/sync operations
   startNewsAnnouncer(client); // Auto-post published news to Discord (per-game / default channel)
   startMediaAnnouncer(client); // Auto-announce opted-in media channels to their Discord channel
