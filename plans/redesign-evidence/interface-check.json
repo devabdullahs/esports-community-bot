@@ -1,0 +1,148 @@
+[
+  {
+    "route": "/",
+    "scrollWidth": 320,
+    "viewport": 320,
+    "inputs": [],
+    "moving": 0,
+    "skip": "Skip to main content",
+    "target": "main-content"
+  },
+  {
+    "route": "/live",
+    "scrollWidth": 320,
+    "viewport": 320,
+    "inputs": [
+      {
+        "size": "16px",
+        "labels": [
+          "GamesAll gamesCall of DutyValorant"
+        ]
+      }
+    ],
+    "moving": 0,
+    "skip": "Skip to main content",
+    "target": "main-content"
+  },
+  {
+    "route": "/teams",
+    "scrollWidth": 320,
+    "viewport": 320,
+    "inputs": [
+      {
+        "size": "16px",
+        "labels": [
+          "Search by name"
+        ]
+      }
+    ],
+    "moving": 0,
+    "skip": "Skip to main content",
+    "target": "main-content"
+  },
+  {
+    "route": "/players",
+    "scrollWidth": 320,
+    "viewport": 320,
+    "inputs": [
+      {
+        "size": "16px",
+        "labels": [
+          "Search by name"
+        ]
+      }
+    ],
+    "moving": 0,
+    "skip": "Skip to main content",
+    "target": "main-content"
+  },
+  {
+    "route": "/tournaments/2",
+    "scrollWidth": 320,
+    "viewport": 320,
+    "inputs": [],
+    "moving": 0,
+    "skip": "Skip to main content",
+    "target": "main-content"
+  },
+  {
+    "locale": "en",
+    "forcedFocus": {
+      "outline": "rgb(55, 0, 110) solid 2px",
+      "name": "Back to tournaments"
+    }
+  },
+  {
+    "route": "/ar/",
+    "scrollWidth": 320,
+    "viewport": 320,
+    "inputs": [],
+    "moving": 0,
+    "skip": "تخطي إلى المحتوى الرئيسي",
+    "target": "main-content"
+  },
+  {
+    "route": "/ar/live",
+    "scrollWidth": 320,
+    "viewport": 320,
+    "inputs": [
+      {
+        "size": "16px",
+        "labels": [
+          "الألعابكل الألعابCall of Dutyفالورانت"
+        ]
+      }
+    ],
+    "moving": 0,
+    "skip": "تخطي إلى المحتوى الرئيسي",
+    "target": "main-content"
+  },
+  {
+    "route": "/ar/teams",
+    "scrollWidth": 320,
+    "viewport": 320,
+    "inputs": [
+      {
+        "size": "16px",
+        "labels": [
+          "ابحث بالاسم"
+        ]
+      }
+    ],
+    "moving": 0,
+    "skip": "تخطي إلى المحتوى الرئيسي",
+    "target": "main-content"
+  },
+  {
+    "route": "/ar/players",
+    "scrollWidth": 320,
+    "viewport": 320,
+    "inputs": [
+      {
+        "size": "16px",
+        "labels": [
+          "ابحث بالاسم"
+        ]
+      }
+    ],
+    "moving": 0,
+    "skip": "تخطي إلى المحتوى الرئيسي",
+    "target": "main-content"
+  },
+  {
+    "route": "/ar/tournaments/2",
+    "scrollWidth": 320,
+    "viewport": 320,
+    "inputs": [],
+    "moving": 0,
+    "skip": "تخطي إلى المحتوى الرئيسي",
+    "target": "main-content"
+  },
+  {
+    "locale": "ar",
+    "forcedFocus": {
+      "outline": "rgb(55, 0, 110) solid 2px",
+      "name": "العودة إلى البطولات"
+    }
+  }
+]

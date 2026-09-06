@@ -12,17 +12,13 @@ async function reconnectPage(page: Page) {
   await page.evaluate(() => window.dispatchEvent(new Event("online")));
 }
 
-test("English home reaches the seeded tournament detail through the directory", async ({ page }, testInfo) => {
+test("English home reaches the seeded tournament detail through the directory", async ({ page }) => {
   await page.goto("/");
   await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
 
-  if (testInfo.project.name === "mobile-chromium") {
-    await page.getByRole("button", { name: "Menu" }).click();
-  } else {
-    await page.getByRole("button", { name: "Competition" }).click();
-  }
 
-  const tournamentsLink = page.getByRole("link", { name: "Tournaments", exact: true });
+
+  const tournamentsLink = page.getByRole("navigation", { name: "Primary navigation", exact: true }).getByRole("link", { name: "Tournaments", exact: true });
   await expect(tournamentsLink).toHaveAttribute("href", "/tournaments");
   await Promise.all([
     page.waitForURL(/\/tournaments$/),
@@ -148,15 +144,11 @@ test("Arabic tournament navigation preserves RTL at the mobile layout", async ({
   }
 });
 
-test("header navigation and locale switching keep a localized destination", async ({ page }, testInfo) => {
+test("header navigation and locale switching keep a localized destination", async ({ page }) => {
   await page.goto("/");
-  if (testInfo.project.name === "mobile-chromium") {
-    await page.getByRole("button", { name: "Menu" }).click();
-  } else {
-    await page.getByRole("button", { name: "Competition" }).click();
-  }
 
-  await page.getByRole("link", { name: "Tournaments", exact: true }).click();
+
+  await page.getByRole("navigation", { name: "Primary navigation", exact: true }).getByRole("link", { name: "Tournaments", exact: true }).click();
   await page.waitForURL(/\/tournaments$/);
   await page.getByRole("button", { name: arabicSwitchLabel }).click();
   await page.waitForURL(/\/ar\/tournaments$/);

@@ -1,0 +1,6230 @@
+[
+  {
+    "route": "/",
+    "width": 1440,
+    "locale": "en",
+    "theme": "h-full antialiased dark",
+    "status": 200,
+    "fonts": [
+      {
+        "weight": "400",
+        "status": "loaded"
+      },
+      {
+        "weight": "500",
+        "status": "loaded"
+      },
+      {
+        "weight": "700",
+        "status": "loaded"
+      }
+    ],
+    "lang": "en",
+    "dir": "ltr",
+    "scrollWidth": 1440,
+    "heading": "Your daily esports desk",
+    "mainCount": 1,
+    "brokenImages": [],
+    "errors": []
+  },
+  {
+    "route": "/live",
+    "width": 1440,
+    "locale": "en",
+    "theme": "h-full antialiased dark",
+    "status": 200,
+    "fonts": [
+      {
+        "weight": "400",
+        "status": "loaded"
+      },
+      {
+        "weight": "500",
+        "status": "loaded"
+      },
+      {
+        "weight": "700",
+        "status": "loaded"
+      }
+    ],
+    "lang": "en",
+    "dir": "ltr",
+    "scrollWidth": 1440,
+    "heading": "Live matches and the next games",
+    "mainCount": 1,
+    "brokenImages": [],
+    "errors": []
+  },
+  {
+    "route": "/live?tab=results",
+    "width": 1440,
+    "locale": "en",
+    "theme": "h-full antialiased dark",
+    "status": 200,
+    "fonts": [
+      {
+        "weight": "400",
+        "status": "loaded"
+      },
+      {
+        "weight": "500",
+        "status": "loaded"
+      },
+      {
+        "weight": "700",
+        "status": "loaded"
+      }
+    ],
+    "lang": "en",
+    "dir": "ltr",
+    "scrollWidth": 1440,
+    "heading": "Live matches and the next games",
+    "mainCount": 1,
+    "brokenImages": [],
+    "errors": []
+  },
+  {
+    "route": "/games",
+    "width": 1440,
+    "locale": "en",
+    "theme": "h-full antialiased dark",
+    "status": 200,
+    "fonts": [
+      {
+        "weight": "400",
+        "status": "loaded"
+      },
+      {
+        "weight": "500",
+        "status": "loaded"
+      },
+      {
+        "weight": "700",
+        "status": "loaded"
+      }
+    ],
+    "lang": "en",
+    "dir": "ltr",
+    "scrollWidth": 1440,
+    "heading": "Games",
+    "mainCount": 1,
+    "brokenImages": [],
+    "errors": []
+  },
+  {
+    "route": "/games/valorant",
+    "width": 1440,
+    "locale": "en",
+    "theme": "h-full antialiased dark",
+    "status": 200,
+    "fonts": [
+      {
+        "weight": "400",
+        "status": "loaded"
+      },
+      {
+        "weight": "500",
+        "status": "loaded"
+      },
+      {
+        "weight": "700",
+        "status": "loaded"
+      }
+    ],
+    "lang": "en",
+    "dir": "ltr",
+    "scrollWidth": 1440,
+    "heading": "Valorant",
+    "mainCount": 1,
+    "brokenImages": [],
+    "errors": []
+  },
+  {
+    "route": "/tournaments",
+    "width": 1440,
+    "locale": "en",
+    "theme": "h-full antialiased dark",
+    "status": 200,
+    "fonts": [
+      {
+        "weight": "400",
+        "status": "loaded"
+      },
+      {
+        "weight": "500",
+        "status": "loaded"
+      },
+      {
+        "weight": "700",
+        "status": "loaded"
+      }
+    ],
+    "lang": "en",
+    "dir": "ltr",
+    "scrollWidth": 1440,
+    "heading": "Tracked tournaments",
+    "mainCount": 1,
+    "brokenImages": [],
+    "errors": []
+  },
+  {
+    "route": "/tournaments/ewc",
+    "width": 1440,
+    "locale": "en",
+    "theme": "h-full antialiased dark",
+    "status": 200,
+    "fonts": [
+      {
+        "weight": "400",
+        "status": "loaded"
+      },
+      {
+        "weight": "500",
+        "status": "loaded"
+      },
+      {
+        "weight": "700",
+        "status": "loaded"
+      }
+    ],
+    "lang": "en",
+    "dir": "ltr",
+    "scrollWidth": 1440,
+    "heading": "EWC tournaments",
+    "mainCount": 1,
+    "brokenImages": [],
+    "errors": []
+  },
+  {
+    "route": "/tournaments/archive",
+    "width": 1440,
+    "locale": "en",
+    "theme": "h-full antialiased dark",
+    "status": 200,
+    "fonts": [
+      {
+        "weight": "400",
+        "status": "loaded"
+      },
+      {
+        "weight": "500",
+        "status": "loaded"
+      },
+      {
+        "weight": "700",
+        "status": "loaded"
+      }
+    ],
+    "lang": "en",
+    "dir": "ltr",
+    "scrollWidth": 1440,
+    "heading": "Finished tournaments",
+    "mainCount": 1,
+    "brokenImages": [],
+    "errors": []
+  },
+  {
+    "route": "/tournaments/1",
+    "width": 1440,
+    "locale": "en",
+    "theme": "h-full antialiased dark",
+    "status": 200,
+    "fonts": [
+      {
+        "weight": "400",
+        "status": "loaded"
+      },
+      {
+        "weight": "500",
+        "status": "loaded"
+      },
+      {
+        "weight": "700",
+        "status": "loaded"
+      }
+    ],
+    "lang": "en",
+    "dir": "ltr",
+    "scrollWidth": 1440,
+    "heading": "EWC 2026 — Valorant",
+    "mainCount": 1,
+    "brokenImages": [],
+    "errors": []
+  },
+  {
+    "route": "/tournaments/2",
+    "width": 1440,
+    "locale": "en",
+    "theme": "h-full antialiased dark",
+    "status": 200,
+    "fonts": [
+      {
+        "weight": "400",
+        "status": "loaded"
+      },
+      {
+        "weight": "500",
+        "status": "loaded"
+      },
+      {
+        "weight": "700",
+        "status": "loaded"
+      }
+    ],
+    "lang": "en",
+    "dir": "ltr",
+    "scrollWidth": 1440,
+    "heading": "EWC 2026 — Black Ops 7",
+    "mainCount": 1,
+    "brokenImages": [],
+    "errors": []
+  },
+  {
+    "route": "/news",
+    "width": 1440,
+    "locale": "en",
+    "theme": "h-full antialiased dark",
+    "status": 200,
+    "fonts": [
+      {
+        "weight": "400",
+        "status": "loaded"
+      },
+      {
+        "weight": "500",
+        "status": "loaded"
+      },
+      {
+        "weight": "700",
+        "status": "loaded"
+      }
+    ],
+    "lang": "en",
+    "dir": "ltr",
+    "scrollWidth": 1440,
+    "heading": "The newsroom",
+    "mainCount": 1,
+    "brokenImages": [],
+    "errors": []
+  },
+  {
+    "route": "/news/ewc",
+    "width": 1440,
+    "locale": "en",
+    "theme": "h-full antialiased dark",
+    "status": 200,
+    "fonts": [
+      {
+        "weight": "400",
+        "status": "loaded"
+      },
+      {
+        "weight": "500",
+        "status": "loaded"
+      },
+      {
+        "weight": "700",
+        "status": "loaded"
+      }
+    ],
+    "lang": "en",
+    "dir": "ltr",
+    "scrollWidth": 1440,
+    "heading": "EWC news",
+    "mainCount": 1,
+    "brokenImages": [],
+    "errors": []
+  },
+  {
+    "route": "/teams",
+    "width": 1440,
+    "locale": "en",
+    "theme": "h-full antialiased dark",
+    "status": 200,
+    "fonts": [
+      {
+        "weight": "400",
+        "status": "loaded"
+      },
+      {
+        "weight": "500",
+        "status": "loaded"
+      },
+      {
+        "weight": "700",
+        "status": "loaded"
+      }
+    ],
+    "lang": "en",
+    "dir": "ltr",
+    "scrollWidth": 1440,
+    "heading": "Teams",
+    "mainCount": 1,
+    "brokenImages": [],
+    "errors": []
+  },
+  {
+    "route": "/teams/1",
+    "width": 1440,
+    "locale": "en",
+    "theme": "h-full antialiased dark",
+    "status": 200,
+    "fonts": [
+      {
+        "weight": "400",
+        "status": "loaded"
+      },
+      {
+        "weight": "500",
+        "status": "loaded"
+      },
+      {
+        "weight": "700",
+        "status": "loaded"
+      }
+    ],
+    "lang": "en",
+    "dir": "ltr",
+    "scrollWidth": 1440,
+    "heading": "Team Falcons",
+    "mainCount": 1,
+    "brokenImages": [],
+    "errors": []
+  },
+  {
+    "route": "/players",
+    "width": 1440,
+    "locale": "en",
+    "theme": "h-full antialiased dark",
+    "status": 200,
+    "fonts": [
+      {
+        "weight": "400",
+        "status": "loaded"
+      },
+      {
+        "weight": "500",
+        "status": "loaded"
+      },
+      {
+        "weight": "700",
+        "status": "loaded"
+      }
+    ],
+    "lang": "en",
+    "dir": "ltr",
+    "scrollWidth": 1440,
+    "heading": "Players",
+    "mainCount": 1,
+    "brokenImages": [],
+    "errors": []
+  },
+  {
+    "route": "/players/1",
+    "width": 1440,
+    "locale": "en",
+    "theme": "h-full antialiased dark",
+    "status": 200,
+    "fonts": [
+      {
+        "weight": "400",
+        "status": "loaded"
+      },
+      {
+        "weight": "500",
+        "status": "loaded"
+      },
+      {
+        "weight": "700",
+        "status": "loaded"
+      }
+    ],
+    "lang": "en",
+    "dir": "ltr",
+    "scrollWidth": 1440,
+    "heading": "Preview competitor",
+    "mainCount": 1,
+    "brokenImages": [],
+    "errors": []
+  },
+  {
+    "route": "/media/hype-cast/news/5",
+    "width": 1440,
+    "locale": "en",
+    "theme": "h-full antialiased dark",
+    "status": 200,
+    "fonts": [
+      {
+        "weight": "400",
+        "status": "loaded"
+      },
+      {
+        "weight": "500",
+        "status": "loaded"
+      },
+      {
+        "weight": "700",
+        "status": "loaded"
+      }
+    ],
+    "lang": "en",
+    "dir": "ltr",
+    "scrollWidth": 1440,
+    "heading": "Inside the broadcast: a community matchday",
+    "mainCount": 1,
+    "brokenImages": [],
+    "errors": []
+  },
+  {
+    "route": "/compare",
+    "width": 1440,
+    "locale": "en",
+    "theme": "h-full antialiased dark",
+    "status": 200,
+    "fonts": [
+      {
+        "weight": "400",
+        "status": "loaded"
+      },
+      {
+        "weight": "500",
+        "status": "loaded"
+      },
+      {
+        "weight": "700",
+        "status": "loaded"
+      }
+    ],
+    "lang": "en",
+    "dir": "ltr",
+    "scrollWidth": 1440,
+    "heading": "Team and player comparison",
+    "mainCount": 1,
+    "brokenImages": [],
+    "errors": []
+  },
+  {
+    "route": "/predictions",
+    "width": 1440,
+    "locale": "en",
+    "theme": "h-full antialiased dark",
+    "status": 200,
+    "fonts": [
+      {
+        "weight": "400",
+        "status": "loaded"
+      },
+      {
+        "weight": "500",
+        "status": "loaded"
+      },
+      {
+        "weight": "700",
+        "status": "loaded"
+      }
+    ],
+    "lang": "en",
+    "dir": "ltr",
+    "scrollWidth": 1440,
+    "heading": "EWC prediction boards",
+    "mainCount": 1,
+    "brokenImages": [],
+    "errors": []
+  },
+  {
+    "route": "/leaderboard",
+    "width": 1440,
+    "locale": "en",
+    "theme": "h-full antialiased dark",
+    "status": 200,
+    "fonts": [
+      {
+        "weight": "400",
+        "status": "loaded"
+      },
+      {
+        "weight": "500",
+        "status": "loaded"
+      },
+      {
+        "weight": "700",
+        "status": "loaded"
+      }
+    ],
+    "lang": "en",
+    "dir": "ltr",
+    "scrollWidth": 1440,
+    "heading": "EWC 2026 prediction leaderboard",
+    "mainCount": 1,
+    "brokenImages": [],
+    "errors": []
+  },
+  {
+    "route": "/clubs",
+    "width": 1440,
+    "locale": "en",
+    "theme": "h-full antialiased dark",
+    "status": 200,
+    "fonts": [
+      {
+        "weight": "400",
+        "status": "loaded"
+      },
+      {
+        "weight": "500",
+        "status": "loaded"
+      },
+      {
+        "weight": "700",
+        "status": "loaded"
+      }
+    ],
+    "lang": "en",
+    "dir": "ltr",
+    "scrollWidth": 1440,
+    "heading": "EWC club tracker",
+    "mainCount": 1,
+    "brokenImages": [],
+    "errors": []
+  },
+  {
+    "route": "/clubs/standings",
+    "width": 1440,
+    "locale": "en",
+    "theme": "h-full antialiased dark",
+    "status": 200,
+    "fonts": [
+      {
+        "weight": "400",
+        "status": "loaded"
+      },
+      {
+        "weight": "500",
+        "status": "loaded"
+      },
+      {
+        "weight": "700",
+        "status": "loaded"
+      }
+    ],
+    "lang": "en",
+    "dir": "ltr",
+    "scrollWidth": 1440,
+    "heading": "EWC Club Championship standings",
+    "mainCount": 1,
+    "brokenImages": [],
+    "errors": []
+  },
+  {
+    "route": "/mvp",
+    "width": 1440,
+    "locale": "en",
+    "theme": "h-full antialiased dark",
+    "status": 200,
+    "fonts": [
+      {
+        "weight": "400",
+        "status": "loaded"
+      },
+      {
+        "weight": "500",
+        "status": "loaded"
+      },
+      {
+        "weight": "700",
+        "status": "loaded"
+      }
+    ],
+    "lang": "en",
+    "dir": "ltr",
+    "scrollWidth": 1440,
+    "heading": "MVP of the day",
+    "mainCount": 1,
+    "brokenImages": [],
+    "errors": []
+  },
+  {
+    "route": "/co-streams",
+    "width": 1440,
+    "locale": "en",
+    "theme": "h-full antialiased dark",
+    "status": 200,
+    "fonts": [
+      {
+        "weight": "400",
+        "status": "loaded"
+      },
+      {
+        "weight": "500",
+        "status": "loaded"
+      },
+      {
+        "weight": "700",
+        "status": "loaded"
+      }
+    ],
+    "lang": "en",
+    "dir": "ltr",
+    "scrollWidth": 1440,
+    "heading": "Co-streams",
+    "mainCount": 1,
+    "brokenImages": [],
+    "errors": [
+      "Failed to load resource: the server responded with a status of 429 (Too Many Requests)",
+      "Permissions policy violation: bluetooth is not allowed in this document.",
+      "getLayoutMap() must be called from a top-level browsing context or allowed by the permission policy."
+    ]
+  },
+  {
+    "route": "/media",
+    "width": 1440,
+    "locale": "en",
+    "theme": "h-full antialiased dark",
+    "status": 200,
+    "fonts": [
+      {
+        "weight": "400",
+        "status": "loaded"
+      },
+      {
+        "weight": "500",
+        "status": "loaded"
+      },
+      {
+        "weight": "700",
+        "status": "loaded"
+      }
+    ],
+    "lang": "en",
+    "dir": "ltr",
+    "scrollWidth": 1440,
+    "heading": "Esports media channels",
+    "mainCount": 1,
+    "brokenImages": [],
+    "errors": []
+  },
+  {
+    "route": "/me",
+    "width": 1440,
+    "locale": "en",
+    "theme": "h-full antialiased dark",
+    "status": 200,
+    "fonts": [
+      {
+        "weight": "400",
+        "status": "loaded"
+      },
+      {
+        "weight": "500",
+        "status": "loaded"
+      },
+      {
+        "weight": "700",
+        "status": "loaded"
+      }
+    ],
+    "lang": "en",
+    "dir": "ltr",
+    "scrollWidth": 1440,
+    "heading": "Discord sign in",
+    "mainCount": 1,
+    "brokenImages": [],
+    "errors": []
+  },
+  {
+    "route": "/login",
+    "width": 1440,
+    "locale": "en",
+    "theme": "h-full antialiased dark",
+    "status": 200,
+    "fonts": [
+      {
+        "weight": "400",
+        "status": "loaded"
+      },
+      {
+        "weight": "500",
+        "status": "loaded"
+      },
+      {
+        "weight": "700",
+        "status": "loaded"
+      }
+    ],
+    "lang": "en",
+    "dir": "ltr",
+    "scrollWidth": 1440,
+    "heading": "Discord sign in",
+    "mainCount": 1,
+    "brokenImages": [],
+    "errors": []
+  },
+  {
+    "route": "/partners",
+    "width": 1440,
+    "locale": "en",
+    "theme": "h-full antialiased dark",
+    "status": 200,
+    "fonts": [
+      {
+        "weight": "400",
+        "status": "loaded"
+      },
+      {
+        "weight": "500",
+        "status": "loaded"
+      },
+      {
+        "weight": "700",
+        "status": "loaded"
+      }
+    ],
+    "lang": "en",
+    "dir": "ltr",
+    "scrollWidth": 1440,
+    "heading": "Support the open-source community project.",
+    "mainCount": 1,
+    "brokenImages": [],
+    "errors": []
+  },
+  {
+    "route": "/docs/mcp",
+    "width": 1440,
+    "locale": "en",
+    "theme": "h-full antialiased dark",
+    "status": 200,
+    "fonts": [
+      {
+        "weight": "400",
+        "status": "loaded"
+      },
+      {
+        "weight": "500",
+        "status": "loaded"
+      },
+      {
+        "weight": "700",
+        "status": "loaded"
+      }
+    ],
+    "lang": "en",
+    "dir": "ltr",
+    "scrollWidth": 1440,
+    "heading": "Public MCP Server",
+    "mainCount": 1,
+    "brokenImages": [],
+    "errors": []
+  },
+  {
+    "route": "/docs/admin-mcp",
+    "width": 1440,
+    "locale": "en",
+    "theme": "h-full antialiased dark",
+    "status": 200,
+    "fonts": [
+      {
+        "weight": "400",
+        "status": "loaded"
+      },
+      {
+        "weight": "500",
+        "status": "loaded"
+      },
+      {
+        "weight": "700",
+        "status": "loaded"
+      }
+    ],
+    "lang": "en",
+    "dir": "ltr",
+    "scrollWidth": 1440,
+    "heading": "Admin MCP Server",
+    "mainCount": 1,
+    "brokenImages": [],
+    "errors": []
+  },
+  {
+    "route": "/privacy",
+    "width": 1440,
+    "locale": "en",
+    "theme": "h-full antialiased dark",
+    "status": 200,
+    "fonts": [
+      {
+        "weight": "400",
+        "status": "loaded"
+      },
+      {
+        "weight": "500",
+        "status": "loaded"
+      },
+      {
+        "weight": "700",
+        "status": "loaded"
+      }
+    ],
+    "lang": "en",
+    "dir": "ltr",
+    "scrollWidth": 1440,
+    "heading": "Privacy Policy",
+    "mainCount": 1,
+    "brokenImages": [],
+    "errors": []
+  },
+  {
+    "route": "/terms",
+    "width": 1440,
+    "locale": "en",
+    "theme": "h-full antialiased dark",
+    "status": 200,
+    "fonts": [
+      {
+        "weight": "400",
+        "status": "loaded"
+      },
+      {
+        "weight": "500",
+        "status": "loaded"
+      },
+      {
+        "weight": "700",
+        "status": "loaded"
+      }
+    ],
+    "lang": "en",
+    "dir": "ltr",
+    "scrollWidth": 1440,
+    "heading": "Terms of Service",
+    "mainCount": 1,
+    "brokenImages": [],
+    "errors": []
+  },
+  {
+    "route": "/offline",
+    "width": 1440,
+    "locale": "en",
+    "theme": "h-full antialiased dark",
+    "status": 200,
+    "fonts": [
+      {
+        "weight": "400",
+        "status": "loaded"
+      },
+      {
+        "weight": "500",
+        "status": "loaded"
+      },
+      {
+        "weight": "700",
+        "status": "loaded"
+      }
+    ],
+    "lang": "en",
+    "dir": "ltr",
+    "scrollWidth": 1440,
+    "mainCount": 1,
+    "brokenImages": [],
+    "errors": []
+  },
+  {
+    "route": "/not-a-real-page",
+    "width": 1440,
+    "locale": "en",
+    "theme": "",
+    "status": 404,
+    "fonts": [],
+    "lang": "",
+    "dir": "",
+    "scrollWidth": 1440,
+    "mainCount": 0,
+    "brokenImages": [],
+    "errors": [
+      "Failed to load resource: the server responded with a status of 404 (Not Found)"
+    ]
+  },
+  {
+    "route": "/games/valorant/news/4",
+    "width": 1440,
+    "locale": "en",
+    "theme": "h-full antialiased dark",
+    "status": 200,
+    "fonts": [
+      {
+        "weight": "400",
+        "status": "loaded"
+      },
+      {
+        "weight": "500",
+        "status": "loaded"
+      },
+      {
+        "weight": "700",
+        "status": "loaded"
+      }
+    ],
+    "lang": "en",
+    "dir": "ltr",
+    "scrollWidth": 1440,
+    "heading": "Power rankings after week two",
+    "mainCount": 1,
+    "brokenImages": [],
+    "errors": []
+  },
+  {
+    "route": "/games/league-of-legends/news/2",
+    "width": 1440,
+    "locale": "en",
+    "theme": "h-full antialiased dark",
+    "status": 200,
+    "fonts": [
+      {
+        "weight": "400",
+        "status": "loaded"
+      },
+      {
+        "weight": "500",
+        "status": "loaded"
+      },
+      {
+        "weight": "700",
+        "status": "loaded"
+      }
+    ],
+    "lang": "en",
+    "dir": "ltr",
+    "scrollWidth": 1440,
+    "heading": "Bracket preview: the road to the final",
+    "mainCount": 1,
+    "brokenImages": [],
+    "errors": []
+  },
+  {
+    "route": "/games/valorant/news/1",
+    "width": 1440,
+    "locale": "en",
+    "theme": "h-full antialiased dark",
+    "status": 200,
+    "fonts": [
+      {
+        "weight": "400",
+        "status": "loaded"
+      },
+      {
+        "weight": "500",
+        "status": "loaded"
+      },
+      {
+        "weight": "700",
+        "status": "loaded"
+      }
+    ],
+    "lang": "en",
+    "dir": "ltr",
+    "scrollWidth": 1440,
+    "heading": "Falcons storm into the EWC group stage",
+    "mainCount": 1,
+    "brokenImages": [],
+    "errors": []
+  },
+  {
+    "route": "/media/echo-mena",
+    "width": 1440,
+    "locale": "en",
+    "theme": "h-full antialiased dark",
+    "status": 200,
+    "fonts": [
+      {
+        "weight": "400",
+        "status": "loaded"
+      },
+      {
+        "weight": "500",
+        "status": "loaded"
+      },
+      {
+        "weight": "700",
+        "status": "loaded"
+      }
+    ],
+    "lang": "en",
+    "dir": "ltr",
+    "scrollWidth": 1440,
+    "heading": "Echo MENA",
+    "mainCount": 1,
+    "brokenImages": [],
+    "errors": []
+  },
+  {
+    "route": "/media/hype-cast",
+    "width": 1440,
+    "locale": "en",
+    "theme": "h-full antialiased dark",
+    "status": 200,
+    "fonts": [
+      {
+        "weight": "400",
+        "status": "loaded"
+      },
+      {
+        "weight": "500",
+        "status": "loaded"
+      },
+      {
+        "weight": "700",
+        "status": "loaded"
+      }
+    ],
+    "lang": "en",
+    "dir": "ltr",
+    "scrollWidth": 1440,
+    "heading": "Hype Cast",
+    "mainCount": 1,
+    "brokenImages": [],
+    "errors": []
+  },
+  {
+    "route": "/media/spot-media",
+    "width": 1440,
+    "locale": "en",
+    "theme": "h-full antialiased dark",
+    "status": 200,
+    "fonts": [
+      {
+        "weight": "400",
+        "status": "loaded"
+      },
+      {
+        "weight": "500",
+        "status": "loaded"
+      },
+      {
+        "weight": "700",
+        "status": "loaded"
+      }
+    ],
+    "lang": "en",
+    "dir": "ltr",
+    "scrollWidth": 1440,
+    "heading": "Spot Media",
+    "mainCount": 1,
+    "brokenImages": [],
+    "errors": []
+  },
+  {
+    "route": "/media/pulse-cast",
+    "width": 1440,
+    "locale": "en",
+    "theme": "h-full antialiased dark",
+    "status": 200,
+    "fonts": [
+      {
+        "weight": "400",
+        "status": "loaded"
+      },
+      {
+        "weight": "500",
+        "status": "loaded"
+      },
+      {
+        "weight": "700",
+        "status": "loaded"
+      }
+    ],
+    "lang": "en",
+    "dir": "ltr",
+    "scrollWidth": 1440,
+    "heading": "Pulse Cast",
+    "mainCount": 1,
+    "brokenImages": [],
+    "errors": []
+  },
+  {
+    "route": "/media/sama-news",
+    "width": 1440,
+    "locale": "en",
+    "theme": "h-full antialiased dark",
+    "status": 200,
+    "fonts": [
+      {
+        "weight": "400",
+        "status": "loaded"
+      },
+      {
+        "weight": "500",
+        "status": "loaded"
+      },
+      {
+        "weight": "700",
+        "status": "loaded"
+      }
+    ],
+    "lang": "en",
+    "dir": "ltr",
+    "scrollWidth": 1440,
+    "heading": "Sama News",
+    "mainCount": 1,
+    "brokenImages": [],
+    "errors": []
+  },
+  {
+    "route": "/media/nara-media",
+    "width": 1440,
+    "locale": "en",
+    "theme": "h-full antialiased dark",
+    "status": 200,
+    "fonts": [
+      {
+        "weight": "400",
+        "status": "loaded"
+      },
+      {
+        "weight": "500",
+        "status": "loaded"
+      },
+      {
+        "weight": "700",
+        "status": "loaded"
+      }
+    ],
+    "lang": "en",
+    "dir": "ltr",
+    "scrollWidth": 1440,
+    "heading": "Nara Media",
+    "mainCount": 1,
+    "brokenImages": [],
+    "errors": []
+  },
+  {
+    "route": "/matches/90",
+    "width": 1440,
+    "locale": "en",
+    "theme": "h-full antialiased dark",
+    "status": 200,
+    "fonts": [
+      {
+        "weight": "400",
+        "status": "loaded"
+      },
+      {
+        "weight": "500",
+        "status": "loaded"
+      },
+      {
+        "weight": "700",
+        "status": "loaded"
+      }
+    ],
+    "lang": "en",
+    "dir": "ltr",
+    "scrollWidth": 1440,
+    "heading": "Boston Breach vs Toronto Ultra",
+    "mainCount": 1,
+    "brokenImages": [],
+    "errors": []
+  },
+  {
+    "route": "/matches/1",
+    "width": 1440,
+    "locale": "en",
+    "theme": "h-full antialiased dark",
+    "status": 200,
+    "fonts": [
+      {
+        "weight": "400",
+        "status": "loaded"
+      },
+      {
+        "weight": "500",
+        "status": "loaded"
+      },
+      {
+        "weight": "700",
+        "status": "loaded"
+      }
+    ],
+    "lang": "en",
+    "dir": "ltr",
+    "scrollWidth": 1440,
+    "heading": "Team Falcons vs Team Liquid",
+    "mainCount": 1,
+    "brokenImages": [],
+    "errors": []
+  },
+  {
+    "route": "/matches/89",
+    "width": 1440,
+    "locale": "en",
+    "theme": "h-full antialiased dark",
+    "status": 200,
+    "fonts": [
+      {
+        "weight": "400",
+        "status": "loaded"
+      },
+      {
+        "weight": "500",
+        "status": "loaded"
+      },
+      {
+        "weight": "700",
+        "status": "loaded"
+      }
+    ],
+    "lang": "en",
+    "dir": "ltr",
+    "scrollWidth": 1440,
+    "heading": "Atlanta FaZe vs Toronto Ultra",
+    "mainCount": 1,
+    "brokenImages": [],
+    "errors": []
+  },
+  {
+    "route": "/matches/88",
+    "width": 1440,
+    "locale": "en",
+    "theme": "h-full antialiased dark",
+    "status": 200,
+    "fonts": [
+      {
+        "weight": "400",
+        "status": "loaded"
+      },
+      {
+        "weight": "500",
+        "status": "loaded"
+      },
+      {
+        "weight": "700",
+        "status": "loaded"
+      }
+    ],
+    "lang": "en",
+    "dir": "ltr",
+    "scrollWidth": 1440,
+    "heading": "Boston Breach vs OpTic Texas",
+    "mainCount": 1,
+    "brokenImages": [],
+    "errors": []
+  },
+  {
+    "route": "/matches/3",
+    "width": 1440,
+    "locale": "en",
+    "theme": "h-full antialiased dark",
+    "status": 200,
+    "fonts": [
+      {
+        "weight": "400",
+        "status": "loaded"
+      },
+      {
+        "weight": "500",
+        "status": "loaded"
+      },
+      {
+        "weight": "700",
+        "status": "loaded"
+      }
+    ],
+    "lang": "en",
+    "dir": "ltr",
+    "scrollWidth": 1440,
+    "heading": "T1 vs FaZe Clan",
+    "mainCount": 1,
+    "brokenImages": [],
+    "errors": []
+  },
+  {
+    "route": "/predictors/41917982-791b-4787-aa4d-60905d1bfba2",
+    "width": 1440,
+    "locale": "en",
+    "theme": "h-full antialiased dark",
+    "status": 200,
+    "fonts": [
+      {
+        "weight": "400",
+        "status": "loaded"
+      },
+      {
+        "weight": "500",
+        "status": "loaded"
+      },
+      {
+        "weight": "700",
+        "status": "loaded"
+      }
+    ],
+    "lang": "en",
+    "dir": "ltr",
+    "scrollWidth": 1440,
+    "heading": "Member 0002's prediction profile",
+    "mainCount": 1,
+    "brokenImages": [],
+    "errors": []
+  },
+  {
+    "route": "/predictors/8bd6504c-139d-479a-b464-b561f6eb901a",
+    "width": 1440,
+    "locale": "en",
+    "theme": "h-full antialiased dark",
+    "status": 200,
+    "fonts": [
+      {
+        "weight": "400",
+        "status": "loaded"
+      },
+      {
+        "weight": "500",
+        "status": "loaded"
+      },
+      {
+        "weight": "700",
+        "status": "loaded"
+      }
+    ],
+    "lang": "en",
+    "dir": "ltr",
+    "scrollWidth": 1440,
+    "heading": "Member 0003's prediction profile",
+    "mainCount": 1,
+    "brokenImages": [],
+    "errors": []
+  },
+  {
+    "route": "/predictors/b709b0d2-79d8-42a1-9f95-f8d5aff06088",
+    "width": 1440,
+    "locale": "en",
+    "theme": "h-full antialiased dark",
+    "status": 200,
+    "fonts": [
+      {
+        "weight": "400",
+        "status": "loaded"
+      },
+      {
+        "weight": "500",
+        "status": "loaded"
+      },
+      {
+        "weight": "700",
+        "status": "loaded"
+      }
+    ],
+    "lang": "en",
+    "dir": "ltr",
+    "scrollWidth": 1440,
+    "heading": "Member 0001's prediction profile",
+    "mainCount": 1,
+    "brokenImages": [],
+    "errors": []
+  },
+  {
+    "route": "/predictors/e43e19c9-f08e-4ed2-8735-05206d1e1f49",
+    "width": 1440,
+    "locale": "en",
+    "theme": "h-full antialiased dark",
+    "status": 200,
+    "fonts": [
+      {
+        "weight": "400",
+        "status": "loaded"
+      },
+      {
+        "weight": "500",
+        "status": "loaded"
+      },
+      {
+        "weight": "700",
+        "status": "loaded"
+      }
+    ],
+    "lang": "en",
+    "dir": "ltr",
+    "scrollWidth": 1440,
+    "heading": "Member 0004's prediction profile",
+    "mainCount": 1,
+    "brokenImages": [],
+    "errors": []
+  },
+  {
+    "route": "/predictors/ef8c121b-290f-4d46-a14c-8c42c6d89ef7",
+    "width": 1440,
+    "locale": "en",
+    "theme": "h-full antialiased dark",
+    "status": 200,
+    "fonts": [
+      {
+        "weight": "400",
+        "status": "loaded"
+      },
+      {
+        "weight": "500",
+        "status": "loaded"
+      },
+      {
+        "weight": "700",
+        "status": "loaded"
+      }
+    ],
+    "lang": "en",
+    "dir": "ltr",
+    "scrollWidth": 1440,
+    "heading": "Member 0007's prediction profile",
+    "mainCount": 1,
+    "brokenImages": [],
+    "errors": []
+  },
+  {
+    "route": "/predictors/5b39893a-4950-4478-8713-07caa11061dc",
+    "width": 1440,
+    "locale": "en",
+    "theme": "h-full antialiased dark",
+    "status": 200,
+    "fonts": [
+      {
+        "weight": "400",
+        "status": "loaded"
+      },
+      {
+        "weight": "500",
+        "status": "loaded"
+      },
+      {
+        "weight": "700",
+        "status": "loaded"
+      }
+    ],
+    "lang": "en",
+    "dir": "ltr",
+    "scrollWidth": 1440,
+    "heading": "Member 0005's prediction profile",
+    "mainCount": 1,
+    "brokenImages": [],
+    "errors": []
+  },
+  {
+    "route": "/predictors/3510dd75-1824-44aa-9093-cb84c759171a",
+    "width": 1440,
+    "locale": "en",
+    "theme": "h-full antialiased dark",
+    "status": 200,
+    "fonts": [
+      {
+        "weight": "400",
+        "status": "loaded"
+      },
+      {
+        "weight": "500",
+        "status": "loaded"
+      },
+      {
+        "weight": "700",
+        "status": "loaded"
+      }
+    ],
+    "lang": "en",
+    "dir": "ltr",
+    "scrollWidth": 1440,
+    "heading": "Member 0006's prediction profile",
+    "mainCount": 1,
+    "brokenImages": [],
+    "errors": []
+  },
+  {
+    "route": "/predictors/76bef96d-bad6-4533-b887-ae3b788bc6d0",
+    "width": 1440,
+    "locale": "en",
+    "theme": "h-full antialiased dark",
+    "status": 200,
+    "fonts": [
+      {
+        "weight": "400",
+        "status": "loaded"
+      },
+      {
+        "weight": "500",
+        "status": "loaded"
+      },
+      {
+        "weight": "700",
+        "status": "loaded"
+      }
+    ],
+    "lang": "en",
+    "dir": "ltr",
+    "scrollWidth": 1440,
+    "heading": "Member 0008's prediction profile",
+    "mainCount": 1,
+    "brokenImages": [],
+    "errors": []
+  },
+  {
+    "route": "/ar",
+    "width": 390,
+    "locale": "ar",
+    "theme": "h-full antialiased dark",
+    "status": 200,
+    "fonts": [
+      {
+        "weight": "400",
+        "status": "loaded"
+      },
+      {
+        "weight": "500",
+        "status": "loaded"
+      },
+      {
+        "weight": "700",
+        "status": "loaded"
+      }
+    ],
+    "lang": "ar",
+    "dir": "rtl",
+    "scrollWidth": 390,
+    "heading": "كل ما يهمك في المنافسة",
+    "mainCount": 1,
+    "brokenImages": [],
+    "errors": []
+  },
+  {
+    "route": "/ar/live",
+    "width": 390,
+    "locale": "ar",
+    "theme": "h-full antialiased dark",
+    "status": 200,
+    "fonts": [
+      {
+        "weight": "400",
+        "status": "loaded"
+      },
+      {
+        "weight": "500",
+        "status": "loaded"
+      },
+      {
+        "weight": "700",
+        "status": "loaded"
+      }
+    ],
+    "lang": "ar",
+    "dir": "rtl",
+    "scrollWidth": 390,
+    "heading": "المباريات المباشرة والقادمة",
+    "mainCount": 1,
+    "brokenImages": [],
+    "errors": []
+  },
+  {
+    "route": "/ar/live?tab=results",
+    "width": 390,
+    "locale": "ar",
+    "theme": "h-full antialiased dark",
+    "status": 200,
+    "fonts": [
+      {
+        "weight": "400",
+        "status": "loaded"
+      },
+      {
+        "weight": "500",
+        "status": "loaded"
+      },
+      {
+        "weight": "700",
+        "status": "loaded"
+      }
+    ],
+    "lang": "ar",
+    "dir": "rtl",
+    "scrollWidth": 390,
+    "heading": "المباريات المباشرة والقادمة",
+    "mainCount": 1,
+    "brokenImages": [],
+    "errors": []
+  },
+  {
+    "route": "/ar/games",
+    "width": 390,
+    "locale": "ar",
+    "theme": "h-full antialiased dark",
+    "status": 200,
+    "fonts": [
+      {
+        "weight": "400",
+        "status": "loaded"
+      },
+      {
+        "weight": "500",
+        "status": "loaded"
+      },
+      {
+        "weight": "700",
+        "status": "loaded"
+      }
+    ],
+    "lang": "ar",
+    "dir": "rtl",
+    "scrollWidth": 390,
+    "heading": "الألعاب",
+    "mainCount": 1,
+    "brokenImages": [],
+    "errors": []
+  },
+  {
+    "route": "/ar/games/valorant",
+    "width": 390,
+    "locale": "ar",
+    "theme": "h-full antialiased dark",
+    "status": 200,
+    "fonts": [
+      {
+        "weight": "400",
+        "status": "loaded"
+      },
+      {
+        "weight": "500",
+        "status": "loaded"
+      },
+      {
+        "weight": "700",
+        "status": "loaded"
+      }
+    ],
+    "lang": "ar",
+    "dir": "rtl",
+    "scrollWidth": 390,
+    "heading": "فالورانت",
+    "mainCount": 1,
+    "brokenImages": [],
+    "errors": []
+  },
+  {
+    "route": "/ar/tournaments",
+    "width": 390,
+    "locale": "ar",
+    "theme": "h-full antialiased dark",
+    "status": 200,
+    "fonts": [
+      {
+        "weight": "400",
+        "status": "loaded"
+      },
+      {
+        "weight": "500",
+        "status": "loaded"
+      },
+      {
+        "weight": "700",
+        "status": "loaded"
+      }
+    ],
+    "lang": "ar",
+    "dir": "rtl",
+    "scrollWidth": 390,
+    "heading": "البطولات المتابَعة",
+    "mainCount": 1,
+    "brokenImages": [],
+    "errors": []
+  },
+  {
+    "route": "/ar/tournaments/ewc",
+    "width": 390,
+    "locale": "ar",
+    "theme": "h-full antialiased dark",
+    "status": 200,
+    "fonts": [
+      {
+        "weight": "400",
+        "status": "loaded"
+      },
+      {
+        "weight": "500",
+        "status": "loaded"
+      },
+      {
+        "weight": "700",
+        "status": "loaded"
+      }
+    ],
+    "lang": "ar",
+    "dir": "rtl",
+    "scrollWidth": 390,
+    "heading": "بطولات EWC",
+    "mainCount": 1,
+    "brokenImages": [],
+    "errors": []
+  },
+  {
+    "route": "/ar/tournaments/archive",
+    "width": 390,
+    "locale": "ar",
+    "theme": "h-full antialiased dark",
+    "status": 200,
+    "fonts": [
+      {
+        "weight": "400",
+        "status": "loaded"
+      },
+      {
+        "weight": "500",
+        "status": "loaded"
+      },
+      {
+        "weight": "700",
+        "status": "loaded"
+      }
+    ],
+    "lang": "ar",
+    "dir": "rtl",
+    "scrollWidth": 390,
+    "heading": "البطولات المنتهية",
+    "mainCount": 1,
+    "brokenImages": [],
+    "errors": []
+  },
+  {
+    "route": "/ar/tournaments/1",
+    "width": 390,
+    "locale": "ar",
+    "theme": "h-full antialiased dark",
+    "status": 200,
+    "fonts": [
+      {
+        "weight": "400",
+        "status": "loaded"
+      },
+      {
+        "weight": "500",
+        "status": "loaded"
+      },
+      {
+        "weight": "700",
+        "status": "loaded"
+      }
+    ],
+    "lang": "ar",
+    "dir": "rtl",
+    "scrollWidth": 390,
+    "heading": "EWC 2026 — Valorant",
+    "mainCount": 1,
+    "brokenImages": [],
+    "errors": []
+  },
+  {
+    "route": "/ar/tournaments/2",
+    "width": 390,
+    "locale": "ar",
+    "theme": "h-full antialiased dark",
+    "status": 200,
+    "fonts": [
+      {
+        "weight": "400",
+        "status": "loaded"
+      },
+      {
+        "weight": "500",
+        "status": "loaded"
+      },
+      {
+        "weight": "700",
+        "status": "loaded"
+      }
+    ],
+    "lang": "ar",
+    "dir": "rtl",
+    "scrollWidth": 390,
+    "heading": "EWC 2026 — Black Ops 7",
+    "mainCount": 1,
+    "brokenImages": [],
+    "errors": []
+  },
+  {
+    "route": "/ar/news",
+    "width": 390,
+    "locale": "ar",
+    "theme": "h-full antialiased dark",
+    "status": 200,
+    "fonts": [
+      {
+        "weight": "400",
+        "status": "loaded"
+      },
+      {
+        "weight": "500",
+        "status": "loaded"
+      },
+      {
+        "weight": "700",
+        "status": "loaded"
+      }
+    ],
+    "lang": "ar",
+    "dir": "rtl",
+    "scrollWidth": 390,
+    "heading": "غرفة الأخبار",
+    "mainCount": 1,
+    "brokenImages": [],
+    "errors": []
+  },
+  {
+    "route": "/ar/news/ewc",
+    "width": 390,
+    "locale": "ar",
+    "theme": "h-full antialiased dark",
+    "status": 200,
+    "fonts": [
+      {
+        "weight": "400",
+        "status": "loaded"
+      },
+      {
+        "weight": "500",
+        "status": "loaded"
+      },
+      {
+        "weight": "700",
+        "status": "loaded"
+      }
+    ],
+    "lang": "ar",
+    "dir": "rtl",
+    "scrollWidth": 390,
+    "heading": "أخبار EWC",
+    "mainCount": 1,
+    "brokenImages": [],
+    "errors": []
+  },
+  {
+    "route": "/ar/teams",
+    "width": 390,
+    "locale": "ar",
+    "theme": "h-full antialiased dark",
+    "status": 200,
+    "fonts": [
+      {
+        "weight": "400",
+        "status": "loaded"
+      },
+      {
+        "weight": "500",
+        "status": "loaded"
+      },
+      {
+        "weight": "700",
+        "status": "loaded"
+      }
+    ],
+    "lang": "ar",
+    "dir": "rtl",
+    "scrollWidth": 390,
+    "heading": "الفرق",
+    "mainCount": 1,
+    "brokenImages": [],
+    "errors": []
+  },
+  {
+    "route": "/ar/teams/1",
+    "width": 390,
+    "locale": "ar",
+    "theme": "h-full antialiased dark",
+    "status": 200,
+    "fonts": [
+      {
+        "weight": "400",
+        "status": "loaded"
+      },
+      {
+        "weight": "500",
+        "status": "loaded"
+      },
+      {
+        "weight": "700",
+        "status": "loaded"
+      }
+    ],
+    "lang": "ar",
+    "dir": "rtl",
+    "scrollWidth": 390,
+    "heading": "Team Falcons",
+    "mainCount": 1,
+    "brokenImages": [],
+    "errors": []
+  },
+  {
+    "route": "/ar/players",
+    "width": 390,
+    "locale": "ar",
+    "theme": "h-full antialiased dark",
+    "status": 200,
+    "fonts": [
+      {
+        "weight": "400",
+        "status": "loaded"
+      },
+      {
+        "weight": "500",
+        "status": "loaded"
+      },
+      {
+        "weight": "700",
+        "status": "loaded"
+      }
+    ],
+    "lang": "ar",
+    "dir": "rtl",
+    "scrollWidth": 390,
+    "heading": "اللاعبون",
+    "mainCount": 1,
+    "brokenImages": [],
+    "errors": []
+  },
+  {
+    "route": "/ar/players/1",
+    "width": 390,
+    "locale": "ar",
+    "theme": "h-full antialiased dark",
+    "status": 200,
+    "fonts": [
+      {
+        "weight": "400",
+        "status": "loaded"
+      },
+      {
+        "weight": "500",
+        "status": "loaded"
+      },
+      {
+        "weight": "700",
+        "status": "loaded"
+      }
+    ],
+    "lang": "ar",
+    "dir": "rtl",
+    "scrollWidth": 390,
+    "heading": "Preview competitor",
+    "mainCount": 1,
+    "brokenImages": [],
+    "errors": []
+  },
+  {
+    "route": "/ar/media/hype-cast/news/5",
+    "width": 390,
+    "locale": "ar",
+    "theme": "h-full antialiased dark",
+    "status": 200,
+    "fonts": [
+      {
+        "weight": "400",
+        "status": "loaded"
+      },
+      {
+        "weight": "500",
+        "status": "loaded"
+      },
+      {
+        "weight": "700",
+        "status": "loaded"
+      }
+    ],
+    "lang": "en",
+    "dir": "ltr",
+    "scrollWidth": 390,
+    "heading": "Inside the broadcast: a community matchday",
+    "mainCount": 1,
+    "brokenImages": [],
+    "errors": []
+  },
+  {
+    "route": "/ar/compare",
+    "width": 390,
+    "locale": "ar",
+    "theme": "h-full antialiased dark",
+    "status": 200,
+    "fonts": [
+      {
+        "weight": "400",
+        "status": "loaded"
+      },
+      {
+        "weight": "500",
+        "status": "loaded"
+      },
+      {
+        "weight": "700",
+        "status": "loaded"
+      }
+    ],
+    "lang": "ar",
+    "dir": "rtl",
+    "scrollWidth": 390,
+    "heading": "مقارنة الفرق واللاعبين",
+    "mainCount": 1,
+    "brokenImages": [],
+    "errors": []
+  },
+  {
+    "route": "/ar/predictions",
+    "width": 390,
+    "locale": "ar",
+    "theme": "h-full antialiased dark",
+    "status": 200,
+    "fonts": [
+      {
+        "weight": "400",
+        "status": "loaded"
+      },
+      {
+        "weight": "500",
+        "status": "loaded"
+      },
+      {
+        "weight": "700",
+        "status": "loaded"
+      }
+    ],
+    "lang": "ar",
+    "dir": "rtl",
+    "scrollWidth": 390,
+    "heading": "لوحات توقعات كأس العالم للرياضات الإلكترونية",
+    "mainCount": 1,
+    "brokenImages": [],
+    "errors": []
+  },
+  {
+    "route": "/ar/leaderboard",
+    "width": 390,
+    "locale": "ar",
+    "theme": "h-full antialiased dark",
+    "status": 200,
+    "fonts": [
+      {
+        "weight": "400",
+        "status": "loaded"
+      },
+      {
+        "weight": "500",
+        "status": "loaded"
+      },
+      {
+        "weight": "700",
+        "status": "loaded"
+      }
+    ],
+    "lang": "ar",
+    "dir": "rtl",
+    "scrollWidth": 390,
+    "heading": "لوحة توقعات EWC 2026",
+    "mainCount": 1,
+    "brokenImages": [],
+    "errors": []
+  },
+  {
+    "route": "/ar/clubs",
+    "width": 390,
+    "locale": "ar",
+    "theme": "h-full antialiased dark",
+    "status": 200,
+    "fonts": [
+      {
+        "weight": "400",
+        "status": "loaded"
+      },
+      {
+        "weight": "500",
+        "status": "loaded"
+      },
+      {
+        "weight": "700",
+        "status": "loaded"
+      }
+    ],
+    "lang": "ar",
+    "dir": "rtl",
+    "scrollWidth": 390,
+    "heading": "متابعة أندية EWC",
+    "mainCount": 1,
+    "brokenImages": [],
+    "errors": []
+  },
+  {
+    "route": "/ar/clubs/standings",
+    "width": 390,
+    "locale": "ar",
+    "theme": "h-full antialiased dark",
+    "status": 200,
+    "fonts": [
+      {
+        "weight": "400",
+        "status": "loaded"
+      },
+      {
+        "weight": "500",
+        "status": "loaded"
+      },
+      {
+        "weight": "700",
+        "status": "loaded"
+      }
+    ],
+    "lang": "ar",
+    "dir": "rtl",
+    "scrollWidth": 390,
+    "heading": "ترتيب بطولة الأندية في كأس العالم للرياضات الإلكترونية",
+    "mainCount": 1,
+    "brokenImages": [],
+    "errors": []
+  },
+  {
+    "route": "/ar/mvp",
+    "width": 390,
+    "locale": "ar",
+    "theme": "h-full antialiased dark",
+    "status": 200,
+    "fonts": [
+      {
+        "weight": "400",
+        "status": "loaded"
+      },
+      {
+        "weight": "500",
+        "status": "loaded"
+      },
+      {
+        "weight": "700",
+        "status": "loaded"
+      }
+    ],
+    "lang": "ar",
+    "dir": "rtl",
+    "scrollWidth": 390,
+    "heading": "أفضل لاعب في اليوم",
+    "mainCount": 1,
+    "brokenImages": [],
+    "errors": []
+  },
+  {
+    "route": "/ar/co-streams",
+    "width": 390,
+    "locale": "ar",
+    "theme": "h-full antialiased dark",
+    "status": 200,
+    "fonts": [
+      {
+        "weight": "400",
+        "status": "loaded"
+      },
+      {
+        "weight": "500",
+        "status": "loaded"
+      },
+      {
+        "weight": "700",
+        "status": "loaded"
+      }
+    ],
+    "lang": "ar",
+    "dir": "rtl",
+    "scrollWidth": 390,
+    "heading": "البث المشترك",
+    "mainCount": 1,
+    "brokenImages": [],
+    "errors": []
+  },
+  {
+    "route": "/ar/media",
+    "width": 390,
+    "locale": "ar",
+    "theme": "h-full antialiased dark",
+    "status": 200,
+    "fonts": [
+      {
+        "weight": "400",
+        "status": "loaded"
+      },
+      {
+        "weight": "500",
+        "status": "loaded"
+      },
+      {
+        "weight": "700",
+        "status": "loaded"
+      }
+    ],
+    "lang": "ar",
+    "dir": "rtl",
+    "scrollWidth": 390,
+    "heading": "القنوات الإعلامية",
+    "mainCount": 1,
+    "brokenImages": [],
+    "errors": []
+  },
+  {
+    "route": "/ar/me",
+    "width": 390,
+    "locale": "ar",
+    "theme": "h-full antialiased dark",
+    "status": 200,
+    "fonts": [
+      {
+        "weight": "400",
+        "status": "loaded"
+      },
+      {
+        "weight": "500",
+        "status": "loaded"
+      },
+      {
+        "weight": "700",
+        "status": "loaded"
+      }
+    ],
+    "lang": "ar",
+    "dir": "rtl",
+    "scrollWidth": 390,
+    "heading": "تسجيل الدخول بديسكورد",
+    "mainCount": 1,
+    "brokenImages": [],
+    "errors": []
+  },
+  {
+    "route": "/ar/login",
+    "width": 390,
+    "locale": "ar",
+    "theme": "h-full antialiased dark",
+    "status": 200,
+    "fonts": [
+      {
+        "weight": "400",
+        "status": "loaded"
+      },
+      {
+        "weight": "500",
+        "status": "loaded"
+      },
+      {
+        "weight": "700",
+        "status": "loaded"
+      }
+    ],
+    "lang": "ar",
+    "dir": "rtl",
+    "scrollWidth": 390,
+    "heading": "تسجيل الدخول بديسكورد",
+    "mainCount": 1,
+    "brokenImages": [],
+    "errors": []
+  },
+  {
+    "route": "/ar/partners",
+    "width": 390,
+    "locale": "ar",
+    "theme": "h-full antialiased dark",
+    "status": 200,
+    "fonts": [
+      {
+        "weight": "400",
+        "status": "loaded"
+      },
+      {
+        "weight": "500",
+        "status": "loaded"
+      },
+      {
+        "weight": "700",
+        "status": "loaded"
+      }
+    ],
+    "lang": "ar",
+    "dir": "rtl",
+    "scrollWidth": 390,
+    "heading": "ادعم مشروع المجتمع مفتوح المصدر.",
+    "mainCount": 1,
+    "brokenImages": [],
+    "errors": []
+  },
+  {
+    "route": "/ar/docs/mcp",
+    "width": 390,
+    "locale": "ar",
+    "theme": "h-full antialiased dark",
+    "status": 200,
+    "fonts": [
+      {
+        "weight": "400",
+        "status": "loaded"
+      },
+      {
+        "weight": "500",
+        "status": "loaded"
+      },
+      {
+        "weight": "700",
+        "status": "loaded"
+      }
+    ],
+    "lang": "ar",
+    "dir": "rtl",
+    "scrollWidth": 390,
+    "heading": "خادم MCP العام",
+    "mainCount": 1,
+    "brokenImages": [],
+    "errors": []
+  },
+  {
+    "route": "/ar/docs/admin-mcp",
+    "width": 390,
+    "locale": "ar",
+    "theme": "h-full antialiased dark",
+    "status": 200,
+    "fonts": [
+      {
+        "weight": "400",
+        "status": "loaded"
+      },
+      {
+        "weight": "500",
+        "status": "loaded"
+      },
+      {
+        "weight": "700",
+        "status": "loaded"
+      }
+    ],
+    "lang": "ar",
+    "dir": "rtl",
+    "scrollWidth": 390,
+    "heading": "خادم MCP الإداري",
+    "mainCount": 1,
+    "brokenImages": [],
+    "errors": []
+  },
+  {
+    "route": "/ar/privacy",
+    "width": 390,
+    "locale": "ar",
+    "theme": "h-full antialiased dark",
+    "status": 200,
+    "fonts": [
+      {
+        "weight": "400",
+        "status": "loaded"
+      },
+      {
+        "weight": "500",
+        "status": "loaded"
+      },
+      {
+        "weight": "700",
+        "status": "loaded"
+      }
+    ],
+    "lang": "ar",
+    "dir": "rtl",
+    "scrollWidth": 390,
+    "heading": "سياسة الخصوصية",
+    "mainCount": 1,
+    "brokenImages": [],
+    "errors": []
+  },
+  {
+    "route": "/ar/terms",
+    "width": 390,
+    "locale": "ar",
+    "theme": "h-full antialiased dark",
+    "status": 200,
+    "fonts": [
+      {
+        "weight": "400",
+        "status": "loaded"
+      },
+      {
+        "weight": "500",
+        "status": "loaded"
+      },
+      {
+        "weight": "700",
+        "status": "loaded"
+      }
+    ],
+    "lang": "ar",
+    "dir": "rtl",
+    "scrollWidth": 390,
+    "heading": "شروط الخدمة",
+    "mainCount": 1,
+    "brokenImages": [],
+    "errors": []
+  },
+  {
+    "route": "/ar/offline",
+    "width": 390,
+    "locale": "ar",
+    "theme": "h-full antialiased dark",
+    "status": 200,
+    "fonts": [
+      {
+        "weight": "400",
+        "status": "loaded"
+      },
+      {
+        "weight": "500",
+        "status": "loaded"
+      },
+      {
+        "weight": "700",
+        "status": "loaded"
+      }
+    ],
+    "lang": "ar",
+    "dir": "rtl",
+    "scrollWidth": 390,
+    "mainCount": 1,
+    "brokenImages": [],
+    "errors": []
+  },
+  {
+    "route": "/ar/not-a-real-page",
+    "width": 390,
+    "locale": "ar",
+    "theme": "",
+    "status": 404,
+    "fonts": [],
+    "lang": "",
+    "dir": "",
+    "scrollWidth": 390,
+    "mainCount": 0,
+    "brokenImages": [],
+    "errors": [
+      "Failed to load resource: the server responded with a status of 404 (Not Found)"
+    ]
+  },
+  {
+    "route": "/ar/games/valorant/news/4",
+    "width": 390,
+    "locale": "ar",
+    "theme": "h-full antialiased dark",
+    "status": 200,
+    "fonts": [
+      {
+        "weight": "400",
+        "status": "loaded"
+      },
+      {
+        "weight": "500",
+        "status": "loaded"
+      },
+      {
+        "weight": "700",
+        "status": "loaded"
+      }
+    ],
+    "lang": "ar",
+    "dir": "rtl",
+    "scrollWidth": 390,
+    "heading": "تصنيف القوّة بعد الأسبوع الثاني",
+    "mainCount": 1,
+    "brokenImages": [],
+    "errors": []
+  },
+  {
+    "route": "/ar/games/league-of-legends/news/2",
+    "width": 390,
+    "locale": "ar",
+    "theme": "h-full antialiased dark",
+    "status": 200,
+    "fonts": [
+      {
+        "weight": "400",
+        "status": "loaded"
+      },
+      {
+        "weight": "500",
+        "status": "loaded"
+      },
+      {
+        "weight": "700",
+        "status": "loaded"
+      }
+    ],
+    "lang": "ar",
+    "dir": "rtl",
+    "scrollWidth": 390,
+    "heading": "نظرة على الأقواس: الطريق إلى النهائي",
+    "mainCount": 1,
+    "brokenImages": [],
+    "errors": []
+  },
+  {
+    "route": "/ar/games/valorant/news/1",
+    "width": 390,
+    "locale": "ar",
+    "theme": "h-full antialiased dark",
+    "status": 200,
+    "fonts": [
+      {
+        "weight": "400",
+        "status": "loaded"
+      },
+      {
+        "weight": "500",
+        "status": "loaded"
+      },
+      {
+        "weight": "700",
+        "status": "loaded"
+      }
+    ],
+    "lang": "en",
+    "dir": "ltr",
+    "scrollWidth": 390,
+    "heading": "Falcons storm into the EWC group stage",
+    "mainCount": 1,
+    "brokenImages": [],
+    "errors": []
+  },
+  {
+    "route": "/ar/media/echo-mena",
+    "width": 390,
+    "locale": "ar",
+    "theme": "h-full antialiased dark",
+    "status": 200,
+    "fonts": [
+      {
+        "weight": "400",
+        "status": "loaded"
+      },
+      {
+        "weight": "500",
+        "status": "loaded"
+      },
+      {
+        "weight": "700",
+        "status": "loaded"
+      }
+    ],
+    "lang": "ar",
+    "dir": "rtl",
+    "scrollWidth": 390,
+    "heading": "إيكو مينا",
+    "mainCount": 1,
+    "brokenImages": [],
+    "errors": []
+  },
+  {
+    "route": "/ar/media/hype-cast",
+    "width": 390,
+    "locale": "ar",
+    "theme": "h-full antialiased dark",
+    "status": 200,
+    "fonts": [
+      {
+        "weight": "400",
+        "status": "loaded"
+      },
+      {
+        "weight": "500",
+        "status": "loaded"
+      },
+      {
+        "weight": "700",
+        "status": "loaded"
+      }
+    ],
+    "lang": "ar",
+    "dir": "rtl",
+    "scrollWidth": 390,
+    "heading": "هايب كاست",
+    "mainCount": 1,
+    "brokenImages": [],
+    "errors": []
+  },
+  {
+    "route": "/ar/media/spot-media",
+    "width": 390,
+    "locale": "ar",
+    "theme": "h-full antialiased dark",
+    "status": 200,
+    "fonts": [
+      {
+        "weight": "400",
+        "status": "loaded"
+      },
+      {
+        "weight": "500",
+        "status": "loaded"
+      },
+      {
+        "weight": "700",
+        "status": "loaded"
+      }
+    ],
+    "lang": "ar",
+    "dir": "rtl",
+    "scrollWidth": 390,
+    "heading": "سبوت ميديا",
+    "mainCount": 1,
+    "brokenImages": [],
+    "errors": []
+  },
+  {
+    "route": "/ar/media/pulse-cast",
+    "width": 390,
+    "locale": "ar",
+    "theme": "h-full antialiased dark",
+    "status": 200,
+    "fonts": [
+      {
+        "weight": "400",
+        "status": "loaded"
+      },
+      {
+        "weight": "500",
+        "status": "loaded"
+      },
+      {
+        "weight": "700",
+        "status": "loaded"
+      }
+    ],
+    "lang": "ar",
+    "dir": "rtl",
+    "scrollWidth": 390,
+    "heading": "بالس كاست",
+    "mainCount": 1,
+    "brokenImages": [],
+    "errors": []
+  },
+  {
+    "route": "/ar/media/sama-news",
+    "width": 390,
+    "locale": "ar",
+    "theme": "h-full antialiased dark",
+    "status": 200,
+    "fonts": [
+      {
+        "weight": "400",
+        "status": "loaded"
+      },
+      {
+        "weight": "500",
+        "status": "loaded"
+      },
+      {
+        "weight": "700",
+        "status": "loaded"
+      }
+    ],
+    "lang": "ar",
+    "dir": "rtl",
+    "scrollWidth": 390,
+    "heading": "سما نيوز",
+    "mainCount": 1,
+    "brokenImages": [],
+    "errors": []
+  },
+  {
+    "route": "/ar/media/nara-media",
+    "width": 390,
+    "locale": "ar",
+    "theme": "h-full antialiased dark",
+    "status": 200,
+    "fonts": [
+      {
+        "weight": "400",
+        "status": "loaded"
+      },
+      {
+        "weight": "500",
+        "status": "loaded"
+      },
+      {
+        "weight": "700",
+        "status": "loaded"
+      }
+    ],
+    "lang": "ar",
+    "dir": "rtl",
+    "scrollWidth": 390,
+    "heading": "نارا ميديا",
+    "mainCount": 1,
+    "brokenImages": [],
+    "errors": []
+  },
+  {
+    "route": "/ar/matches/90",
+    "width": 390,
+    "locale": "ar",
+    "theme": "h-full antialiased dark",
+    "status": 200,
+    "fonts": [
+      {
+        "weight": "400",
+        "status": "loaded"
+      },
+      {
+        "weight": "500",
+        "status": "loaded"
+      },
+      {
+        "weight": "700",
+        "status": "loaded"
+      }
+    ],
+    "lang": "ar",
+    "dir": "rtl",
+    "scrollWidth": 390,
+    "heading": "Boston Breach ضد Toronto Ultra",
+    "mainCount": 1,
+    "brokenImages": [],
+    "errors": []
+  },
+  {
+    "route": "/ar/matches/1",
+    "width": 390,
+    "locale": "ar",
+    "theme": "h-full antialiased dark",
+    "status": 200,
+    "fonts": [
+      {
+        "weight": "400",
+        "status": "loaded"
+      },
+      {
+        "weight": "500",
+        "status": "loaded"
+      },
+      {
+        "weight": "700",
+        "status": "loaded"
+      }
+    ],
+    "lang": "ar",
+    "dir": "rtl",
+    "scrollWidth": 390,
+    "heading": "Team Falcons ضد Team Liquid",
+    "mainCount": 1,
+    "brokenImages": [],
+    "errors": []
+  },
+  {
+    "route": "/ar/matches/89",
+    "width": 390,
+    "locale": "ar",
+    "theme": "h-full antialiased dark",
+    "status": 200,
+    "fonts": [
+      {
+        "weight": "400",
+        "status": "loaded"
+      },
+      {
+        "weight": "500",
+        "status": "loaded"
+      },
+      {
+        "weight": "700",
+        "status": "loaded"
+      }
+    ],
+    "lang": "ar",
+    "dir": "rtl",
+    "scrollWidth": 390,
+    "heading": "Atlanta FaZe ضد Toronto Ultra",
+    "mainCount": 1,
+    "brokenImages": [],
+    "errors": []
+  },
+  {
+    "route": "/ar/matches/88",
+    "width": 390,
+    "locale": "ar",
+    "theme": "h-full antialiased dark",
+    "status": 200,
+    "fonts": [
+      {
+        "weight": "400",
+        "status": "loaded"
+      },
+      {
+        "weight": "500",
+        "status": "loaded"
+      },
+      {
+        "weight": "700",
+        "status": "loaded"
+      }
+    ],
+    "lang": "ar",
+    "dir": "rtl",
+    "scrollWidth": 390,
+    "heading": "Boston Breach ضد OpTic Texas",
+    "mainCount": 1,
+    "brokenImages": [],
+    "errors": []
+  },
+  {
+    "route": "/ar/matches/3",
+    "width": 390,
+    "locale": "ar",
+    "theme": "h-full antialiased dark",
+    "status": 200,
+    "fonts": [
+      {
+        "weight": "400",
+        "status": "loaded"
+      },
+      {
+        "weight": "500",
+        "status": "loaded"
+      },
+      {
+        "weight": "700",
+        "status": "loaded"
+      }
+    ],
+    "lang": "ar",
+    "dir": "rtl",
+    "scrollWidth": 390,
+    "heading": "T1 ضد FaZe Clan",
+    "mainCount": 1,
+    "brokenImages": [],
+    "errors": []
+  },
+  {
+    "route": "/ar/predictors/41917982-791b-4787-aa4d-60905d1bfba2",
+    "width": 390,
+    "locale": "ar",
+    "theme": "h-full antialiased dark",
+    "status": 200,
+    "fonts": [
+      {
+        "weight": "400",
+        "status": "loaded"
+      },
+      {
+        "weight": "500",
+        "status": "loaded"
+      },
+      {
+        "weight": "700",
+        "status": "loaded"
+      }
+    ],
+    "lang": "ar",
+    "dir": "rtl",
+    "scrollWidth": 390,
+    "heading": "ملف توقعات Member 0002",
+    "mainCount": 1,
+    "brokenImages": [],
+    "errors": []
+  },
+  {
+    "route": "/ar/predictors/8bd6504c-139d-479a-b464-b561f6eb901a",
+    "width": 390,
+    "locale": "ar",
+    "theme": "h-full antialiased dark",
+    "status": 200,
+    "fonts": [
+      {
+        "weight": "400",
+        "status": "loaded"
+      },
+      {
+        "weight": "500",
+        "status": "loaded"
+      },
+      {
+        "weight": "700",
+        "status": "loaded"
+      }
+    ],
+    "lang": "ar",
+    "dir": "rtl",
+    "scrollWidth": 390,
+    "heading": "ملف توقعات Member 0003",
+    "mainCount": 1,
+    "brokenImages": [],
+    "errors": []
+  },
+  {
+    "route": "/ar/predictors/b709b0d2-79d8-42a1-9f95-f8d5aff06088",
+    "width": 390,
+    "locale": "ar",
+    "theme": "h-full antialiased dark",
+    "status": 200,
+    "fonts": [
+      {
+        "weight": "400",
+        "status": "loaded"
+      },
+      {
+        "weight": "500",
+        "status": "loaded"
+      },
+      {
+        "weight": "700",
+        "status": "loaded"
+      }
+    ],
+    "lang": "ar",
+    "dir": "rtl",
+    "scrollWidth": 390,
+    "heading": "ملف توقعات Member 0001",
+    "mainCount": 1,
+    "brokenImages": [],
+    "errors": []
+  },
+  {
+    "route": "/ar/predictors/e43e19c9-f08e-4ed2-8735-05206d1e1f49",
+    "width": 390,
+    "locale": "ar",
+    "theme": "h-full antialiased dark",
+    "status": 200,
+    "fonts": [
+      {
+        "weight": "400",
+        "status": "loaded"
+      },
+      {
+        "weight": "500",
+        "status": "loaded"
+      },
+      {
+        "weight": "700",
+        "status": "loaded"
+      }
+    ],
+    "lang": "ar",
+    "dir": "rtl",
+    "scrollWidth": 390,
+    "heading": "ملف توقعات Member 0004",
+    "mainCount": 1,
+    "brokenImages": [],
+    "errors": []
+  },
+  {
+    "route": "/ar/predictors/ef8c121b-290f-4d46-a14c-8c42c6d89ef7",
+    "width": 390,
+    "locale": "ar",
+    "theme": "h-full antialiased dark",
+    "status": 200,
+    "fonts": [
+      {
+        "weight": "400",
+        "status": "loaded"
+      },
+      {
+        "weight": "500",
+        "status": "loaded"
+      },
+      {
+        "weight": "700",
+        "status": "loaded"
+      }
+    ],
+    "lang": "ar",
+    "dir": "rtl",
+    "scrollWidth": 390,
+    "heading": "ملف توقعات Member 0007",
+    "mainCount": 1,
+    "brokenImages": [],
+    "errors": []
+  },
+  {
+    "route": "/ar/predictors/5b39893a-4950-4478-8713-07caa11061dc",
+    "width": 390,
+    "locale": "ar",
+    "theme": "h-full antialiased dark",
+    "status": 200,
+    "fonts": [
+      {
+        "weight": "400",
+        "status": "loaded"
+      },
+      {
+        "weight": "500",
+        "status": "loaded"
+      },
+      {
+        "weight": "700",
+        "status": "loaded"
+      }
+    ],
+    "lang": "ar",
+    "dir": "rtl",
+    "scrollWidth": 390,
+    "heading": "ملف توقعات Member 0005",
+    "mainCount": 1,
+    "brokenImages": [],
+    "errors": []
+  },
+  {
+    "route": "/ar/predictors/3510dd75-1824-44aa-9093-cb84c759171a",
+    "width": 390,
+    "locale": "ar",
+    "theme": "h-full antialiased dark",
+    "status": 200,
+    "fonts": [
+      {
+        "weight": "400",
+        "status": "loaded"
+      },
+      {
+        "weight": "500",
+        "status": "loaded"
+      },
+      {
+        "weight": "700",
+        "status": "loaded"
+      }
+    ],
+    "lang": "ar",
+    "dir": "rtl",
+    "scrollWidth": 390,
+    "heading": "ملف توقعات Member 0006",
+    "mainCount": 1,
+    "brokenImages": [],
+    "errors": []
+  },
+  {
+    "route": "/ar/predictors/76bef96d-bad6-4533-b887-ae3b788bc6d0",
+    "width": 390,
+    "locale": "ar",
+    "theme": "h-full antialiased dark",
+    "status": 200,
+    "fonts": [
+      {
+        "weight": "400",
+        "status": "loaded"
+      },
+      {
+        "weight": "500",
+        "status": "loaded"
+      },
+      {
+        "weight": "700",
+        "status": "loaded"
+      }
+    ],
+    "lang": "ar",
+    "dir": "rtl",
+    "scrollWidth": 390,
+    "heading": "ملف توقعات Member 0008",
+    "mainCount": 1,
+    "brokenImages": [],
+    "errors": []
+  },
+  {
+    "route": "/",
+    "width": 768,
+    "locale": "en",
+    "theme": "h-full antialiased light",
+    "status": 200,
+    "fonts": [
+      {
+        "weight": "400",
+        "status": "loaded"
+      },
+      {
+        "weight": "500",
+        "status": "loaded"
+      },
+      {
+        "weight": "700",
+        "status": "loaded"
+      }
+    ],
+    "lang": "en",
+    "dir": "ltr",
+    "scrollWidth": 768,
+    "heading": "Your daily esports desk",
+    "mainCount": 1,
+    "brokenImages": [],
+    "errors": []
+  },
+  {
+    "route": "/live",
+    "width": 768,
+    "locale": "en",
+    "theme": "h-full antialiased light",
+    "status": 200,
+    "fonts": [
+      {
+        "weight": "400",
+        "status": "loaded"
+      },
+      {
+        "weight": "500",
+        "status": "loaded"
+      },
+      {
+        "weight": "700",
+        "status": "loaded"
+      }
+    ],
+    "lang": "en",
+    "dir": "ltr",
+    "scrollWidth": 768,
+    "heading": "Live matches and the next games",
+    "mainCount": 1,
+    "brokenImages": [],
+    "errors": []
+  },
+  {
+    "route": "/live?tab=results",
+    "width": 768,
+    "locale": "en",
+    "theme": "h-full antialiased light",
+    "status": 200,
+    "fonts": [
+      {
+        "weight": "400",
+        "status": "loaded"
+      },
+      {
+        "weight": "500",
+        "status": "loaded"
+      },
+      {
+        "weight": "700",
+        "status": "loaded"
+      }
+    ],
+    "lang": "en",
+    "dir": "ltr",
+    "scrollWidth": 768,
+    "heading": "Live matches and the next games",
+    "mainCount": 1,
+    "brokenImages": [],
+    "errors": []
+  },
+  {
+    "route": "/games",
+    "width": 768,
+    "locale": "en",
+    "theme": "h-full antialiased light",
+    "status": 200,
+    "fonts": [
+      {
+        "weight": "400",
+        "status": "loaded"
+      },
+      {
+        "weight": "500",
+        "status": "loaded"
+      },
+      {
+        "weight": "700",
+        "status": "loaded"
+      }
+    ],
+    "lang": "en",
+    "dir": "ltr",
+    "scrollWidth": 768,
+    "heading": "Games",
+    "mainCount": 1,
+    "brokenImages": [],
+    "errors": []
+  },
+  {
+    "route": "/games/valorant",
+    "width": 768,
+    "locale": "en",
+    "theme": "h-full antialiased light",
+    "status": 200,
+    "fonts": [
+      {
+        "weight": "400",
+        "status": "loaded"
+      },
+      {
+        "weight": "500",
+        "status": "loaded"
+      },
+      {
+        "weight": "700",
+        "status": "loaded"
+      }
+    ],
+    "lang": "en",
+    "dir": "ltr",
+    "scrollWidth": 768,
+    "heading": "Valorant",
+    "mainCount": 1,
+    "brokenImages": [],
+    "errors": []
+  },
+  {
+    "route": "/tournaments",
+    "width": 768,
+    "locale": "en",
+    "theme": "h-full antialiased light",
+    "status": 200,
+    "fonts": [
+      {
+        "weight": "400",
+        "status": "loaded"
+      },
+      {
+        "weight": "500",
+        "status": "loaded"
+      },
+      {
+        "weight": "700",
+        "status": "loaded"
+      }
+    ],
+    "lang": "en",
+    "dir": "ltr",
+    "scrollWidth": 768,
+    "heading": "Tracked tournaments",
+    "mainCount": 1,
+    "brokenImages": [],
+    "errors": []
+  },
+  {
+    "route": "/tournaments/ewc",
+    "width": 768,
+    "locale": "en",
+    "theme": "h-full antialiased light",
+    "status": 200,
+    "fonts": [
+      {
+        "weight": "400",
+        "status": "loaded"
+      },
+      {
+        "weight": "500",
+        "status": "loaded"
+      },
+      {
+        "weight": "700",
+        "status": "loaded"
+      }
+    ],
+    "lang": "en",
+    "dir": "ltr",
+    "scrollWidth": 768,
+    "heading": "EWC tournaments",
+    "mainCount": 1,
+    "brokenImages": [],
+    "errors": []
+  },
+  {
+    "route": "/tournaments/archive",
+    "width": 768,
+    "locale": "en",
+    "theme": "h-full antialiased light",
+    "status": 200,
+    "fonts": [
+      {
+        "weight": "400",
+        "status": "loaded"
+      },
+      {
+        "weight": "500",
+        "status": "loaded"
+      },
+      {
+        "weight": "700",
+        "status": "loaded"
+      }
+    ],
+    "lang": "en",
+    "dir": "ltr",
+    "scrollWidth": 768,
+    "heading": "Finished tournaments",
+    "mainCount": 1,
+    "brokenImages": [],
+    "errors": []
+  },
+  {
+    "route": "/tournaments/1",
+    "width": 768,
+    "locale": "en",
+    "theme": "h-full antialiased light",
+    "status": 200,
+    "fonts": [
+      {
+        "weight": "400",
+        "status": "loaded"
+      },
+      {
+        "weight": "500",
+        "status": "loaded"
+      },
+      {
+        "weight": "700",
+        "status": "loaded"
+      }
+    ],
+    "lang": "en",
+    "dir": "ltr",
+    "scrollWidth": 768,
+    "heading": "EWC 2026 — Valorant",
+    "mainCount": 1,
+    "brokenImages": [],
+    "errors": []
+  },
+  {
+    "route": "/tournaments/2",
+    "width": 768,
+    "locale": "en",
+    "theme": "h-full antialiased light",
+    "status": 200,
+    "fonts": [
+      {
+        "weight": "400",
+        "status": "loaded"
+      },
+      {
+        "weight": "500",
+        "status": "loaded"
+      },
+      {
+        "weight": "700",
+        "status": "loaded"
+      }
+    ],
+    "lang": "en",
+    "dir": "ltr",
+    "scrollWidth": 768,
+    "heading": "EWC 2026 — Black Ops 7",
+    "mainCount": 1,
+    "brokenImages": [],
+    "errors": []
+  },
+  {
+    "route": "/news",
+    "width": 768,
+    "locale": "en",
+    "theme": "h-full antialiased light",
+    "status": 200,
+    "fonts": [
+      {
+        "weight": "400",
+        "status": "loaded"
+      },
+      {
+        "weight": "500",
+        "status": "loaded"
+      },
+      {
+        "weight": "700",
+        "status": "loaded"
+      }
+    ],
+    "lang": "en",
+    "dir": "ltr",
+    "scrollWidth": 768,
+    "heading": "The newsroom",
+    "mainCount": 1,
+    "brokenImages": [],
+    "errors": []
+  },
+  {
+    "route": "/news/ewc",
+    "width": 768,
+    "locale": "en",
+    "theme": "h-full antialiased light",
+    "status": 200,
+    "fonts": [
+      {
+        "weight": "400",
+        "status": "loaded"
+      },
+      {
+        "weight": "500",
+        "status": "loaded"
+      },
+      {
+        "weight": "700",
+        "status": "loaded"
+      }
+    ],
+    "lang": "en",
+    "dir": "ltr",
+    "scrollWidth": 768,
+    "heading": "EWC news",
+    "mainCount": 1,
+    "brokenImages": [],
+    "errors": []
+  },
+  {
+    "route": "/teams",
+    "width": 768,
+    "locale": "en",
+    "theme": "h-full antialiased light",
+    "status": 200,
+    "fonts": [
+      {
+        "weight": "400",
+        "status": "loaded"
+      },
+      {
+        "weight": "500",
+        "status": "loaded"
+      },
+      {
+        "weight": "700",
+        "status": "loaded"
+      }
+    ],
+    "lang": "en",
+    "dir": "ltr",
+    "scrollWidth": 768,
+    "heading": "Teams",
+    "mainCount": 1,
+    "brokenImages": [],
+    "errors": []
+  },
+  {
+    "route": "/teams/1",
+    "width": 768,
+    "locale": "en",
+    "theme": "h-full antialiased light",
+    "status": 200,
+    "fonts": [
+      {
+        "weight": "400",
+        "status": "loaded"
+      },
+      {
+        "weight": "500",
+        "status": "loaded"
+      },
+      {
+        "weight": "700",
+        "status": "loaded"
+      }
+    ],
+    "lang": "en",
+    "dir": "ltr",
+    "scrollWidth": 768,
+    "heading": "Team Falcons",
+    "mainCount": 1,
+    "brokenImages": [],
+    "errors": []
+  },
+  {
+    "route": "/players",
+    "width": 768,
+    "locale": "en",
+    "theme": "h-full antialiased light",
+    "status": 200,
+    "fonts": [
+      {
+        "weight": "400",
+        "status": "loaded"
+      },
+      {
+        "weight": "500",
+        "status": "loaded"
+      },
+      {
+        "weight": "700",
+        "status": "loaded"
+      }
+    ],
+    "lang": "en",
+    "dir": "ltr",
+    "scrollWidth": 768,
+    "heading": "Players",
+    "mainCount": 1,
+    "brokenImages": [],
+    "errors": []
+  },
+  {
+    "route": "/players/1",
+    "width": 768,
+    "locale": "en",
+    "theme": "h-full antialiased light",
+    "status": 200,
+    "fonts": [
+      {
+        "weight": "400",
+        "status": "loaded"
+      },
+      {
+        "weight": "500",
+        "status": "loaded"
+      },
+      {
+        "weight": "700",
+        "status": "loaded"
+      }
+    ],
+    "lang": "en",
+    "dir": "ltr",
+    "scrollWidth": 768,
+    "heading": "Preview competitor",
+    "mainCount": 1,
+    "brokenImages": [],
+    "errors": []
+  },
+  {
+    "route": "/media/hype-cast/news/5",
+    "width": 768,
+    "locale": "en",
+    "theme": "h-full antialiased light",
+    "status": 200,
+    "fonts": [
+      {
+        "weight": "400",
+        "status": "loaded"
+      },
+      {
+        "weight": "500",
+        "status": "loaded"
+      },
+      {
+        "weight": "700",
+        "status": "loaded"
+      }
+    ],
+    "lang": "en",
+    "dir": "ltr",
+    "scrollWidth": 768,
+    "heading": "Inside the broadcast: a community matchday",
+    "mainCount": 1,
+    "brokenImages": [],
+    "errors": []
+  },
+  {
+    "route": "/compare",
+    "width": 768,
+    "locale": "en",
+    "theme": "h-full antialiased light",
+    "status": 200,
+    "fonts": [
+      {
+        "weight": "400",
+        "status": "loaded"
+      },
+      {
+        "weight": "500",
+        "status": "loaded"
+      },
+      {
+        "weight": "700",
+        "status": "loaded"
+      }
+    ],
+    "lang": "en",
+    "dir": "ltr",
+    "scrollWidth": 768,
+    "heading": "Team and player comparison",
+    "mainCount": 1,
+    "brokenImages": [],
+    "errors": []
+  },
+  {
+    "route": "/predictions",
+    "width": 768,
+    "locale": "en",
+    "theme": "h-full antialiased light",
+    "status": 200,
+    "fonts": [
+      {
+        "weight": "400",
+        "status": "loaded"
+      },
+      {
+        "weight": "500",
+        "status": "loaded"
+      },
+      {
+        "weight": "700",
+        "status": "loaded"
+      }
+    ],
+    "lang": "en",
+    "dir": "ltr",
+    "scrollWidth": 768,
+    "heading": "EWC prediction boards",
+    "mainCount": 1,
+    "brokenImages": [],
+    "errors": []
+  },
+  {
+    "route": "/leaderboard",
+    "width": 768,
+    "locale": "en",
+    "theme": "h-full antialiased light",
+    "status": 200,
+    "fonts": [
+      {
+        "weight": "400",
+        "status": "loaded"
+      },
+      {
+        "weight": "500",
+        "status": "loaded"
+      },
+      {
+        "weight": "700",
+        "status": "loaded"
+      }
+    ],
+    "lang": "en",
+    "dir": "ltr",
+    "scrollWidth": 768,
+    "heading": "EWC 2026 prediction leaderboard",
+    "mainCount": 1,
+    "brokenImages": [],
+    "errors": []
+  },
+  {
+    "route": "/clubs",
+    "width": 768,
+    "locale": "en",
+    "theme": "h-full antialiased light",
+    "status": 200,
+    "fonts": [
+      {
+        "weight": "400",
+        "status": "loaded"
+      },
+      {
+        "weight": "500",
+        "status": "loaded"
+      },
+      {
+        "weight": "700",
+        "status": "loaded"
+      }
+    ],
+    "lang": "en",
+    "dir": "ltr",
+    "scrollWidth": 768,
+    "heading": "EWC club tracker",
+    "mainCount": 1,
+    "brokenImages": [],
+    "errors": []
+  },
+  {
+    "route": "/clubs/standings",
+    "width": 768,
+    "locale": "en",
+    "theme": "h-full antialiased light",
+    "status": 200,
+    "fonts": [
+      {
+        "weight": "400",
+        "status": "loaded"
+      },
+      {
+        "weight": "500",
+        "status": "loaded"
+      },
+      {
+        "weight": "700",
+        "status": "loaded"
+      }
+    ],
+    "lang": "en",
+    "dir": "ltr",
+    "scrollWidth": 768,
+    "heading": "EWC Club Championship standings",
+    "mainCount": 1,
+    "brokenImages": [],
+    "errors": []
+  },
+  {
+    "route": "/mvp",
+    "width": 768,
+    "locale": "en",
+    "theme": "h-full antialiased light",
+    "status": 200,
+    "fonts": [
+      {
+        "weight": "400",
+        "status": "loaded"
+      },
+      {
+        "weight": "500",
+        "status": "loaded"
+      },
+      {
+        "weight": "700",
+        "status": "loaded"
+      }
+    ],
+    "lang": "en",
+    "dir": "ltr",
+    "scrollWidth": 768,
+    "heading": "MVP of the day",
+    "mainCount": 1,
+    "brokenImages": [],
+    "errors": []
+  },
+  {
+    "route": "/co-streams",
+    "width": 768,
+    "locale": "en",
+    "theme": "h-full antialiased light",
+    "status": 200,
+    "fonts": [
+      {
+        "weight": "400",
+        "status": "loaded"
+      },
+      {
+        "weight": "500",
+        "status": "loaded"
+      },
+      {
+        "weight": "700",
+        "status": "loaded"
+      }
+    ],
+    "lang": "en",
+    "dir": "ltr",
+    "scrollWidth": 768,
+    "heading": "Co-streams",
+    "mainCount": 1,
+    "brokenImages": [],
+    "errors": [
+      "Failed to load resource: the server responded with a status of 429 (Too Many Requests)",
+      "Permissions policy violation: bluetooth is not allowed in this document.",
+      "getLayoutMap() must be called from a top-level browsing context or allowed by the permission policy."
+    ]
+  },
+  {
+    "route": "/media",
+    "width": 768,
+    "locale": "en",
+    "theme": "h-full antialiased light",
+    "status": 200,
+    "fonts": [
+      {
+        "weight": "400",
+        "status": "loaded"
+      },
+      {
+        "weight": "500",
+        "status": "loaded"
+      },
+      {
+        "weight": "700",
+        "status": "loaded"
+      }
+    ],
+    "lang": "en",
+    "dir": "ltr",
+    "scrollWidth": 768,
+    "heading": "Esports media channels",
+    "mainCount": 1,
+    "brokenImages": [],
+    "errors": []
+  },
+  {
+    "route": "/me",
+    "width": 768,
+    "locale": "en",
+    "theme": "h-full antialiased light",
+    "status": 200,
+    "fonts": [
+      {
+        "weight": "400",
+        "status": "loaded"
+      },
+      {
+        "weight": "500",
+        "status": "loaded"
+      },
+      {
+        "weight": "700",
+        "status": "loaded"
+      }
+    ],
+    "lang": "en",
+    "dir": "ltr",
+    "scrollWidth": 768,
+    "heading": "Discord sign in",
+    "mainCount": 1,
+    "brokenImages": [],
+    "errors": []
+  },
+  {
+    "route": "/login",
+    "width": 768,
+    "locale": "en",
+    "theme": "h-full antialiased light",
+    "status": 200,
+    "fonts": [
+      {
+        "weight": "400",
+        "status": "loaded"
+      },
+      {
+        "weight": "500",
+        "status": "loaded"
+      },
+      {
+        "weight": "700",
+        "status": "loaded"
+      }
+    ],
+    "lang": "en",
+    "dir": "ltr",
+    "scrollWidth": 768,
+    "heading": "Discord sign in",
+    "mainCount": 1,
+    "brokenImages": [],
+    "errors": []
+  },
+  {
+    "route": "/partners",
+    "width": 768,
+    "locale": "en",
+    "theme": "h-full antialiased light",
+    "status": 200,
+    "fonts": [
+      {
+        "weight": "400",
+        "status": "loaded"
+      },
+      {
+        "weight": "500",
+        "status": "loaded"
+      },
+      {
+        "weight": "700",
+        "status": "loaded"
+      }
+    ],
+    "lang": "en",
+    "dir": "ltr",
+    "scrollWidth": 768,
+    "heading": "Support the open-source community project.",
+    "mainCount": 1,
+    "brokenImages": [],
+    "errors": []
+  },
+  {
+    "route": "/docs/mcp",
+    "width": 768,
+    "locale": "en",
+    "theme": "h-full antialiased light",
+    "status": 200,
+    "fonts": [
+      {
+        "weight": "400",
+        "status": "loaded"
+      },
+      {
+        "weight": "500",
+        "status": "loaded"
+      },
+      {
+        "weight": "700",
+        "status": "loaded"
+      }
+    ],
+    "lang": "en",
+    "dir": "ltr",
+    "scrollWidth": 768,
+    "heading": "Public MCP Server",
+    "mainCount": 1,
+    "brokenImages": [],
+    "errors": []
+  },
+  {
+    "route": "/docs/admin-mcp",
+    "width": 768,
+    "locale": "en",
+    "theme": "h-full antialiased light",
+    "status": 200,
+    "fonts": [
+      {
+        "weight": "400",
+        "status": "loaded"
+      },
+      {
+        "weight": "500",
+        "status": "loaded"
+      },
+      {
+        "weight": "700",
+        "status": "loaded"
+      }
+    ],
+    "lang": "en",
+    "dir": "ltr",
+    "scrollWidth": 768,
+    "heading": "Admin MCP Server",
+    "mainCount": 1,
+    "brokenImages": [],
+    "errors": []
+  },
+  {
+    "route": "/privacy",
+    "width": 768,
+    "locale": "en",
+    "theme": "h-full antialiased light",
+    "status": 200,
+    "fonts": [
+      {
+        "weight": "400",
+        "status": "loaded"
+      },
+      {
+        "weight": "500",
+        "status": "loaded"
+      },
+      {
+        "weight": "700",
+        "status": "loaded"
+      }
+    ],
+    "lang": "en",
+    "dir": "ltr",
+    "scrollWidth": 768,
+    "heading": "Privacy Policy",
+    "mainCount": 1,
+    "brokenImages": [],
+    "errors": []
+  },
+  {
+    "route": "/terms",
+    "width": 768,
+    "locale": "en",
+    "theme": "h-full antialiased light",
+    "status": 200,
+    "fonts": [
+      {
+        "weight": "400",
+        "status": "loaded"
+      },
+      {
+        "weight": "500",
+        "status": "loaded"
+      },
+      {
+        "weight": "700",
+        "status": "loaded"
+      }
+    ],
+    "lang": "en",
+    "dir": "ltr",
+    "scrollWidth": 768,
+    "heading": "Terms of Service",
+    "mainCount": 1,
+    "brokenImages": [],
+    "errors": []
+  },
+  {
+    "route": "/offline",
+    "width": 768,
+    "locale": "en",
+    "theme": "h-full antialiased light",
+    "status": 200,
+    "fonts": [
+      {
+        "weight": "400",
+        "status": "loaded"
+      },
+      {
+        "weight": "500",
+        "status": "loaded"
+      },
+      {
+        "weight": "700",
+        "status": "loaded"
+      }
+    ],
+    "lang": "en",
+    "dir": "ltr",
+    "scrollWidth": 768,
+    "mainCount": 1,
+    "brokenImages": [],
+    "errors": []
+  },
+  {
+    "route": "/not-a-real-page",
+    "width": 768,
+    "locale": "en",
+    "theme": "",
+    "status": 404,
+    "fonts": [],
+    "lang": "",
+    "dir": "",
+    "scrollWidth": 768,
+    "mainCount": 0,
+    "brokenImages": [],
+    "errors": [
+      "Failed to load resource: the server responded with a status of 404 (Not Found)"
+    ]
+  },
+  {
+    "route": "/games/valorant/news/4",
+    "width": 768,
+    "locale": "en",
+    "theme": "h-full antialiased light",
+    "status": 200,
+    "fonts": [
+      {
+        "weight": "400",
+        "status": "loaded"
+      },
+      {
+        "weight": "500",
+        "status": "loaded"
+      },
+      {
+        "weight": "700",
+        "status": "loaded"
+      }
+    ],
+    "lang": "en",
+    "dir": "ltr",
+    "scrollWidth": 768,
+    "heading": "Power rankings after week two",
+    "mainCount": 1,
+    "brokenImages": [],
+    "errors": []
+  },
+  {
+    "route": "/games/league-of-legends/news/2",
+    "width": 768,
+    "locale": "en",
+    "theme": "h-full antialiased light",
+    "status": 200,
+    "fonts": [
+      {
+        "weight": "400",
+        "status": "loaded"
+      },
+      {
+        "weight": "500",
+        "status": "loaded"
+      },
+      {
+        "weight": "700",
+        "status": "loaded"
+      }
+    ],
+    "lang": "en",
+    "dir": "ltr",
+    "scrollWidth": 768,
+    "heading": "Bracket preview: the road to the final",
+    "mainCount": 1,
+    "brokenImages": [],
+    "errors": []
+  },
+  {
+    "route": "/games/valorant/news/1",
+    "width": 768,
+    "locale": "en",
+    "theme": "h-full antialiased light",
+    "status": 200,
+    "fonts": [
+      {
+        "weight": "400",
+        "status": "loaded"
+      },
+      {
+        "weight": "500",
+        "status": "loaded"
+      },
+      {
+        "weight": "700",
+        "status": "loaded"
+      }
+    ],
+    "lang": "en",
+    "dir": "ltr",
+    "scrollWidth": 768,
+    "heading": "Falcons storm into the EWC group stage",
+    "mainCount": 1,
+    "brokenImages": [],
+    "errors": []
+  },
+  {
+    "route": "/media/echo-mena",
+    "width": 768,
+    "locale": "en",
+    "theme": "h-full antialiased light",
+    "status": 200,
+    "fonts": [
+      {
+        "weight": "400",
+        "status": "loaded"
+      },
+      {
+        "weight": "500",
+        "status": "loaded"
+      },
+      {
+        "weight": "700",
+        "status": "loaded"
+      }
+    ],
+    "lang": "en",
+    "dir": "ltr",
+    "scrollWidth": 768,
+    "heading": "Echo MENA",
+    "mainCount": 1,
+    "brokenImages": [],
+    "errors": []
+  },
+  {
+    "route": "/media/hype-cast",
+    "width": 768,
+    "locale": "en",
+    "theme": "h-full antialiased light",
+    "status": 200,
+    "fonts": [
+      {
+        "weight": "400",
+        "status": "loaded"
+      },
+      {
+        "weight": "500",
+        "status": "loaded"
+      },
+      {
+        "weight": "700",
+        "status": "loaded"
+      }
+    ],
+    "lang": "en",
+    "dir": "ltr",
+    "scrollWidth": 768,
+    "heading": "Hype Cast",
+    "mainCount": 1,
+    "brokenImages": [],
+    "errors": []
+  },
+  {
+    "route": "/media/spot-media",
+    "width": 768,
+    "locale": "en",
+    "theme": "h-full antialiased light",
+    "status": 200,
+    "fonts": [
+      {
+        "weight": "400",
+        "status": "loaded"
+      },
+      {
+        "weight": "500",
+        "status": "loaded"
+      },
+      {
+        "weight": "700",
+        "status": "loaded"
+      }
+    ],
+    "lang": "en",
+    "dir": "ltr",
+    "scrollWidth": 768,
+    "heading": "Spot Media",
+    "mainCount": 1,
+    "brokenImages": [],
+    "errors": []
+  },
+  {
+    "route": "/media/pulse-cast",
+    "width": 768,
+    "locale": "en",
+    "theme": "h-full antialiased light",
+    "status": 200,
+    "fonts": [
+      {
+        "weight": "400",
+        "status": "loaded"
+      },
+      {
+        "weight": "500",
+        "status": "loaded"
+      },
+      {
+        "weight": "700",
+        "status": "loaded"
+      }
+    ],
+    "lang": "en",
+    "dir": "ltr",
+    "scrollWidth": 768,
+    "heading": "Pulse Cast",
+    "mainCount": 1,
+    "brokenImages": [],
+    "errors": []
+  },
+  {
+    "route": "/media/sama-news",
+    "width": 768,
+    "locale": "en",
+    "theme": "h-full antialiased light",
+    "status": 200,
+    "fonts": [
+      {
+        "weight": "400",
+        "status": "loaded"
+      },
+      {
+        "weight": "500",
+        "status": "loaded"
+      },
+      {
+        "weight": "700",
+        "status": "loaded"
+      }
+    ],
+    "lang": "en",
+    "dir": "ltr",
+    "scrollWidth": 768,
+    "heading": "Sama News",
+    "mainCount": 1,
+    "brokenImages": [],
+    "errors": []
+  },
+  {
+    "route": "/media/nara-media",
+    "width": 768,
+    "locale": "en",
+    "theme": "h-full antialiased light",
+    "status": 200,
+    "fonts": [
+      {
+        "weight": "400",
+        "status": "loaded"
+      },
+      {
+        "weight": "500",
+        "status": "loaded"
+      },
+      {
+        "weight": "700",
+        "status": "loaded"
+      }
+    ],
+    "lang": "en",
+    "dir": "ltr",
+    "scrollWidth": 768,
+    "heading": "Nara Media",
+    "mainCount": 1,
+    "brokenImages": [],
+    "errors": []
+  },
+  {
+    "route": "/matches/90",
+    "width": 768,
+    "locale": "en",
+    "theme": "h-full antialiased light",
+    "status": 200,
+    "fonts": [
+      {
+        "weight": "400",
+        "status": "loaded"
+      },
+      {
+        "weight": "500",
+        "status": "loaded"
+      },
+      {
+        "weight": "700",
+        "status": "loaded"
+      }
+    ],
+    "lang": "en",
+    "dir": "ltr",
+    "scrollWidth": 768,
+    "heading": "Boston Breach vs Toronto Ultra",
+    "mainCount": 1,
+    "brokenImages": [],
+    "errors": []
+  },
+  {
+    "route": "/matches/1",
+    "width": 768,
+    "locale": "en",
+    "theme": "h-full antialiased light",
+    "status": 200,
+    "fonts": [
+      {
+        "weight": "400",
+        "status": "loaded"
+      },
+      {
+        "weight": "500",
+        "status": "loaded"
+      },
+      {
+        "weight": "700",
+        "status": "loaded"
+      }
+    ],
+    "lang": "en",
+    "dir": "ltr",
+    "scrollWidth": 768,
+    "heading": "Team Falcons vs Team Liquid",
+    "mainCount": 1,
+    "brokenImages": [],
+    "errors": []
+  },
+  {
+    "route": "/matches/89",
+    "width": 768,
+    "locale": "en",
+    "theme": "h-full antialiased light",
+    "status": 200,
+    "fonts": [
+      {
+        "weight": "400",
+        "status": "loaded"
+      },
+      {
+        "weight": "500",
+        "status": "loaded"
+      },
+      {
+        "weight": "700",
+        "status": "loaded"
+      }
+    ],
+    "lang": "en",
+    "dir": "ltr",
+    "scrollWidth": 768,
+    "heading": "Atlanta FaZe vs Toronto Ultra",
+    "mainCount": 1,
+    "brokenImages": [],
+    "errors": []
+  },
+  {
+    "route": "/matches/88",
+    "width": 768,
+    "locale": "en",
+    "theme": "h-full antialiased light",
+    "status": 200,
+    "fonts": [
+      {
+        "weight": "400",
+        "status": "loaded"
+      },
+      {
+        "weight": "500",
+        "status": "loaded"
+      },
+      {
+        "weight": "700",
+        "status": "loaded"
+      }
+    ],
+    "lang": "en",
+    "dir": "ltr",
+    "scrollWidth": 768,
+    "heading": "Boston Breach vs OpTic Texas",
+    "mainCount": 1,
+    "brokenImages": [],
+    "errors": []
+  },
+  {
+    "route": "/matches/3",
+    "width": 768,
+    "locale": "en",
+    "theme": "h-full antialiased light",
+    "status": 200,
+    "fonts": [
+      {
+        "weight": "400",
+        "status": "loaded"
+      },
+      {
+        "weight": "500",
+        "status": "loaded"
+      },
+      {
+        "weight": "700",
+        "status": "loaded"
+      }
+    ],
+    "lang": "en",
+    "dir": "ltr",
+    "scrollWidth": 768,
+    "heading": "T1 vs FaZe Clan",
+    "mainCount": 1,
+    "brokenImages": [],
+    "errors": []
+  },
+  {
+    "route": "/predictors/41917982-791b-4787-aa4d-60905d1bfba2",
+    "width": 768,
+    "locale": "en",
+    "theme": "h-full antialiased light",
+    "status": 200,
+    "fonts": [
+      {
+        "weight": "400",
+        "status": "loaded"
+      },
+      {
+        "weight": "500",
+        "status": "loaded"
+      },
+      {
+        "weight": "700",
+        "status": "loaded"
+      }
+    ],
+    "lang": "en",
+    "dir": "ltr",
+    "scrollWidth": 768,
+    "heading": "Member 0002's prediction profile",
+    "mainCount": 1,
+    "brokenImages": [],
+    "errors": []
+  },
+  {
+    "route": "/predictors/8bd6504c-139d-479a-b464-b561f6eb901a",
+    "width": 768,
+    "locale": "en",
+    "theme": "h-full antialiased light",
+    "status": 200,
+    "fonts": [
+      {
+        "weight": "400",
+        "status": "loaded"
+      },
+      {
+        "weight": "500",
+        "status": "loaded"
+      },
+      {
+        "weight": "700",
+        "status": "loaded"
+      }
+    ],
+    "lang": "en",
+    "dir": "ltr",
+    "scrollWidth": 768,
+    "heading": "Member 0003's prediction profile",
+    "mainCount": 1,
+    "brokenImages": [],
+    "errors": []
+  },
+  {
+    "route": "/predictors/b709b0d2-79d8-42a1-9f95-f8d5aff06088",
+    "width": 768,
+    "locale": "en",
+    "theme": "h-full antialiased light",
+    "status": 200,
+    "fonts": [
+      {
+        "weight": "400",
+        "status": "loaded"
+      },
+      {
+        "weight": "500",
+        "status": "loaded"
+      },
+      {
+        "weight": "700",
+        "status": "loaded"
+      }
+    ],
+    "lang": "en",
+    "dir": "ltr",
+    "scrollWidth": 768,
+    "heading": "Member 0001's prediction profile",
+    "mainCount": 1,
+    "brokenImages": [],
+    "errors": []
+  },
+  {
+    "route": "/predictors/e43e19c9-f08e-4ed2-8735-05206d1e1f49",
+    "width": 768,
+    "locale": "en",
+    "theme": "h-full antialiased light",
+    "status": 200,
+    "fonts": [
+      {
+        "weight": "400",
+        "status": "loaded"
+      },
+      {
+        "weight": "500",
+        "status": "loaded"
+      },
+      {
+        "weight": "700",
+        "status": "loaded"
+      }
+    ],
+    "lang": "en",
+    "dir": "ltr",
+    "scrollWidth": 768,
+    "heading": "Member 0004's prediction profile",
+    "mainCount": 1,
+    "brokenImages": [],
+    "errors": []
+  },
+  {
+    "route": "/predictors/ef8c121b-290f-4d46-a14c-8c42c6d89ef7",
+    "width": 768,
+    "locale": "en",
+    "theme": "h-full antialiased light",
+    "status": 200,
+    "fonts": [
+      {
+        "weight": "400",
+        "status": "loaded"
+      },
+      {
+        "weight": "500",
+        "status": "loaded"
+      },
+      {
+        "weight": "700",
+        "status": "loaded"
+      }
+    ],
+    "lang": "en",
+    "dir": "ltr",
+    "scrollWidth": 768,
+    "heading": "Member 0007's prediction profile",
+    "mainCount": 1,
+    "brokenImages": [],
+    "errors": []
+  },
+  {
+    "route": "/predictors/5b39893a-4950-4478-8713-07caa11061dc",
+    "width": 768,
+    "locale": "en",
+    "theme": "h-full antialiased light",
+    "status": 200,
+    "fonts": [
+      {
+        "weight": "400",
+        "status": "loaded"
+      },
+      {
+        "weight": "500",
+        "status": "loaded"
+      },
+      {
+        "weight": "700",
+        "status": "loaded"
+      }
+    ],
+    "lang": "en",
+    "dir": "ltr",
+    "scrollWidth": 768,
+    "heading": "Member 0005's prediction profile",
+    "mainCount": 1,
+    "brokenImages": [],
+    "errors": []
+  },
+  {
+    "route": "/predictors/3510dd75-1824-44aa-9093-cb84c759171a",
+    "width": 768,
+    "locale": "en",
+    "theme": "h-full antialiased light",
+    "status": 200,
+    "fonts": [
+      {
+        "weight": "400",
+        "status": "loaded"
+      },
+      {
+        "weight": "500",
+        "status": "loaded"
+      },
+      {
+        "weight": "700",
+        "status": "loaded"
+      }
+    ],
+    "lang": "en",
+    "dir": "ltr",
+    "scrollWidth": 768,
+    "heading": "Member 0006's prediction profile",
+    "mainCount": 1,
+    "brokenImages": [],
+    "errors": []
+  },
+  {
+    "route": "/predictors/76bef96d-bad6-4533-b887-ae3b788bc6d0",
+    "width": 768,
+    "locale": "en",
+    "theme": "h-full antialiased light",
+    "status": 200,
+    "fonts": [
+      {
+        "weight": "400",
+        "status": "loaded"
+      },
+      {
+        "weight": "500",
+        "status": "loaded"
+      },
+      {
+        "weight": "700",
+        "status": "loaded"
+      }
+    ],
+    "lang": "en",
+    "dir": "ltr",
+    "scrollWidth": 768,
+    "heading": "Member 0008's prediction profile",
+    "mainCount": 1,
+    "brokenImages": [],
+    "errors": []
+  },
+  {
+    "route": "/",
+    "width": 320,
+    "locale": "en",
+    "theme": "h-full antialiased light",
+    "status": 200,
+    "fonts": [
+      {
+        "weight": "400",
+        "status": "loaded"
+      },
+      {
+        "weight": "500",
+        "status": "loaded"
+      },
+      {
+        "weight": "700",
+        "status": "loaded"
+      }
+    ],
+    "lang": "en",
+    "dir": "ltr",
+    "scrollWidth": 320,
+    "heading": "Your daily esports desk",
+    "mainCount": 1,
+    "brokenImages": [],
+    "errors": []
+  },
+  {
+    "route": "/live",
+    "width": 320,
+    "locale": "en",
+    "theme": "h-full antialiased light",
+    "status": 200,
+    "fonts": [
+      {
+        "weight": "400",
+        "status": "loaded"
+      },
+      {
+        "weight": "500",
+        "status": "loaded"
+      },
+      {
+        "weight": "700",
+        "status": "loaded"
+      }
+    ],
+    "lang": "en",
+    "dir": "ltr",
+    "scrollWidth": 320,
+    "heading": "Live matches and the next games",
+    "mainCount": 1,
+    "brokenImages": [],
+    "errors": []
+  },
+  {
+    "route": "/live?tab=results",
+    "width": 320,
+    "locale": "en",
+    "theme": "h-full antialiased light",
+    "status": 200,
+    "fonts": [
+      {
+        "weight": "400",
+        "status": "loaded"
+      },
+      {
+        "weight": "500",
+        "status": "loaded"
+      },
+      {
+        "weight": "700",
+        "status": "loaded"
+      }
+    ],
+    "lang": "en",
+    "dir": "ltr",
+    "scrollWidth": 320,
+    "heading": "Live matches and the next games",
+    "mainCount": 1,
+    "brokenImages": [],
+    "errors": []
+  },
+  {
+    "route": "/games",
+    "width": 320,
+    "locale": "en",
+    "theme": "h-full antialiased light",
+    "status": 200,
+    "fonts": [
+      {
+        "weight": "400",
+        "status": "loaded"
+      },
+      {
+        "weight": "500",
+        "status": "loaded"
+      },
+      {
+        "weight": "700",
+        "status": "loaded"
+      }
+    ],
+    "lang": "en",
+    "dir": "ltr",
+    "scrollWidth": 320,
+    "heading": "Games",
+    "mainCount": 1,
+    "brokenImages": [],
+    "errors": []
+  },
+  {
+    "route": "/games/valorant",
+    "width": 320,
+    "locale": "en",
+    "theme": "h-full antialiased light",
+    "status": 200,
+    "fonts": [
+      {
+        "weight": "400",
+        "status": "loaded"
+      },
+      {
+        "weight": "500",
+        "status": "loaded"
+      },
+      {
+        "weight": "700",
+        "status": "loaded"
+      }
+    ],
+    "lang": "en",
+    "dir": "ltr",
+    "scrollWidth": 320,
+    "heading": "Valorant",
+    "mainCount": 1,
+    "brokenImages": [],
+    "errors": []
+  },
+  {
+    "route": "/tournaments",
+    "width": 320,
+    "locale": "en",
+    "theme": "h-full antialiased light",
+    "status": 200,
+    "fonts": [
+      {
+        "weight": "400",
+        "status": "loaded"
+      },
+      {
+        "weight": "500",
+        "status": "loaded"
+      },
+      {
+        "weight": "700",
+        "status": "loaded"
+      }
+    ],
+    "lang": "en",
+    "dir": "ltr",
+    "scrollWidth": 320,
+    "heading": "Tracked tournaments",
+    "mainCount": 1,
+    "brokenImages": [],
+    "errors": []
+  },
+  {
+    "route": "/tournaments/ewc",
+    "width": 320,
+    "locale": "en",
+    "theme": "h-full antialiased light",
+    "status": 200,
+    "fonts": [
+      {
+        "weight": "400",
+        "status": "loaded"
+      },
+      {
+        "weight": "500",
+        "status": "loaded"
+      },
+      {
+        "weight": "700",
+        "status": "loaded"
+      }
+    ],
+    "lang": "en",
+    "dir": "ltr",
+    "scrollWidth": 320,
+    "heading": "EWC tournaments",
+    "mainCount": 1,
+    "brokenImages": [],
+    "errors": []
+  },
+  {
+    "route": "/tournaments/archive",
+    "width": 320,
+    "locale": "en",
+    "theme": "h-full antialiased light",
+    "status": 200,
+    "fonts": [
+      {
+        "weight": "400",
+        "status": "loaded"
+      },
+      {
+        "weight": "500",
+        "status": "loaded"
+      },
+      {
+        "weight": "700",
+        "status": "loaded"
+      }
+    ],
+    "lang": "en",
+    "dir": "ltr",
+    "scrollWidth": 320,
+    "heading": "Finished tournaments",
+    "mainCount": 1,
+    "brokenImages": [],
+    "errors": []
+  },
+  {
+    "route": "/tournaments/1",
+    "width": 320,
+    "locale": "en",
+    "theme": "h-full antialiased light",
+    "status": 200,
+    "fonts": [
+      {
+        "weight": "400",
+        "status": "loaded"
+      },
+      {
+        "weight": "500",
+        "status": "loaded"
+      },
+      {
+        "weight": "700",
+        "status": "loaded"
+      }
+    ],
+    "lang": "en",
+    "dir": "ltr",
+    "scrollWidth": 320,
+    "heading": "EWC 2026 — Valorant",
+    "mainCount": 1,
+    "brokenImages": [],
+    "errors": []
+  },
+  {
+    "route": "/tournaments/2",
+    "width": 320,
+    "locale": "en",
+    "theme": "h-full antialiased light",
+    "status": 200,
+    "fonts": [
+      {
+        "weight": "400",
+        "status": "loaded"
+      },
+      {
+        "weight": "500",
+        "status": "loaded"
+      },
+      {
+        "weight": "700",
+        "status": "loaded"
+      }
+    ],
+    "lang": "en",
+    "dir": "ltr",
+    "scrollWidth": 320,
+    "heading": "EWC 2026 — Black Ops 7",
+    "mainCount": 1,
+    "brokenImages": [],
+    "errors": []
+  },
+  {
+    "route": "/news",
+    "width": 320,
+    "locale": "en",
+    "theme": "h-full antialiased light",
+    "status": 200,
+    "fonts": [
+      {
+        "weight": "400",
+        "status": "loaded"
+      },
+      {
+        "weight": "500",
+        "status": "loaded"
+      },
+      {
+        "weight": "700",
+        "status": "loaded"
+      }
+    ],
+    "lang": "en",
+    "dir": "ltr",
+    "scrollWidth": 320,
+    "heading": "The newsroom",
+    "mainCount": 1,
+    "brokenImages": [],
+    "errors": []
+  },
+  {
+    "route": "/news/ewc",
+    "width": 320,
+    "locale": "en",
+    "theme": "h-full antialiased light",
+    "status": 200,
+    "fonts": [
+      {
+        "weight": "400",
+        "status": "loaded"
+      },
+      {
+        "weight": "500",
+        "status": "loaded"
+      },
+      {
+        "weight": "700",
+        "status": "loaded"
+      }
+    ],
+    "lang": "en",
+    "dir": "ltr",
+    "scrollWidth": 320,
+    "heading": "EWC news",
+    "mainCount": 1,
+    "brokenImages": [],
+    "errors": []
+  },
+  {
+    "route": "/teams",
+    "width": 320,
+    "locale": "en",
+    "theme": "h-full antialiased light",
+    "status": 200,
+    "fonts": [
+      {
+        "weight": "400",
+        "status": "loaded"
+      },
+      {
+        "weight": "500",
+        "status": "loaded"
+      },
+      {
+        "weight": "700",
+        "status": "loaded"
+      }
+    ],
+    "lang": "en",
+    "dir": "ltr",
+    "scrollWidth": 320,
+    "heading": "Teams",
+    "mainCount": 1,
+    "brokenImages": [],
+    "errors": []
+  },
+  {
+    "route": "/teams/1",
+    "width": 320,
+    "locale": "en",
+    "theme": "h-full antialiased light",
+    "status": 200,
+    "fonts": [
+      {
+        "weight": "400",
+        "status": "loaded"
+      },
+      {
+        "weight": "500",
+        "status": "loaded"
+      },
+      {
+        "weight": "700",
+        "status": "loaded"
+      }
+    ],
+    "lang": "en",
+    "dir": "ltr",
+    "scrollWidth": 320,
+    "heading": "Team Falcons",
+    "mainCount": 1,
+    "brokenImages": [],
+    "errors": []
+  },
+  {
+    "route": "/players",
+    "width": 320,
+    "locale": "en",
+    "theme": "h-full antialiased light",
+    "status": 200,
+    "fonts": [
+      {
+        "weight": "400",
+        "status": "loaded"
+      },
+      {
+        "weight": "500",
+        "status": "loaded"
+      },
+      {
+        "weight": "700",
+        "status": "loaded"
+      }
+    ],
+    "lang": "en",
+    "dir": "ltr",
+    "scrollWidth": 320,
+    "heading": "Players",
+    "mainCount": 1,
+    "brokenImages": [],
+    "errors": []
+  },
+  {
+    "route": "/players/1",
+    "width": 320,
+    "locale": "en",
+    "theme": "h-full antialiased light",
+    "status": 200,
+    "fonts": [
+      {
+        "weight": "400",
+        "status": "loaded"
+      },
+      {
+        "weight": "500",
+        "status": "loaded"
+      },
+      {
+        "weight": "700",
+        "status": "loaded"
+      }
+    ],
+    "lang": "en",
+    "dir": "ltr",
+    "scrollWidth": 320,
+    "heading": "Preview competitor",
+    "mainCount": 1,
+    "brokenImages": [],
+    "errors": []
+  },
+  {
+    "route": "/media/hype-cast/news/5",
+    "width": 320,
+    "locale": "en",
+    "theme": "h-full antialiased light",
+    "status": 200,
+    "fonts": [
+      {
+        "weight": "400",
+        "status": "loaded"
+      },
+      {
+        "weight": "500",
+        "status": "loaded"
+      },
+      {
+        "weight": "700",
+        "status": "loaded"
+      }
+    ],
+    "lang": "en",
+    "dir": "ltr",
+    "scrollWidth": 320,
+    "heading": "Inside the broadcast: a community matchday",
+    "mainCount": 1,
+    "brokenImages": [],
+    "errors": []
+  },
+  {
+    "route": "/compare",
+    "width": 320,
+    "locale": "en",
+    "theme": "h-full antialiased light",
+    "status": 200,
+    "fonts": [
+      {
+        "weight": "400",
+        "status": "loaded"
+      },
+      {
+        "weight": "500",
+        "status": "loaded"
+      },
+      {
+        "weight": "700",
+        "status": "loaded"
+      }
+    ],
+    "lang": "en",
+    "dir": "ltr",
+    "scrollWidth": 320,
+    "heading": "Team and player comparison",
+    "mainCount": 1,
+    "brokenImages": [],
+    "errors": []
+  },
+  {
+    "route": "/predictions",
+    "width": 320,
+    "locale": "en",
+    "theme": "h-full antialiased light",
+    "status": 200,
+    "fonts": [
+      {
+        "weight": "400",
+        "status": "loaded"
+      },
+      {
+        "weight": "500",
+        "status": "loaded"
+      },
+      {
+        "weight": "700",
+        "status": "loaded"
+      }
+    ],
+    "lang": "en",
+    "dir": "ltr",
+    "scrollWidth": 320,
+    "heading": "EWC prediction boards",
+    "mainCount": 1,
+    "brokenImages": [],
+    "errors": []
+  },
+  {
+    "route": "/leaderboard",
+    "width": 320,
+    "locale": "en",
+    "theme": "h-full antialiased light",
+    "status": 200,
+    "fonts": [
+      {
+        "weight": "400",
+        "status": "loaded"
+      },
+      {
+        "weight": "500",
+        "status": "loaded"
+      },
+      {
+        "weight": "700",
+        "status": "loaded"
+      }
+    ],
+    "lang": "en",
+    "dir": "ltr",
+    "scrollWidth": 320,
+    "heading": "EWC 2026 prediction leaderboard",
+    "mainCount": 1,
+    "brokenImages": [],
+    "errors": []
+  },
+  {
+    "route": "/clubs",
+    "width": 320,
+    "locale": "en",
+    "theme": "h-full antialiased light",
+    "status": 200,
+    "fonts": [
+      {
+        "weight": "400",
+        "status": "loaded"
+      },
+      {
+        "weight": "500",
+        "status": "loaded"
+      },
+      {
+        "weight": "700",
+        "status": "loaded"
+      }
+    ],
+    "lang": "en",
+    "dir": "ltr",
+    "scrollWidth": 320,
+    "heading": "EWC club tracker",
+    "mainCount": 1,
+    "brokenImages": [],
+    "errors": []
+  },
+  {
+    "route": "/clubs/standings",
+    "width": 320,
+    "locale": "en",
+    "theme": "h-full antialiased light",
+    "status": 200,
+    "fonts": [
+      {
+        "weight": "400",
+        "status": "loaded"
+      },
+      {
+        "weight": "500",
+        "status": "loaded"
+      },
+      {
+        "weight": "700",
+        "status": "loaded"
+      }
+    ],
+    "lang": "en",
+    "dir": "ltr",
+    "scrollWidth": 320,
+    "heading": "EWC Club Championship standings",
+    "mainCount": 1,
+    "brokenImages": [],
+    "errors": []
+  },
+  {
+    "route": "/mvp",
+    "width": 320,
+    "locale": "en",
+    "theme": "h-full antialiased light",
+    "status": 200,
+    "fonts": [
+      {
+        "weight": "400",
+        "status": "loaded"
+      },
+      {
+        "weight": "500",
+        "status": "loaded"
+      },
+      {
+        "weight": "700",
+        "status": "loaded"
+      }
+    ],
+    "lang": "en",
+    "dir": "ltr",
+    "scrollWidth": 320,
+    "heading": "MVP of the day",
+    "mainCount": 1,
+    "brokenImages": [],
+    "errors": []
+  },
+  {
+    "route": "/co-streams",
+    "width": 320,
+    "locale": "en",
+    "theme": "h-full antialiased light",
+    "status": 200,
+    "fonts": [
+      {
+        "weight": "400",
+        "status": "loaded"
+      },
+      {
+        "weight": "500",
+        "status": "loaded"
+      },
+      {
+        "weight": "700",
+        "status": "loaded"
+      }
+    ],
+    "lang": "en",
+    "dir": "ltr",
+    "scrollWidth": 320,
+    "heading": "Co-streams",
+    "mainCount": 1,
+    "brokenImages": [],
+    "errors": []
+  },
+  {
+    "route": "/media",
+    "width": 320,
+    "locale": "en",
+    "theme": "h-full antialiased light",
+    "status": 200,
+    "fonts": [
+      {
+        "weight": "400",
+        "status": "loaded"
+      },
+      {
+        "weight": "500",
+        "status": "loaded"
+      },
+      {
+        "weight": "700",
+        "status": "loaded"
+      }
+    ],
+    "lang": "en",
+    "dir": "ltr",
+    "scrollWidth": 320,
+    "heading": "Esports media channels",
+    "mainCount": 1,
+    "brokenImages": [],
+    "errors": []
+  },
+  {
+    "route": "/me",
+    "width": 320,
+    "locale": "en",
+    "theme": "h-full antialiased light",
+    "status": 200,
+    "fonts": [
+      {
+        "weight": "400",
+        "status": "loaded"
+      },
+      {
+        "weight": "500",
+        "status": "loaded"
+      },
+      {
+        "weight": "700",
+        "status": "loaded"
+      }
+    ],
+    "lang": "en",
+    "dir": "ltr",
+    "scrollWidth": 320,
+    "heading": "Discord sign in",
+    "mainCount": 1,
+    "brokenImages": [],
+    "errors": []
+  },
+  {
+    "route": "/login",
+    "width": 320,
+    "locale": "en",
+    "theme": "h-full antialiased light",
+    "status": 200,
+    "fonts": [
+      {
+        "weight": "400",
+        "status": "loaded"
+      },
+      {
+        "weight": "500",
+        "status": "loaded"
+      },
+      {
+        "weight": "700",
+        "status": "loaded"
+      }
+    ],
+    "lang": "en",
+    "dir": "ltr",
+    "scrollWidth": 320,
+    "heading": "Discord sign in",
+    "mainCount": 1,
+    "brokenImages": [],
+    "errors": []
+  },
+  {
+    "route": "/partners",
+    "width": 320,
+    "locale": "en",
+    "theme": "h-full antialiased light",
+    "status": 200,
+    "fonts": [
+      {
+        "weight": "400",
+        "status": "loaded"
+      },
+      {
+        "weight": "500",
+        "status": "loaded"
+      },
+      {
+        "weight": "700",
+        "status": "loaded"
+      }
+    ],
+    "lang": "en",
+    "dir": "ltr",
+    "scrollWidth": 320,
+    "heading": "Support the open-source community project.",
+    "mainCount": 1,
+    "brokenImages": [],
+    "errors": []
+  },
+  {
+    "route": "/docs/mcp",
+    "width": 320,
+    "locale": "en",
+    "theme": "h-full antialiased light",
+    "status": 200,
+    "fonts": [
+      {
+        "weight": "400",
+        "status": "loaded"
+      },
+      {
+        "weight": "500",
+        "status": "loaded"
+      },
+      {
+        "weight": "700",
+        "status": "loaded"
+      }
+    ],
+    "lang": "en",
+    "dir": "ltr",
+    "scrollWidth": 320,
+    "heading": "Public MCP Server",
+    "mainCount": 1,
+    "brokenImages": [],
+    "errors": []
+  },
+  {
+    "route": "/docs/admin-mcp",
+    "width": 320,
+    "locale": "en",
+    "theme": "h-full antialiased light",
+    "status": 200,
+    "fonts": [
+      {
+        "weight": "400",
+        "status": "loaded"
+      },
+      {
+        "weight": "500",
+        "status": "loaded"
+      },
+      {
+        "weight": "700",
+        "status": "loaded"
+      }
+    ],
+    "lang": "en",
+    "dir": "ltr",
+    "scrollWidth": 320,
+    "heading": "Admin MCP Server",
+    "mainCount": 1,
+    "brokenImages": [],
+    "errors": []
+  },
+  {
+    "route": "/privacy",
+    "width": 320,
+    "locale": "en",
+    "theme": "h-full antialiased light",
+    "status": 200,
+    "fonts": [
+      {
+        "weight": "400",
+        "status": "loaded"
+      },
+      {
+        "weight": "500",
+        "status": "loaded"
+      },
+      {
+        "weight": "700",
+        "status": "loaded"
+      }
+    ],
+    "lang": "en",
+    "dir": "ltr",
+    "scrollWidth": 320,
+    "heading": "Privacy Policy",
+    "mainCount": 1,
+    "brokenImages": [],
+    "errors": []
+  },
+  {
+    "route": "/terms",
+    "width": 320,
+    "locale": "en",
+    "theme": "h-full antialiased light",
+    "status": 200,
+    "fonts": [
+      {
+        "weight": "400",
+        "status": "loaded"
+      },
+      {
+        "weight": "500",
+        "status": "loaded"
+      },
+      {
+        "weight": "700",
+        "status": "loaded"
+      }
+    ],
+    "lang": "en",
+    "dir": "ltr",
+    "scrollWidth": 320,
+    "heading": "Terms of Service",
+    "mainCount": 1,
+    "brokenImages": [],
+    "errors": []
+  },
+  {
+    "route": "/offline",
+    "width": 320,
+    "locale": "en",
+    "theme": "h-full antialiased light",
+    "status": 200,
+    "fonts": [
+      {
+        "weight": "400",
+        "status": "loaded"
+      },
+      {
+        "weight": "500",
+        "status": "loaded"
+      },
+      {
+        "weight": "700",
+        "status": "loaded"
+      }
+    ],
+    "lang": "en",
+    "dir": "ltr",
+    "scrollWidth": 320,
+    "mainCount": 1,
+    "brokenImages": [],
+    "errors": []
+  },
+  {
+    "route": "/not-a-real-page",
+    "width": 320,
+    "locale": "en",
+    "theme": "",
+    "status": 404,
+    "fonts": [],
+    "lang": "",
+    "dir": "",
+    "scrollWidth": 320,
+    "mainCount": 0,
+    "brokenImages": [],
+    "errors": [
+      "Failed to load resource: the server responded with a status of 404 (Not Found)"
+    ]
+  },
+  {
+    "route": "/games/valorant/news/4",
+    "width": 320,
+    "locale": "en",
+    "theme": "h-full antialiased light",
+    "status": 200,
+    "fonts": [
+      {
+        "weight": "400",
+        "status": "loaded"
+      },
+      {
+        "weight": "500",
+        "status": "loaded"
+      },
+      {
+        "weight": "700",
+        "status": "loaded"
+      }
+    ],
+    "lang": "en",
+    "dir": "ltr",
+    "scrollWidth": 320,
+    "heading": "Power rankings after week two",
+    "mainCount": 1,
+    "brokenImages": [],
+    "errors": []
+  },
+  {
+    "route": "/games/league-of-legends/news/2",
+    "width": 320,
+    "locale": "en",
+    "theme": "h-full antialiased light",
+    "status": 200,
+    "fonts": [
+      {
+        "weight": "400",
+        "status": "loaded"
+      },
+      {
+        "weight": "500",
+        "status": "loaded"
+      },
+      {
+        "weight": "700",
+        "status": "loaded"
+      }
+    ],
+    "lang": "en",
+    "dir": "ltr",
+    "scrollWidth": 320,
+    "heading": "Bracket preview: the road to the final",
+    "mainCount": 1,
+    "brokenImages": [],
+    "errors": []
+  },
+  {
+    "route": "/games/valorant/news/1",
+    "width": 320,
+    "locale": "en",
+    "theme": "h-full antialiased light",
+    "status": 200,
+    "fonts": [
+      {
+        "weight": "400",
+        "status": "loaded"
+      },
+      {
+        "weight": "500",
+        "status": "loaded"
+      },
+      {
+        "weight": "700",
+        "status": "loaded"
+      }
+    ],
+    "lang": "en",
+    "dir": "ltr",
+    "scrollWidth": 320,
+    "heading": "Falcons storm into the EWC group stage",
+    "mainCount": 1,
+    "brokenImages": [],
+    "errors": []
+  },
+  {
+    "route": "/media/echo-mena",
+    "width": 320,
+    "locale": "en",
+    "theme": "h-full antialiased light",
+    "status": 200,
+    "fonts": [
+      {
+        "weight": "400",
+        "status": "loaded"
+      },
+      {
+        "weight": "500",
+        "status": "loaded"
+      },
+      {
+        "weight": "700",
+        "status": "loaded"
+      }
+    ],
+    "lang": "en",
+    "dir": "ltr",
+    "scrollWidth": 320,
+    "heading": "Echo MENA",
+    "mainCount": 1,
+    "brokenImages": [],
+    "errors": []
+  },
+  {
+    "route": "/media/hype-cast",
+    "width": 320,
+    "locale": "en",
+    "theme": "h-full antialiased light",
+    "status": 200,
+    "fonts": [
+      {
+        "weight": "400",
+        "status": "loaded"
+      },
+      {
+        "weight": "500",
+        "status": "loaded"
+      },
+      {
+        "weight": "700",
+        "status": "loaded"
+      }
+    ],
+    "lang": "en",
+    "dir": "ltr",
+    "scrollWidth": 320,
+    "heading": "Hype Cast",
+    "mainCount": 1,
+    "brokenImages": [],
+    "errors": []
+  },
+  {
+    "route": "/media/spot-media",
+    "width": 320,
+    "locale": "en",
+    "theme": "h-full antialiased light",
+    "status": 200,
+    "fonts": [
+      {
+        "weight": "400",
+        "status": "loaded"
+      },
+      {
+        "weight": "500",
+        "status": "loaded"
+      },
+      {
+        "weight": "700",
+        "status": "loaded"
+      }
+    ],
+    "lang": "en",
+    "dir": "ltr",
+    "scrollWidth": 320,
+    "heading": "Spot Media",
+    "mainCount": 1,
+    "brokenImages": [],
+    "errors": []
+  },
+  {
+    "route": "/media/pulse-cast",
+    "width": 320,
+    "locale": "en",
+    "theme": "h-full antialiased light",
+    "status": 200,
+    "fonts": [
+      {
+        "weight": "400",
+        "status": "loaded"
+      },
+      {
+        "weight": "500",
+        "status": "loaded"
+      },
+      {
+        "weight": "700",
+        "status": "loaded"
+      }
+    ],
+    "lang": "en",
+    "dir": "ltr",
+    "scrollWidth": 320,
+    "heading": "Pulse Cast",
+    "mainCount": 1,
+    "brokenImages": [],
+    "errors": []
+  },
+  {
+    "route": "/media/sama-news",
+    "width": 320,
+    "locale": "en",
+    "theme": "h-full antialiased light",
+    "status": 200,
+    "fonts": [
+      {
+        "weight": "400",
+        "status": "loaded"
+      },
+      {
+        "weight": "500",
+        "status": "loaded"
+      },
+      {
+        "weight": "700",
+        "status": "loaded"
+      }
+    ],
+    "lang": "en",
+    "dir": "ltr",
+    "scrollWidth": 320,
+    "heading": "Sama News",
+    "mainCount": 1,
+    "brokenImages": [],
+    "errors": []
+  },
+  {
+    "route": "/media/nara-media",
+    "width": 320,
+    "locale": "en",
+    "theme": "h-full antialiased light",
+    "status": 200,
+    "fonts": [
+      {
+        "weight": "400",
+        "status": "loaded"
+      },
+      {
+        "weight": "500",
+        "status": "loaded"
+      },
+      {
+        "weight": "700",
+        "status": "loaded"
+      }
+    ],
+    "lang": "en",
+    "dir": "ltr",
+    "scrollWidth": 320,
+    "heading": "Nara Media",
+    "mainCount": 1,
+    "brokenImages": [],
+    "errors": []
+  },
+  {
+    "route": "/matches/90",
+    "width": 320,
+    "locale": "en",
+    "theme": "h-full antialiased light",
+    "status": 200,
+    "fonts": [
+      {
+        "weight": "400",
+        "status": "loaded"
+      },
+      {
+        "weight": "500",
+        "status": "loaded"
+      },
+      {
+        "weight": "700",
+        "status": "loaded"
+      }
+    ],
+    "lang": "en",
+    "dir": "ltr",
+    "scrollWidth": 320,
+    "heading": "Boston Breach vs Toronto Ultra",
+    "mainCount": 1,
+    "brokenImages": [],
+    "errors": []
+  },
+  {
+    "route": "/matches/1",
+    "width": 320,
+    "locale": "en",
+    "theme": "h-full antialiased light",
+    "status": 200,
+    "fonts": [
+      {
+        "weight": "400",
+        "status": "loaded"
+      },
+      {
+        "weight": "500",
+        "status": "loaded"
+      },
+      {
+        "weight": "700",
+        "status": "loaded"
+      }
+    ],
+    "lang": "en",
+    "dir": "ltr",
+    "scrollWidth": 320,
+    "heading": "Team Falcons vs Team Liquid",
+    "mainCount": 1,
+    "brokenImages": [],
+    "errors": []
+  },
+  {
+    "route": "/matches/89",
+    "width": 320,
+    "locale": "en",
+    "theme": "h-full antialiased light",
+    "status": 200,
+    "fonts": [
+      {
+        "weight": "400",
+        "status": "loaded"
+      },
+      {
+        "weight": "500",
+        "status": "loaded"
+      },
+      {
+        "weight": "700",
+        "status": "loaded"
+      }
+    ],
+    "lang": "en",
+    "dir": "ltr",
+    "scrollWidth": 320,
+    "heading": "Atlanta FaZe vs Toronto Ultra",
+    "mainCount": 1,
+    "brokenImages": [],
+    "errors": []
+  },
+  {
+    "route": "/matches/88",
+    "width": 320,
+    "locale": "en",
+    "theme": "h-full antialiased light",
+    "status": 200,
+    "fonts": [
+      {
+        "weight": "400",
+        "status": "loaded"
+      },
+      {
+        "weight": "500",
+        "status": "loaded"
+      },
+      {
+        "weight": "700",
+        "status": "loaded"
+      }
+    ],
+    "lang": "en",
+    "dir": "ltr",
+    "scrollWidth": 320,
+    "heading": "Boston Breach vs OpTic Texas",
+    "mainCount": 1,
+    "brokenImages": [],
+    "errors": []
+  },
+  {
+    "route": "/matches/3",
+    "width": 320,
+    "locale": "en",
+    "theme": "h-full antialiased light",
+    "status": 200,
+    "fonts": [
+      {
+        "weight": "400",
+        "status": "loaded"
+      },
+      {
+        "weight": "500",
+        "status": "loaded"
+      },
+      {
+        "weight": "700",
+        "status": "loaded"
+      }
+    ],
+    "lang": "en",
+    "dir": "ltr",
+    "scrollWidth": 320,
+    "heading": "T1 vs FaZe Clan",
+    "mainCount": 1,
+    "brokenImages": [],
+    "errors": []
+  },
+  {
+    "route": "/predictors/41917982-791b-4787-aa4d-60905d1bfba2",
+    "width": 320,
+    "locale": "en",
+    "theme": "h-full antialiased light",
+    "status": 200,
+    "fonts": [
+      {
+        "weight": "400",
+        "status": "loaded"
+      },
+      {
+        "weight": "500",
+        "status": "loaded"
+      },
+      {
+        "weight": "700",
+        "status": "loaded"
+      }
+    ],
+    "lang": "en",
+    "dir": "ltr",
+    "scrollWidth": 320,
+    "heading": "Member 0002's prediction profile",
+    "mainCount": 1,
+    "brokenImages": [],
+    "errors": []
+  },
+  {
+    "route": "/predictors/8bd6504c-139d-479a-b464-b561f6eb901a",
+    "width": 320,
+    "locale": "en",
+    "theme": "h-full antialiased light",
+    "status": 200,
+    "fonts": [
+      {
+        "weight": "400",
+        "status": "loaded"
+      },
+      {
+        "weight": "500",
+        "status": "loaded"
+      },
+      {
+        "weight": "700",
+        "status": "loaded"
+      }
+    ],
+    "lang": "en",
+    "dir": "ltr",
+    "scrollWidth": 320,
+    "heading": "Member 0003's prediction profile",
+    "mainCount": 1,
+    "brokenImages": [],
+    "errors": []
+  },
+  {
+    "route": "/predictors/b709b0d2-79d8-42a1-9f95-f8d5aff06088",
+    "width": 320,
+    "locale": "en",
+    "theme": "h-full antialiased light",
+    "status": 200,
+    "fonts": [
+      {
+        "weight": "400",
+        "status": "loaded"
+      },
+      {
+        "weight": "500",
+        "status": "loaded"
+      },
+      {
+        "weight": "700",
+        "status": "loaded"
+      }
+    ],
+    "lang": "en",
+    "dir": "ltr",
+    "scrollWidth": 320,
+    "heading": "Member 0001's prediction profile",
+    "mainCount": 1,
+    "brokenImages": [],
+    "errors": []
+  },
+  {
+    "route": "/predictors/e43e19c9-f08e-4ed2-8735-05206d1e1f49",
+    "width": 320,
+    "locale": "en",
+    "theme": "h-full antialiased light",
+    "status": 200,
+    "fonts": [
+      {
+        "weight": "400",
+        "status": "loaded"
+      },
+      {
+        "weight": "500",
+        "status": "loaded"
+      },
+      {
+        "weight": "700",
+        "status": "loaded"
+      }
+    ],
+    "lang": "en",
+    "dir": "ltr",
+    "scrollWidth": 320,
+    "heading": "Member 0004's prediction profile",
+    "mainCount": 1,
+    "brokenImages": [],
+    "errors": []
+  },
+  {
+    "route": "/predictors/ef8c121b-290f-4d46-a14c-8c42c6d89ef7",
+    "width": 320,
+    "locale": "en",
+    "theme": "h-full antialiased light",
+    "status": 200,
+    "fonts": [
+      {
+        "weight": "400",
+        "status": "loaded"
+      },
+      {
+        "weight": "500",
+        "status": "loaded"
+      },
+      {
+        "weight": "700",
+        "status": "loaded"
+      }
+    ],
+    "lang": "en",
+    "dir": "ltr",
+    "scrollWidth": 320,
+    "heading": "Member 0007's prediction profile",
+    "mainCount": 1,
+    "brokenImages": [],
+    "errors": []
+  },
+  {
+    "route": "/predictors/5b39893a-4950-4478-8713-07caa11061dc",
+    "width": 320,
+    "locale": "en",
+    "theme": "h-full antialiased light",
+    "status": 200,
+    "fonts": [
+      {
+        "weight": "400",
+        "status": "loaded"
+      },
+      {
+        "weight": "500",
+        "status": "loaded"
+      },
+      {
+        "weight": "700",
+        "status": "loaded"
+      }
+    ],
+    "lang": "en",
+    "dir": "ltr",
+    "scrollWidth": 320,
+    "heading": "Member 0005's prediction profile",
+    "mainCount": 1,
+    "brokenImages": [],
+    "errors": []
+  },
+  {
+    "route": "/predictors/3510dd75-1824-44aa-9093-cb84c759171a",
+    "width": 320,
+    "locale": "en",
+    "theme": "h-full antialiased light",
+    "status": 200,
+    "fonts": [
+      {
+        "weight": "400",
+        "status": "loaded"
+      },
+      {
+        "weight": "500",
+        "status": "loaded"
+      },
+      {
+        "weight": "700",
+        "status": "loaded"
+      }
+    ],
+    "lang": "en",
+    "dir": "ltr",
+    "scrollWidth": 320,
+    "heading": "Member 0006's prediction profile",
+    "mainCount": 1,
+    "brokenImages": [],
+    "errors": []
+  },
+  {
+    "route": "/predictors/76bef96d-bad6-4533-b887-ae3b788bc6d0",
+    "width": 320,
+    "locale": "en",
+    "theme": "h-full antialiased light",
+    "status": 200,
+    "fonts": [
+      {
+        "weight": "400",
+        "status": "loaded"
+      },
+      {
+        "weight": "500",
+        "status": "loaded"
+      },
+      {
+        "weight": "700",
+        "status": "loaded"
+      }
+    ],
+    "lang": "en",
+    "dir": "ltr",
+    "scrollWidth": 320,
+    "heading": "Member 0008's prediction profile",
+    "mainCount": 1,
+    "brokenImages": [],
+    "errors": []
+  }
+]

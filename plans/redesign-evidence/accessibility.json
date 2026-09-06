@@ -1,0 +1,206 @@
+[
+  {
+    "route": "/",
+    "width": 1440,
+    "theme": "light",
+    "violations": []
+  },
+  {
+    "route": "/live",
+    "width": 1440,
+    "theme": "light",
+    "violations": []
+  },
+  {
+    "route": "/tournaments",
+    "width": 1440,
+    "theme": "light",
+    "violations": []
+  },
+  {
+    "route": "/tournaments/2",
+    "width": 1440,
+    "theme": "light",
+    "violations": []
+  },
+  {
+    "route": "/games",
+    "width": 1440,
+    "theme": "light",
+    "violations": []
+  },
+  {
+    "route": "/games/valorant",
+    "width": 1440,
+    "theme": "light",
+    "violations": []
+  },
+  {
+    "route": "/news",
+    "width": 1440,
+    "theme": "light",
+    "violations": []
+  },
+  {
+    "route": "/games/valorant/news/4",
+    "width": 1440,
+    "theme": "light",
+    "violations": []
+  },
+  {
+    "route": "/media/hype-cast/news/5",
+    "width": 1440,
+    "theme": "light",
+    "violations": []
+  },
+  {
+    "route": "/teams/1",
+    "width": 1440,
+    "theme": "light",
+    "violations": []
+  },
+  {
+    "route": "/players/1",
+    "width": 1440,
+    "theme": "light",
+    "violations": []
+  },
+  {
+    "route": "/compare",
+    "width": 1440,
+    "theme": "light",
+    "violations": []
+  },
+  {
+    "route": "/leaderboard",
+    "width": 1440,
+    "theme": "light",
+    "violations": []
+  },
+  {
+    "route": "/predictions",
+    "width": 1440,
+    "theme": "light",
+    "violations": []
+  },
+  {
+    "route": "/mvp",
+    "width": 1440,
+    "theme": "light",
+    "violations": []
+  },
+  {
+    "route": "/login",
+    "width": 1440,
+    "theme": "light",
+    "violations": []
+  },
+  {
+    "route": "/docs/mcp",
+    "width": 1440,
+    "theme": "light",
+    "violations": []
+  },
+  {
+    "route": "/ar",
+    "width": 390,
+    "theme": "dark",
+    "violations": []
+  },
+  {
+    "route": "/ar/live",
+    "width": 390,
+    "theme": "dark",
+    "violations": []
+  },
+  {
+    "route": "/ar/tournaments",
+    "width": 390,
+    "theme": "dark",
+    "violations": []
+  },
+  {
+    "route": "/ar/tournaments/2",
+    "width": 390,
+    "theme": "dark",
+    "violations": []
+  },
+  {
+    "route": "/ar/games",
+    "width": 390,
+    "theme": "dark",
+    "violations": []
+  },
+  {
+    "route": "/ar/games/valorant",
+    "width": 390,
+    "theme": "dark",
+    "violations": []
+  },
+  {
+    "route": "/ar/news",
+    "width": 390,
+    "theme": "dark",
+    "violations": []
+  },
+  {
+    "route": "/ar/games/valorant/news/4",
+    "width": 390,
+    "theme": "dark",
+    "violations": []
+  },
+  {
+    "route": "/ar/media/hype-cast/news/5",
+    "width": 390,
+    "theme": "dark",
+    "violations": []
+  },
+  {
+    "route": "/ar/teams/1",
+    "width": 390,
+    "theme": "dark",
+    "violations": []
+  },
+  {
+    "route": "/ar/players/1",
+    "width": 390,
+    "theme": "dark",
+    "violations": []
+  },
+  {
+    "route": "/ar/compare",
+    "width": 390,
+    "theme": "dark",
+    "violations": []
+  },
+  {
+    "route": "/ar/leaderboard",
+    "width": 390,
+    "theme": "dark",
+    "violations": []
+  },
+  {
+    "route": "/ar/predictions",
+    "width": 390,
+    "theme": "dark",
+    "violations": []
+  },
+  {
+    "route": "/ar/mvp",
+    "width": 390,
+    "theme": "dark",
+    "violations": []
+  },
+  {
+    "route": "/ar/login",
+    "width": 390,
+    "theme": "dark",
+    "violations": []
+  },
+  {
+    "route": "/ar/docs/mcp",
+    "width": 390,
+    "theme": "dark",
+    "violations": []
+  }
+]
