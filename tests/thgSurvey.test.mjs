@@ -560,6 +560,22 @@ test('the THG embed carries no Discord identity of any kind', () => {
   assert.deepEqual(buildThgEmbed(STORED, { respondent: RESPONDENT }).toJSON(), embed);
 });
 
+test('the card claims THG get no account INFORMATION, which the code has to honour', () => {
+  const notice = THG_SURVEY.privacyNotice.announcement.ar;
+  assert.ok(notice.includes('دون مشاركة معلومات حسابك في ديسكورد'), notice);
+  // "اسم حسابك" understated it: THG receive no username, id, display name,
+  // nickname or avatar either.
+  assert.ok(!notice.includes('اسم حسابك'), 'the narrower account-name claim is retired');
+
+  // The promise is only true because the THG embed has no identity in it, while
+  // the internal log embed still names the respondent for moderation.
+  const thg = JSON.stringify(buildThgEmbed(STORED).toJSON());
+  assert.ok(!thg.includes(RESPONDENT.userId) && !/<@/.test(thg), 'the card would be lying otherwise');
+  const log = buildLogEmbed(STORED, { respondent: RESPONDENT }).toJSON();
+  assert.ok(log.fields.some((field) => field.name === 'Submitted By'));
+  assert.ok(log.fields.some((field) => field.name === 'Discord User ID'));
+});
+
 test('a blank optional contact renders as Not provided, in both destinations', () => {
   const blank = { ...STORED, answers: { ...STORED.answers, q4: '' } };
   for (const embed of [buildLogEmbed(blank, { respondent: RESPONDENT }).toJSON(), buildThgEmbed(blank).toJSON()]) {

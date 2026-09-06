@@ -47,9 +47,13 @@ export const THG_SURVEY = {
   // differ only because the modal has already named the field just above.
   privacyNotice: {
     announcement: {
+      // "معلومات حسابك" rather than "اسم حسابك": THG receive no Discord identity
+      // at all — not the username, id, display name, nickname or avatar — so
+      // naming only the username understated what is withheld. This claim covers
+      // THG alone; the internal log embed still carries the mention and id.
       ar:
-        'سيتم مشاركة إجابات الاستبيان مع فريق THG بهدف دراسة اهتمام مجتمع الألعاب بمجال الأمن السيبراني، ' +
-        'دون مشاركة اسم حسابك في ديسكورد.',
+        'سيتم مشاركة إجاباتك مع فريق THG بهدف دراسة مدى اهتمام مجتمع الألعاب بالأمن السيبراني، ' +
+        'دون مشاركة معلومات حسابك في ديسكورد.',
     },
     modal: {
       ar:
