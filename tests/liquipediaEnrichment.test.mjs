@@ -359,6 +359,48 @@ test('player page enrichment resumes from stored roster links after budget cutof
   assert.deepEqual(secondParseCalls, [{ kind: 'player', wiki: 'resume', page: 'Resume_Squad_Star' }]);
 });
 
+test('team discovery cannot consume the last biography slot in a small run', async () => {
+  const tournament = await addTournament({
+    source: 'liquipedia', external_id: 'fairbios/cup', game: 'fairbios',
+    name: 'Fair Bios Cup', url: 'https://liquipedia.net/fairbios/Cup', guild_id: GUILD,
+  });
+  await upsertMatch({
+    tournament_id: tournament.id, source: 'liquipedia', external_id: 'fairbios-1',
+    team_a: 'First Club', team_b: 'Second Club', status: 'scheduled',
+  });
+  const parseCalls = [];
+  const resolveCalls = [];
+  const result = await runLiquipediaEnrichment({
+    liquipedia: mockLiquipedia({ parseCalls, resolveCalls, supportedGames: ['fairbios'] }),
+    maxParses: 3,
+  });
+  assert.equal(result.playersParsed, 1);
+  assert.deepEqual(parseCalls.map(call => call.kind), ['team', 'player']);
+  assert.equal(resolveCalls.length + parseCalls.length, 3);
+});
+
+test('ISO and timezone-offset player timestamps respect the enrichment TTL', async () => {
+  const tournament = await addTournament({
+    source: 'liquipedia', external_id: 'timeformats/cup', game: 'timeformats',
+    name: 'Time Formats Cup', url: 'https://liquipedia.net/timeformats/Cup', guild_id: GUILD,
+  });
+  assert.ok(tournament.id);
+  const now = Date.parse('2026-09-06T09:00:00Z');
+  for (const [index, at] of ['2026-09-06T08:00:00Z', '2026-09-06 11:00:00+03:00'].entries()) {
+    const player = await createLiquipediaPlayer({
+      game: 'timeformats', name: `Time Player ${index}`, slug: `time-player-${index}`,
+      liquipediaUrl: `https://liquipedia.net/timeformats/Player_${index}`,
+    });
+    await runDb('UPDATE players SET liquipedia_parsed_at = ? WHERE id = ?', [at, player.id]);
+  }
+  const parseCalls = [];
+  await runLiquipediaEnrichment({
+    liquipedia: mockLiquipedia({ parseCalls, supportedGames: ['timeformats'] }),
+    maxParses: 3, now, playerImageBackfillBefore: null,
+  });
+  assert.equal(parseCalls.length, 0);
+});
+
 test('fresh Liquipedia players missing a portrait get one image backfill pass', async () => {
   const tournament = await addTournament({
     source: 'liquipedia',

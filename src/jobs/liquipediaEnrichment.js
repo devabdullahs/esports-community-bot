@@ -49,8 +49,8 @@ function splitName(full) {
 
 function isFresh(parsedAt, ttlMs, now) {
   if (!parsedAt) return false;
-  const at = Date.parse(`${parsedAt}Z`);
-  return Number.isFinite(at) && now - at < ttlMs;
+  const at = parseTimeMs(parsedAt);
+  return at !== null && now - at < ttlMs;
 }
 
 // BR/lobby schedule rows stored in `matches` (team_a = "Grand Finals - Game 3",
@@ -65,7 +65,9 @@ function isScheduleRowName(name) {
 function parseTimeMs(value) {
   if (!value) return null;
   const text = String(value);
-  const at = Date.parse(/\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}/.test(text) ? `${text}Z` : text);
+  const at = value instanceof Date ? value.getTime() : Date.parse(
+    /^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}:\d{2}(?:\.\d+)?$/.test(text) ? `${text}Z` : text,
+  );
   return Number.isFinite(at) ? at : null;
 }
 
@@ -356,6 +358,8 @@ export async function runLiquipediaEnrichment({
           if (confirmedIds.length && !entity.rosterTruncated) {
             await clearDroppedRosterPlayers(game, team.id, confirmedIds);
           }
+          // Give biographies a turn before the next team consumes the remaining budget.
+          await drainPlayerQueue(1);
         }
       };
 
@@ -400,8 +404,9 @@ export async function runLiquipediaEnrichment({
       // Roster players: their rows were created/verified during the roster
       // pass above, and their pages came straight from the team page links, so
       // no search round-trip is needed - just a parse each, budget permitting.
-      const drainPlayerQueue = async () => {
-        while (playerQueue.length && budget > 0) {
+      const drainPlayerQueue = async (maxPlayers = Infinity) => {
+        let parsed = 0;
+        while (playerQueue.length && budget > 0 && parsed < maxPlayers) {
           const member = playerQueue.shift();
           const player = member.player;
           if (!needsPlayerPageRefresh(player, ttlMs, now, playerImageBackfillCutoff)) {
@@ -413,6 +418,7 @@ export async function runLiquipediaEnrichment({
           }
           const entity = await liquipedia.fetchPlayerEntity(wiki, member.page);
           budget -= 1;
+          parsed += 1;
           if (!entity) {
             await stampPlayerLiquipedia(player.id, { url: member.url });
             summary.misses += 1;

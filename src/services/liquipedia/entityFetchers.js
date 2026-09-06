@@ -93,8 +93,8 @@ export async function fetchTeamEntity(wiki, page) {
   const details = parsePlayerInfoboxDetails($);
   const facts = {
     ...infobox.facts,
-    ...(details.achievements.length ? { achievements: details.achievements } : {}),
-    ...(details.history.length ? { history: details.history } : {}),
+    achievements: details.achievements,
+    history: details.history,
   };
   const { players: roster, truncated: rosterTruncated } = parseTeamRoster($);
   const rosterTable = findTeamRosterTable($);
@@ -121,8 +121,8 @@ export async function fetchPlayerEntity(wiki, page) {
   const details = parsePlayerInfoboxDetails($);
   const facts = {
     ...infobox.facts,
-    ...(details.achievements.length ? { achievements: details.achievements } : {}),
-    ...(details.history.length ? { history: details.history } : {}),
+    achievements: details.achievements,
+    history: details.history,
   };
   const raw = $.html($('.fo-nttax-infobox').first()) || '';
   return {
