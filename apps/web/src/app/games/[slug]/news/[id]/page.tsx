@@ -124,7 +124,7 @@ export default async function NewsPostPage({
 
   return (
     <main
-      className="mx-auto flex w-full max-w-3xl flex-1 flex-col gap-6 px-4 py-8 sm:px-8 sm:py-10"
+      className="ec-public-page mx-auto flex w-full max-w-3xl flex-1 flex-col gap-6 px-4 py-8 sm:px-8 sm:py-10"
     >
       <script
         type="application/ld+json"
@@ -151,7 +151,7 @@ export default async function NewsPostPage({
         {localizeText(game.title, locale)}
       </Button>
 
-      <article dir="auto" className="flex flex-col gap-5">
+      <article dir="auto" className="ec-article flex flex-col gap-5">
         <header className="flex flex-col gap-3">
           <h1
             dir="auto"

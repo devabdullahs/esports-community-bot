@@ -15,7 +15,6 @@ import {
   CardDescription,
   CardFooter,
   CardHeader,
-  CardTitle,
 } from "@/components/ui/card";
 import {
   Field,
@@ -77,11 +76,11 @@ export function LoginPanelContent({
   const common = copy[locale].common;
 
   return (
-    <Card className="mx-auto w-full max-w-lg">
+    <Card className="ec-login-panel mx-auto w-full max-w-lg border-t-4 border-t-primary">
       <CardHeader className="flex flex-row items-center gap-3 text-start">
         <Image src="/icon.svg" alt="" width={40} height={40} className="size-10 shrink-0" />
         <div className="flex min-w-0 flex-col gap-1">
-          <CardTitle className="text-xl">{text.title}</CardTitle>
+          <h1 className="text-2xl font-semibold">{text.title}</h1>
           <CardDescription>{text.description}</CardDescription>
         </div>
       </CardHeader>

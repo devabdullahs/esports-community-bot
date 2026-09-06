@@ -17,7 +17,7 @@ export default async function LoginPage() {
   const locale = await getRequestLocale();
 
   return (
-    <main className="flex flex-1">
+    <main className="ec-public-page flex flex-1">
       <div className="mx-auto flex w-full max-w-6xl flex-1 items-center px-4 py-10 sm:px-8 sm:py-14">
         <Suspense fallback={<Skeleton className="mx-auto h-96 w-full max-w-lg rounded-xl" />}>
           <LoginPanel locale={locale} />

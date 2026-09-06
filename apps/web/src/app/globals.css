@@ -1,12 +1,13 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
+@import "./esports.css";
 
 @custom-variant dark (&:is(.dark *));
 
 @font-face {
   font-family: "Thmanyah Sans";
-  src: url("https://assets.esportscommunity.net/thmanyahsans/woff2/thmanyahsans-Regular.woff2") format("woff2");
+  src: url("/fonts/thmanyahsans/thmanyahsans-Regular.woff2") format("woff2");
   font-style: normal;
   font-weight: 400;
   font-display: swap;
@@ -14,7 +15,7 @@
 
 @font-face {
   font-family: "Thmanyah Sans";
-  src: url("https://assets.esportscommunity.net/thmanyahsans/woff2/thmanyahsans-Medium.woff2") format("woff2");
+  src: url("/fonts/thmanyahsans/thmanyahsans-Medium.woff2") format("woff2");
   font-style: normal;
   font-weight: 500;
   font-display: swap;
@@ -22,7 +23,7 @@
 
 @font-face {
   font-family: "Thmanyah Sans";
-  src: url("https://assets.esportscommunity.net/thmanyahsans/woff2/thmanyahsans-Bold.woff2") format("woff2");
+  src: url("/fonts/thmanyahsans/thmanyahsans-Bold.woff2") format("woff2");
   font-style: normal;
   font-weight: 700;
   font-display: swap;
@@ -111,7 +112,7 @@
   --card-foreground: oklch(0.22 0.02 262);
   --popover: oklch(1 0 0);
   --popover-foreground: oklch(0.22 0.02 262);
-  --primary: oklch(0.55 0.2 258);
+  --primary: oklch(0.51 0.19 258);
   --primary-foreground: oklch(0.985 0.008 258);
   --secondary: oklch(0.965 0.008 262);
   --secondary-foreground: oklch(0.26 0.03 262);
@@ -119,7 +120,7 @@
   --muted-foreground: oklch(0.52 0.025 260);
   --accent: oklch(0.95 0.03 258);
   --accent-foreground: oklch(0.3 0.06 258);
-  --destructive: oklch(0.58 0.22 27.3);
+  --destructive: oklch(0.52 0.2 27.3);
   --border: oklch(0.9 0.012 260);
   --input: oklch(0.9 0.012 260);
   --ring: oklch(0.55 0.2 258);
@@ -128,7 +129,7 @@
   --chart-3: oklch(0.68 0.13 200);
   --chart-4: oklch(0.6 0.12 180);
   --chart-5: oklch(0.5 0.18 275);
-  --radius: 0.625rem;
+  --radius: 0.375rem;
   /* Bracket geometry: the gutter connectors are drawn in, the minimum height a slot row
      divides between its cells, and the fixed score column that makes a round's scores read
      as one vertical rule. */
@@ -153,7 +154,7 @@
   --popover: oklch(0.205 0.014 264);
   --popover-foreground: oklch(0.97 0.005 250);
   --primary: oklch(0.62 0.2 258);
-  --primary-foreground: oklch(0.985 0.01 258);
+  --primary-foreground: #071327;
   --secondary: oklch(0.27 0.015 264);
   --secondary-foreground: oklch(0.97 0.005 250);
   --muted: oklch(0.27 0.015 264);
@@ -198,14 +199,6 @@
     text-rendering: optimizeLegibility;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
-    /* Soft Royal Azure ambiance behind the top of every page - adds depth in
-       both themes without touching component backgrounds. */
-    background-image: radial-gradient(
-      ellipse 85% 48% at 50% -12%,
-      color-mix(in oklab, var(--primary) 12%, transparent),
-      transparent 68%
-    );
-    background-repeat: no-repeat;
   }
   main,
   section,

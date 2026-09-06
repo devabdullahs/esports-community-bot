@@ -12,6 +12,9 @@ import { cn } from "@/lib/utils";
 // only adds classes to <code>, so still no raw HTML / dangerouslySetInnerHTML.
 // The admin live preview and public post pages share this renderer.
 const components: Components = {
+  pre({ children }) {
+    return <pre tabIndex={0}>{children}</pre>;
+  },
   a({ href, children, ...props }) {
     const safe = safeUrlOrUndefined(href);
     if (!safe) return <span>{children}</span>;

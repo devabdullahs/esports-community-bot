@@ -46,6 +46,22 @@ function callsMatching(fragment: string) {
 }
 
 describe("public cache admission", () => {
+  test("newsroom caching admits only four fixed first-page keys", async () => {
+    cachedLoaderCalls.length = 0;
+    const { listNewsroomPosts } = await import("@/lib/news");
+    for (const locale of ["en", "ar"] as const) {
+      for (const ewcOnly of [false, true]) {
+        await listNewsroomPosts(locale, ewcOnly ? 51 : 21, ewcOnly, 0);
+      }
+    }
+    expect(new Set(callsMatching("newsroom-front-page")).size).toBe(4);
+    cachedLoaderCalls.length = 0;
+    for (let offset = 1; offset <= MISS_CORPUS; offset++) {
+      await listNewsroomPosts("en", 21, false, offset);
+    }
+    await listNewsroomPosts("en", 300, false, 0);
+    expect(callsMatching("newsroom-front-page")).toHaveLength(0);
+  });
   test("unknown game and media slugs create no per-object cache entry", async () => {
     cachedLoaderCalls.length = 0;
 

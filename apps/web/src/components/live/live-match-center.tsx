@@ -1,209 +1,36 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { CalendarClockIcon, RadioIcon, RefreshCwIcon, TrophyIcon } from "lucide-react";
+import {
+  CalendarClockIcon,
+  RadioIcon,
+  RefreshCwIcon,
+  TrophyIcon,
+} from "lucide-react";
+import { useState } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { LocalDateTime } from "@/components/local-date-time";
-import { PlatformIcon } from "@/components/platform-icon";
-import { ProfileAvatar } from "@/components/profiles/profile-avatar";
-import { GameIcon } from "@/components/tournaments/tournament-directory";
-import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardHeader } from "@/components/ui/card";
+import { MatchRow, ScheduleGroup } from "@/components/esports/match-row";
+import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { OfficialTournamentAttribution } from "@/components/tournaments/official-tournament-attribution";
 import { copy, localizedPath, type Locale } from "@/lib/i18n";
-import type { LiveMatchCenter as LiveMatchCenterData, LiveMatchCenterItem } from "@/lib/live-match-center";
-import { matchOutcomeLabel, type MatchLifecycleView } from "@/lib/match-lifecycle";
-import { safeUrlOrUndefined } from "@/lib/safe-url";
+import type { LiveMatchCenter as LiveMatchCenterData } from "@/lib/live-match-center";
 
-const REFETCH_INTERVAL_MS = 75_000;
-
-function teamLabel(value: string | null, fallback: string) {
-  return value?.trim() || fallback;
-}
-
-function MatchTime({ value, locale, fallback }: { value: number | null; locale: Locale; fallback: string }) {
-  if (value == null || !Number.isFinite(value)) return <span>{fallback}</span>;
-  return <LocalDateTime value={new Date(value * 1000).toISOString()} locale={locale} fallback={fallback} />;
-}
-
-function lifecycleView(item: LiveMatchCenterItem): MatchLifecycleView {
-  return {
-    status: item.status,
-    team_a: item.teamA,
-    team_b: item.teamB,
-    score_a: item.scoreA,
-    score_b: item.scoreB,
-    winner_side: item.winnerSide,
-    result_reason: item.resultReason,
-  };
-}
-
-function MatchTeams({ item, locale }: { item: LiveMatchCenterItem; locale: Locale }) {
+export function LiveMatchCenter({
+  initialData,
+  locale,
+  gameLabels = {},
+}: {
+  initialData: LiveMatchCenterData;
+  locale: Locale;
+  gameLabels?: Record<string, string>;
+}) {
   const text = copy[locale].tournaments;
-  const a = teamLabel(item.teamA, text.tbd);
-  const b = teamLabel(item.teamB, text.tbd);
-  const hasScore = item.scoreA != null && item.scoreB != null;
-
-  return (
-    <div className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-3" dir={locale === "ar" ? "rtl" : "ltr"}>
-      <div className="flex min-w-0 items-center gap-2">
-        <ProfileAvatar src={item.logoA} name={a} shape="rounded" fit="contain" className="size-7 shrink-0 border border-border/70" />
-        <bdi className="min-w-0 truncate text-start text-sm font-semibold">{a}</bdi>
-      </div>
-      <span className="shrink-0 tabular-nums text-sm font-semibold">
-        {hasScore ? (
-          <>{item.scoreA} <span className="text-muted-foreground">-</span> {item.scoreB}</>
-        ) : (
-          <span className="text-muted-foreground">{text.vs}</span>
-        )}
-      </span>
-      <div className="flex min-w-0 items-center justify-end gap-2">
-        <bdi className="min-w-0 truncate text-end text-sm font-semibold">{b}</bdi>
-        <ProfileAvatar src={item.logoB} name={b} shape="rounded" fit="contain" className="size-7 shrink-0 border border-border/70" />
-      </div>
-    </div>
-  );
-}
-
-function StreamLinks({ item, locale }: { item: LiveMatchCenterItem; locale: Locale }) {
-  const text = copy[locale].tournaments;
-  const officialUrl = safeUrlOrUndefined(item.stream?.url);
-  const coStreams = item.coStreams
-    .map((stream) => ({ ...stream, url: safeUrlOrUndefined(stream.url) }))
-    .filter((stream): stream is typeof stream & { url: string } => Boolean(stream.url));
-  if (!officialUrl && !coStreams.length) return null;
-
-  return (
-    <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-t px-3 py-2 text-xs text-muted-foreground">
-      {officialUrl && item.stream ? (
-        <a
-          href={officialUrl}
-          target="_blank"
-          rel="noreferrer"
-          className="inline-flex items-center gap-1.5 font-medium text-primary hover:underline"
-        >
-          <PlatformIcon platform={item.stream.platform} className="size-3.5" />
-          {text.watchNow}
-        </a>
-      ) : null}
-      {coStreams.length ? (
-        <span className="inline-flex items-center gap-1.5">
-          <RadioIcon className="size-3 text-primary" />
-          {text.coStreaming}
-        </span>
-      ) : null}
-      {coStreams.map((stream) => (
-        <a
-          key={`${stream.platform}:${stream.handle}`}
-          href={stream.url}
-          target="_blank"
-          rel="noreferrer"
-          className="inline-flex max-w-40 items-center gap-1 text-foreground/80 hover:text-foreground hover:underline"
-        >
-          <PlatformIcon platform={stream.platform} className="size-3.5 shrink-0" />
-          <bdi className="truncate">{stream.label}</bdi>
-        </a>
-      ))}
-    </div>
-  );
-}
-
-function MatchCard({ item, locale, live }: { item: LiveMatchCenterItem; locale: Locale; live: boolean }) {
-  const text = copy[locale].tournaments;
-  const title = item.name?.trim() || `${teamLabel(item.teamA, text.tbd)} ${text.vs} ${teamLabel(item.teamB, text.tbd)}`;
-
-  return (
-    <Card size="sm" className="gap-3">
-      <CardHeader className="gap-2">
-        <div className="flex min-w-0 items-start justify-between gap-3">
-          <div className="flex min-w-0 flex-wrap items-center gap-2">
-            {live ? <Badge variant="destructive">{text.liveNow}</Badge> : <Badge variant="secondary">{text.upcoming}</Badge>}
-            {item.game ? <Badge variant="outline"><bdi>{item.game}</bdi></Badge> : null}
-            <span className="text-xs text-muted-foreground">
-              <MatchTime value={item.scheduledAt} locale={locale} fallback={text.timeTbd} />
-            </span>
-          </div>
-          {item.game ? (
-            <span className="grid size-9 shrink-0 place-items-center rounded-lg border bg-background/50 text-primary" aria-hidden>
-              <GameIcon slug={item.game} size="mark" />
-            </span>
-          ) : null}
-        </div>
-        <Link
-          href={localizedPath(item.tournamentHref, locale)}
-          className="min-w-0 truncate text-sm font-medium text-foreground hover:text-primary hover:underline"
-        >
-          <bdi>{item.tournamentName || title}</bdi>
-        </Link>
-      </CardHeader>
-      <CardContent className="space-y-3">
-        <MatchTeams item={item} locale={locale} />
-        <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
-          <bdi className="min-w-0 truncate text-muted-foreground">{title}</bdi>
-          <Link href={localizedPath(item.matchHref, locale)} className="shrink-0 font-medium text-primary hover:underline">
-            {text.matchDetails}
-          </Link>
-        </div>
-      </CardContent>
-      <StreamLinks item={item} locale={locale} />
-    </Card>
-  );
-}
-
-function EmptyState({ live, locale }: { live: boolean; locale: Locale }) {
-  const text = copy[locale].tournaments;
-  const liveText = copy[locale].live;
-  return (
-    <div className="flex min-h-44 flex-col items-center justify-center gap-3 border border-dashed px-5 text-center">
-      {live ? <RadioIcon className="size-5 text-muted-foreground" /> : <CalendarClockIcon className="size-5 text-muted-foreground" />}
-      <p className="text-sm font-medium">{live ? text.noLive : text.noUpcoming}</p>
-      <p className="max-w-md text-sm text-muted-foreground">{live ? liveText.noLiveDescription : liveText.noUpcomingDescription}</p>
-    </div>
-  );
-}
-
-function RecentFinished({ items, locale }: { items: LiveMatchCenterItem[]; locale: Locale }) {
-  const text = copy[locale].tournaments;
-  const liveText = copy[locale].live;
-  if (!items.length) return null;
-
-  return (
-    <section aria-labelledby="live-recent-results" className="border-y py-5">
-      <div className="mb-3 flex items-center gap-2">
-        <TrophyIcon className="size-4 text-muted-foreground" />
-        <h2 id="live-recent-results" className="text-sm font-semibold">{liveText.recentContext}</h2>
-      </div>
-      <ol className="divide-y">
-        {items.map((item) => (
-          <li key={item.id} className="flex min-w-0 items-center justify-between gap-4 py-2 text-sm">
-            <div className="min-w-0">
-              <Link href={localizedPath(item.tournamentHref, locale)} className="block truncate font-medium hover:text-primary hover:underline">
-                <bdi>{item.tournamentName || text.tbd}</bdi>
-              </Link>
-              <p className="truncate text-xs text-muted-foreground">
-                <bdi>{teamLabel(item.teamA, text.tbd)}</bdi> <span>{text.vs}</span> <bdi>{teamLabel(item.teamB, text.tbd)}</bdi>
-              </p>
-            </div>
-            {item.scoreA != null && item.scoreB != null ? (
-              <span className="shrink-0 tabular-nums font-semibold">
-                {item.scoreA} <span className="text-muted-foreground">-</span> {item.scoreB}
-              </span>
-            ) : (
-              <span className="shrink-0 text-end text-xs font-medium text-muted-foreground">
-                {matchOutcomeLabel(lifecycleView(item), locale)}
-              </span>
-            )}
-          </li>
-        ))}
-      </ol>
-    </section>
-  );
-}
-
-export function LiveMatchCenter({ initialData, locale }: { initialData: LiveMatchCenterData; locale: Locale }) {
-  const liveText = copy[locale].live;
-  const matchText = copy[locale].tournaments;
+  const router = useRouter();
+  const pathname = usePathname();
+  const search = useSearchParams();
+  const [game, setGame] = useState("all");
   const query = useQuery<LiveMatchCenterData>({
     queryKey: ["live-match-center"],
     queryFn: async () => {
@@ -212,57 +39,193 @@ export function LiveMatchCenter({ initialData, locale }: { initialData: LiveMatc
       return response.json();
     },
     initialData,
-    refetchInterval: REFETCH_INTERVAL_MS,
+    refetchInterval: 75_000,
     refetchIntervalInBackground: false,
     refetchOnWindowFocus: true,
   });
   const data = query.data ?? initialData;
-  const defaultTab = data.running.length ? "live" : "upcoming";
-
+  const requested = search.get("tab");
+  const selectedTab =
+    requested && ["live", "upcoming", "results"].includes(requested)
+      ? requested
+      : data.running.length
+        ? "live"
+        : "upcoming";
+  const games = [
+    ...new Set(
+      [...data.running, ...data.upcoming, ...data.recentFinished]
+        .map((item) => item.game)
+        .filter((value): value is string => Boolean(value)),
+    ),
+  ].sort();
+  const sections = [
+    { key: "live", label: text.liveNow, items: data.running, icon: RadioIcon },
+    {
+      key: "upcoming",
+      label: text.upcoming,
+      items: data.upcoming,
+      icon: CalendarClockIcon,
+    },
+    {
+      key: "results",
+      label: locale === "ar" ? "النتائج" : "Results",
+      items: data.recentFinished,
+      icon: TrophyIcon,
+    },
+  ];
+  function changeTab(value: string) {
+    const params = new URLSearchParams(search.toString());
+    params.set("tab", value);
+    router.replace(`${pathname}?${params}`, { scroll: false });
+  }
   return (
-    <main className="mx-auto flex w-full max-w-6xl flex-col gap-8 px-4 py-8 sm:px-8 sm:py-10">
-      <header className="flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
-        <div className="max-w-2xl space-y-2">
-          <p className="text-sm font-medium text-primary">{liveText.eyebrow}</p>
-          <h1 className="text-3xl font-semibold tracking-normal sm:text-4xl">{liveText.title}</h1>
-          <p className="text-sm leading-6 text-muted-foreground sm:text-base">{liveText.description}</p>
-        </div>
-        <div className="flex items-center gap-2 text-sm text-muted-foreground" role="status">
-          <RefreshCwIcon className={`size-4 ${query.isFetching ? "animate-spin" : ""}`} />
-          <span>{matchText.liveNow}: {data.running.length}</span>
-        </div>
+    <main className="ec-public-page ec-container flex flex-col gap-6 py-7">
+      <header className="ec-page-heading">
+        <p className="ec-kicker">
+          {locale === "ar"
+            ? "مباشر · جدول · نتائج"
+            : "LIVE · SCHEDULE · RESULTS"}
+        </p>
+        <h1>{copy[locale].live.title}</h1>
+        <p>
+          {locale === "ar"
+            ? "المواجهات التي تهمك، من صافرة البداية إلى النتيجة النهائية."
+            : "Every series in focus, from the opening round to the final score."}
+        </p>
       </header>
-
-      <Tabs defaultValue={defaultTab} className="gap-5">
-        <TabsList aria-label={liveText.tabsLabel}>
-          <TabsTrigger value="live">
-            <RadioIcon />
-            {matchText.liveNow}
-            <Badge variant="secondary">{data.running.length}</Badge>
-          </TabsTrigger>
-          <TabsTrigger value="upcoming">
-            <CalendarClockIcon />
-            {matchText.upcoming}
-            <Badge variant="secondary">{data.upcoming.length}</Badge>
-          </TabsTrigger>
+      <div className="flex flex-wrap items-center justify-between gap-4">
+        <label className="flex items-center gap-3 text-sm">
+          {copy[locale].common.games}
+          <select
+            className="min-h-10 rounded border bg-background px-3 text-sm"
+            value={game}
+            onChange={(event) => setGame(event.target.value)}
+          >
+            <option value="all">
+              {locale === "ar" ? "كل الألعاب" : "All games"}
+            </option>
+            {games.map((value) => (
+              <option key={value} value={value}>
+                {gameLabels[value] ||
+                  (
+                    {
+                      callofduty: "Call of Duty",
+                      valorant: "VALORANT",
+                      csgo: "Counter-Strike",
+                      lol: "League of Legends",
+                      rocketleague: "Rocket League",
+                      dota2: "Dota 2",
+                    } as Record<string, string>
+                  )[value] ||
+                  value}
+              </option>
+            ))}
+          </select>
+        </label>
+        <div
+          className="flex items-center gap-2 text-xs text-muted-foreground"
+          role="status"
+        >
+          <RadioIcon className="size-3 text-live" />
+          {text.liveNow}: {data.running.length}
+          <span aria-hidden="true">·</span>
+          {locale === "ar" ? "بتوقيت الرياض" : "Riyadh time"} UTC+3
+        </div>
+      </div>
+      {query.isError ? (
+        <div
+          role="alert"
+          className="flex flex-wrap items-center gap-3 text-sm text-destructive"
+        >
+          {locale === "ar"
+            ? "تعذّر تحديث المباريات. نعرض آخر بيانات متاحة."
+            : "Could not refresh matches. Showing the last available data."}
+          <Button variant="outline" size="sm" onClick={() => query.refetch()}>
+            <RefreshCwIcon data-icon="inline-start" />
+            {locale === "ar" ? "إعادة المحاولة" : "Retry"}
+          </Button>
+        </div>
+      ) : null}
+      <Tabs value={selectedTab} onValueChange={changeTab} className="gap-4">
+        <TabsList
+          className="ec-match-tabs"
+          aria-label={copy[locale].live.tabsLabel}
+          variant="line"
+        >
+          {sections.map(({ key, label, items, icon: Icon }) => (
+            <TabsTrigger value={key} key={key}>
+              <Icon />
+              {label}
+              <span className="ms-1 text-xs text-muted-foreground">
+                {items.length}
+              </span>
+            </TabsTrigger>
+          ))}
         </TabsList>
-        <TabsContent value="live">
-          {data.running.length ? (
-            <section aria-label={matchText.liveNow} className="grid gap-3 lg:grid-cols-2">
-              {data.running.map((item) => <MatchCard key={item.id} item={item} locale={locale} live />)}
-            </section>
-          ) : <EmptyState live locale={locale} />}
-        </TabsContent>
-        <TabsContent value="upcoming">
-          {data.upcoming.length ? (
-            <section aria-label={matchText.upcoming} className="grid gap-3 lg:grid-cols-2">
-              {data.upcoming.map((item) => <MatchCard key={item.id} item={item} locale={locale} live={false} />)}
-            </section>
-          ) : <EmptyState live={false} locale={locale} />}
-        </TabsContent>
+        {sections.map(({ key, items, label }) => {
+          const filtered = items.filter(
+            (item) => game === "all" || item.game === game,
+          );
+          return (
+            <TabsContent key={key} value={key}>
+              <section aria-label={label}>
+                {filtered.length ? (
+                  key === "upcoming" ? (
+                    <ScheduleGroup items={filtered} locale={locale} />
+                  ) : (
+                    filtered.map((item) => (
+                      <MatchRow item={item} key={item.id} locale={locale} />
+                    ))
+                  )
+                ) : (
+                  <div className="ec-empty">
+                    <p>
+                      {key === "live"
+                        ? text.noLive
+                        : key === "upcoming"
+                          ? text.noUpcoming
+                          : locale === "ar"
+                            ? "لا توجد نتائج لهذا الاختيار."
+                            : "No results for this selection."}
+                    </p>
+                    <p>
+                      {locale === "ar"
+                        ? "اختر لعبة أخرى أو استعرض البطولات والنتائج السابقة."
+                        : "Try another game or explore tournaments and previous results."}
+                    </p>
+                    <Link
+                      href={localizedPath("/tournaments", locale)}
+                      className="ec-text-link"
+                    >
+                      {copy[locale].common.tournaments}
+                    </Link>
+                  </div>
+                )}
+              </section>
+            </TabsContent>
+          );
+        })}
       </Tabs>
-
-      <RecentFinished items={data.recentFinished} locale={locale} />
+      {selectedTab !== "results" && data.recentFinished.length ? (
+        <section aria-labelledby="live-recent-results">
+          <h2 id="live-recent-results" className="mb-3 text-lg font-semibold">
+            {copy[locale].live.recentContext}
+          </h2>
+          {data.recentFinished.slice(0, 3).map((item) => (
+            <MatchRow item={item} locale={locale} key={item.id} />
+          ))}
+        </section>
+      ) : null}
+      {selectedTab === "results" ? (
+        <Link
+          href={localizedPath("/tournaments/archive", locale)}
+          className="ec-text-link"
+        >
+          {locale === "ar"
+            ? "استعرض أرشيف البطولات لمزيد من النتائج"
+            : "Explore the tournament archive for more results"}
+        </Link>
+      ) : null}
       <OfficialTournamentAttribution value={data.attribution} />
     </main>
   );

@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { LiveMatchCenter } from "@/components/live/live-match-center";
+import { listGamesCached } from "@/lib/games";
 import { copy, localizedPath } from "@/lib/i18n";
 import { getLiveMatchCenter } from "@/lib/live-match-center";
 import { buildPageMetadata } from "@/lib/metadata";
@@ -21,5 +22,6 @@ export async function generateMetadata(): Promise<Metadata> {
 
 export default async function LivePage() {
   const locale = await getRequestLocale();
-  return <LiveMatchCenter initialData={await getLiveMatchCenter()} locale={locale} />;
+  const [initialData, games] = await Promise.all([getLiveMatchCenter(), listGamesCached()]);
+  return <LiveMatchCenter initialData={initialData} locale={locale} gameLabels={Object.fromEntries(games.map(game => [game.slug, game.title[locale]]))} />;
 }

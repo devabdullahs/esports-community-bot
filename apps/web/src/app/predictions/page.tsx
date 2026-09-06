@@ -1,3 +1,4 @@
+import { getOptionalSession } from "@/lib/session";
 import type { Metadata } from "next";
 import Link from "next/link";
 import {
@@ -110,6 +111,7 @@ export async function generateMetadata(): Promise<Metadata> {
 }
 
 export default async function PredictionsPage() {
+  const session = await getOptionalSession();
   const locale = await getRequestLocale();
   const t = COPY[locale];
   const status = await getPublicPredictionStatus().catch(() => ({
@@ -134,7 +136,7 @@ export default async function PredictionsPage() {
           : t.idle;
 
   return (
-    <main className="mx-auto flex w-full max-w-5xl flex-1 flex-col gap-8 px-4 py-8 sm:px-8 sm:py-10">
+    <main className="ec-public-page mx-auto flex w-full max-w-5xl flex-1 flex-col gap-8 px-4 py-8 sm:px-8 sm:py-10">
       <section className="flex max-w-3xl flex-col items-start gap-4">
         <Badge variant="outline">
           <TargetIcon data-icon="inline-start" />
@@ -216,9 +218,9 @@ export default async function PredictionsPage() {
         </CardContent>
       </Card>
 
-      <PredictionPickerEntry locale={locale} />
+      {session ? <PredictionPickerEntry locale={locale} /> : null}
 
-      <PredictionMiniLeagues locale={locale} compact />
+      {session ? <PredictionMiniLeagues locale={locale} compact /> : null}
 
       {status.upcomingRounds.length || status.awaitingRounds.length ? (
         <section className="flex flex-col gap-4" aria-label={t.currentRound}>
@@ -235,7 +237,7 @@ export default async function PredictionsPage() {
             <section key={awaitingRound.weekKey} className="flex flex-col gap-4 border-b pb-4 last:border-b-0">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div>
-                  <p className="font-medium">{awaitingRound.label}</p>
+                  <h2 className="font-medium">{awaitingRound.label}</h2>
                   <p className="text-sm text-muted-foreground">{t.awaiting}</p>
                 </div>
                 <Badge variant="outline">{t.scoring}</Badge>

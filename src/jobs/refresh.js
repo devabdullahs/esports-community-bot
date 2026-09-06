@@ -1,3 +1,5 @@
+import { config } from '../config.js';
+import { createCoalescedRefresh } from '../lib/coalescedRefresh.js';
 import { logger } from '../lib/logger.js';
 import { getTournamentById, listActiveTournaments } from '../db/tournaments.js';
 import { updateLeaderboard } from './leaderboard.js';
@@ -14,32 +16,39 @@ function describeError(error, depth = 0) {
   return `${message} [${nested.slice(0, 5).map((cause) => describeError(cause, depth + 1)).join('; ')}]`;
 }
 
-// Coalesces rapid match updates into one leaderboard+voice refresh per guild.
-const DEBOUNCE_MS = 2500;
-const pending = new Map(); // guildId -> timer
+const refreshes = createCoalescedRefresh(async (guildId, client) => {
+  // Independent surfaces must not wait for a slow leaderboard upload.
+  await Promise.all([
+    ['leaderboard', updateLeaderboard],
+    ['voice', updateVoiceChannel],
+    ['match card', updateMatchCards],
+  ].map(async ([label, update]) => {
+    try {
+      await update(client, guildId);
+    } catch (error) {
+      logger.error(`[refresh] ${label} ${guildId}: ${describeError(error)}`);
+    }
+  }));
+}, { onError: (error, guildId) => logger.error(`[refresh] ${guildId}: ${describeError(error)}`) });
 
 export function refreshGuild(client, guildId) {
-  if (!guildId || pending.has(guildId)) return;
-  const t = setTimeout(async () => {
-    pending.delete(guildId);
-    try {
-      await updateLeaderboard(client, guildId);
-    } catch (e) {
-      logger.error(`[refresh] leaderboard ${guildId}: ${e.message}`);
-    }
-    try {
-      await updateVoiceChannel(client, guildId);
-    } catch (e) {
-      logger.error(`[refresh] voice ${guildId}: ${e.message}`);
-    }
-    try {
-      await updateMatchCards(client, guildId);
-    } catch (e) {
-      logger.error(`[refresh] match card ${guildId}: ${describeError(e)}`);
-    }
-  }, DEBOUNCE_MS);
-  t.unref?.();
-  pending.set(guildId, t);
+  refreshes.request(guildId, client);
+}
+
+let sweepTimer = null;
+export function startRefreshLoop(client) {
+  if (sweepTimer) return;
+  // Stored data only: retries Discord failures without additional provider requests.
+  sweepTimer = setInterval(() => {
+    refreshAllGuilds(client).catch((error) => logger.error(`[refresh] sweep: ${describeError(error)}`));
+  }, 60_000);
+  sweepTimer.unref?.();
+}
+
+export function stopRefreshLoop() {
+  if (sweepTimer) clearInterval(sweepTimer);
+  sweepTimer = null;
+  refreshes.stop();
 }
 
 // Called by the polling manager's update hook (see events/ready.js).
@@ -51,7 +60,7 @@ export async function onMatchUpdate(client, _type, match) {
 
 export async function refreshAllGuilds(client) {
   const tournaments = await listActiveTournaments();
-  for (const guildId of new Set(tournaments.map((t) => t.guild_id))) {
+  for (const guildId of new Set([config.discord.guildId, ...tournaments.map((t) => t.guild_id)].filter(Boolean))) {
     refreshGuild(client, guildId);
   }
 }

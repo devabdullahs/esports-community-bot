@@ -1,5 +1,6 @@
 import { createCanvas, GlobalFonts } from '@napi-rs/canvas';
-import { isEwcMatch, matchTag, matchTagEwc } from './games.js';
+import { gameName, isEwcMatch, matchTag, matchTagEwc } from './games.js';
+import { loadGameCardIcon } from './gameCardIcon.js';
 import { loadLogoImage } from './logoCache.js';
 import { isLobbyMatch, matchLabel } from './render.js';
 
@@ -180,67 +181,72 @@ export function formatRiyadhDateTime(sec) {
 // m = { tournament, subtitle, timeText, scoreText, teamA, teamB, logoA, logoB, accent, nextText }
 export async function renderMatchCard(m) {
   const W = 1200;
-  const H = 600;
+  const H = 520;
   const canvas = createCanvas(W, H);
   const ctx = canvas.getContext('2d');
 
-  const bg = ctx.createLinearGradient(0, 0, W, H);
-  bg.addColorStop(0, '#15273f');
-  bg.addColorStop(1, '#070c16');
-  ctx.fillStyle = bg;
+  ctx.fillStyle = '#101722';
   ctx.fillRect(0, 0, W, H);
   ctx.strokeStyle = m.accent || 'rgba(120,150,200,0.30)';
   ctx.lineWidth = 3;
-  roundRect(ctx, 14, 14, W - 28, H - 28, 28);
+  roundRect(ctx, 14, 14, W - 28, H - 28, 18);
   ctx.stroke();
 
   // Header
   ctx.textBaseline = 'alphabetic';
   ctx.textAlign = 'left';
+  const gameIcon = await loadGameCardIcon(m.game);
+  const titleX = gameIcon ? 126 : 54;
+  if (gameIcon) ctx.drawImage(gameIcon, 54, 46, 54, 54);
   ctx.fillStyle = '#ffffff';
-  ctx.fillText(fit(ctx, m.tournament || 'Match', 720, `bold 46px ${HEAD}`), 64, 104);
+  ctx.fillText(fit(ctx, m.tournament || 'Match', 790 - titleX, `bold 40px ${HEAD}`), titleX, 76);
   if (m.subtitle) {
     ctx.fillStyle = '#9fb3d1';
-    ctx.fillText(fit(ctx, m.subtitle, 720, `32px ${BODY}`), 64, 150);
+    ctx.fillText(fit(ctx, m.subtitle, 790 - titleX, `28px ${BODY}`), titleX, 118);
   }
   if (m.timeText) {
-    ctx.fillStyle = '#8ab4ff';
+    ctx.fillStyle = m.status === 'running' ? '#ff8791' : m.status === 'finished' ? '#83dfa8' : '#b9c9e1';
     ctx.textAlign = 'right';
-    ctx.font = `bold 36px ${HEAD}`;
-    ctx.fillText(m.timeText, W - 64, 104);
+    ctx.fillText(fit(ctx, m.timeText, 320, `bold 30px ${HEAD}`), W - 54, 82);
   }
 
   ctx.strokeStyle = 'rgba(130,160,210,0.18)';
   ctx.lineWidth = 2;
   ctx.beginPath();
-  ctx.moveTo(54, 196);
-  ctx.lineTo(W - 54, 196);
+  ctx.moveTo(54, 152);
+  ctx.lineTo(W - 54, 152);
   ctx.stroke();
 
   const [logoA, logoB] = await Promise.all([loadLogoImage(m.logoA), loadLogoImage(m.logoB)]);
-  drawTeam(ctx, 270, 380, 160, m.teamA, logoA);
+  drawTeam(ctx, 270, 294, 144, m.teamA, logoA);
 
   ctx.fillStyle = '#ffffff';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   if (m.teamB) {
-    drawTeam(ctx, W - 270, 380, 160, m.teamB, logoB);
-    ctx.font = `bold 120px ${HEAD}`;
-    ctx.fillText(m.scoreText || 'VS', W / 2, 384);
+    drawTeam(ctx, W - 270, 294, 144, m.teamB, logoB);
+    ctx.fillStyle = '#ffffff';
+    ctx.textBaseline = 'middle';
+    ctx.font = `bold 94px ${HEAD}`;
+    ctx.fillText(m.scoreText || 'VS', W / 2, 294);
+    if (m.scoreLabel) {
+      ctx.fillStyle = '#b5c4d9';
+      ctx.fillText(fit(ctx, m.scoreLabel, 300, `24px ${BODY}`), W / 2, 356);
+    }
   } else {
     ctx.font = `bold 76px ${HEAD}`;
-    ctx.fillText(m.scoreText || m.timeText || 'LIVE', W - 330, 360);
+    ctx.fillText(m.scoreText || m.timeText || 'LIVE', W - 330, 294);
     ctx.fillStyle = '#9fb3d1';
     ctx.font = `30px ${BODY}`;
-    ctx.fillText('Event lobby', W - 330, 420);
+    ctx.fillText('Event lobby', W - 330, 354);
   }
   ctx.textBaseline = 'alphabetic';
 
-  if (m.nextText) {
+  if (m.nextText || m.detailText) {
     ctx.fillStyle = '#9fb3d1';
     ctx.textAlign = 'center';
     ctx.font = `24px ${BODY}`;
-    ctx.fillText(fit(ctx, m.nextText, 1060, `24px ${BODY}`), W / 2, 572);
+    ctx.fillText(fit(ctx, m.nextText || m.detailText, 1060, `24px ${BODY}`), W / 2, 478);
   }
 
   return canvas.toBuffer('image/png');
@@ -623,14 +629,6 @@ export function renderStatusCard({ title, subtitle, statusText, detail, accent }
   return canvas.toBuffer('image/png');
 }
 
-const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-function fmtUtc(sec) {
-  const d = new Date(sec * 1000);
-  const hh = String(d.getUTCHours()).padStart(2, '0');
-  const mm = String(d.getUTCMinutes()).padStart(2, '0');
-  return `${MONTHS[d.getUTCMonth()]} ${d.getUTCDate()} - ${hh}:${mm} UTC`;
-}
-
 // Render a card from a DB match row (joined with tournament fields by getMatchesForGuild).
 export function renderCardForMatch(m, { nextText } = {}) {
   // A two-team match (TFT/other lobby-scored games are still Team vs Team per round)
@@ -647,17 +645,21 @@ export function renderCardForMatch(m, { nextText } = {}) {
     timeText = 'FINAL';
     accent = 'rgba(87,242,135,0.6)';
   } else if (m.scheduled_at) {
-    timeText = fmtUtc(m.scheduled_at);
+    timeText = 'UPCOMING';
     accent = 'rgba(88,101,242,0.65)';
   }
   const hasScore = m.status !== 'scheduled' && m.score_a != null && m.score_b != null;
   let scoreText;
   if (hasScore) scoreText = `${m.score_a} : ${m.score_b}`;
-  else if (twoTeams) scoreText = lobby ? '—' : 'VS';
+  else if (twoTeams) scoreText = lobby || m.status !== 'scheduled' ? '—' : 'VS';
   else scoreText = timeText || 'EVENT';
   return renderMatchCard({
+    game: m.game,
+    status: m.status,
     tournament: m.tournament_name || (tag ? `${tag} match` : 'Match'),
-    subtitle: m.tournament_name && tag ? tag : null,
+    subtitle: gameName(m.game) || tag || null,
+    scoreLabel: !hasScore && m.status === 'running' ? 'Score pending' : !hasScore && m.status === 'finished' ? 'Result unavailable' : null,
+    detailText: m.scheduled_at ? formatRiyadhDateTime(m.scheduled_at).text : null,
     timeText,
     scoreText,
     teamA: displayTeamName(m.team_a),

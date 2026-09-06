@@ -52,7 +52,7 @@ export default async function PublicMcpDocsPage() {
   return (
     <main
       dir={dir}
-      className="mx-auto flex w-full max-w-5xl flex-1 flex-col gap-7 px-4 py-8 sm:px-8 sm:py-10"
+      className="ec-public-page mx-auto flex w-full max-w-5xl flex-1 flex-col gap-7 px-4 py-8 sm:px-8 sm:py-10"
     >
       <section className="flex flex-col gap-5 md:flex-row md:items-start md:justify-between">
         <div className="flex max-w-3xl flex-col items-start gap-4">

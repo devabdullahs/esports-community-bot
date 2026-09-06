@@ -39,3 +39,11 @@ tmp-*.mjs
 # Playwright failure artifacts
 apps/web/test-results/
 apps/web/playwright-report/
+
+# Local redesign captures; retain final machine-readable audit summaries.
+plans/redesign-evidence/*
+!plans/redesign-evidence/accessibility.json
+!plans/redesign-evidence/interface-check.json
+!plans/redesign-evidence/sweep/
+plans/redesign-evidence/sweep/*
+!plans/redesign-evidence/sweep/report.json

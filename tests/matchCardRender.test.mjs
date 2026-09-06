@@ -90,3 +90,14 @@ test('match card renderers return PNG buffers', async () => {
     }),
   );
 });
+
+test('game icons load locally, share aliases, and safely omit unsupported games', async () => {
+  const { loadGameCardIcon } = await import('../src/lib/gameCardIcon.js');
+  const icon = await loadGameCardIcon('leagueoflegends');
+  assert.ok(icon?.width > 0);
+  assert.equal(await loadGameCardIcon('lol'), icon);
+  assert.equal(await loadGameCardIcon('../unknown'), null);
+  const png = await renderCardForMatch(matchRow({ game: 'leagueoflegends', status: 'running' }));
+  assert.equal(png.readUInt32BE(16), 1200);
+  assert.equal(png.readUInt32BE(20), 520);
+});

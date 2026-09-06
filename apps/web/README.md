@@ -149,17 +149,11 @@ The site uses only Thmanyah Sans:
 - Medium
 - Bold
 
-The font base URL is controlled by:
-
-```env
-THMANYAH_FONT_BASE_URL=https://assets.esportscommunity.net
-```
-
-The app expects the font files under:
-
-```text
-thmanyahsans/woff2/
-```
+The public website serves the existing Regular, Medium, and Bold WOFF2 assets from
+`public/fonts/thmanyahsans/`. These are the same files previously served by
+`assets.esportscommunity.net`, bundled locally to avoid cross-origin font failures.
+`font-display: swap` keeps text visible while they load. `THMANYAH_FONT_BASE_URL`
+remains available to bot-side renderers; it does not configure the website CSS.
 
 Do not use the Thmanyah display or serif font families in this dashboard.
 

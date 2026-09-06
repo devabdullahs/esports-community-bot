@@ -1,70 +1,66 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import {
-  ArrowLeftIcon,
-  ArrowRightIcon,
-  Gamepad2Icon,
-  NewspaperIcon,
-  RadioIcon,
-  ShieldCheckIcon,
-  TrophyIcon,
-} from "lucide-react";
+import { RadioIcon, ShieldCheckIcon } from "lucide-react";
 import { FollowButton } from "@/components/follows/follow-button";
 import { PageBreadcrumb } from "@/components/page-breadcrumb";
-import { Badge } from "@/components/ui/badge";
+import { GameLogoMark } from "@/components/game-logo-mark";
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
-import { DateTime } from "@/components/date-time";
-import { Separator } from "@/components/ui/separator";
+import { SectionHeading } from "@/components/esports/section-heading";
+import { MatchRow, ScheduleGroup } from "@/components/esports/match-row";
+import { NewsStory } from "@/components/esports/news-story";
+import { OfficialTournamentAttribution } from "@/components/tournaments/official-tournament-attribution";
 import { localizeText } from "@/lib/community-content";
 import { getViewerFollowState } from "@/lib/follows";
 import { getGameCached } from "@/lib/games";
-import {
-  copy,
-  formatNumber,
-  localizedPath,
-} from "@/lib/i18n";
+import { copy, formatNumber, localizedPath } from "@/lib/i18n";
 import { listPublishedNewsPostsCached } from "@/lib/news";
-import { newsPublicPath } from "@/lib/news-url";
 import { getRequestLocale } from "@/lib/request-locale";
-import { safeUrlOrUndefined } from "@/lib/safe-url";
 import { canManageGame, getAdminAccess } from "@/lib/admin";
 import { buildPageMetadata } from "@/lib/metadata";
-import { listTournamentSummariesCached } from "@/lib/tournaments";
+import {
+  getTournamentMatchesCached,
+  listTournamentSummariesCached,
+} from "@/lib/tournaments";
+import { buildLiveMatchCenter } from "@/lib/live-match-center";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-function gameDescription(title: string, description: string, locale: "en" | "ar") {
-  if (description.trim()) return description.trim();
-  return locale === "ar"
-    ? `تابع بطولات ${title} والمباريات المباشرة والقادمة والنتائج وأخبار المجتمع.`
-    : `Follow ${title} esports tournaments, live and upcoming matches, results, and community news.`;
+function gameDescription(
+  title: string,
+  description: string,
+  locale: "en" | "ar",
+) {
+  return (
+    description.trim() ||
+    (locale === "ar"
+      ? `تابع بطولات ${title} والمباريات المباشرة والقادمة والنتائج وأخبار المجتمع.`
+      : `Follow ${title} esports tournaments, live and upcoming matches, results, and community news.`)
+  );
 }
-
 export async function generateMetadata({
   params,
 }: {
   params: Promise<{ slug: string }>;
 }): Promise<Metadata> {
   const { slug } = await params;
-  const [game, locale] = await Promise.all([getGameCached(slug), getRequestLocale()]);
+  const [game, locale] = await Promise.all([
+    getGameCached(slug),
+    getRequestLocale(),
+  ]);
   if (!game) return {};
   const title = localizeText(game.title, locale);
   return buildPageMetadata({
     title,
-    description: gameDescription(title, localizeText(game.description, locale), locale),
+    description: gameDescription(
+      title,
+      localizeText(game.description, locale),
+      locale,
+    ),
     path: localizedPath(`/games/${slug}`, locale),
   });
 }
-
 export default async function GamePage({
   params,
 }: {
@@ -73,224 +69,213 @@ export default async function GamePage({
   const { slug } = await params;
   const game = await getGameCached(slug);
   if (!game) notFound();
-
   const locale = await getRequestLocale();
-  const text = copy[locale].game;
-  const common = copy[locale].common;
-  const access = await getAdminAccess();
-  const [posts, allTournaments] = await Promise.all([
+  const text = copy[locale];
+  const ar = locale === "ar";
+  const [posts, allTournaments, access, follow] = await Promise.all([
     listPublishedNewsPostsCached(slug, locale),
     listTournamentSummariesCached(),
+    getAdminAccess(),
+    getViewerFollowState("game", slug),
   ]);
-  const followState = await getViewerFollowState("game", slug);
   const title = localizeText(game.title, locale);
-  const description = gameDescription(title, localizeText(game.description, locale), locale);
   const tournaments = allTournaments
-    .filter((tournament) => tournament.game === slug)
     .filter(
-      (tournament) =>
-        tournament.hasStandings ||
-        tournament.matchCounts.running > 0 ||
-        tournament.matchCounts.scheduled > 0 ||
-        tournament.matchCounts.finished > 0,
+      (event) =>
+        event.game === slug &&
+        (event.hasStandings ||
+          event.matchCounts.running ||
+          event.matchCounts.scheduled ||
+          event.matchCounts.finished),
     )
-    .sort((a, b) => {
-      const aLive = a.matchCounts.running > 0 ? 1 : 0;
-      const bLive = b.matchCounts.running > 0 ? 1 : 0;
-      if (aLive !== bLive) return bLive - aLive;
-      return (a.featuredMatch?.scheduled_at ?? Number.MAX_SAFE_INTEGER) -
-        (b.featuredMatch?.scheduled_at ?? Number.MAX_SAFE_INTEGER);
-    })
+    .sort(
+      (a, b) =>
+        b.matchCounts.running - a.matchCounts.running ||
+        (a.featuredMatch?.scheduled_at ?? Infinity) -
+          (b.featuredMatch?.scheduled_at ?? Infinity),
+    )
     .slice(0, 6);
-  const tournamentCopy = locale === "ar"
-    ? {
-        title: "البطولات المتتبعة",
-        viewAll: "عرض كل البطولات",
-        live: "مباشر",
-        upcoming: "قادمة",
-        results: "نتائج",
-        standings: "ترتيب",
-      }
-    : {
-        title: "Tracked tournaments",
-        viewAll: "View all tournaments",
-        live: "Live",
-        upcoming: "Upcoming",
-        results: "Results",
-        standings: "Standings",
-      };
-
+  const matches = buildLiveMatchCenter(
+    await Promise.all(
+      tournaments.map((event) =>
+        getTournamentMatchesCached(event.id, { limit: 5 }),
+      ),
+    ),
+  );
   return (
-    <main
-      className="mx-auto flex w-full max-w-6xl flex-1 flex-col gap-8 px-4 py-8 sm:px-8 sm:py-10"
-    >
+    <main className="ec-container ec-public-page flex flex-col gap-6 py-7">
       <PageBreadcrumb
         items={[
-          { label: common.home, href: localizedPath("/", locale) },
-          { label: common.games, href: localizedPath("/games", locale) },
+          { label: text.common.home, href: localizedPath("/", locale) },
+          { label: text.common.games, href: localizedPath("/games", locale) },
           { label: title },
         ]}
       />
-      <Button
-        render={<Link href={localizedPath("/games", locale)} />}
-        nativeButton={false}
-        variant="ghost"
-        className="w-fit"
-      >
-        <ArrowLeftIcon data-icon="inline-start" className="rtl:rotate-180" />
-        {text.back}
-      </Button>
-
-      <section className="grid gap-8 lg:grid-cols-[1fr_22rem] lg:items-start">
-        <div className="flex flex-col items-start gap-4">
-          <Badge variant="outline">
-            <Gamepad2Icon data-icon="inline-start" />
-            {localizeText(game.status, locale)}
-          </Badge>
-          <div className="flex max-w-3xl flex-col gap-3">
-            <h1 className="text-3xl font-semibold leading-tight sm:text-4xl">
-              {title}
-            </h1>
-            <p className="text-sm leading-6 text-muted-foreground sm:text-base">
-              {description}
-            </p>
-          </div>
-          <FollowButton
-            entityType="game"
-            entityKey={slug}
-            entityLabel={title}
-            entityRef={`/games/${slug}`}
-            signedIn={followState.signedIn}
-            initialFollowing={followState.following}
-            locale={locale}
-            callbackPath={localizedPath(`/games/${slug}`, locale)}
-          />
-          {canManageGame(access, slug) ? (
-            <Button
-              render={<Link href={localizedPath("/admin", locale)} />}
-              nativeButton={false}
-              variant="outline"
-            >
-              <ShieldCheckIcon data-icon="inline-start" />
-              {text.admin}
-              <ArrowRightIcon data-icon="inline-end" className="rtl:rotate-180" />
-            </Button>
-          ) : null}
+      <header className="ec-page-heading ec-game-heading flex flex-wrap items-center gap-5">
+        <GameLogoMark slug={slug} className="size-16" iconClassName="size-12" />
+        <div className="min-w-0 flex-1">
+          <p className="ec-kicker">{ar ? "ساحة المنافسة" : "GAME HUB"}</p>
+          <h1>{title}</h1>
+          <p>
+            {gameDescription(
+              title,
+              localizeText(game.description, locale),
+              locale,
+            )}
+          </p>
         </div>
-
-        <Card size="sm">
-          <CardHeader>
-            <CardTitle>{text.owner}</CardTitle>
-            <CardDescription>{localizeText(game.owner, locale)}</CardDescription>
-          </CardHeader>
-          <CardContent className="flex flex-col">
-            {game.focus.map((item, index) => (
-              <div key={localizeText(item, locale)}>
-                {index > 0 ? <Separator /> : null}
-                <p className="py-3 text-sm">{localizeText(item, locale)}</p>
+        <FollowButton
+          entityType="game"
+          entityKey={slug}
+          entityLabel={title}
+          entityRef={`/games/${slug}`}
+          signedIn={follow.signedIn}
+          initialFollowing={follow.following}
+          locale={locale}
+          callbackPath={localizedPath(`/games/${slug}`, locale)}
+        />
+      </header>
+      <nav
+        className="ec-context-nav"
+        aria-label={ar ? "أقسام اللعبة" : "Game sections"}
+      >
+        <a href="#game-matches">{ar ? "المباريات" : "Matches"}</a>
+        <a href="#game-results">{ar ? "النتائج" : "Results"}</a>
+        <a href="#game-tournaments">{text.common.tournaments}</a>
+        <a href="#game-news">{text.common.news}</a>
+      </nav>
+      <div className="ec-desk-layout">
+        <div className="ec-desk-main">
+          <section id="game-matches">
+            <SectionHeading title={text.tournaments.liveNow} />
+            {matches.running.length ? (
+              matches.running.map((item) => (
+                <MatchRow key={item.id} item={item} locale={locale} />
+              ))
+            ) : (
+              <div className="ec-empty">
+                <p>{text.tournaments.noLive}</p>
               </div>
-            ))}
-          </CardContent>
-        </Card>
-      </section>
-
-      {tournaments.length ? (
-        <section className="flex flex-col gap-4" aria-labelledby="tracked-tournaments-heading">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <h2 id="tracked-tournaments-heading" className="text-xl font-semibold">
-              {tournamentCopy.title}
+            )}
+            <h2 className="mb-3 mt-6 text-lg font-semibold">
+              {text.tournaments.upcoming}
             </h2>
-            <Button
-              render={<Link href={localizedPath("/tournaments", locale)} />}
-              nativeButton={false}
-              variant="ghost"
-              size="sm"
-            >
-              {tournamentCopy.viewAll}
-              <ArrowRightIcon data-icon="inline-end" className="rtl:rotate-180" />
-            </Button>
-          </div>
-          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-            {tournaments.map((tournament) => (
-              <Link key={tournament.id} href={localizedPath(`/tournaments/${tournament.id}`, locale)}>
-                <Card size="sm" className="h-full transition-colors hover:border-primary/40">
-                  <CardHeader className="gap-3">
-                    <div className="flex items-center justify-between gap-2">
-                      <Badge variant={tournament.matchCounts.running > 0 ? "destructive" : "secondary"}>
-                        {tournament.matchCounts.running > 0 ? (
-                          <RadioIcon data-icon="inline-start" />
-                        ) : (
-                          <TrophyIcon data-icon="inline-start" />
-                        )}
-                        {tournament.matchCounts.running > 0
-                          ? tournamentCopy.live
-                          : tournament.matchCounts.scheduled > 0
-                            ? tournamentCopy.upcoming
-                            : tournament.hasStandings && tournament.matchCounts.finished === 0
-                              ? tournamentCopy.standings
-                              : tournamentCopy.results}
-                      </Badge>
-                    </div>
-                    <CardTitle className="line-clamp-2" dir="auto">
-                      {tournament.name || `#${tournament.id}`}
-                    </CardTitle>
-                    <CardDescription>
-                      {formatNumber(tournament.matchCounts.running, locale)} {tournamentCopy.live} ·{" "}
-                      {formatNumber(tournament.matchCounts.scheduled, locale)} {tournamentCopy.upcoming} ·{" "}
-                      {formatNumber(tournament.matchCounts.finished, locale)} {tournamentCopy.results}
-                      {tournament.hasStandings ? ` · ${tournamentCopy.standings}` : ""}
-                    </CardDescription>
-                  </CardHeader>
-                </Card>
-              </Link>
-            ))}
-          </div>
-        </section>
-      ) : null}
-
-      <section className="flex flex-col gap-4">
-        <h2 className="text-xl font-semibold">{text.postsTitle}</h2>
-        {posts.length ? (
-          <div className="grid gap-4 md:grid-cols-2">
-            {posts.map((post) => {
-              const cover = safeUrlOrUndefined(post.coverImageUrl);
-
-              return (
-                <Link
+            {matches.upcoming.length ? (
+              <ScheduleGroup
+                items={matches.upcoming.slice(0, 8)}
+                locale={locale}
+              />
+            ) : (
+              <div className="ec-empty">
+                <p>{text.tournaments.noUpcoming}</p>
+              </div>
+            )}
+          </section>
+          <section id="game-results">
+            <SectionHeading title={ar ? "آخر النتائج" : "Latest results"} />
+            {matches.recentFinished.length ? (
+              matches.recentFinished.map((item) => (
+                <MatchRow key={item.id} item={item} locale={locale} />
+              ))
+            ) : (
+              <div className="ec-empty">
+                <p>
+                  {ar ? "لم تُسجّل نتائج بعد." : "No results recorded yet."}
+                </p>
+              </div>
+            )}
+          </section>
+          <section id="game-news">
+            <SectionHeading title={text.game.postsTitle} />
+            {posts.length ? (
+              posts.map((post, index) => (
+                <NewsStory
                   key={post.id}
-                  href={newsPublicPath(post, locale)}
-                  className="group block"
+                  post={post}
+                  locale={locale}
+                  label={title}
+                  featured={index === 0}
+                />
+              ))
+            ) : (
+              <div className="ec-empty">
+                <p>{text.game.postsEmpty}</p>
+              </div>
+            )}
+          </section>
+        </div>
+        <aside className="ec-desk-aside">
+          <section id="game-tournaments">
+            <SectionHeading
+              title={text.common.tournaments}
+              href={localizedPath(`/tournaments?game=${slug}`, locale)}
+              action={ar ? "عرض الكل" : "View all"}
+            />
+            {tournaments.length ? (
+              tournaments.map((event) => (
+                <Link
+                  key={event.id}
+                  href={localizedPath(`/tournaments/${event.id}`, locale)}
+                  className="ec-event-row"
                 >
-                  <Card className="h-full overflow-hidden ring-1 ring-transparent transition-all group-hover:-translate-y-0.5 group-hover:border-primary/30 group-hover:shadow-md group-hover:ring-primary/40">
-                    {cover ? (
-                      // eslint-disable-next-line @next/next/no-img-element -- external/admin URL, validated http(s)
-                      <img
-                        src={cover}
-                        alt=""
-                        className="aspect-video w-full object-cover"
-                      />
+                  <GameLogoMark
+                    slug={slug}
+                    className="size-8"
+                    iconClassName="size-6"
+                  />
+                  <div>
+                    {event.matchCounts.running ? (
+                      <span className="ec-event-state">
+                        <RadioIcon className="size-3" />
+                        {text.tournaments.liveNow}
+                      </span>
                     ) : null}
-                    <CardHeader>
-                      <Badge variant="secondary" className="mb-2 w-fit">
-                        <NewspaperIcon data-icon="inline-start" />
-                        {post.publishedAt ? <DateTime value={post.publishedAt} locale={locale} /> : text.published}
-                      </Badge>
-                      <CardTitle dir="auto">{post.title}</CardTitle>
-                      {post.summary ? (
-                        <CardDescription dir="auto" className="article-copy news-card-summary">
-                          {post.summary}
-                        </CardDescription>
-                      ) : null}
-                    </CardHeader>
-                  </Card>
+                    <h3 dir="auto">{event.name}</h3>
+                    <p>
+                      {formatNumber(event.matchCounts.scheduled, locale)}{" "}
+                      {text.tournaments.upcoming} ·{" "}
+                      {formatNumber(event.matchCounts.finished, locale)}{" "}
+                      {text.tournaments.finished}
+                      {event.hasStandings
+                        ? ` · ${text.tournaments.standings}`
+                        : ""}
+                    </p>
+                  </div>
                 </Link>
-              );
-            })}
-          </div>
-        ) : (
-          <p className="text-sm text-muted-foreground">{text.postsEmpty}</p>
-        )}
-      </section>
+              ))
+            ) : (
+              <div className="ec-empty">
+                <p>{text.tournaments.empty}</p>
+              </div>
+            )}
+          </section>
+          <section>
+            <SectionHeading title={ar ? "حول التغطية" : "About the coverage"} />
+            <p className="mt-4 text-sm text-muted-foreground">
+              {localizeText(game.owner, locale)}
+            </p>
+            <ul className="mt-3 flex flex-col gap-2 text-sm">
+              {game.focus.map((item) => (
+                <li key={localizeText(item, locale)}>
+                  {localizeText(item, locale)}
+                </li>
+              ))}
+            </ul>
+            {canManageGame(access, slug) ? (
+              <Button
+                render={<Link href={localizedPath("/admin", locale)} />}
+                nativeButton={false}
+                variant="outline"
+                className="mt-4"
+              >
+                <ShieldCheckIcon data-icon="inline-start" />
+                {text.game.admin}
+              </Button>
+            ) : null}
+          </section>
+        </aside>
+      </div>
+      <OfficialTournamentAttribution value={matches.attribution} />
     </main>
   );
 }

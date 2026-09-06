@@ -3,10 +3,10 @@ import { ExternalLinkIcon, RadioIcon, TvIcon, UsersIcon } from "lucide-react";
 import { MatchReminderButton } from "@/components/tournaments/match-reminder-button";
 import { GameIcon, SourceIcon } from "@/components/tournaments/competition-icons";
 import { PlatformIcon } from "@/components/platform-icon";
+import { ProfileAvatar } from "@/components/profiles/profile-avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import type { MatchPageModel } from "@/lib/match-details";
-import { displayImageUrl } from "@/lib/logo-url";
 import { copy, formatNumber, formatUnixSeconds, localizedPath, type Locale } from "@/lib/i18n";
 import {
   matchOutcomeLabel,
@@ -27,17 +27,7 @@ function platformLabel(platform: string) {
 }
 
 function TeamLogo({ name, url }: { name: string; url: string | null }) {
-  if (!url) {
-    return (
-      <span className="flex size-16 shrink-0 items-center justify-center rounded-xl bg-muted text-sm font-semibold text-muted-foreground">
-        {name.slice(0, 2).toUpperCase()}
-      </span>
-    );
-  }
-  return (
-    // eslint-disable-next-line @next/next/no-img-element
-    <img src={displayImageUrl(url)} alt="" className="size-16 shrink-0 rounded-xl object-contain sm:size-20" />
-  );
+  return <ProfileAvatar src={url} name={name} shape="rounded" fit="contain" className="size-16 shrink-0 sm:size-20" />;
 }
 
 export function MatchHeader({
@@ -56,9 +46,6 @@ export function MatchHeader({
   const text = copy[locale].tournaments;
   const teamA = model.teamA || text.tbd;
   const teamB = model.teamB || text.tbd;
-  const score = model.scoreA != null && model.scoreB != null
-    ? `${formatNumber(model.scoreA, locale)} - ${formatNumber(model.scoreB, locale)}`
-    : text.vs;
   const providerLabel = sourceLabel(model.tournament.source || model.source);
   const showDetailedOutcome = model.status === "finished" && shouldShowOutcomeLabel({
     status: model.status,
@@ -79,8 +66,7 @@ export function MatchHeader({
     result_reason: model.resultReason,
   }, locale);
   return (
-    <header className="relative overflow-hidden rounded-2xl border bg-card/40 p-5 sm:p-8">
-      <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-primary/60 to-transparent" />
+    <header className="ec-match-header border-t-4 border-primary bg-surface px-4 py-6 sm:p-8">
       <div className="flex flex-col items-center gap-5 text-center">
         <div className="flex w-full flex-wrap items-center justify-center gap-x-4 gap-y-2 text-sm text-muted-foreground">
           {model.tournament.name ? (
@@ -119,13 +105,14 @@ export function MatchHeader({
             {matchStatusLabel(model.status, locale)}
           </Badge>
         </div>
+        <h1 className="sr-only">{teamA} {text.vs} {teamB}</h1>
         <div className="grid w-full grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-3 sm:gap-6">
           <div className="flex min-w-0 flex-col items-center gap-2" dir="ltr">
             <TeamLogo name={teamA} url={model.logoA} />
             <span className="max-w-full truncate text-sm font-semibold sm:text-base" title={teamA}>{teamA}</span>
           </div>
-          <span className="text-3xl font-semibold tabular-nums sm:text-5xl" dir="ltr">
-            {score}
+          <span className="inline-flex items-center gap-3 text-3xl font-semibold tabular-nums sm:gap-5 sm:text-5xl">
+            {model.scoreA != null && model.scoreB != null ? <><span>{formatNumber(model.scoreA, locale)}</span><span className="text-muted-foreground">–</span><span>{formatNumber(model.scoreB, locale)}</span></> : text.vs}
           </span>
           <div className="flex min-w-0 flex-col items-center gap-2" dir="ltr">
             <TeamLogo name={teamB} url={model.logoB} />
@@ -136,7 +123,7 @@ export function MatchHeader({
           <p className="text-sm font-medium text-muted-foreground" dir="auto">{outcome}</p>
         ) : null}
         {model.scheduledAt ? (
-          <time className="text-sm text-muted-foreground" dir="ltr">
+          <time dateTime={new Date(model.scheduledAt * 1000).toISOString()} className="text-sm text-muted-foreground" dir="ltr">
             {formatUnixSeconds(model.scheduledAt, locale)}
           </time>
         ) : null}

@@ -73,29 +73,35 @@ function cleanAchievements(value: unknown): LiquipediaAchievement[] {
   });
 }
 
+function profileCollections(facts: Record<string, unknown>, raw: string | null) {
+  const achievements = cleanAchievements(facts.achievements);
+  const history = cleanHistory(facts.history);
+  const hasAchievements = Array.isArray(facts.achievements);
+  const hasHistory = Array.isArray(facts.history);
+  // New snapshots persist empty arrays too. Only legacy snapshots need HTML extraction.
+  const rawDetails = raw && (!hasAchievements || !hasHistory)
+    ? parsePlayerInfoboxDetails(cheerio.load(raw))
+    : { achievements: [], history: [] };
+  return {
+    achievements: hasAchievements ? achievements : rawDetails.achievements,
+    history: hasHistory ? history : rawDetails.history,
+  };
+}
+
 export function liquipediaPlayerDetails(player: PlayerProfile): LiquipediaPlayerDetails {
   const facts = parseFacts(player.liquipedia_facts);
-  const rawDetails = player.liquipedia_raw
-    ? parsePlayerInfoboxDetails(cheerio.load(player.liquipedia_raw))
-    : { achievements: [], history: [] };
 
   return {
     romanizedName: stringValue(facts.romanized_name),
     status: stringValue(facts.status),
     team: stringValue(facts.team) ?? stringValue(facts.current_team),
     totalWinnings: moneyValue(facts.approx_total_winnings) ?? moneyValue(facts.total_winnings) ?? moneyValue(facts.earnings),
-    achievements: cleanAchievements(facts.achievements).length
-      ? cleanAchievements(facts.achievements)
-      : rawDetails.achievements,
-    history: cleanHistory(facts.history).length ? cleanHistory(facts.history) : rawDetails.history,
+    ...profileCollections(facts, player.liquipedia_raw),
   };
 }
 
 export function liquipediaTeamDetails(team: TeamProfile): LiquipediaTeamDetails {
   const facts = parseFacts(team.liquipedia_facts);
-  const rawDetails = team.liquipedia_raw
-    ? parsePlayerInfoboxDetails(cheerio.load(team.liquipedia_raw))
-    : { achievements: [], history: [] };
 
   return {
     location: stringValue(facts.location) ?? stringValue(facts.country),
@@ -103,9 +109,6 @@ export function liquipediaTeamDetails(team: TeamProfile): LiquipediaTeamDetails 
     coach: stringValue(facts.coach) ?? stringValue(facts.head_coach),
     manager: stringValue(facts.manager),
     totalWinnings: moneyValue(facts.approx_total_winnings) ?? moneyValue(facts.total_winnings) ?? moneyValue(facts.earnings),
-    achievements: cleanAchievements(facts.achievements).length
-      ? cleanAchievements(facts.achievements)
-      : rawDetails.achievements,
-    history: cleanHistory(facts.history).length ? cleanHistory(facts.history) : rawDetails.history,
+    ...profileCollections(facts, team.liquipedia_raw),
   };
 }

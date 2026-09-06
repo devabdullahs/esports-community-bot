@@ -25,7 +25,7 @@ export default function RouteError({
   }, [error]);
   const text = copy[locale].common;
   return (
-    <main className="mx-auto flex w-full max-w-md flex-1 flex-col items-center justify-center gap-4 px-5 py-20 text-center">
+    <main className="ec-public-page mx-auto flex w-full max-w-md flex-1 flex-col items-center justify-center gap-4 px-5 py-20 text-center">
       <h1 className="text-2xl font-semibold">{text.errorTitle}</h1>
       <p className="text-sm leading-6 text-muted-foreground">{text.errorBody}</p>
       <Button onClick={() => reset()} className="mt-2">

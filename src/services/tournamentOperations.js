@@ -149,7 +149,10 @@ export async function validateAndActivateTournament(request, effects = {}) {
     throw error;
   }
 
-  const tournament = await addTournament(resolved);
+  const preserveExisting = request.requestedActorType === 'system' && String(request.idempotencyKey || '').startsWith('discovery:');
+  const tournament = await addTournament(resolved, { preserveExisting });
+  // An administrator may have added/archived the event while validation was queued.
+  if (!tournament) return { code: 'already_tracked', count: 0 };
   const generation = Number(tournament.lifecycle_generation);
   await recordTournamentSyncSuccess({
     tournamentId: tournament.id,

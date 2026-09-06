@@ -16,6 +16,7 @@ export async function SiteFooter({ analyticsConsentEnabled = false }: { analytic
 
   const explore = [
     { href: "/live", label: text.common.live },
+    { href: "/tournaments", label: text.common.tournaments },
     { href: "/games", label: text.common.games },
     { href: "/news", label: text.common.news },
     { href: "/media", label: text.common.media },
@@ -30,11 +31,11 @@ export async function SiteFooter({ analyticsConsentEnabled = false }: { analytic
   ];
 
   return (
-    <footer className="border-t bg-muted/20">
+    <footer className="ec-site-footer border-t bg-muted/20">
       <div className="mx-auto flex w-full max-w-6xl flex-col gap-8 px-4 py-10 sm:px-8">
-        <div className="grid gap-8 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="grid grid-cols-2 gap-8 lg:grid-cols-4">
           {/* Brand */}
-          <div className="flex flex-col gap-3 sm:col-span-2 lg:col-span-1">
+          <div className="flex flex-col gap-3 col-span-2 lg:col-span-1">
             <div className="flex items-center gap-2.5">
               <span className="flex size-8 shrink-0 items-center justify-center rounded-md border bg-background text-foreground">
                 <TrophyIcon className="size-4" />

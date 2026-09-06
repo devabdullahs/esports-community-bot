@@ -28,7 +28,8 @@ export const MATCH_STATUS = {
 };
 
 export function matchScoreText(m) {
-  if (m.status === 'scheduled' || m.score_a == null || m.score_b == null) return 'VS';
+  if (m.status === 'scheduled') return 'VS';
+  if (m.score_a == null || m.score_b == null) return m.status === 'running' ? 'Awaiting update' : 'Result unavailable';
   return `${m.score_a} - ${m.score_b}`;
 }
 
@@ -92,7 +93,7 @@ function nextMatchImageText(m, showGameTag = false) {
 export function buildMatchEmbed(m, imageName, { nextMatch = null, showNextGameTag = false } = {}) {
   const meta = MATCH_STATUS[m.status] ?? MATCH_STATUS.scheduled;
   const tag = gameTag(m.game);
-  const url = tournamentUrl(m);
+  const url = matchUrl(m) || tournamentUrl(m);
   const lines = [`Status: **${meta.label}**`, `Score: **${matchScoreText(m)}**`];
   const when = timeLine(m);
   if (when) lines.push(when);

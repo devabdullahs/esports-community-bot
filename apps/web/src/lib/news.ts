@@ -288,15 +288,32 @@ export const listHomepageNewsPostsCached = unstable_cache(
 );
 
 /**
- * Visitor-selected news pages are NOT persistently cached: `page` is unbounded, so each one
- * would mint its own entry for a nearly identical payload. The underlying query is already
- * bounded by limit/offset, so this reads through.
+ * The newsroom front page has four finite keys. Visitor-selected pages read through below.
  */
-export function listLatestPublishedNewsPosts_uncachedPage(
+const cachedNewsroomFrontPage = unstable_cache(
+  async (locale: Locale, ewcOnly: boolean) =>
+    listLatestPublishedNewsPosts(locale, ewcOnly ? 51 : 21, ewcOnly, 0),
+  ["newsroom-front-page"],
+  { tags: ["cms-news", "cms-games", "cms-media"], revalidate: 60 },
+);
+
+export function listNewsroomPosts(
   locale: Locale,
   limit: number,
   ewcOnly: boolean,
   offset: number,
+) {
+  // Four finite keys: two locales × two feeds. Visitor-chosen pages still read through.
+  if ((locale === "en" || locale === "ar") && typeof ewcOnly === "boolean" &&
+      offset === 0 && limit === (ewcOnly ? 51 : 21)) {
+    return cachedNewsroomFrontPage(locale, ewcOnly);
+  }
+  return listLatestPublishedNewsPosts(locale, limit, ewcOnly, offset);
+}
+
+// Arbitrary visitor pagination must never expand the persistent cache namespace.
+export function listLatestPublishedNewsPosts_uncachedPage(
+  locale: Locale, limit: number, ewcOnly: boolean, offset: number,
 ) {
   return listLatestPublishedNewsPosts(locale, limit, ewcOnly, offset);
 }

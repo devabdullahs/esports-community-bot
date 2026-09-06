@@ -177,7 +177,7 @@ describe("BracketView", () => {
     const regularHtml = renderMatchList(payload([match({ id: 4, name: "Alpha vs Bravo" })]));
 
     expect(bracketHtml).toContain('data-bracket-view="true"');
-    expect(bracketHtml.indexOf('data-bracket-view="true"')).toBeLessThan(bracketHtml.indexOf("Live now"));
+    expect(bracketHtml.indexOf('data-bracket-view="true"')).toBeLessThan(bracketHtml.indexOf('id="tournament-live"'));
     expect(bracketHtml).toContain('href="/matches/1"');
     expect(bracketHtml).toContain('id="tournament-match-1"');
     expect(regularHtml).not.toContain('data-bracket-view="true"');

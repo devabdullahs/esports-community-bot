@@ -132,6 +132,7 @@ function ProfileSelector({
             className="w-full"
             placeholder={text.comparisonSearchPlaceholder}
             aria-describedby={`${id}-hint`}
+            clearLabel={locale === "ar" ? "مسح الاختيار" : "Clear selection"}
             showClear
           />
           <ComboboxContent>

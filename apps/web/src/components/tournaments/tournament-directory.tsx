@@ -4,14 +4,11 @@ import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
   ArrowRightIcon,
-  CalendarDaysIcon,
-  Gamepad2Icon,
   ListFilterIcon,
   RadioIcon,
   SearchIcon,
   TrophyIcon,
   XIcon,
-  type LucideIcon,
 } from "lucide-react";
 import {
   memo,
@@ -190,7 +187,7 @@ export function TournamentDirectory({
   ];
 
   return (
-    <div className="flex flex-col gap-7">
+    <div className="ec-tournament-directory flex flex-col gap-7">
       <CompetitionMasthead
         locale={locale}
         heading={heading}
@@ -277,8 +274,8 @@ function CompetitionMasthead({
 }) {
   const text = copy[locale].tournaments;
   return (
-    <section className="border-b pb-6">
-      <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
+    <section className="ec-page-heading border-b pb-5">
+      <div className="flex flex-col gap-4">
         <div className="flex max-w-3xl flex-col gap-3">
           <Badge variant="outline" className="w-fit">
             <TrophyIcon data-icon="inline-start" />
@@ -303,12 +300,7 @@ function CompetitionMasthead({
             </Button>
           ) : null}
         </div>
-        <div className="grid w-full grid-cols-2 gap-2 sm:grid-cols-4 lg:w-[31rem]">
-          <StatFact icon={TrophyIcon} label={text.trackedTournaments} value={stats.tournaments} locale={locale} />
-          <StatFact icon={Gamepad2Icon} label={text.trackedGames} value={stats.games} locale={locale} />
-          <StatFact icon={RadioIcon} label={text.liveTournaments} value={stats.live} locale={locale} />
-          <StatFact icon={CalendarDaysIcon} label={text.upcomingTournaments} value={stats.upcoming} locale={locale} />
-        </div>
+        <p className="text-xs text-muted-foreground">{formatNumber(stats.tournaments, locale)} {text.trackedTournaments} · {formatNumber(stats.games, locale)} {text.trackedGames}</p>
       </div>
     </section>
   );
@@ -434,6 +426,7 @@ function TournamentFilters({
 
       <div className="flex flex-wrap items-center justify-between gap-3">
         <ToggleGroup
+          role="toolbar"
           value={[filters.status]}
           onValueChange={(values) => values[0] && onNavigate({ status: values[0] as TournamentStatusFilter })}
           variant="outline"
@@ -550,11 +543,11 @@ const TournamentGrid = memo(function TournamentGrid({
     />
   ));
   return ariaLabel ? (
-    <section aria-label={ariaLabel} className="grid gap-3 lg:grid-cols-2">
+    <section aria-label={ariaLabel} className="grid gap-3">
       {panels}
     </section>
   ) : (
-    <div className="grid gap-3 lg:grid-cols-2">{panels}</div>
+    <div className="grid gap-3">{panels}</div>
   );
 });
 
@@ -571,7 +564,7 @@ const TournamentPanel = memo(function TournamentPanel({
   const status = tournamentPrimaryStatus(tournament);
   const match = tournament.featuredMatch;
   return (
-    <article className="flex min-w-0 flex-col rounded-lg border bg-card">
+    <article className="ec-event-panel min-w-0 border bg-card" data-state={status}>
       <Link
         href={localizedPath(`/tournaments/${tournament.id}`, locale)}
         className="group flex items-start justify-between gap-3 p-4 outline-none focus-visible:ring-2 focus-visible:ring-ring"
@@ -622,28 +615,6 @@ function Metric({ label, value, locale }: { label: string; value: number; locale
     <div className="border-e px-2 py-2 last:border-e-0">
       <span className="font-semibold tabular-nums text-foreground">{formatNumber(value, locale)}</span>
       <span className="ms-1.5">{label}</span>
-    </div>
-  );
-}
-
-function StatFact({
-  icon: Icon,
-  label,
-  value,
-  locale,
-}: {
-  icon: LucideIcon;
-  label: string;
-  value: number;
-  locale: Locale;
-}) {
-  return (
-    <div className="border-s-2 border-primary/45 px-3 py-1">
-      <div className="flex items-center gap-2 text-xs text-muted-foreground">
-        <Icon className="size-3.5 text-primary" />
-        <span className="truncate">{label}</span>
-      </div>
-      <div className="mt-1 text-xl font-semibold tabular-nums">{formatNumber(value, locale)}</div>
     </div>
   );
 }

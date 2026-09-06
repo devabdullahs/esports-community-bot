@@ -408,11 +408,11 @@ export function CoStreamsView({
   };
 
   return (
-    <main className="mx-auto flex w-full max-w-[120rem] flex-1 flex-col gap-6 px-4 py-8 sm:px-8 sm:py-10">
+    <main className="ec-public-page mx-auto flex w-full max-w-[120rem] flex-1 flex-col gap-6 px-4 py-8 sm:px-8 sm:py-10">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <p className="text-sm text-muted-foreground">{t.eyebrow}</p>
-          <h1 className="text-3xl font-semibold leading-tight">EWC</h1>
+          <h1 className="text-3xl font-semibold leading-tight">{locale === "ar" ? "البث المشترك" : "Co-streams"}</h1>
           <p className="mt-2 max-w-prose text-sm text-muted-foreground">{t.subtitle}</p>
         </div>
         <Badge variant={liveCount ? "default" : "secondary"} className="gap-1.5">
