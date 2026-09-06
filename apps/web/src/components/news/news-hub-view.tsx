@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { localizeText } from "@/lib/community-content";
 import { gameTitleForSlug, listGamesCached } from "@/lib/games";
 import { copy, localizedPath, type Locale } from "@/lib/i18n";
-import { listLatestPublishedNewsPosts_uncachedPage } from "@/lib/news";
+import { listNewsroomPosts } from "@/lib/news";
 
 export async function NewsHubView({
   locale,
@@ -24,7 +24,7 @@ export async function NewsHubView({
   const pageSize = ewcOnly ? 50 : 20;
   const current = Math.max(1, page);
   const [fetched, games] = await Promise.all([
-    listLatestPublishedNewsPosts_uncachedPage(
+    listNewsroomPosts(
       locale,
       pageSize + 1,
       ewcOnly,

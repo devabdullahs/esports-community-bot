@@ -1,4 +1,5 @@
 import "server-only";
+import { cache } from "react";
 
 import {
   getTeamById as _getTeamById,
@@ -62,14 +63,14 @@ const getPlayerById = _getPlayerById as (id: number) => Promise<PlayerProfile | 
 // invalidation is not available when a profile gains fresh facts/images. Keep
 // profile detail reads live; these pages are already dynamic and the DB lookups
 // are cheap compared with showing stale enrichment for an hour.
-export async function getTeamProfile(id: number) {
+export const getTeamProfile = cache(async (id: number) => {
   return getTeamById(id);
-}
+});
 
-export async function getTeamPlayers(id: number) {
+export const getTeamPlayers = cache(async (id: number) => {
   return listTeamPlayers(id);
-}
+});
 
-export async function getPlayerProfile(id: number) {
+export const getPlayerProfile = cache(async (id: number) => {
   return getPlayerById(id);
-}
+});

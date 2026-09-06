@@ -108,7 +108,6 @@ export default async function PlayerProfilePage({
   ]);
   if (!player) notFound();
 
-  const followState = await getViewerFollowState("player", String(player.id));
   const common = copy[locale].common;
   const text = copy[locale].profiles;
   const returnContext = profileReturnContextFromSearchParams(rawSearchParams, {
@@ -148,7 +147,6 @@ export default async function PlayerProfilePage({
   const nationalityFlag = flagEmoji(player.nationality);
   const secondaryName = realName(player);
   const statusOrRole = liquipedia.status ?? player.role;
-  player.role = statusOrRole;
   const sourceLabel = player.liquipedia_parsed_at ? text.profileSourceMixed : text.pandascoreSource;
   const infoRows: { label: string; value: string }[] = [
     { label: text.romanizedName, value: liquipedia.romanizedName },
@@ -159,11 +157,14 @@ export default async function PlayerProfilePage({
   const hasLiquipediaDetails = Boolean(
     infoRows.length || liquipedia.achievements.length || liquipedia.history.length,
   );
-  const trackedMatches = await getProfileMatchesForTeamNamesCached({
-    game: player.game,
-    names: [teamName, player.current_team_name, liquipedia.team],
-  });
-  const mvpWin = await getPlayerMvpWin(player.id);
+  const [followState, trackedMatches, mvpWin] = await Promise.all([
+    getViewerFollowState("player", String(player.id)),
+    getProfileMatchesForTeamNamesCached({
+      game: player.game,
+      names: [teamName, player.current_team_name, liquipedia.team],
+    }),
+    getPlayerMvpWin(player.id),
+  ]);
 
   return (
     <main className="ec-public-page mx-auto flex w-full max-w-5xl flex-1 flex-col gap-6 px-4 py-8 sm:px-8 sm:py-10">
@@ -213,10 +214,10 @@ export default async function PlayerProfilePage({
               <div className="flex flex-wrap items-center gap-1.5 text-sm text-muted-foreground">
                 <GameIcon slug={player.game ?? "other"} />
                 <span className="capitalize" dir="auto">{gameTitle || "—"}</span>
-                {player.role ? (
+                {statusOrRole ? (
                   <>
                     <span aria-hidden>·</span>
-                    <span className="uppercase tracking-wide">{player.role}</span>
+                    <span className="uppercase tracking-wide">{statusOrRole}</span>
                   </>
                 ) : null}
               </div>
@@ -251,7 +252,7 @@ export default async function PlayerProfilePage({
             </Stat>
             <Stat label={liquipedia.status ? text.status : text.role}>
               <ShieldIcon className="size-3.5 text-primary" />
-              <span className="truncate uppercase">{player.role || "—"}</span>
+              <span className="truncate uppercase">{statusOrRole || "—"}</span>
             </Stat>
             <Stat label={text.nationality}>
               {nationalityFlag ? <span aria-hidden>{nationalityFlag}</span> : <MapPinIcon className="size-3.5" />}
