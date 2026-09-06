@@ -1,6 +1,7 @@
 "use client";
 
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
+import { Input } from "@/components/ui/input";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
@@ -85,9 +86,12 @@ export function AdminDashboardShell({
   displayName: string | null;
   roleLabel: string;
 }) {
+  const [navQuery, setNavQuery] = useState("");
   const pathname = usePathname();
   const common = copy[locale].common;
-  const sections = adminNavSections(locale, isSuper, canManageGamePosts, canManageMediaPosts);
+  const allSections = adminNavSections(locale, isSuper, canManageGamePosts, canManageMediaPosts);
+  const sections = allSections.map(section => ({ ...section, items: section.items.filter(item => item.label.toLocaleLowerCase().includes(navQuery.trim().toLocaleLowerCase())) })).filter(section => section.items.length);
+  const currentPage = allSections.flatMap(section => section.items).find(item => isActiveAdminPath(stripLocalePrefix(pathname), item));
   const side = locale === "ar" ? "right" : "left";
 
   return (
@@ -96,7 +100,7 @@ export function AdminDashboardShell({
         <Sidebar
           side={side}
           collapsible="icon"
-          style={{ top: "4rem", height: "calc(100svh - 4rem)" }}
+          style={{ top: "var(--site-header-height, 120px)", height: "calc(100svh - var(--site-header-height, 120px))" }}
         >
           <SidebarHeader>
             <div className="flex w-full items-center gap-2 px-1 py-1.5">
@@ -109,8 +113,10 @@ export function AdminDashboardShell({
               </span>
               <SidebarTrigger aria-label={common.menu} className="ms-auto md:hidden" />
             </div>
+            <Input aria-label={locale === "ar" ? "البحث في أدوات الإدارة" : "Find an admin tool"} placeholder={locale === "ar" ? "البحث في الأدوات…" : "Find a tool…"} value={navQuery} onChange={event => setNavQuery(event.target.value)} className="group-data-[collapsible=icon]:hidden" />
           </SidebarHeader>
           <SidebarContent>
+            {!sections.length ? <p className="px-4 py-5 text-sm text-muted-foreground">{locale === "ar" ? "لا توجد أدوات مطابقة." : "No tools match your search."}</p> : null}
             {sections.map((section) => (
               <SidebarGroup key={section.title}>
                 <SidebarGroupLabel>{section.title}</SidebarGroupLabel>
@@ -158,9 +164,10 @@ export function AdminDashboardShell({
           </SidebarFooter>
           <SidebarRail />
         </Sidebar>
-        <SidebarInset>
-          <header className="sticky top-0 z-30 flex h-14 shrink-0 items-center gap-2 border-b border-border bg-background/95 px-4 backdrop-blur supports-backdrop-filter:bg-background/80 sm:px-6">
+        <SidebarInset className="min-w-0">
+          <header style={{ top: "var(--site-header-height, 120px)" }} className="sticky z-30 flex h-14 shrink-0 items-center gap-2 border-b border-border bg-background/95 px-4 backdrop-blur supports-backdrop-filter:bg-background/80 sm:px-6">
             <SidebarTrigger aria-label={common.menu} className="-ms-1.5" />
+            <span className="truncate text-sm font-semibold">{currentPage?.label || common.admin}</span>
             <div className="ms-auto flex min-w-0 items-center gap-2">
               <Badge variant={isSuper ? "default" : "secondary"} className="hidden sm:inline-flex">
                 {roleLabel}
