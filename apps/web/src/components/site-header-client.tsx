@@ -36,7 +36,6 @@ import {
 } from "@/components/ui/dropdown-menu";
 import {
   Sheet,
-  SheetClose,
   SheetContent,
   SheetDescription,
   SheetHeader,
@@ -289,39 +288,32 @@ export function SiteHeaderClient({
                   <div key={group.label}>
                     <h2>{group.label}</h2>
                     {group.links.map((link) => (
-                      <SheetClose
+                      <Link
                         key={link.href}
-                        render={
-                          <Link
-                            href={localizedPath(link.href, locale)}
-                            aria-current={
-                              active(link.href) ? "page" : undefined
-                            }
-                          />
-                        }
+                        href={localizedPath(link.href, locale)}
+                        aria-current={active(link.href) ? "page" : undefined}
+                        onClick={() => setMobileOpen(false)}
                         className="ec-mobile-link"
                       >
                         {link.label}
                         {streamBadge(link.href)}
-                      </SheetClose>
+                      </Link>
                     ))}
                   </div>
                 ))}
                 <div>
                   <h2>{text.common.account}</h2>
-                  <SheetClose
-                    render={<Link href={localizedPath("/me", locale)} />}
+                  <Link
+                    href={localizedPath("/me", locale)}
+                    onClick={() => setMobileOpen(false)}
                     className="ec-mobile-link"
                   >
                     {text.common.myProfile}
-                  </SheetClose>
+                  </Link>
                   {hasSession ? (
-                    <SheetClose
-                      render={
-                        <Link
-                          href={localizedPath("/me?tab=notifications", locale)}
-                        />
-                      }
+                    <Link
+                      href={localizedPath("/me?tab=notifications", locale)}
+                      onClick={() => setMobileOpen(false)}
                       className="ec-mobile-link"
                     >
                       {text.follows.notificationsTitle}
@@ -329,15 +321,16 @@ export function SiteHeaderClient({
                         count={unreadNotifications}
                         locale={locale}
                       />
-                    </SheetClose>
+                    </Link>
                   ) : null}
                   {isAdmin ? (
-                    <SheetClose
-                      render={<Link href={localizedPath("/admin", locale)} />}
+                    <Link
+                      href={localizedPath("/admin", locale)}
+                      onClick={() => setMobileOpen(false)}
                       className="ec-mobile-link"
                     >
                       {text.common.admin}
-                    </SheetClose>
+                    </Link>
                   ) : null}
                   <a
                     href={DISCORD_INVITE_URL}
