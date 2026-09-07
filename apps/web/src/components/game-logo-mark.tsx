@@ -22,7 +22,7 @@ const GAME_GLYPH_PATHS: Record<string, string> = {
   esportsfc: "/game-glyphs/esportsfc.png",
   fifa: "/game-glyphs/esportsfc.png",
   fighters: "/game-glyphs/fighters.png",
-  fortnite: "/game-glyphs/fortnite.png",
+  fortnite: "/game-glyphs/fortnite.svg",
   freefire: "/game-glyphs/freefire.png",
   halo: "/game-glyphs/halo.svg",
   hearthstone: "/game-glyphs/hearthstone.svg",
@@ -57,6 +57,7 @@ const GAME_GLYPH_PATHS: Record<string, string> = {
 };
 
 const GAME_SLUG_ALIASES: Record<string, string> = {
+  "dota": "dota2",
   "cs2": "counterstrike",
   "csgo": "counterstrike",
   "callofdutyleague": "callofdutyleague",
