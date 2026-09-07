@@ -13,7 +13,7 @@ import {
   TrophyIcon,
   UserRoundIcon,
 } from "lucide-react";
-import Link from "next/link";
+import { NavigationLink as Link } from "@/components/navigation-link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { DiscordIcon } from "@/components/discord-icon";
