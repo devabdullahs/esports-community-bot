@@ -1071,3 +1071,46 @@
 :root:not(.dark) .post-body :is(.hljs-number,.hljs-built_in,.hljs-type) { color: #834b10; }
 :root:not(.dark) .post-body :is(.hljs-title,.hljs-name,.hljs-selector-id,.hljs-selector-class) { color: #15589b; }
 :root:not(.dark) .post-body :is(.hljs-attribute,.hljs-variable,.hljs-tag,.hljs-deletion) { color: #a52939; }
+
+.ec-page-loading { flex: 1; padding-block: 32px 64px; }
+.ec-navigation-feedback { position: fixed; z-index: 100; inset-block-start: calc(var(--site-header-height, 120px) + 12px); left: 50%; transform: translateX(-50%); display: flex; align-items: center; gap: 12px; width: max-content; max-width: calc(100vw - 32px); padding: 12px 18px; border: 1px solid var(--border); border-radius: 10px; background: var(--background); color: var(--foreground); box-shadow: 0 6px 24px rgb(0 0 0 / 18%); font-size: .875rem; font-weight: 500; pointer-events: none; }
+.ec-loading-track { height: 3px; overflow: hidden; background: var(--muted); border-radius: 2px; }
+.ec-loading-track > span { display: block; height: 100%; width: 35%; background: var(--primary); }
+.ec-loading-heading { display: flex; align-items: center; gap: 16px; margin-block: 28px 12px; }
+.ec-loading-heading h1 { font-size: 1.25rem; font-weight: 600; }
+.ec-loading-heading p, .ec-loading-status { color: var(--muted-foreground); font-size: .875rem; line-height: 1.6; }
+.ec-loading-spinner { width: 28px; height: 28px; flex-shrink: 0; border: 3px solid var(--muted); border-top-color: var(--primary); border-inline-end-color: var(--primary); border-radius: 50%; }
+.ec-loading-status:not(:empty) { margin-block: 12px; max-width: 42rem; }
+.ec-loading-content { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); gap: 32px; margin-block-start: 32px; }
+.ec-loading-placeholder { height: 12px; border-radius: 4px; background: color-mix(in oklab, var(--muted-foreground) 18%, var(--background)); }
+.ec-loading-title { height: 20px; width: 45%; margin-block-end: 24px; }
+.ec-loading-row { display: flex; align-items: center; gap: 16px; padding-block: 20px; border-bottom: 1px solid var(--border); }
+.ec-loading-mark { width: 44px; height: 44px; flex-shrink: 0; border-radius: 8px; }
+.ec-loading-lines { display: grid; gap: 12px; flex: 1; }
+.ec-loading-lines > :first-child { width: 70%; }
+.ec-loading-lines > :last-child { width: 45%; height: 8px; }
+.ec-loading-score { width: 48px; }
+.ec-loading-cover { height: 160px; margin-block-end: 24px; }
+.ec-daily-shortcuts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin-block-end: 28px; }
+.ec-daily-shortcuts > a { display: flex; align-items: center; gap: 12px; padding: 16px; border: 1px solid var(--border); border-radius: 8px; background: var(--card); }
+.ec-daily-shortcuts > a > svg { flex-shrink: 0; }
+.ec-daily-shortcuts > a > span { flex: 1; min-width: 0; }
+.ec-daily-shortcuts strong { display: block; font-size: .875rem; line-height: 1.5; }
+.ec-daily-shortcuts strong + span { display: block; margin-block-start: 4px; font-size: .75rem; line-height: 1.6; color: var(--muted-foreground); }
+@media (hover: hover) { .ec-daily-shortcuts > a:hover { border-color: var(--primary); } }
+@media (max-width: 700px) {
+  .ec-loading-content { grid-template-columns: minmax(0, 1fr); }
+  .ec-loading-aside { display: none; }
+  .ec-daily-shortcuts { grid-template-columns: minmax(0, 1fr); gap: 8px; }
+  .ec-daily-shortcuts > a { padding: 12px; }
+  .ec-daily-shortcuts strong + span { margin-block-start: 2px; }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .ec-loading-spinner { animation: ec-loading-rotate 1s linear infinite; }
+  .ec-loading-track > span { animation: ec-loading-travel 1.6s ease-in-out infinite; }
+  .ec-loading-placeholder { animation: ec-loading-breathe 1.8s ease-in-out infinite; }
+  .ec-loading-row:nth-child(even) .ec-loading-placeholder { animation-delay: .2s; }
+}
+@keyframes ec-loading-rotate { to { transform: rotate(360deg); } }
+@keyframes ec-loading-travel { from { transform: translateX(-110%); } to { transform: translateX(390%); } }
+@keyframes ec-loading-breathe { 50% { opacity: .4; } }

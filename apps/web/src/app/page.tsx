@@ -3,9 +3,9 @@ import Link from "next/link";
 import {
   ArrowRightIcon,
   RadioIcon,
-  TargetIcon,
   TrophyIcon,
 } from "lucide-react";
+import { DailyShortcuts } from "@/components/esports/daily-shortcuts";
 import { GameLogoMark } from "@/components/game-logo-mark";
 import { ProfileAvatar } from "@/components/profiles/profile-avatar";
 import { PartnerPlacement } from "@/components/partners/partner-placement";
@@ -76,6 +76,7 @@ export default async function Home() {
           {ar ? "بتوقيت الرياض" : "Riyadh time"} · UTC+3
         </p>
       </header>
+      <DailyShortcuts locale={locale} />
       <div className="ec-desk-layout">
         <div className="ec-desk-main">
           <section aria-labelledby="home-live">
@@ -240,27 +241,6 @@ export default async function Home() {
                 </p>
               </div>
             ) : null}
-          </section>
-          <section className="ec-community-promo">
-            <TargetIcon className="size-6 text-primary" aria-hidden="true" />
-            <h2>{ar ? "توقّع. نافس. تقدّم." : "Make your picks."}</h2>
-            <p>
-              {ar
-                ? "اختبر معرفتك بالمنافسات، وتابع ترتيبك مع مجتمعك."
-                : "Put your esports knowledge to the test. Pick your winners and climb the community leaderboard."}
-            </p>
-            <Link href={href("/predictions")} className="ec-text-link">
-              {text.common.predictions}
-              <ArrowRightIcon className="size-4 rtl:rotate-180" />
-            </Link>
-            <div className="ec-community-links">
-              <Link className="ec-text-link" href={href("/leaderboard")}>
-                {ar ? "المتصدرون" : "Leaderboard"}
-              </Link>
-              <Link className="ec-text-link" href={href("/clubs/standings")}>
-                {ar ? "ترتيب الأندية" : "Club standings"}
-              </Link>
-            </div>
           </section>
           {mvp ? (
             <section>
