@@ -72,7 +72,7 @@ const GAME_GLYPH_PATHS: Record<string, string> = {
   esportsfc: "/game-glyphs/esportsfc.png",
   fifa: "/game-glyphs/esportsfc.png",
   fighters: "/game-glyphs/fighters.png",
-  fortnite: "/game-glyphs/fortnite.png",
+  fortnite: "/game-glyphs/fortnite.svg",
   freefire: "/game-glyphs/freefire.png",
   halo: "/game-glyphs/halo.svg",
   hearthstone: "/game-glyphs/hearthstone.svg",
@@ -114,6 +114,7 @@ const SOURCE_GLYPH_PATHS: Record<string, string> = {
 
 function normalizedGameSlug(slug: string): string {
   const key = slug.trim().toLowerCase();
+  if (key === "dota") return "dota2";
   if (key === "cs2") return "counterstrike";
   if (key === "fifa" || key === "ea-sports-fc" || key === "easportsfc") return "esportsfc";
   if (key === "teamfighttactics") return "tft";
