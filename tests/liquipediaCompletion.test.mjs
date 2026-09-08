@@ -24,7 +24,7 @@ test('a final ticker result replaces a stale bracket partial in the correct orie
 
 test('untimed FC draws finish, including a confirmed scoreless draw', () => {
   for (const score of [0, 2]) {
-    const match = matchlist({ marker: 'bg-draw', a: score, b: score });
+    const match = matchlist({ marker: 'bg-draw', a: score, b: score, extra: '<div class="brkts-popup">(Bo5)</div>' });
     assert.equal(match.scheduledAt, null);
     assert.equal(match.status, 'finished');
     assert.equal(normalizeMatchLifecycle(match).winner_side, 'draw');
