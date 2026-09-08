@@ -118,6 +118,15 @@ test('PostgreSQL DB parity', { skip: postgresEnabled ? false : 'run through npm 
     assert.ok(row.count > 0);
   });
 
+  await t.test('stream announcement claims are atomic across pooled connections', async () => {
+    const { claimStreamCreatorAnnouncement } = await import('../src/db/streamAnnouncements.js');
+    const claim = { creatorKey: 'pg-stream-claim', platform: 'youtube', handle: 'creator', liveVideoId: 'video123', announcedAt: 10000 };
+    const attempts = await Promise.all(Array.from({ length: 100 }, () => claimStreamCreatorAnnouncement(claim)));
+    assert.equal(attempts.filter(Boolean).length, 1);
+    assert.equal(await claimStreamCreatorAnnouncement({ ...claim, announcedAt: 100000 }), false);
+    assert.equal(await claimStreamCreatorAnnouncement({ ...claim, announcedAt: 100000, liveVideoId: 'nextVideo' }), true);
+  });
+
   await t.test('transaction rollback leaves no inserted row', async () => {
     await db.exec(
       'CREATE TABLE IF NOT EXISTS postgres_ci_probe (id TEXT PRIMARY KEY, value_text TEXT NOT NULL)',

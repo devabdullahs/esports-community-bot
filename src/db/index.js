@@ -1183,10 +1183,12 @@ db.exec(`
     handle          TEXT,
     title           TEXT,
     live_started_at INTEGER,
+    live_video_id   TEXT,
     updated_at      TEXT NOT NULL DEFAULT (datetime('now'))
   );
 `);
 
+ensureColumns('stream_creator_announce_state', [['live_video_id', 'TEXT']]);
 ensureColumns('ewc_prediction_weeks', [
   ['score_after', 'INTEGER'],
   ['start_at', 'INTEGER'],

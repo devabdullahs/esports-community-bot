@@ -1,6 +1,7 @@
 import { config } from '../config.js';
 import { logger } from '../lib/logger.js';
 import { EmbedBuilder } from 'discord.js';
+import { createHash } from 'node:crypto';
 import {
   channelUrl,
   getActiveChannelMeta,
@@ -8,7 +9,7 @@ import {
   repairDuplicateStreamDefaults,
 } from '../db/streamChannels.js';
 import { listLiveStreamStatuses, markStaleStatusesOffline, upsertStreamStatus } from '../db/streamChannelStatus.js';
-import { getStreamCreatorAnnouncement, recordStreamCreatorAnnouncement } from '../db/streamAnnouncements.js';
+import { getStreamCreatorAnnouncement, claimStreamCreatorAnnouncement } from '../db/streamAnnouncements.js';
 import { getGuildsWithCostreamAnnounce, getSettings } from '../db/settings.js';
 import { categoryToGameSlug, gameName } from '../lib/games.js';
 import * as twitch from '../services/twitch.js';
@@ -118,44 +119,56 @@ async function announceGoLive(client, liveBefore, liveAfter, now = Date.now) {
     embed.addFields({ name: 'Watch', value: watchUrl, inline: false });
     if (status.thumbnailUrl && /^https:\/\//.test(status.thumbnailUrl)) embed.setImage(status.thumbnailUrl);
 
-    let delivered = false;
+    const targets = [];
+    const targetIds = new Set();
     for (const guildId of guildIds) {
       const settings = await getSettings(guildId);
       const channelId = settings.costream_announce_channel_id;
       if (!channelId) continue;
       const roleId = settings.costream_announce_role_id;
       const channel = await client.channels.fetch(channelId).catch(() => null);
-      if (!channel?.isTextBased?.()) continue;
+      if (!channel?.isTextBased?.() || targetIds.has(channelId)) continue;
+      targetIds.add(channelId);
+      targets.push({ guildId, channelId, roleId, channel });
+    }
+    if (!targets.length) continue;
+    const announcedAt = Math.floor(nowMs / 1000);
+    const claimed = await claimStreamCreatorAnnouncement({
+      creatorKey, announcedAt, platform, handle,
+      title: status.title || null, liveStartedAt: status.startedAt,
+      liveVideoId: status.videoId,
+      cooldownSeconds: ANNOUNCE_COOLDOWN_MS / 1000,
+      crossPlatformSeconds: CROSS_PLATFORM_DEDUP_MS / 1000,
+    });
+    if (!claimed) continue;
+    lastAnnouncedAt.set(creatorKey, nowMs);
+    for (const { guildId, channelId, roleId, channel } of targets) {
       try {
         await channel.send({
+          nonce: createHash('sha256').update(JSON.stringify([creatorKey, channelId, announcedAt])).digest('hex').slice(0, 24),
+          enforceNonce: true,
           content: roleId ? `<@&${roleId}>` : undefined,
           embeds: [embed],
           allowedMentions: roleId ? { roles: [roleId], parse: [] } : { parse: [] },
         });
-        delivered = true;
         sent += 1;
       } catch (e) {
         logger.warn(`[stream-status] go-live announce failed in ${guildId}: ${e.message}`);
       }
-    }
-    if (delivered) {
-      const announcedAt = Math.floor(nowMs / 1000);
-      lastAnnouncedAt.set(creatorKey, nowMs);
-      await recordStreamCreatorAnnouncement({
-        creatorKey,
-        announcedAt,
-        platform,
-        handle,
-        title: status.title || null,
-        liveStartedAt: status.startedAt,
-      });
     }
   }
   return sent;
 }
 
 // `twitchSvc`/`kickSvc`/`youtubeSvc` are injectable for tests (no network).
-export async function refreshStreamStatus({
+let refreshInFlight = null;
+export function refreshStreamStatus(options = {}) {
+  if (refreshInFlight) return refreshInFlight;
+  refreshInFlight = refreshStreamStatusOnce(options).finally(() => { refreshInFlight = null; });
+  return refreshInFlight;
+}
+
+async function refreshStreamStatusOnce({
   twitchSvc = twitch,
   kickSvc = kick,
   youtubeSvc = youtube,
@@ -228,6 +241,7 @@ let announceClient = null;
 
 export function startStreamStatusJob(client = null) {
   announceClient = client;
+  if (timer) return;
   repairDuplicateStreamDefaults()
     .then((count) => count && logger.info(`[stream-status] cleared ${count} duplicate default channel(s).`))
     .catch((error) => logger.warn(`[stream-status] default-channel cleanup failed: ${error.message}`));
