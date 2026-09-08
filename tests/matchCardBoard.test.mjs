@@ -12,6 +12,24 @@ const { setGameMatchCard, setMatchCardMessage, getMatchCardMessages } = await im
 const { updateMatchCards } = await import('../src/jobs/matchCardBoard.js');
 
 let sequence = 0;
+
+test('a parsed untimed FC draw clears the previous live Discord card', async () => {
+  const { load } = await import('cheerio');
+  const { parseMatchlistMatch } = await import('../src/services/liquipedia/parsers.js');
+  const { toMatchRow, getMatch } = await import('../src/db/matches.js');
+  const f = await fixture({ game: 'easportsfc', status: 'running' });
+  await run('UPDATE matches SET scheduled_at = NULL WHERE id = $1', [f.match.id]);
+  const $ = load(`<div class="brkts-matchlist-match"><div class="brkts-matchlist-opponent bg-draw" aria-label="T1"></div><div class="brkts-matchlist-score"><span class="brkts-matchlist-cell-content">2</span><span class="brkts-matchlist-cell-content">2</span></div><div class="brkts-matchlist-opponent bg-draw" aria-label="FEARX"></div></div>`);
+  const parsed = parseMatchlistMatch($, $('.brkts-matchlist-match')[0], 'easportsfc');
+  parsed.externalId = f.match.external_id;
+  await upsertMatch(toMatchRow(parsed, f.match.tournament_id));
+  await updateMatchCards(f.client, f.guild);
+  const stored = await getMatch('liquipedia', f.match.external_id);
+  assert.equal(stored.status, 'finished');
+  assert.equal(stored.winner_side, 'draw');
+  assert.equal(f.mock.state.deleted, 1);
+  assert.equal((await getMatchCardMessages(f.guild, f.game))[0].match_id, 0);
+});
 function channelMock() {
   const messages = new Map();
   const state = { sent: 0, deleted: 0, edited: 0, fetchError: null, deleteError: null };
