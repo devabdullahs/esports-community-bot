@@ -53,7 +53,7 @@ export async function claimStreamCreatorAnnouncement({
        live_video_id   = excluded.live_video_id,
        updated_at      = excluded.updated_at
      WHERE stream_creator_announce_state.announced_at <= excluded.announced_at -
-       CASE WHEN COALESCE(stream_creator_announce_state.platform, '') <> COALESCE(excluded.platform, '') THEN $9 ELSE $10 END
+       CASE WHEN COALESCE(stream_creator_announce_state.platform, '') <> COALESCE(excluded.platform, '') THEN CAST($9 AS BIGINT) ELSE CAST($10 AS BIGINT) END
        AND NOT (
          COALESCE(stream_creator_announce_state.platform, '') = COALESCE(excluded.platform, '')
          AND COALESCE(stream_creator_announce_state.handle, '') = COALESCE(excluded.handle, '')
