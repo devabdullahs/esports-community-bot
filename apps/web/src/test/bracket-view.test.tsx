@@ -349,9 +349,10 @@ describe("BracketView, draw mode", () => {
       ]),
     );
 
-    expect(paired).toContain('data-connector="pair"');
-    expect(paired.match(/data-feeds="pair"/g)?.length).toBe(2);
-    expect(unpaired).not.toContain('data-connector="pair"');
+    expect(paired).toContain('data-bracket-edge-count="2"');
+    expect(paired).toContain('data-bracket-side="a"');
+    expect(paired).toContain('data-bracket-side="b"');
+    expect(unpaired).toContain('data-bracket-edge-count="0"');
   });
 
   test("never draws a connector in fallback mode", () => {

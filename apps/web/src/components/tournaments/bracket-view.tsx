@@ -3,6 +3,7 @@
 import { TrophyIcon } from "lucide-react";
 import { useState } from "react";
 import { BracketMatchCard } from "@/components/tournaments/bracket-match-card";
+import { BracketConnections } from "@/components/tournaments/bracket-connections";
 import {
   buildBracketLayout,
   defaultSectionKey,
@@ -99,7 +100,7 @@ export function BracketView({
       data-bracket-source={layout.source}
       aria-labelledby={headingId}
       dir={directionForLocale(locale)}
-      className="flex flex-col gap-3"
+      className="flex min-w-0 max-w-full flex-col gap-3"
     >
       <h2 id={headingId} className="flex items-center gap-2 text-lg font-semibold">
         <TrophyIcon className="size-4 text-primary" aria-hidden="true" />
@@ -140,7 +141,7 @@ export function BracketView({
         data-bracket-scroll="true"
         aria-label={text.bracketScrollLabel}
         tabIndex={0}
-        className="overflow-x-auto overscroll-x-contain pb-2 outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
+        className="w-full min-w-0 overflow-x-auto overscroll-x-contain pb-2 outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
       >
         <div className="flex min-w-max flex-col gap-8 lg:min-w-full">
           {shown ? (
@@ -186,6 +187,7 @@ function BracketSection({
       {showSectionHeading && section.title ? (
         <h3 className="text-sm font-semibold">{section.title}</h3>
       ) : null}
+      <BracketConnections edges={section.edges}>
       {section.bands.map((band) => (
         <div
           key={band.branch ?? "open"}
@@ -197,23 +199,15 @@ function BracketSection({
               {band.branch === "upper" ? text.bracketUpper : text.bracketLower}
             </BandHeading>
           ) : null}
-          {/*
-            One grid per band, with the round headings occupying its first row and every slot
-            placed on an explicit row and span. Declaring the placement rather than letting
-            flex distribute it is what lets a connector be a percentage-positioned elbow on
-            the receiving cell: with the feeders on that cell's two halves, their centres are
-            at fixed fractions of it, and nothing has to be measured on resize, zoom, font
-            swap, RTL, or scroll.
-          */}
           <div
             data-bracket-columns={section.columns}
-            className="grid snap-x snap-mandatory justify-start gap-x-(--bracket-gutter) gap-y-2 md:snap-none"
+            className="grid snap-x snap-mandatory justify-start gap-x-12 gap-y-0 md:snap-none"
             style={{
               // One round fills a phone screen; on a desktop the rounds share the width but
               // stop growing, so a section with a single drawn round does not stretch one
               // card across the whole page.
-              gridTemplateColumns: `repeat(${section.columns}, minmax(min(72vw, 15rem), 19rem))`,
-              gridTemplateRows: `auto repeat(${band.tracks}, minmax(var(--bracket-track), auto))`,
+              gridTemplateColumns: `repeat(${section.columns}, min(72vw, 16rem))`,
+              gridTemplateRows: `auto repeat(${band.tracks}, minmax(8rem, auto))`,
             }}
           >
             {band.rounds.map((round) => (
@@ -234,8 +228,6 @@ function BracketSection({
                 <div
                   key={cell.slot.key}
                   data-bracket-cell="true"
-                  data-connector={cell.connector ? "pair" : undefined}
-                  data-feeds={cell.feedsConnector ? "pair" : undefined}
                   className="relative flex items-center px-0.5"
                   style={{ gridColumn: round.column, gridRow: `${cell.row + 1} / span ${cell.span}` }}
                 >
@@ -251,6 +243,7 @@ function BracketSection({
           </div>
         </div>
       ))}
+      </BracketConnections>
     </div>
   );
 }
