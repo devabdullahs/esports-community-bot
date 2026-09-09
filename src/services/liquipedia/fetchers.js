@@ -251,7 +251,9 @@ export async function fetchSchedule(
         kept.scoreA = incomingScoreA;
         kept.scoreB = incomingScoreB;
       }
-      if (incoming.winner) kept.winner = incoming.winner;
+      kept.winner = incoming.winner ?? null;
+      kept.winnerSide = incoming.winnerSide === 'draw' ? 'draw' : null;
+      kept.resultReason = incoming.resultReason;
     }
     if (!kept.logoA && incomingLogoA) kept.logoA = incomingLogoA;
     if (!kept.logoB && incomingLogoB) kept.logoB = incomingLogoB;
@@ -307,10 +309,7 @@ export async function fetchSchedule(
       if (candidates.length === 1) {
         const kept = candidates[0];
         if (matchResultRank(m) > matchResultRank(kept)) {
-          kept.status = m.status;
-          kept.scoreA = m.scoreA;
-          kept.scoreB = m.scoreB;
-          kept.winner = m.winner;
+          mergeAuthoritativeCopy(kept, m);
         }
         continue;
       }

@@ -74,10 +74,12 @@ export function deriveStatus({
   scheduledAt,
   placeholder = false,
   live = false,
+  draw = false,
 }) {
   const winAt = bestOf ? Math.floor(bestOf / 2) + 1 : null;
   const played = (scoreA ?? 0) + (scoreB ?? 0);
   const reachedWin = winAt != null && ((scoreA ?? 0) >= winAt || (scoreB ?? 0) >= winAt);
+  if (draw) return 'finished';
   if (bestOf) {
     if (reachedWin || played >= bestOf) return 'finished';
     if (played > 0) return 'running';
@@ -107,7 +109,21 @@ function explicitLifecycleStatus($, el) {
     .join(' ');
   if (/\bcancel(?:led|ed)\b/i.test(marker)) return 'cancelled';
   if (/\bpostponed\b|\bdelayed\b/i.test(marker)) return 'postponed';
+  // Read completion only from the row/status badge, never a popup's round title
+  // or countdown data-finished attribute (which can describe a timer, not a result).
+  const status = cleanName($match.attr('data-status') || $match.find('.match-info-status, .brkts-match-status, .brkts-matchlist-status').first().text());
+  if (/^(?:finished|completed|complete|ended|final)$/i.test(status)) return 'finished';
   return null;
+}
+
+function opponentWon($, el) {
+  return $(el).is('.brkts-opponent-win, .brkts-matchlist-slot-winner, .bg-win, .match-info-header-winner') ||
+    $(el).find('.brkts-opponent-win').length > 0;
+}
+
+function opponentsDrew($, opponents, scoreA, scoreB) {
+  return scoreA != null && scoreA === scoreB && opponents.length >= 2 &&
+    [opponents[0], opponents[1]].every((el) => $(el).is('.bg-draw, .brkts-matchlist-slot-draw'));
 }
 
 // Resolve a team's full name from a Liquipedia team-template cell.
@@ -324,10 +340,13 @@ export function parseMatchInfo($, el, game) {
   const matchHref = $m.find('a[href*="/Match:"]').attr('href') || '';
   const matchId = matchHref.split('/').pop() || null;
   const externalId = matchId || `${game}:${scheduledAt}:${teamA}:${teamB}`;
+  const headerOpponents = $m.find('.match-info-header > .match-info-header-opponent');
+  const winA = opponentWon($, headerOpponents[0]);
+  const winB = opponentWon($, headerOpponents[1]);
 
   const status =
     explicitLifecycleStatus($, el) ||
-    deriveStatus({ scoreA, scoreB, bestOf, scheduledAt, live });
+    deriveStatus({ winA, winB, scoreA, scoreB, bestOf, scheduledAt, live });
 
   return {
     source: 'liquipedia',
@@ -345,6 +364,7 @@ export function parseMatchInfo($, el, game) {
     stream: parseMatchStream($, el),
     tournamentPath,
     tournamentName,
+    ...(winA || winB ? { winner: winA ? teamA : teamB } : {}),
   };
 }
 
@@ -358,6 +378,22 @@ export function matchResultRank(match) {
 
 export function mergeLiveWidgetMatch(existing, liveMatch) {
   const existingHasAuthoritativeResult = matchResultRank(existing) === 4;
+
+  // The ticker can publish a final result before the bracket updates. Previously
+  // only its running state was merged, leaving a bracket's partial score live.
+  if (!existingHasAuthoritativeResult && liveMatch.status === 'finished' &&
+      (liveMatch.winner || (liveMatch.scoreA != null && liveMatch.scoreB != null &&
+        liveMatch.scoreA + liveMatch.scoreB > 0))) {
+    const reversed = cleanName(existing.teamA).toLowerCase() === cleanName(liveMatch.teamB).toLowerCase() &&
+      cleanName(existing.teamB).toLowerCase() === cleanName(liveMatch.teamA).toLowerCase() &&
+      cleanName(existing.teamA) !== cleanName(existing.teamB);
+    existing.status = 'finished';
+    existing.scoreA = (reversed ? liveMatch.scoreB : liveMatch.scoreA) ?? existing.scoreA;
+    existing.scoreB = (reversed ? liveMatch.scoreA : liveMatch.scoreB) ?? existing.scoreB;
+    existing.winner = liveMatch.winner ?? null;
+    if (!existing.scheduledAt && liveMatch.scheduledAt) existing.scheduledAt = liveMatch.scheduledAt;
+    return true;
+  }
 
   if (liveMatch.status === 'running' && !existingHasAuthoritativeResult) {
     existing.status = 'running';
@@ -408,8 +444,9 @@ export function parseBracketMatch($, el, game, scope = '') {
   const scoreA = scoreEls[0] ? parseScoreCell($(scoreEls[0]).text()) : null;
   const scoreB = scoreEls[1] ? parseScoreCell($(scoreEls[1]).text()) : null;
 
-  const winA = $(entries[0]).find('.brkts-opponent-win').length > 0;
-  const winB = $(entries[1]).find('.brkts-opponent-win').length > 0;
+  const winA = opponentWon($, entries[0]);
+  const winB = opponentWon($, entries[1]);
+  const draw = opponentsDrew($, entries, scoreA, scoreB);
 
   const scheduledAt = Number($m.find('[data-timestamp]').attr('data-timestamp')) || null;
   const bestOf = Number($m.find('.brkts-popup').text().match(/\(Bo(\d+)\)/i)?.[1]) || null;
@@ -420,6 +457,7 @@ export function parseBracketMatch($, el, game, scope = '') {
     deriveStatus({
       winA,
       winB,
+      draw,
       scoreA,
       scoreB,
       bestOf,
@@ -446,6 +484,7 @@ export function parseBracketMatch($, el, game, scope = '') {
     status,
     stream: parseMatchStream($, el),
     winner: winA ? teamA : winB ? teamB : null,
+    ...(status === 'finished' && draw ? { winnerSide: 'draw', resultReason: 'normal' } : {}),
   };
 }
 
@@ -471,8 +510,9 @@ export function parseMatchlistMatch($, el, game, scope = '') {
   const scoreEls = $m.find('.brkts-matchlist-score .brkts-matchlist-cell-content');
   const [scoreA, scoreB] = parseMatchlistScorePair($, scoreEls);
 
-  const winA = $(opps[0]).hasClass('brkts-matchlist-slot-winner');
-  const winB = $(opps[1]).hasClass('brkts-matchlist-slot-winner');
+  const winA = opponentWon($, opps[0]);
+  const winB = opponentWon($, opps[1]);
+  const draw = opponentsDrew($, opps, scoreA, scoreB);
 
   const scheduledAt = Number($m.find('[data-timestamp]').attr('data-timestamp')) || null;
   const bestOf = Number($m.find('.brkts-popup').text().match(/\(Bo(\d+)\)/i)?.[1]) || null;
@@ -482,6 +522,7 @@ export function parseMatchlistMatch($, el, game, scope = '') {
     deriveStatus({
       winA,
       winB,
+      draw,
       scoreA,
       scoreB,
       bestOf,
@@ -508,6 +549,7 @@ export function parseMatchlistMatch($, el, game, scope = '') {
     status,
     stream: parseMatchStream($, el),
     winner: winA ? teamA : winB ? teamB : null,
+    ...(status === 'finished' && draw ? { winnerSide: 'draw', resultReason: 'normal' } : {}),
   };
 }
 
@@ -560,6 +602,7 @@ function parseModernSwissMatches($, game) {
         scheduledAt: null,
         status: 'finished',
         winner: scoreA === scoreB ? null : scoreA > scoreB ? rowTeam : opponent,
+        ...(scoreA === scoreB ? { winnerSide: 'draw', resultReason: 'normal' } : {}),
         roundIndex,
       });
     });
@@ -601,7 +644,8 @@ export function parseSwissMatches($, game) {
             if (!sc) return;
             const scoreA = Number(sc[1]);
             const scoreB = Number(sc[2]);
-            if (scoreA === 0 && scoreB === 0) return;
+            const draw = scoreA === scoreB && $cell.is('.bg-draw, .swisstable-bgc-draw');
+            if (scoreA === 0 && scoreB === 0 && !draw) return;
             const opp = teamName($, cell);
             if (!opp || opp === 'TBD' || opp.toLowerCase() === rowTeam.toLowerCase()) return;
             const oppLogo = teamLogo($, cell);
@@ -621,8 +665,9 @@ export function parseSwissMatches($, game) {
               scoreB,
               bestOf: null,
               scheduledAt: null,
-              status: decided ? 'finished' : 'running',
+              status: decided || draw ? 'finished' : 'running',
               winner: decided ? (scoreA > scoreB ? rowTeam : opp) : null,
+              ...(draw ? { winnerSide: 'draw', resultReason: 'normal' } : {}),
             });
           });
       });
