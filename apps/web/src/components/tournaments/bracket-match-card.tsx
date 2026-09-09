@@ -68,6 +68,7 @@ function sideLabel(name: string | null, awaiting: DrawAwaiting | null, text: Tou
 }
 
 function TeamRow({
+  side,
   name,
   awaiting,
   logo,
@@ -76,6 +77,7 @@ function TeamRow({
   locale,
   text,
 }: {
+  side: "a" | "b";
   name: string | null;
   awaiting: DrawAwaiting | null;
   logo: string | null;
@@ -87,7 +89,7 @@ function TeamRow({
   const label = sideLabel(name, awaiting, text);
   const undrawn = !name?.trim();
   return (
-    <span className="flex min-w-0 items-center gap-2">
+    <span data-bracket-side={side} className="flex min-h-8 min-w-0 items-center gap-2 border-b border-border/60 last:border-b-0">
       <span className="flex min-w-0 flex-1 items-center gap-1.5">
         {undrawn ? null : <TeamLogo url={logo} alt={label} />}
         <bdi
@@ -143,13 +145,13 @@ export function BracketMatchCard({
   const lifecycle = shouldShowOutcomeLabel(lifecycleView) ? matchOutcomeLabel(lifecycleView, locale) : null;
 
   const className = [
-    "group flex min-h-20 w-full flex-col justify-center gap-1.5 rounded-lg border bg-card px-2.5 py-2 text-sm shadow-xs transition-[border-color,background-color] motion-reduce:transition-none",
+    "group relative flex min-h-20 w-full flex-col justify-center rounded-md border bg-card px-2.5 py-1.5 text-sm transition-[border-color,background-color] motion-reduce:transition-none",
     // Live and finished are marked by a shape change on the leading edge, never by colour
     // alone: the same reading has to survive a monochrome screen.
     live ? "border-s-2 border-s-primary" : "",
     slot.matchId != null
       ? "hover:border-primary/50 hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
-      : "border-dashed",
+      : !slot.teamA || !slot.teamB ? "border-dashed" : "",
   ]
     .filter(Boolean)
     .join(" ");
@@ -181,6 +183,7 @@ export function BracketMatchCard({
         </span>
       ) : null}
       <TeamRow
+        side="a"
         name={slot.teamA}
         awaiting={slot.awaitingA}
         logo={slot.logoA}
@@ -190,6 +193,7 @@ export function BracketMatchCard({
         text={text}
       />
       <TeamRow
+        side="b"
         name={slot.teamB}
         awaiting={slot.awaitingB}
         logo={slot.logoB}

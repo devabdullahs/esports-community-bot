@@ -41,6 +41,7 @@ export type LayoutBand = {
 };
 
 export type LayoutSection = {
+  edges: DrawSection["edges"];
   key: string;
   title: string | null;
   columns: number;
@@ -108,7 +109,7 @@ function layoutSection(section: DrawSection, source: TournamentDraw["source"]): 
     ...laidOut.flatMap((band) => band.rounds.map((round) => round.column)),
     1,
   );
-  return { key: section.key, title: section.title, columns, bands: laidOut };
+  return { key: section.key, title: section.title, columns, bands: laidOut, edges: section.edges };
 }
 
 /**
