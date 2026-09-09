@@ -140,6 +140,8 @@ test(
     await client.connect();
     try {
       await client.query(baseline);
+      await client.query(`INSERT INTO stream_creator_announce_state (creator_key, announced_at, platform, handle, live_started_at)
+        VALUES ('migration-existing-stream', 10000, 'twitch', 'existing', 9000)`);
     } finally {
       await client.end();
     }
@@ -147,6 +149,9 @@ test(
     const result = await runPostgresMigrations(postgresOptions());
     const expectedVersions = currentMigrationVersions();
     assert.deepEqual(result.applied, expectedVersions);
+    assert.deepEqual(await queryOne(`SELECT announced_at, live_started_at, live_video_id
+      FROM stream_creator_announce_state WHERE creator_key = 'migration-existing-stream'`),
+    { announced_at: '10000', live_started_at: '9000', live_video_id: null });
     assert.equal(
       Number((await queryOne('SELECT COUNT(*)::BIGINT AS count FROM app_schema_migrations')).count),
       expectedVersions.length,

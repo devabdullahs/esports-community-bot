@@ -1383,3 +1383,8 @@ CREATE TABLE IF NOT EXISTS thg_survey_responses (
 CREATE INDEX IF NOT EXISTS idx_thg_survey_responses_survey
   ON thg_survey_responses(guild_id, survey_version, submitted_at);
 -- END MIGRATION 0007-thg-survey.sql
+
+-- BEGIN MIGRATION 0008-stream-announcement-identity.sql
+-- Persist YouTube broadcast identity alongside Twitch/Kick start times.
+ALTER TABLE stream_creator_announce_state ADD COLUMN IF NOT EXISTS live_video_id TEXT;
+-- END MIGRATION 0008-stream-announcement-identity.sql
