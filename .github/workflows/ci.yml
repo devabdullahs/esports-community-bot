@@ -79,6 +79,15 @@ jobs:
       - run: npm run web:build
       - run: npm run security:boundary
 
+  docker-build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      # Exercise the actual deployment build, including native dependencies and
+      # parallel page collection, without production secrets or publishing it.
+      - run: docker build --tag esports-community-ci .
+
   e2e:
     needs: web
     runs-on: ubuntu-latest
