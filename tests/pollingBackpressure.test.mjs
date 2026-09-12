@@ -63,3 +63,36 @@ test('stopping watchers while queued discards the result without rearming matche
   assert.equal(activeCount(), 0);
   assert.equal((await getMatch(matches[0].source, matches[0].external_id)).status, 'running');
 });
+
+test('a blocked tournament does not block another tournament', async () => {
+  const first = await fixture();
+  const second = await fixture();
+  let release;
+  let entered;
+  const started = new Promise(resolve => { entered = resolve; });
+  const gate = new Promise(resolve => { release = resolve; });
+  const pending = pollMatch(first.matches[0], first.tournament, { fetchSchedule: async () => {
+    entered(); await gate; return first.parsed;
+  } });
+  await started;
+  try {
+    await pollMatch(second.matches[0], second.tournament, { fetchSchedule: async () =>
+      second.parsed.map(row => ({ ...row, status: 'finished', scoreA: 2, scoreB: 0 })) });
+    assert.equal(activeCount(), 2);
+    assert.equal((await getMatch(second.matches[1].source, second.matches[1].external_id)).status, 'finished');
+  } finally {
+    release(); await pending;
+  }
+});
+
+test('a remaining live watcher can refresh after its sibling finishes', async () => {
+  const { tournament, parsed, matches } = await fixture();
+  await pollMatch(matches[0], tournament, { fetchSchedule: async () => [
+    { ...parsed[0], status: 'finished', scoreA: 2, scoreB: 0 }, parsed[1],
+  ] });
+  assert.equal(activeCount(), 1);
+  await pollMatch(matches[1], tournament, { fetchSchedule: async () =>
+    parsed.map(row => ({ ...row, status: 'finished', scoreA: 2, scoreB: 0 })) });
+  assert.equal(activeCount(), 0);
+  assert.equal((await getMatch(matches[1].source, matches[1].external_id)).status, 'finished');
+});
