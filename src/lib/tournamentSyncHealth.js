@@ -17,6 +17,7 @@ const MIN_POLL_INTERVAL_MS = 1_000;
 const MAX_POLL_INTERVAL_MS = 24 * 60 * 60 * 1000;
 
 function finiteUnixSeconds(value, fallback = null) {
+  if (value == null || value === '') return fallback;
   const seconds = Math.floor(Number(value));
   return Number.isFinite(seconds) && seconds >= 0 ? seconds : fallback;
 }

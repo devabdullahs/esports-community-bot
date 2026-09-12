@@ -187,6 +187,12 @@ test('classifies public freshness without exposing operational detail', () => {
   );
 });
 
+test('null success timestamps stay unknown instead of becoming a successful Unix epoch sync', () => {
+  const health = { last_success_at: null, last_attempt_at: null, last_item_count: null };
+  assert.equal(classifyTournamentSyncHealth(health, { archivedAt: 100, nowSec: 200 }), 'unavailable');
+  assert.equal(publicTournamentSyncHealth(health, { nowSec: 200 }).lastSuccessAt, null);
+});
+
 test('categorizes provider errors into the closed safe set', () => {
   assert.equal(categorizeTournamentSyncError({ response: { status: 429 } }), 'rate_limit');
   assert.equal(categorizeTournamentSyncError({ response: { status: 401 } }), 'auth');

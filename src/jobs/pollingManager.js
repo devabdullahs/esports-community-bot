@@ -45,6 +45,7 @@ const ARM_LOOKAHEAD_SECONDS = Math.max(
 );
 
 const watchers = new Map(); // external_id -> { tournamentId, generation, armTimer?, pollTimer? }
+const tournamentPolls = new Map(); // tournament/generation -> one complete fetch-and-persist pass
 const detailRefreshes = new Map(); // match.id -> { promise, finalRequested }
 const MATCH_DETAIL_GAMES = new Set(['valorant', 'dota2']);
 
@@ -179,7 +180,7 @@ function startPolling(match, tournament, { initialPollDelayMs = 0 } = {}) {
   if (w.pollTimer || w.firstPollTimer) return;
   logger.info(`[poll] start ${match.external_id} (${match.team_a} vs ${match.team_b})`);
   const tick = () =>
-    pollOnce(match, tournament).catch((e) => {
+    pollMatch(match, tournament).catch((e) => {
       const message = `[poll] ${match.external_id}: ${e.message}`;
       if (isServiceBackoff(e)) logger.debug(message);
       else logger.error(message);
@@ -294,8 +295,21 @@ async function persistPollSnapshot(match, tournament, generation, all) {
   });
 }
 
-async function pollOnce(match, tournament) {
+// A slow provider queue must not accumulate another full persistence pass on
+// every interval, or for every match sharing the same tournament schedule.
+export function pollMatch(match, tournament, options = {}) {
   const watcher = watchers.get(match.external_id);
+  if (!watcher) return Promise.resolve();
+  const key = `${watcher.tournamentId}:${watcher.generation}`;
+  if (tournamentPolls.has(key)) return Promise.resolve();
+  const promise = pollOnce(match, tournament, watcher, options)
+    .finally(() => { if (tournamentPolls.get(key) === promise) tournamentPolls.delete(key); });
+  tournamentPolls.set(key, promise);
+  return promise;
+}
+
+async function pollOnce(match, tournament, watcher, { fetchSchedule = fetchTournamentSchedule } = {}) {
+  const stillWatching = () => watchers.get(match.external_id) === watcher;
   const generation = Number(watcher?.generation ?? tournament.lifecycle_generation ?? 0);
   if (!(await isTournamentGenerationActive(match.tournament_id, generation))) {
     clearWatcher(match.external_id);
@@ -307,11 +321,13 @@ async function pollOnce(match, tournament) {
     return;
   }
 
-  const fetched = await fetchTournamentSchedule(
+  if (!stillWatching()) return;
+  const fetched = await fetchSchedule(
     service,
     tournament,
     tournamentProviderAdmissionOptions(match.tournament_id, generation),
   );
+  if (!stillWatching()) return;
   if (!(await isTournamentGenerationActive(match.tournament_id, generation))) {
     clearWatcher(match.external_id);
     return;
@@ -328,6 +344,13 @@ async function pollOnce(match, tournament) {
   // later corrections all propagate — not just the one match this watcher is tied to.
   let polled = null;
   for (const { before, row, fresh } of snapshot.value) {
+    if (!shouldWatchMatch(row)) {
+      // Retired sibling watchers will not get their own final detail pass.
+      if (row.external_id !== match.external_id && watchers.has(row.external_id)) {
+        queueMatchDetailsRefresh(row, tournament, generation);
+      }
+      clearWatcher(row.external_id);
+    }
     const changed =
       !before ||
       before.score_a !== row.score_a ||
